@@ -9,6 +9,7 @@ import {
   proposeCommitment,
   updateDayDirectorCommitment,
 } from "../planning/dayDirector/dayDirectorService";
+import { operatorInstructionAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { getClaireCampaignSummary, type ClaireCampaignSummary } from "./campaignAwareness";
 import {
   assessAmbiguity,
@@ -339,10 +340,24 @@ export type VoiceCommitmentTurnResult =
   | { kind: "capability_gap"; speak: string; sourceId?: string; mutationReceipt?: MutationReceipt }
   | { kind: "not_applicable" };
 
+/** Both voice writes happen only after the operator said yes to the pending item. */
+function voiceTurnAdmission(
+  input: { operatorUserId?: string; conversationId?: string },
+  promptKey: string
+) {
+  return operatorInstructionAdmission({
+    operatorUserId: input.operatorUserId ?? "",
+    surface: "claire_turn",
+    sourceRef: input.conversationId ? `voice:${input.conversationId}:${promptKey}` : `voice:${promptKey}`,
+  });
+}
+
 export async function handleVoiceCommitmentTurn(
   input: {
     tenantId: string;
     actorId: string;
+    /** The authenticated operator speaking. Required for any Day Line write this turn makes. */
+    operatorUserId: string;
     businessDate: string;
     utterance: string;
     state: PendingProposalState;
@@ -501,6 +516,7 @@ export async function handleVoiceCommitmentTurn(
         actorId: input.actorId,
         businessDate: input.businessDate,
         proposal,
+        admission: voiceTurnAdmission(input, proposal.promptKey),
       });
       const storedId =
         stored && typeof stored === "object" && "id" in stored
@@ -614,6 +630,7 @@ export async function handleVoiceCommitmentTurn(
               actorId: input.actorId,
               businessDate: input.businessDate,
               proposal,
+              admission: voiceTurnAdmission(input, proposal.promptKey),
             });
             const id =
               stored && typeof stored === "object" && "id" in stored

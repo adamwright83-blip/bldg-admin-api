@@ -34,6 +34,7 @@
 import { createHash } from "node:crypto";
 import { AssertionGuard, type MutationReceipt } from "./assertionGuard";
 import { acceptProposal, designateDayDirectorPrimary, getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
+import { operatorInstructionAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { loadDailyCommand, type DailyCommand } from "./dailyCommandContract";
 import {
   applyWeeklyIntentToCommand,
@@ -763,6 +764,12 @@ export async function executeOperatorMissionCommand(
         actorId: dayDirectorActorId,
         businessDate,
         proposal,
+        // The operator's explicit mission command, spoken in this turn.
+        admission: operatorInstructionAdmission({
+          operatorUserId,
+          surface: "claire_turn",
+          sourceRef: sourceCommandRef,
+        }),
       });
       if (!stored?.id) return failure();
       commitmentId = stored.id;

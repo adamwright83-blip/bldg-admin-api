@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { dayDirectorCommitments, towerWarsPromises } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { getBusinessDayWindow } from "../../dashboardZoned";
+import { admissionRecord, assertDayLineAdmission, type DayLineAdmission } from "./dayLineAdmission";
 import { canExecuteTowerWarsPromise, type TowerWarsBuildingId, type TowerWarsPromiseType, type TowerWarsPermissionStatus, type TowerWarsPermissionChannel } from "../../../shared/towerWars";
 
 export async function listTowerWarsPromises(tenantId: string) {
@@ -63,6 +64,8 @@ export async function activateTowerWarsPromise(input: {
   tenantId: string;
   promiseId: string;
   actorId: string;
+  /** The operator's instruction to put this promise on the Day Line. */
+  admission: DayLineAdmission;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -81,6 +84,13 @@ export async function activateTowerWarsPromise(input: {
     throw new Error("Promise lacks explicit execution permission evidence");
   const bounds = getBusinessDayWindow();
   const idempotencyKey = `tower-wars:${promise.id}`;
+  const admission = await assertDayLineAdmission({
+    tenantId: input.tenantId,
+    actorIds: [input.actorId],
+    businessDate: bounds.businessDate,
+    proposal: { promptKey: idempotencyKey },
+    admission: input.admission,
+  });
   const title = (
     {
       offer_insert: "Fulfill promised offer inserts",
@@ -108,6 +118,7 @@ export async function activateTowerWarsPromise(input: {
         buildingId: promise.buildingId,
         sourceReference: promise.sourceReference,
         permissionEvidence: promise.permissionEvidence,
+        dayLineAdmission: admissionRecord(admission),
       },
     })
     .onDuplicateKeyUpdate({ set: { title } });

@@ -19,6 +19,7 @@ import {
   readDayDirectorCanonicalCommitment,
   updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
+import { operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
 import { recordPersistentOperatorDiagnosticEvent } from "../../agents/persistentOperator/observability";
 import { latestWeeklyIntent, saveWeeklyIntent } from "./intentStore";
 import {
@@ -352,6 +353,15 @@ function intentDay(
   };
 }
 
+/** Only the operator's explicit "lock the week" reaches commitWeeklyPlan. */
+function weeklyLockAdmission(session: WeeklyPlanningSession) {
+  return operatorInstructionAdmission({
+    operatorUserId: session.operatorId,
+    surface: "claire_turn",
+    sourceRef: `weekly_lock:${session.weekStart}`,
+  });
+}
+
 function primaryKey(weekStart: string, businessDate: string): string {
   return `weekly-primary:${weekStart}:${businessDate}`;
 }
@@ -388,6 +398,7 @@ async function createPrimary(
     actorIds,
     businessDate,
     proposal,
+    admission: weeklyLockAdmission(session),
   });
   if (!accepted.stored?.id) throw new Error(`Primary was not stored for ${businessDate}`);
   if (testMockStore) {
@@ -454,6 +465,7 @@ async function createScheduledReadiness(
     actorIds,
     businessDate,
     proposal,
+    admission: weeklyLockAdmission(session),
   });
   if (!accepted.stored?.id) {
     throw new Error(`Scheduled readiness was not stored for ${businessDate}`);

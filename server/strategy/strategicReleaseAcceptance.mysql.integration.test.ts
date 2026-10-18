@@ -11,6 +11,7 @@ import {
   designateDayDirectorPrimary,
 } from "../planning/dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
+import { operatorInstructionAdmission } from "../planning/dayDirector/dayLineAdmission";
 /* LEGACY DAYFORGE COMPATIBILITY: historical SaaS SQL table names retained for the production schema; current product is JOYSTICK. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /* Controlled provider transport; real MySQL, workers, policies, voice sessions,
  * proposal revisions, and Day Director writes. No real outbound phone call. */
@@ -280,6 +281,11 @@ describeMysql(
           command: emptyCommandMetadata(),
           executionType: "mission",
         },
+        admission: operatorInstructionAdmission({
+          operatorUserId: identity.canonicalOpenId,
+          surface: "day_line_ui",
+          sourceRef: `protected:${suffix}`,
+        }),
       });
       expect(protectedResult.stored?.id).toBeTruthy();
       await designateDayDirectorPrimary({

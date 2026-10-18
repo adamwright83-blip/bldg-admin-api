@@ -23,6 +23,7 @@ import {
 } from "../workdayCommandLanguage";
 import { emptyCommandMetadata } from "../../../shared/claireWorkdayCommand";
 import { confirmLinkedVehicleWork } from "../workdayCargoOrchestrator";
+import { operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
 
 /**
  * Turning a confirmed briefing into Day Line truth, without duplicates:
@@ -210,7 +211,14 @@ export type BriefingCommitResult = {
 
 export async function commitBriefing(
   parsed: ParsedBriefing,
-  input: { tenantId: string; dayDirectorActorId: string; conversationKey: string; vehicleId?: string },
+  input: {
+    tenantId: string;
+    dayDirectorActorId: string;
+    /** The authenticated operator whose confirmed briefing this is. Required for Day Line admission. */
+    operatorUserId: string;
+    conversationKey: string;
+    vehicleId?: string;
+  },
   deps: {
     accept?: (input: Parameters<typeof acceptProposalWithReceipt>[0]) => Promise<Awaited<ReturnType<typeof acceptProposalWithReceipt>> | Awaited<ReturnType<typeof acceptProposal>>>;
     complete?: typeof completeDayDirectorCommitment;
@@ -232,6 +240,12 @@ export async function commitBriefing(
       }
     : readDayDirectorCanonicalCommitment);
 
+  // Only an operator-confirmed briefing reaches commitBriefing.
+  const admission = operatorInstructionAdmission({
+    operatorUserId: input.operatorUserId ?? "",
+    surface: "claire_turn",
+    sourceRef: `briefing:${input.conversationKey}`,
+  });
   const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], commitmentIds: [], receipts: [] };
   const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string, checkType = true) => {
     const row = await readCanonical({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
@@ -280,7 +294,7 @@ export async function commitBriefing(
       if (item.kind === "new_work" && input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
         const linked = await linkVehicleWork({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
           vehicleId: input.vehicleId, businessDate: item.businessDate, requestId: keyFor(input.conversationKey, item),
-          transcript: item.quote, place: item.place, confirmed: true });
+          transcript: item.quote, place: item.place, confirmed: true, admission });
         if (linked.dayLine.ok) {
           if (testMockStore) {
             testMockStore.set(linked.dayLine.id, {
@@ -333,7 +347,7 @@ export async function commitBriefing(
           detailNote: item.kind === "completed" ? "Operator reported this as already done" : detailNote(item),
           references: item.references ?? [], targetBusinessDate: item.businessDate, command: commandForItem(item, parsed),
           ...(item.executionType ? { executionType: item.executionType } : {}),
-        } });
+        }, admission });
       const receipt = accepted && "stored" in accepted ? accepted : { stored: accepted, created: true };
       const id = receipt.stored?.id;
       if (!id) throw new Error("Day Line write returned no persisted identity");

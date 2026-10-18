@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveCanonicalOperatorIdentity, type CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import { acceptProposalWithReceipt, getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
+import { operatorInstructionAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { assertSupersededRetirable, retireSupersededOrRollBack } from "./strategicApproval";
 import { readDayLineOverlay } from "../../shared/goldlineDayLine";
 
@@ -32,6 +33,7 @@ describeMysql("rescheduling never leaves two active meetings", () => {
     (await acceptProposalWithReceipt({
       tenantId, actorId: identity.dayDirectorActorId, actorIds: identity.dayDirectorActorIds, businessDate: date,
       proposal: { promptKey: key, title: "Meet Maria at Sunset Junction", kind: "growth", quantity: null, sourceText: "Meeting", prerequisites: [], question: null, intelligence: "manual_fallback", targetBusinessDate: date, command: emptyCommandMetadata() },
+      admission: operatorInstructionAdmission({ operatorUserId: identity.canonicalOpenId, surface: "day_line_ui", sourceRef: key }),
     })).stored!.id;
   const active = async (date: string) =>
     (await getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, actorIds: identity.dayDirectorActorIds, businessDate: date })).commitments.map(c => c.id);

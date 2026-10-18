@@ -127,7 +127,7 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
     const accept = vi.fn().mockResolvedValue({ id: "commitment-1" });
     const state: PendingProposalState = { pendingProposal: proposalFixture() };
     const result = await handleVoiceCommitmentTurn(
-      { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: "yes, add it", state },
+      { tenantId: "tenant-1", actorId: "operator-1", operatorUserId: "operator-1", businessDate: "2026-09-14", utterance: "yes, add it", state },
       { accept }
     );
     expect(result.kind).toBe("accepted");
@@ -137,6 +137,12 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
       actorId: "operator-1",
       businessDate: "2026-09-14",
       proposal: expect.objectContaining({ promptKey: "commitment:abc123" }),
+      admission: {
+        kind: "operator_instruction",
+        operatorUserId: "operator-1",
+        surface: "claire_turn",
+        sourceRef: "voice:commitment:abc123",
+      },
     });
     expect(state.pendingProposal).toBeNull();
   });

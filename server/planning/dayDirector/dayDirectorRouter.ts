@@ -12,6 +12,7 @@ import {
   proposeCommitment,
   setPromptState,
 } from "./dayDirectorService";
+import { operatorInstructionAdmission } from "./dayLineAdmission";
 import {
   answerMissionFollowUp,
   revokeMissionPresentation,
@@ -117,6 +118,12 @@ export const dayDirectorRouter = router({
         actorId: identity.dayDirectorActorId,
         actorIds: identity.dayDirectorActorIds,
         ...input,
+        // The authenticated operator pressed accept on this exact proposal.
+        admission: operatorInstructionAdmission({
+          operatorUserId: identity.canonicalOpenId,
+          surface: "day_line_ui",
+          sourceRef: `day_director.accept:${input.proposal.promptKey}`,
+        }),
       });
       if (stored && created) {
         await recordPersistentOperatorDiagnosticEvent({
