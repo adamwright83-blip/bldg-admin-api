@@ -1,3 +1,5 @@
+import type { StrategyOpportunity } from "./workThread";
+
 /** StrategyEngine evidence and reasoning; never execution or ranking authority. */
 export type BusinessDriver =
   | "acquisition"
@@ -70,6 +72,14 @@ export type StrategyAction = {
   evidenceRefs: string[];
   reviewCondition: string;
   territoryId: string | null;
+  /**
+   * The opportunity this action pursues, from structured scope only. A revised
+   * tactic or a revisited hypothesis keeps it; wording never changes it.
+   * Absent on diagnoses persisted before Work Threads.
+   */
+  opportunity?: StrategyOpportunity;
+  /** The durable Work Thread the opportunity resolved to when the diagnosis was prepared. */
+  workThreadId?: string;
 };
 export type StrategyOption = {
   id: string;
@@ -152,6 +162,8 @@ export type StrategicProposalItem = {
   planId: string;
   planRevision: number;
   evidenceRefs: string[];
+  /** The durable Work Thread this item continues; absent on pre-thread proposals and unresolved work. */
+  workThreadId?: string;
 };
 export type StrategicPlanningProposal = {
   id: string;

@@ -105,6 +105,7 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | Lantern City visual map & building display | `server/experience/lanternCity/`, `server/experience/lanternCity/lanternCityOverviewService.ts` | Composes projections; does not create native business facts. |
 | Tower Wars gameplay mechanics | `server/experience/goldline/modes/towerWars/` | Consumes admitted payment evidence; cannot admit payments. |
 | Action execution, retry, or worker leasing | `server/platform/execution/worker.ts`, `server/platform/authority/actionExecutionGate.ts` | Workers orchestrate domain commands; they do not invent business policy. |
+| Durable opportunity identity (Work Threads) | `shared/workThread.ts`, `server/agents/persistentOperator/workThreadStore.ts` | The minted thread id is the identity; the opportunity key only finds the open thread. Never derive identity from wording, diagnosis ids, timestamps or goal-cycle occurrence ids. |
 
 ---
 

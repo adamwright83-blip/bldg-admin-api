@@ -2,6 +2,7 @@
 import {
   bigint,
   boolean,
+  char,
   customType,
   datetime,
   double,
@@ -7727,9 +7728,16 @@ export const goalCycleDecisions = mysqlTable(
     loadoutJson: json("loadoutJson").notNull(),
     experimentJson: json("experimentJson"),
     decisionFingerprint: varchar("decisionFingerprint", { length: 64 }).notNull(),
+    /** The durable Work Thread (Phase 2 · Slice A) the selected work belongs to. Null for waits and pre-thread decisions. */
+    workThreadId: varchar("workThreadId", { length: 36 }),
     createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
   },
   table => ({
+    workThreadIdx: index("idx_goal_cycle_decisions_work_thread").on(
+      table.tenantId,
+      table.workThreadId,
+      table.createdAt
+    ),
     cycleUnique: uniqueIndex("uq_goal_cycle_decisions_cycle").on(
       table.tenantId,
       table.cycleId
@@ -7779,6 +7787,8 @@ export const goalCycleObjectives = mysqlTable(
     evidenceRefsJson: json("evidenceRefsJson").notNull(),
     /** The latest decision that re-selected this open objective (Stage 1 · 1B). Null until reused. */
     latestDecisionId: varchar("latestDecisionId", { length: 36 }),
+    /** The durable Work Thread (Phase 2 · Slice A) this objective pursues. Null for pre-thread objectives. */
+    workThreadId: varchar("workThreadId", { length: 36 }),
     completedAt: timestamp("completedAt", { fsp: 3 }),
     createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
@@ -7787,6 +7797,11 @@ export const goalCycleObjectives = mysqlTable(
     latestDecisionIdx: index("idx_goal_cycle_objectives_latest_decision").on(
       table.tenantId,
       table.latestDecisionId
+    ),
+    workThreadIdx: index("idx_goal_cycle_objectives_work_thread").on(
+      table.tenantId,
+      table.workThreadId,
+      table.status
     ),
     decisionUnique: uniqueIndex("uq_goal_cycle_objectives_decision").on(
       table.tenantId,
@@ -7805,6 +7820,57 @@ export const goalCycleObjectives = mysqlTable(
     ),
   })
 );
+
+/**
+ * Phase 2 · Slice A: one underlying business opportunity, durable across hourly
+ * decisions, re-diagnoses, wording, worker restarts and proposal revisions.
+ * `id` is the identity; `opportunityKey` only finds the open thread for a newly
+ * observed opportunity (one open thread per key; a closed key mints a new
+ * generation). See shared/workThread.ts.
+ */
+export const workThreads = mysqlTable(
+  "work_threads",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    opportunityKey: varchar("opportunityKey", { length: 512 }).notNull(),
+    opportunityKeyHash: char("opportunityKeyHash", { length: 64 }).notNull(),
+    generation: int("generation").notNull().default(1),
+    /** 1 while open, NULL once closed: at most one open thread per key. */
+    openSlot: tinyint("openSlot").default(1),
+    status: varchar("status", { length: 16 }).notNull().default("open"),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    opportunityJson: json("opportunityJson").notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    createdByOperatorId: varchar("createdByOperatorId", { length: 191 }),
+    firstSourceRef: varchar("firstSourceRef", { length: 191 }),
+    lastSourceRef: varchar("lastSourceRef", { length: 191 }),
+    lastObservedAt: timestamp("lastObservedAt", { fsp: 3 }),
+    closedReason: varchar("closedReason", { length: 64 }),
+    closedAt: timestamp("closedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    openUnique: uniqueIndex("uq_work_threads_open").on(
+      table.tenantId,
+      table.opportunityKeyHash,
+      table.openSlot
+    ),
+    generationUnique: uniqueIndex("uq_work_threads_generation").on(
+      table.tenantId,
+      table.opportunityKeyHash,
+      table.generation
+    ),
+    tenantStatusIdx: index("idx_work_threads_tenant_status").on(
+      table.tenantId,
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
+
+export type WorkThreadRow = typeof workThreads.$inferSelect;
 
 export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
 export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;

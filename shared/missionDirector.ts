@@ -49,6 +49,8 @@ export type MissionWorkRankEvidence = {
   /** Candidate growth motion; identifies matching missions across sources. */
   motion?: WeeklyGrowthMotion;
   sourceRefs: WeeklyGrowthSourceRef[];
+  /** The durable Work Thread the candidate already names; absent otherwise. Not a ranking input. */
+  workThreadId?: string;
   score: number;
   confidence: "high" | "low";
   executionType: ObjectiveExecutionType | null;
@@ -66,6 +68,8 @@ export type MissionWorkSelection = {
   sourceKind: WeeklyGrowthSourceKind;
   motion?: WeeklyGrowthMotion;
   sourceRefs: WeeklyGrowthSourceRef[];
+  /** The durable Work Thread the selected work already names; absent otherwise. */
+  workThreadId?: string;
   executionType: "mission" | "challenge";
   rankEvidence: MissionWorkRankEvidence;
 };

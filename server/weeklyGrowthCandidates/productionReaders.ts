@@ -172,6 +172,8 @@ async function readCommitments(input: {
         metadata.executionType === "mission" || metadata.executionType === "challenge"
           ? metadata.executionType
           : null,
+      // Approved work continues the Work Thread it was approved under.
+      workThreadId: stringField(asRecord(metadata.workThread), "id"),
       campaignId,
       followUpId,
       missionId,
