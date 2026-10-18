@@ -68,6 +68,125 @@ async function hasEarlierLiveScheduledTick(
   return rows.length > 0;
 }
 
+/** A run's dead tick is not revived sooner than this, so a persistent failure can't hot-loop. */
+const DEAD_LETTER_REVIVAL_DELAY_MS = 60 * 60 * 1000;
+
+function dateOf(value: unknown): Date {
+  return value instanceof Date ? value : new Date(String(value));
+}
+
+/**
+ * Queues the run's single scheduled tick, keyed `scheduled_tick:<runId>`:
+ * inserted if absent, moved earlier if already waiting, revived if it ended.
+ * Caller holds the transaction.
+ */
+async function queueRunScheduledTickLocked(
+  connection: PoolConnection,
+  input: {
+    tenantId: string;
+    goalRunId: string;
+    availableAt: Date;
+    triggerSourceReference: string;
+    deadLetterRevivalDelayMs?: number;
+  }
+): Promise<string> {
+  const idempotencyKey = `scheduled_tick:${input.goalRunId}`;
+  const [scheduledRows] = await connection.execute<RowDataPacket[]>(
+    `SELECT id, goalRunId, status, availableAt, updatedAt
+       FROM goal_cycle_requests
+      WHERE tenantId = ? AND idempotencyKey = ?
+      LIMIT 1
+      FOR UPDATE`,
+    [input.tenantId, idempotencyKey]
+  );
+  const existing = scheduledRows[0];
+  if (!existing) {
+    const scheduledId = randomUUID();
+    await connection.execute(
+      `INSERT INTO goal_cycle_requests
+         (id, tenantId, goalRunId, triggerType, triggerSourceReference,
+          idempotencyKey, status, availableAt, maxAttempts)
+       VALUES (?, ?, ?, 'scheduled_tick', ?, ?, 'queued', ?, 5)`,
+      [
+        scheduledId,
+        input.tenantId,
+        input.goalRunId,
+        input.triggerSourceReference,
+        idempotencyKey,
+        input.availableAt,
+      ]
+    );
+    await insertHistory(connection, {
+      tenantId: input.tenantId,
+      goalRunId: input.goalRunId,
+      requestId: scheduledId,
+      eventType: "cycle.queued",
+      toStatus: "queued",
+      details: {
+        triggerType: "scheduled_tick",
+        triggerSourceReference: input.triggerSourceReference,
+        availableAt: input.availableAt.toISOString(),
+      },
+    });
+    return scheduledId;
+  }
+  if (String(existing.goalRunId ?? "") !== input.goalRunId) {
+    throw new Error("Scheduled goal cycle key is bound to a different run");
+  }
+  const existingStatus = String(existing.status ?? "");
+  if (["queued", "retry_scheduled"].includes(existingStatus)) {
+    const currentAvailableAt = dateOf(existing.availableAt);
+    const availableAt =
+      Number.isNaN(currentAvailableAt.getTime()) ||
+      input.availableAt.getTime() < currentAvailableAt.getTime()
+        ? input.availableAt
+        : currentAvailableAt;
+    await connection.execute(
+      `UPDATE goal_cycle_requests
+          SET availableAt = ?,
+              triggerSourceReference = ?
+        WHERE tenantId = ? AND id = ?`,
+      [availableAt, input.triggerSourceReference, input.tenantId, String(existing.id)]
+    );
+  } else if (["completed", "dead_letter", "cancelled"].includes(existingStatus)) {
+    const diedAt = dateOf(existing.updatedAt);
+    const availableAt =
+      existingStatus === "dead_letter" &&
+      input.deadLetterRevivalDelayMs &&
+      !Number.isNaN(diedAt.getTime()) &&
+      diedAt.getTime() + input.deadLetterRevivalDelayMs > input.availableAt.getTime()
+        ? new Date(diedAt.getTime() + input.deadLetterRevivalDelayMs)
+        : input.availableAt;
+    await connection.execute(
+      `UPDATE goal_cycle_requests
+          SET status = 'queued',
+              triggerSourceReference = ?,
+              availableAt = ?,
+              deadlineAt = NULL,
+              leaseOwner = NULL,
+              leaseExpiresAt = NULL,
+              heartbeatAt = NULL,
+              attemptCount = 0,
+              maxAttempts = 5,
+              lastError = NULL,
+              resultJson = NULL,
+              completedAt = NULL
+        WHERE tenantId = ? AND id = ?`,
+      [input.triggerSourceReference, availableAt, input.tenantId, String(existing.id)]
+    );
+    await insertHistory(connection, {
+      tenantId: input.tenantId,
+      goalRunId: input.goalRunId,
+      requestId: String(existing.id),
+      eventType: "cycle.rescheduled",
+      fromStatus: existingStatus,
+      toStatus: "queued",
+      details: { availableAt: availableAt.toISOString() },
+    });
+  }
+  return String(existing.id);
+}
+
 async function insertHistory(
   connection: PoolConnection,
   input: {
@@ -496,112 +615,76 @@ export class GoalCycleStore
       });
 
       if (nextEvaluationAt && !supersededTick) {
-        const idempotencyKey = `scheduled_tick:${step.goalRunId}`;
-        const [scheduledRows] = await connection.execute<RowDataPacket[]>(
-          `SELECT id, goalRunId, status, availableAt
-             FROM goal_cycle_requests
-            WHERE tenantId = ? AND idempotencyKey = ?
-            LIMIT 1
-            FOR UPDATE`,
-          [step.tenantId, idempotencyKey]
-        );
-        const existing = scheduledRows[0];
-        if (!existing) {
-          const scheduledId = randomUUID();
-          await connection.execute(
-            `INSERT INTO goal_cycle_requests
-               (id, tenantId, goalRunId, triggerType, triggerSourceReference,
-                idempotencyKey, status, availableAt, maxAttempts)
-             VALUES (?, ?, ?, 'scheduled_tick', ?, ?, 'queued', ?, 5)`,
-            [
-              scheduledId,
-              step.tenantId,
-              step.goalRunId,
-              `goal_cycle_requests:${step.id}:scheduled_successor`,
-              idempotencyKey,
-              nextEvaluationAt,
-            ]
-          );
-          await insertHistory(connection, {
-            tenantId: step.tenantId,
-            goalRunId: step.goalRunId,
-            requestId: scheduledId,
-            eventType: "cycle.queued",
-            toStatus: "queued",
-            details: {
-              triggerType: "scheduled_tick",
-              triggerSourceReference:
-                `goal_cycle_requests:${step.id}:scheduled_successor`,
-              availableAt: nextEvaluationAt.toISOString(),
-            },
-          });
-        } else {
-          if (String(existing.goalRunId ?? "") !== step.goalRunId) {
-            throw new Error("Scheduled goal cycle key is bound to a different run");
-          }
-          const existingStatus = String(existing.status ?? "");
-          if (["queued", "retry_scheduled"].includes(existingStatus)) {
-            const currentAvailableAt =
-              existing.availableAt instanceof Date
-                ? existing.availableAt
-                : new Date(String(existing.availableAt));
-            const availableAt =
-              Number.isNaN(currentAvailableAt.getTime()) ||
-              nextEvaluationAt.getTime() < currentAvailableAt.getTime()
-                ? nextEvaluationAt
-                : currentAvailableAt;
-            await connection.execute(
-              `UPDATE goal_cycle_requests
-                  SET availableAt = ?,
-                      triggerSourceReference = ?
-                WHERE tenantId = ? AND id = ?`,
-              [
-                availableAt,
-                `goal_cycle_requests:${step.id}:scheduled_successor`,
-                step.tenantId,
-                String(existing.id),
-              ]
-            );
-          } else if (
-            ["completed", "dead_letter", "cancelled"].includes(existingStatus)
-          ) {
-            await connection.execute(
-              `UPDATE goal_cycle_requests
-                  SET status = 'queued',
-                      triggerSourceReference = ?,
-                      availableAt = ?,
-                      deadlineAt = NULL,
-                      leaseOwner = NULL,
-                      leaseExpiresAt = NULL,
-                      heartbeatAt = NULL,
-                      attemptCount = 0,
-                      maxAttempts = 5,
-                      lastError = NULL,
-                      resultJson = NULL,
-                      completedAt = NULL
-                WHERE tenantId = ? AND id = ?`,
-              [
-                `goal_cycle_requests:${step.id}:scheduled_successor`,
-                nextEvaluationAt,
-                step.tenantId,
-                String(existing.id),
-              ]
-            );
-            await insertHistory(connection, {
-              tenantId: step.tenantId,
-              goalRunId: step.goalRunId,
-              requestId: String(existing.id),
-              eventType: "cycle.rescheduled",
-              fromStatus: existingStatus,
-              toStatus: "queued",
-              details: { availableAt: nextEvaluationAt.toISOString() },
-            });
-          }
-        }
+        await queueRunScheduledTickLocked(connection, {
+          tenantId: step.tenantId,
+          goalRunId: step.goalRunId,
+          availableAt: nextEvaluationAt,
+          triggerSourceReference: `goal_cycle_requests:${step.id}:scheduled_successor`,
+        });
       }
 
       await connection.commit();
       return true;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * The bootstrap's only scheduling job: make sure an active run has a live
+   * cycle. If it has none, the run's one scheduled tick (`scheduled_tick:<runId>`)
+   * is queued, or revived if it ended, so repeated sweeps never mint new rows.
+   * A tick that dead-lettered is revived no sooner than an hour after it died.
+   * It never evaluates, prepares or decides; the leased worker does that.
+   */
+  async ensureLiveScheduledTick(input: {
+    tenantId: string;
+    goalRunId: string;
+    now?: Date;
+  }): Promise<{ id: string | null; queued: boolean }> {
+    const now = input.now ?? new Date();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      // The run row lock serializes concurrent sweeps and the worker's successor write.
+      const [runRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT status FROM macro_goal_runs
+          WHERE tenantId = ? AND id = ? LIMIT 1 FOR UPDATE`,
+        [input.tenantId, input.goalRunId]
+      );
+      if (!runRows[0] || String(runRows[0].status) !== "active") {
+        await connection.commit();
+        return { id: null, queued: false };
+      }
+      const [live] = await connection.execute<RowDataPacket[]>(
+        `SELECT id FROM goal_cycle_requests
+          WHERE tenantId = ? AND goalRunId = ?
+            AND status IN (${LIVE_TICK_STATUSES.map(() => "?").join(",")})
+          ORDER BY id
+          LIMIT 1`,
+        [input.tenantId, input.goalRunId, ...LIVE_TICK_STATUSES]
+      );
+      if (live[0]) {
+        await connection.commit();
+        return { id: String(live[0].id), queued: false };
+      }
+      // claimNextStep only considers tenants with a fairness row.
+      await connection.execute(
+        `INSERT IGNORE INTO goal_cycle_tenant_state (tenantId) VALUES (?)`,
+        [input.tenantId]
+      );
+      const id = await queueRunScheduledTickLocked(connection, {
+        tenantId: input.tenantId,
+        goalRunId: input.goalRunId,
+        availableAt: now,
+        triggerSourceReference: "autonomous_supervisor:heartbeat",
+        deadLetterRevivalDelayMs: DEAD_LETTER_REVIVAL_DELAY_MS,
+      });
+      await connection.commit();
+      return { id, queued: true };
     } catch (error) {
       await connection.rollback();
       throw error;
