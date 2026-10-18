@@ -24,6 +24,7 @@ import type { VerticalRegistry } from "../../strategy/verticalTemplates/registry
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import { isLegacyDayforgeTenant } from "../../saas/tenantAccess";
 import { resolveCanonicalOperatorIdentity } from "./identity";
+import { goalCyclePolicyAllows, type GoalCyclePolicyReceipt } from "./goalCyclePolicy";
 import {
   appendGoalCycleDecision,
   findDecisionForCycle,
@@ -351,6 +352,8 @@ export async function decideGoalCycle(input: {
   runId: string;
   cycleId: string;
   registry: VerticalRegistry;
+  /** Required. evaluatePersistentActionPolicy's verdict on preparing this occurrence. */
+  actionPolicy: GoalCyclePolicyReceipt;
   now?: Date;
 }): Promise<DecideGoalCycleResult> {
   const existing = await findDecisionForCycle({
@@ -382,6 +385,40 @@ export async function decideGoalCycle(input: {
 
   const now = input.now ?? new Date();
   const run = await loadRun({ tenantId: input.tenantId, runId: input.runId });
+  // A denied (or missing) policy decides to wait and prepares nothing. Checked
+  // before identity resolution, because an unresolved identity is itself a denial.
+  if (!goalCyclePolicyAllows(input.actionPolicy)) {
+    const decisionResult = await appendGoalCycleDecision({
+      tenantId: input.tenantId,
+      goalRunId: run.id,
+      cycleId: input.cycleId,
+      canonicalOperatorId: run.canonicalOperatorId,
+      operatorUserId: run.operatorUserId,
+      policyVersion: run.policyVersion,
+      weeklyIntentId: null,
+      weeklyIntentRevision: null,
+      weekStart: null,
+      candidateFingerprint: null,
+      candidateIds: [],
+      candidateReasonCodes: {},
+      missionDirectorPlanId: null,
+      missionDirectorRevision: null,
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedExecutionType: null,
+      selectedReasonCode: "ACTION_POLICY_DENIED",
+      evidenceRefs: [],
+      blockedCandidates: [],
+      priorComparableDecisionId: null,
+      sourceCoverage: {
+        goalRun: run.status,
+        actionPolicy: input.actionPolicy ?? { status: "denied", reason: "missing_policy_receipt" },
+      },
+      loadout: [],
+      experiment: null,
+    });
+    return { ...decisionResult, objective: null };
+  }
   const identity = await resolveCanonicalOperatorIdentity({
     tenantId: input.tenantId,
     source: { type: "open_id", value: run.operatorUserId },
@@ -427,7 +464,7 @@ export async function decideGoalCycle(input: {
           : [],
       blockedCandidates: [],
       priorComparableDecisionId: null,
-      sourceCoverage: { goalRun: run.status },
+      sourceCoverage: { goalRun: run.status, actionPolicy: input.actionPolicy },
       loadout: [],
       experiment: null,
     });
@@ -458,7 +495,7 @@ export async function decideGoalCycle(input: {
       evidenceRefs: [],
       blockedCandidates: [],
       priorComparableDecisionId: null,
-      sourceCoverage: { tenantTimeZone: "unavailable" },
+      sourceCoverage: { tenantTimeZone: "unavailable", actionPolicy: input.actionPolicy },
       loadout: [],
       experiment: null,
     };
@@ -548,7 +585,7 @@ export async function decideGoalCycle(input: {
     candidateFeed: feedCoverage,
     obligations: obligationCoverage,
     missionDirector: missionDirectorCoverage,
-    actionPolicy: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+    actionPolicy: input.actionPolicy,
     channelReadiness: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
   };
 
