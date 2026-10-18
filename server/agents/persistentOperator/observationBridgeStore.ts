@@ -355,3 +355,37 @@ export async function readObservationBridgeBacklog(input: { tenantId?: string; n
     oldestRetryingAgeMs: oldest ? Math.max(0, now.getTime() - oldest.getTime()) : null,
   };
 }
+
+/**
+ * The obligations a person should look at: ambiguous lineage, and anything
+ * still retrying after a day. Oldest first, read-only.
+ */
+export async function listObservationObligationsNeedingAttention(input: {
+  tenantId: string;
+  now?: Date;
+  limit?: number;
+}): Promise<Array<Pick<ObservationBridgeObligation, "id" | "sourceKind" | "sourceKey" | "status" | "attemptCount" | "lastError" | "result" | "createdAt">>> {
+  const db = await database();
+  const now = input.now ?? new Date();
+  const stale = new Date(now.getTime() - 24 * 60 * MINUTE);
+  const rows = await db
+    .select()
+    .from(observationBridgeObligations)
+    .where(
+      and(
+        eq(observationBridgeObligations.tenantId, input.tenantId),
+        or(
+          eq(observationBridgeObligations.status, "ambiguous_review"),
+          and(
+            inArray(observationBridgeObligations.status, [...RETRYABLE_OBSERVATION_BRIDGE_STATUSES]),
+            lt(observationBridgeObligations.createdAt, stale)
+          )
+        )
+      )
+    )
+    .orderBy(asc(observationBridgeObligations.createdAt))
+    .limit(input.limit ?? 50);
+  return rows.map(toRecord).map(({ id, sourceKind, sourceKey, status, attemptCount, lastError, result, createdAt }) => ({
+    id, sourceKind, sourceKey, status, attemptCount, lastError, result, createdAt,
+  }));
+}

@@ -39,6 +39,11 @@ import {
   enqueueCompletedCommitmentObligations,
 } from "./commitmentExecutionBridge";
 import { drainObservationBridgeObligations, type ObservationBridgeHandler } from "./observationBridgeStore";
+import {
+  CLEANCLOUD_PAID_ORDER_SOURCE,
+  enqueueUnbridgedPaidOrderObligations,
+  paidOrderObservationHandler,
+} from "./paidOrderObservationBridge";
 import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
@@ -413,32 +418,40 @@ export async function sweepUnpropagatedConquestWins(input: {
   return { processedCount, errors };
 }
 
-/** Observation-bridge handlers by source kind. */
-export function observationBridgeHandlers(): Partial<Record<string, ObservationBridgeHandler>> {
-  return { [COMMITMENT_COMPLETION_SOURCE]: commitmentCompletionHandler };
-}
-
-/** Completed commitments look back this far for a missing obligation. */
-const COMMITMENT_RECONCILIATION_DAYS = 30;
+/** Completed commitments and paid orders look back this far for a missing obligation. */
+const OBSERVATION_RECONCILIATION_DAYS = 30;
 
 /**
- * Reconcile observation bridges: completed, approved commitments get their
- * obligation if a crash or another completion path skipped it, then due
- * obligations are retried. Per-item errors are returned, never swallowed.
+ * Reconcile observation bridges. Source events with no obligation (a crash
+ * after the commit, a completion path that never bridged) get one; then due
+ * obligations are retried, commitment completions before paid orders, so an
+ * order whose attempt was just linked is not judged before its attempt.
+ * Per-item errors are returned, never swallowed.
  */
-export async function sweepObservationBridges(input: { leaseOwner: string; now?: Date; limit?: number }) {
+export async function sweepObservationBridges(input: {
+  leaseOwner: string;
+  now?: Date;
+  limit?: number;
+  /** One tenant only: a targeted repair, or a test that must not touch other tenants' obligations. The worker sweeps every tenant. */
+  tenantId?: string;
+}) {
   const now = input.now ?? new Date();
-  const discovered = await enqueueCompletedCommitmentObligations({
-    since: new Date(now.getTime() - COMMITMENT_RECONCILIATION_DAYS * 86_400_000),
-    now,
-  });
-  const drained = await drainObservationBridgeObligations({
-    handlers: observationBridgeHandlers(),
-    leaseOwner: input.leaseOwner,
-    limit: input.limit ?? 25,
-    now,
-  });
-  return { discovered: discovered.enqueued, ...drained };
+  const since = new Date(now.getTime() - OBSERVATION_RECONCILIATION_DAYS * 86_400_000);
+  const scope = input.tenantId ? { tenantId: input.tenantId } : {};
+  const commitments = await enqueueCompletedCommitmentObligations({ since, now, ...scope });
+  const paidOrders = await enqueueUnbridgedPaidOrderObligations({ since, now, ...scope });
+  const passes: Array<Record<string, ObservationBridgeHandler>> = [
+    { [COMMITMENT_COMPLETION_SOURCE]: commitmentCompletionHandler },
+    { [CLEANCLOUD_PAID_ORDER_SOURCE]: paidOrderObservationHandler },
+  ];
+  const summary = { discovered: commitments.enqueued + paidOrders.enqueued, attempted: 0, byStatus: {} as Record<string, number>, errors: [] as Array<{ id: string; sourceKind: string; sourceKey: string; error: string }> };
+  for (const handlers of passes) {
+    const drained = await drainObservationBridgeObligations({ handlers, leaseOwner: input.leaseOwner, limit: input.limit ?? 25, now, ...scope });
+    summary.attempted += drained.attempted;
+    for (const [status, count] of Object.entries(drained.byStatus)) summary.byStatus[status] = (summary.byStatus[status] ?? 0) + (count ?? 0);
+    summary.errors.push(...drained.errors);
+  }
+  return summary;
 }
 
 export function startAutonomousPersistentOperatorWorkers(
