@@ -8,8 +8,14 @@ vi.mock("./agentMailVendorEmailProvider", async () => {
 const { sendVendorEmailViaAgentMail, SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
 const { createVendorAcquisitionMissionRouter, resolveTargetGeography, classifyOutreachReadiness } = await import("./vendorAcquisitionMissionRouter");
 
-function context(user: { role: string } | null) {
-  return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
+function context(user: { role: string; openId?: string } | null) {
+  return {
+    user: user ? { id: 1, openId: "operator-admin", ...user, openId: user.openId ?? "operator-admin" } : null,
+    tenantId: "default",
+    req: {},
+    res: {},
+    vendorSession: null,
+  } as never;
 }
 
 function makeMockStore(overrides?: Record<string, unknown>) {
