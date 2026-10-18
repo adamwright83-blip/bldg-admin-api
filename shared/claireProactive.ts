@@ -462,7 +462,7 @@ export function morningChiefOfStaffBrief(input: {
         `${names.length} dormant customer${names.length === 1 ? "" : "s"} ready for recovery: ${naturalNames}.`
       );
     } else {
-      lines.push(`${todayRecovery[0].title} is on the line because ${todayRecovery[0].why}`);
+      lines.push(`${todayRecovery[0].title} is prepared because ${todayRecovery[0].why} It goes on the Day Line only when you approve it.`);
     }
   }
   if (todaySales[0]) {

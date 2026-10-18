@@ -12,7 +12,6 @@ import {
 } from "../../strategy/dormantOutreachGate";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
-import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
 import { listOpenCommercialFollowUps } from "../../domains/commercial/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,
@@ -112,37 +111,6 @@ async function backfillObligationCommercialFollowUpRef(input: {
   commercialFollowUpRef: string;
 }): Promise<void> {
   await backfillPersistentOperatorCommercialFollowUpRef(input);
-}
-
-async function placeOnDayLine(input: {
-  tenantId: string;
-  actorId: string;
-  dueDate: string;
-  title: string;
-  idempotencyKey: string;
-  sourceText: string;
-}): Promise<void> {
-  const result = await acceptProposalWithReceipt({
-    tenantId: input.tenantId,
-    actorId: input.actorId,
-    businessDate: input.dueDate,
-    proposal: {
-      promptKey: input.idempotencyKey.slice(0, 191),
-      title: input.title.slice(0, 255),
-      kind: "growth",
-      quantity: null,
-      sourceText: input.sourceText,
-      prerequisites: [],
-      question: null,
-      intelligence: "manual_fallback",
-      detailState: "COMPLETE",
-      missingDetails: [],
-      targetBusinessDate: input.dueDate,
-    },
-  });
-  if (!result.stored?.id) {
-    throw new Error("Proactive Day Line item was not persisted");
-  }
 }
 
 /**
@@ -337,15 +305,9 @@ export async function ensureOperatorBoard(input: {
       lastServiceLabel: input.recoveryDraftIdentity.serviceLabel,
     });
     const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
+    // Prepared, never committed: the obligation reaches Mission Director as a
+    // candidate, and only the operator's approval puts it on the Day Line.
     await upsertObligation(input.tenantId, input.operatorUserId, obligation);
-    await placeOnDayLine({
-      tenantId: input.tenantId,
-      actorId: input.actorId,
-      dueDate,
-      title: obligation.title,
-      idempotencyKey: `claire-proactive:${obligation.id}`,
-      sourceText: `${obligation.why} Rook draft is prepared; sending still needs you.`,
-    });
     created += 1;
   }
 
@@ -386,14 +348,6 @@ export async function ensureOperatorBoard(input: {
           obligation,
           { commercialFollowUpRef: follow.id }
         );
-        await placeOnDayLine({
-          tenantId: input.tenantId,
-          actorId: input.actorId,
-          dueDate: dueDate < today ? today : dueDate,
-          title: obligation.title,
-          idempotencyKey: `claire-proactive:${obligation.id}`,
-          sourceText: obligation.why,
-        });
         created += 1;
       }
     } catch (error) {
