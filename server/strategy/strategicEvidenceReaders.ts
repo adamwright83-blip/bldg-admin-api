@@ -608,7 +608,7 @@ export async function readObjectiveFocus(input: {
       .filter(m => m.matched)
       .sort((a, b) => b.revenueCents - a.revenueCents)
       .slice(0, 5)
-      .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents }));
+      .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents, identityKey: m.identityId }));
     focus.dormantRef = `objective_area_dormant:${input.tenantId}:${label}:${capturedAt}`;
     evidence.push({
       id: focus.dormantRef,

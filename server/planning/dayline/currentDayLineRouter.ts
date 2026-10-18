@@ -12,6 +12,7 @@ import type { CampaignRun } from "../../../shared/campaignRun";
 import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { listOperatorRunsForIdentities } from "../../campaignRuns/campaignRunService";
 import { bridgeDriverAction } from "../../agents/persistentOperator/fieldEventBridge";
+import { bridgeCommitmentCompletion } from "../../agents/persistentOperator/commitmentExecutionBridge";
 import { completeDayDirectorCommitment } from "../dayDirector/dayDirectorService";
 import { getLatestPlan } from "../missionDirector/missionDirectorService";
 import { resolveCandidateCompletionLineage } from "./candidateCompletionLineage";
@@ -266,30 +267,36 @@ export const currentDayLineRouter = router({
           commitmentId,
         });
 
-        const bridged = await bridgeDriverAction({
+        // The commitment is done on the Day Line. Its goal evidence binds to
+        // the exact objective approval recorded, through a durable obligation:
+        // a failure is retried, never reported as verified.
+        const goalEvidence = await bridgeCommitmentCompletion({
           tenantId,
-          actorId: identity.dayDirectorActorId,
           commitmentId,
           evidenceReference: input.evidenceReference,
-          evidenceClass: input.evidenceClass,
+          ...(input.evidenceClass ? { evidenceClass: input.evidenceClass } : {}),
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
-          explanation: input.explanation ?? `Day Director commitment completed via HUD: ${commitmentId}`,
-        }).catch(() => ({ bridged: false as const, reason: "no_linked_objective" as const }));
+          actorId: identity.canonicalOpenId,
+          explanation: input.explanation ?? null,
+        });
 
-        await recordPersistentOperatorDiagnosticEvent({
-          tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
-          operatorUserId: identity.canonicalOpenId,
-          subsystem: "day_line.completeItem",
-          eventKind: "objective_verified",
-          objectiveId: commitmentId,
-        }).catch(() => undefined);
+        if (goalEvidence.status === "recorded") {
+          await recordPersistentOperatorDiagnosticEvent({
+            tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            operatorUserId: identity.canonicalOpenId,
+            subsystem: "day_line.completeItem",
+            eventKind: "objective_verified",
+            objectiveId: goalEvidence.objectiveId,
+          }).catch(() => undefined);
+        }
 
         return {
           success: true,
           lineageKind: "commitment" as const,
           itemId: lineItem.id,
-          receipt: { commitment: commitmentResult, bridged },
+          receipt: { commitment: commitmentResult },
+          goalEvidence,
         };
       }
 

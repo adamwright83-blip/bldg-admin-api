@@ -51,7 +51,7 @@ export type DiagnosisInput = {
     salesRef: string | null;
     dormant: number | null;
     dormantRef: string | null;
-    dormantTop: Array<{ name: string; lastOrderDate: string | null; revenueCents: number }>;
+    dormantTop: Array<{ name: string; lastOrderDate: string | null; revenueCents: number; identityKey?: string | null }>;
     figuresVerified: boolean;
   };
   /** Sources current, but some orders are not payment-verified: figures are usable as recorded, never as confirmed. */
@@ -59,6 +59,9 @@ export type DiagnosisInput = {
   /** Durable Work Thread ids already resolved for this diagnosis's opportunities, by opportunity key. */
   workThreadIds?: Readonly<Record<string, string>>;
 };
+
+/** Win-back contacts are judged on replies and orders in this many days after contact. */
+export const RECOVERY_OBSERVATION_DAYS = 14;
 
 export function assembleStrategicDiagnosis(
   input: DiagnosisInput,
@@ -405,6 +408,12 @@ export function assembleStrategicDiagnosis(
       "Review at the next weekly cycle; reject the hypothesis if the source records or verified outcomes contradict it.",
     territoryId: null,
     opportunity,
+    // A win-back names its customers and how long their orders are watched;
+    // a review of a contradicted approach contacts no one.
+    ...(!revisitingFailedHypothesis && focusPlan?.targets?.length ? { targets: focusPlan.targets } : {}),
+    ...(!revisitingFailedHypothesis && (focusPlan?.observationWindowDays || recovery)
+      ? { observationWindowDays: focusPlan?.observationWindowDays ?? RECOVERY_OBSERVATION_DAYS }
+      : {}),
     ...(input.workThreadIds?.[workThreadOpportunityKey(opportunity)]
       ? { workThreadId: input.workThreadIds[workThreadOpportunityKey(opportunity)] }
       : {}),
@@ -590,7 +599,7 @@ function enrichOptions(
       if (i === 0) {
         o.expectedBenefit = `If ${n} of ${f.dormant} dormant customers each place one order: ${perOrder(n)}`;
         o.uncertainty = "Reply and return rates for this business are unobserved; consent and eligibility may reduce the reachable list.";
-        o.nextMeasurableAction = `Prepare ${n} consented recovery contacts and record replies and orders within 14 days.`;
+        o.nextMeasurableAction = `Prepare ${n} consented recovery contacts and record replies and orders within ${RECOVERY_OBSERVATION_DAYS} days.`;
         o.reason = "Preferred: known buyers with an existing relationship, measurable within one cycle, and no acquisition spend.";
       } else {
         o.expectedBenefit = f.newCustomers == null
@@ -648,6 +657,9 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
   if (focus.dormant != null && focus.dormant > 0) {
     const n = Math.min(5, focus.dormant);
     const names = focus.dormantTop.slice(0, n).map(c => c.name).filter(Boolean);
+    const targets = focus.dormantTop
+      .slice(0, n)
+      .flatMap(c => (c.identityKey ? [{ identityKey: c.identityKey, displayName: c.name }] : []));
     const who = names.length
       ? `${names.join(", ")} — your ${names.length} highest-spending lapsed ${area} customers`
       : `the ${n} highest-spending lapsed ${area} customers`;
@@ -659,13 +671,15 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
       chosen: `Win back lapsed ${area} customers`,
       alternative: outreach,
       leadingIndicator: "Win-back contacts made; replies and returning orders recorded.",
+      targets,
+      observationWindowDays: RECOVERY_OBSERVATION_DAYS,
       uncertainty: [profit, "Why these customers stopped ordering is unknown; ask when you contact them."],
       chosenFields: {
         observedBasis: condition,
         reason: `Preferred: ${focus.dormant} ${area} customers already know the service, so a few returning is the quickest measurable lift toward your objective, with no acquisition spend.`,
         expectedBenefit: `If ${n} return once: ${worth(n)}`,
         uncertainty: `Return rate is unobserved. ${profit}`,
-        nextMeasurableAction: `Contact ${who} with a return offer you approve; record replies and orders within 14 days.`,
+        nextMeasurableAction: `Contact ${who} with a return offer you approve; record replies and orders within ${RECOVERY_OBSERVATION_DAYS} days.`,
       },
       altFields: {
         observedBasis: condition,
@@ -684,6 +698,9 @@ export function planForObjective(focus: Focus, businessAov: number | null, byId:
     chosen: outreach,
     alternative: `Raise order frequency of current ${area} customers`,
     leadingIndicator: "Outreach logged; new orders recorded.",
+    // New customers are not known in advance, so nothing is targeted or watched by identity.
+    targets: [] as Array<{ identityKey: string; displayName: string }>,
+    observationWindowDays: undefined as number | undefined,
     uncertainty: [profit],
     chosenFields: {
       observedBasis: condition,

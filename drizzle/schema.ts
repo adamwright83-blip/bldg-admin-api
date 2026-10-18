@@ -7872,6 +7872,48 @@ export const workThreads = mysqlTable(
 
 export type WorkThreadRow = typeof workThreads.$inferSelect;
 
+/**
+ * Phase 2 · Slices C and D: a durable source event (a completed commitment, a
+ * paid CleanCloud order) that must be connected to its goal objective. The row
+ * owns the retry instead of a "deferred" log line. See
+ * server/agents/persistentOperator/observationBridgeStore.ts.
+ */
+export const observationBridgeObligations = mysqlTable(
+  "observation_bridge_obligations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    sourceKind: varchar("sourceKind", { length: 48 }).notNull(),
+    sourceKey: varchar("sourceKey", { length: 191 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("pending"),
+    payloadJson: json("payloadJson").notNull(),
+    resultJson: json("resultJson"),
+    attemptCount: int("attemptCount").notNull().default(0),
+    nextAttemptAt: timestamp("nextAttemptAt", { fsp: 3 }).notNull().defaultNow(),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    lastError: text("lastError"),
+    resolvedAt: timestamp("resolvedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    sourceUnique: uniqueIndex("uq_observation_bridge_source").on(
+      table.tenantId,
+      table.sourceKind,
+      table.sourceKey
+    ),
+    dueIdx: index("idx_observation_bridge_due").on(table.status, table.nextAttemptAt),
+    tenantStatusIdx: index("idx_observation_bridge_tenant_status").on(
+      table.tenantId,
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
+
+export type ObservationBridgeObligationRow = typeof observationBridgeObligations.$inferSelect;
+
 export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
 export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;
 

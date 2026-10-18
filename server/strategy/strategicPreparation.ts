@@ -295,6 +295,8 @@ export async function prepareStrategicProposal(input: {
           planRevision: 0,
           evidenceRefs: [`strategic_diagnosis:${diagnosis.id}`, ...diagnosis.supportingEvidence],
           ...(strategyThreadId ? { workThreadId: strategyThreadId } : {}),
+          ...(selectedAction.targets?.length ? { customerTargets: selectedAction.targets } : {}),
+          ...(selectedAction.observationWindowDays ? { observationWindowDays: selectedAction.observationWindowDays } : {}),
         }
       : null;
   if (strategyItem) {
