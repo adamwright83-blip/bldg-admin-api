@@ -1,7 +1,7 @@
 import { cancelDayLineItem } from "../planning/dayline/dayLineMutationService";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { mergeDayLineOverlay, readDayLineOverlay } from "../../shared/goldlineDayLine";
 import {
   dayDirectorCommitments,
@@ -17,6 +17,7 @@ import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { proposalItemExecutionWindow } from "../../shared/weeklyMissionReadiness";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
+import { REUSABLE_OBJECTIVE_STATUSES } from "../agents/persistentOperator/objectiveStore";
 import type { StrategicPlanningProposal } from "../../shared/strategicIntelligence";
 import {
   loadStrategicProposal,
@@ -35,6 +36,63 @@ export type StrategicApprovalInput = {
   source: "authenticated_app" | "authenticated_voice";
   now?: Date;
 };
+/** Where an approved item's outcomes will bind, or why they cannot. */
+export type ApprovedObjectiveLineage =
+  | { objectiveId: string; objectiveStatus: string }
+  | { objectiveId: null; reason: "no_open_goal_objective" };
+
+/**
+ * Outcomes reach the goal only through the goal-cycle objective for the work,
+ * so an approval attaches its item to the operator's open objective for that
+ * work (the one for the same day first): a presented objective becomes
+ * accepted, one already further along is left as it is. Approval never invents
+ * an objective; only a goal-cycle decision creates one.
+ */
+async function attachApprovedObjective(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  input: {
+    tenantId: string;
+    canonicalOperatorId: string;
+    selectedRef: string;
+    businessDate: string;
+    statusReason: string;
+  }
+): Promise<ApprovedObjectiveLineage> {
+  const open = await db
+    .select({ id: goalCycleObjectives.id, businessDate: goalCycleObjectives.businessDate })
+    .from(goalCycleObjectives)
+    .where(
+      and(
+        eq(goalCycleObjectives.tenantId, input.tenantId),
+        eq(goalCycleObjectives.canonicalOperatorId, input.canonicalOperatorId),
+        eq(goalCycleObjectives.selectedRef, input.selectedRef),
+        inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
+      )
+    )
+    .orderBy(desc(goalCycleObjectives.createdAt), desc(goalCycleObjectives.id));
+  const chosen = open.find(o => o.businessDate === input.businessDate) ?? open[0];
+  if (chosen) {
+    await db
+      .update(goalCycleObjectives)
+      .set({ status: "accepted", statusReason: input.statusReason })
+      .where(
+        and(
+          eq(goalCycleObjectives.tenantId, input.tenantId),
+          eq(goalCycleObjectives.id, chosen.id),
+          eq(goalCycleObjectives.status, "presented")
+        )
+      );
+    const [after] = await db
+      .select({ id: goalCycleObjectives.id, status: goalCycleObjectives.status })
+      .from(goalCycleObjectives)
+      .where(and(eq(goalCycleObjectives.tenantId, input.tenantId), eq(goalCycleObjectives.id, chosen.id)))
+      .limit(1);
+    if (after && (REUSABLE_OBJECTIVE_STATUSES as readonly string[]).includes(after.status))
+      return { objectiveId: after.id, objectiveStatus: after.status };
+  }
+  return { objectiveId: null, reason: "no_open_goal_objective" };
+}
+
 /** The operator's business-local date and time, the frame every execution window is judged in. */
 function businessClock(timeZone: string, now: Date) {
   return { businessDate: formatInTimeZone(now, timeZone, "yyyy-MM-dd"), localTime: formatInTimeZone(now, timeZone, "HH:mm") };
@@ -106,6 +164,7 @@ export async function respondToStrategicProposal(
           : "The decision is deferred. No work was added.",
       actionIds: [] as string[],
       failedItems: [] as string[],
+      unboundItems: [] as string[],
       responseId: response.id,
     };
   const approvals = (await strategicResponses(input.identity, p.id))
@@ -113,6 +172,7 @@ export async function respondToStrategicProposal(
     .reverse();
   const actionIds: string[] = [];
   const failedItems: string[] = [];
+  const unboundItems: string[] = [];
   for (const id of itemIds) {
     const item = p.items.find(i => i.id === id)!;
     try {
@@ -190,37 +250,30 @@ export async function respondToStrategicProposal(
         !isDeepStrictEqual(lineage, expectedLineage)
       )
         throw new Error("Canonical commitment readback mismatch");
-      if (metadata && (item.missionType || item.timeWindow)) {
-        const label = item.timeWindow
-          ? `${item.timeWindow.window[0]!.toUpperCase()}${item.timeWindow.window.slice(1)}${item.timeWindow.time ? ` · ${item.timeWindow.time}` : ""}`
-          : null;
-        await db
-          .update(dayDirectorCommitments)
-          .set({
-            metadataJson: {
-              ...(metadata as Record<string, unknown>),
-              ...(item.missionType ? { missionType: item.missionType } : {}),
-              ...(label ? { scheduleLabel: label } : {}),
-            },
-          })
-          .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));
-      }
-      // The accepted canonical commitment is the execution authority. Keep
-      // the originating durable objective's lifecycle in sync for outcome binding.
+      // The accepted canonical commitment is the execution authority; the
+      // goal objective is where its outcomes bind. Record which one, or that
+      // there is none, on the commitment itself.
+      const objectiveLineage = await attachApprovedObjective(db, {
+        tenantId: p.tenantId,
+        canonicalOperatorId: p.canonicalOperatorId,
+        selectedRef: item.candidateId,
+        businessDate: item.businessDate,
+        statusReason: `Exact proposal approval ${firstApproval.id}; canonical commitment ${row.id}`,
+      });
+      const label = item.timeWindow
+        ? `${item.timeWindow.window[0]!.toUpperCase()}${item.timeWindow.window.slice(1)}${item.timeWindow.time ? ` · ${item.timeWindow.time}` : ""}`
+        : null;
       await db
-        .update(goalCycleObjectives)
+        .update(dayDirectorCommitments)
         .set({
-          status: "accepted",
-          statusReason: `Exact proposal approval ${firstApproval.id}; canonical commitment ${row.id}`,
+          metadataJson: {
+            ...((metadata ?? {}) as Record<string, unknown>),
+            ...(item.missionType ? { missionType: item.missionType } : {}),
+            ...(label ? { scheduleLabel: label } : {}),
+            objectiveLineage,
+          },
         })
-        .where(
-          and(
-            eq(goalCycleObjectives.tenantId, p.tenantId),
-            eq(goalCycleObjectives.canonicalOperatorId, p.canonicalOperatorId),
-            eq(goalCycleObjectives.selectedRef, item.candidateId),
-            eq(goalCycleObjectives.status, "presented")
-          )
-        );
+        .where(and(eq(dayDirectorCommitments.tenantId, p.tenantId), eq(dayDirectorCommitments.id, row.id)));
       // A rescheduled item replaces earlier commitments. The replacement exists
       // only if every earlier slot is retired; otherwise it is rolled back, the
       // earlier slots stay active, and the item is reported as not confirmed.
@@ -233,16 +286,27 @@ export async function respondToStrategicProposal(
         reason: `Rescheduled to ${item.businessDate} by approved plan revision ${p.revision.slice(0, 12)}`,
       });
       actionIds.push(row.id);
+      if (!objectiveLineage.objectiveId) unboundItems.push(item.id);
     } catch {
       failedItems.push(item.id);
     }
   }
+  const titles = (ids: readonly string[]) => ids.map(id => p.items.find(i => i.id === id)!.title).join("; ");
+  // Work with no goal objective is on the Day Line, but its results cannot
+  // count toward the goal. Say so; never call it verified progress.
+  const unbound = unboundItems.length
+    ? ` Not linked to a goal objective, so results on ${unboundItems.length === 1 ? "it" : "them"} cannot count toward the goal: ${titles(unboundItems)}.`
+    : "";
+  const linked = itemIds.filter(id => !failedItems.includes(id) && !unboundItems.includes(id));
   return {
     speech: failedItems.length
-      ? `${actionIds.length} accepted item(s) verified in storage; ${failedItems.length} could not be verified. The failed items are not confirmed as added.`
-      : `${actionIds.length} approved item(s) added and verified in the Day Line: ${itemIds.map(id => p.items.find(i => i.id === id)!.title).join("; ")}.`,
+      ? `${actionIds.length} accepted item(s) verified in storage; ${failedItems.length} could not be verified. The failed items are not confirmed as added.${unbound}`
+      : unboundItems.length
+        ? `${actionIds.length} approved item(s) added to the Day Line.${linked.length ? ` Verified and linked to the goal: ${titles(linked)}.` : ""}${unbound}`
+        : `${actionIds.length} approved item(s) added and verified in the Day Line: ${titles(itemIds)}.`,
     actionIds,
     failedItems,
+    unboundItems,
     responseId: response.id,
   };
 }

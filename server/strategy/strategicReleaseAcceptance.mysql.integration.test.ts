@@ -102,6 +102,21 @@ vi.mock("../twilioPlatform/claireCallProvider", () => ({
 }));
 const describeMysql = process.env.DATABASE_URL ? describe : describe.skip;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** Approval speech says "verified" only for an item linked to a goal objective (Stage 1 Phase 3 c). */
+async function expectHonestApprovalSpeech(sql: mysql.Connection, tenantId: string, itemId: string, speech: string) {
+  const [rows] = await sql.execute<mysql.RowDataPacket[]>(
+    "SELECT metadataJson FROM day_director_commitments WHERE tenantId=? AND JSON_UNQUOTE(JSON_EXTRACT(metadataJson,'$.strategicApproval.itemId'))=?",
+    [tenantId, itemId]
+  );
+  expect(rows).toHaveLength(1);
+  const metadata = typeof rows[0]!.metadataJson === "string" ? JSON.parse(rows[0]!.metadataJson) : rows[0]!.metadataJson;
+  expect(metadata.objectiveLineage).toBeDefined();
+  if (metadata.objectiveLineage.objectiveId) expect(speech).toContain("verified");
+  else {
+    expect(speech).toContain("Not linked to a goal objective");
+    expect(speech).not.toContain("added and verified");
+  }
+}
 async function until(check: () => Promise<boolean>, timeout = 25000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -416,7 +431,7 @@ describeMysql(
           expect(decisions.find(r => r.action === "approve")?.itemIds).toEqual([
             proposal.items[1]!.id,
           ]);
-          expect(result.speak).toContain("verified");
+          await expectHonestApprovalSpeech(sql, tenantId, proposal.items[1]!.id, result.speak);
           const metadata =
             typeof rows[0]!.metadataJson === "string"
               ? JSON.parse(rows[0]!.metadataJson)
@@ -592,7 +607,7 @@ describeMysql(
         await readVerifiedStrategicApprovalItemIds(identity, revisedShared!)
       ).toEqual([]);
       const bApproval = await say(b, "Only add the second one.");
-      expect(bApproval.speak).toContain("verified");
+      await expectHonestApprovalSpeech(sql, tenantId, shared.items[1]!.id, bApproval.speak);
       expect(
         await readVerifiedStrategicApprovalItemIds(identity, revisedShared!)
       ).toEqual([shared.items[1]!.id]);
@@ -616,7 +631,7 @@ describeMysql(
       const held = await say(fragmentedCall, "make the", true);
       expect(held.listenOnly).toBe(true);
       const completed = await say(fragmentedCall, "second item a mission");
-      expect(completed.speak).toContain("verified");
+      await expectHonestApprovalSpeech(sql, tenantId, fragmented.items[1]!.id, completed.speak);
       expect(
         await readVerifiedStrategicApprovalItemIds(identity, fragmented)
       ).toEqual([fragmented.items[1]!.id]);

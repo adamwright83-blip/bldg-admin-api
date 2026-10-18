@@ -168,7 +168,8 @@ test.describe("work whose execution window has passed", () => {
       await expect(item).not.toContainText("time passed");
       await item.getByRole("checkbox").check();
       await e.page.getByTestId("claire-strategic-proposal").getByRole("button", { name: "Approve selected", exact: true }).click();
-      await expect(e.page.getByTestId("claire-strategic-proposal")).toContainText("1 approved item(s) added and verified");
+      // No goal cycle runs in this suite, so the fixture has no goal objective: approval says so instead of claiming verified progress (Stage 1 Phase 3 c).
+      await expect(e.page.getByTestId("claire-strategic-proposal")).toContainText("1 approved item(s) added to the Day Line. Not linked to a goal objective");
       expect(await commitments(e)).toEqual([{ title: "Ordinary mission due today", d: target }]);
     } finally {
       await e.close();
@@ -190,7 +191,8 @@ test.describe("work whose execution window has passed", () => {
       await expect(later).not.toContainText("time passed");
       await later.getByRole("checkbox").check();
       await e.page.getByTestId("claire-strategic-proposal").getByRole("button", { name: "Approve selected", exact: true }).click();
-      await expect(e.page.getByTestId("claire-strategic-proposal")).toContainText("1 approved item(s) added and verified");
+      // No goal cycle runs in this suite, so the fixture has no goal objective: approval says so instead of claiming verified progress (Stage 1 Phase 3 c).
+      await expect(e.page.getByTestId("claire-strategic-proposal")).toContainText("1 approved item(s) added to the Day Line. Not linked to a goal objective");
       expect(await commitments(e)).toEqual([{ title: "Meeting the operator set for 23:30", d: e.today }]);
     } finally {
       await e.close();
@@ -214,7 +216,8 @@ test.describe("work whose execution window has passed", () => {
       await expect(secondary).toContainText("Win back lapsed customers (no time)");
       await expect(secondary).toContainText("Time passed — reschedule");
       await primary.getByRole("button", { name: "Approve this mission", exact: true }).click();
-      await expect(e.page.getByTestId("approve-result")).toContainText("1 approved item(s) added and verified in the Day Line");
+      // No goal cycle runs in this suite, so the fixture has no goal objective: approval says so instead of claiming verified progress (Stage 1 Phase 3 c).
+      await expect(e.page.getByTestId("approve-result")).toContainText("1 approved item(s) added to the Day Line. Not linked to a goal objective");
       expect(await commitments(e)).toEqual([{ title: "Win back lapsed customers (desk fixture)", d: e.today }]);
     } finally {
       await e.close();
