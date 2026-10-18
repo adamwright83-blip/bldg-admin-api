@@ -88,6 +88,8 @@ describeMysql("autonomous goal bootstrap on MySQL", () => {
   const live = (rows: mysql.RowDataPacket[]) => rows.filter(r => ["queued", "retry_scheduled", "leased", "running"].includes(String(r.status)));
 
   it("a dead-lettered scheduled tick plus repeated sweeps leaves exactly one live tick, no auto_tick rows, and never prepares", async () => {
+    // Stage 1 · 1B: the dead occurrence stays dead (its id is its decision identity);
+    // the sweep queues one new occurrence after it, and further sweeps add nothing.
     const t = await operatorWithRun();
     // The run's scheduled tick exhausted its attempts.
     const tickId = randomUUID();
@@ -100,12 +102,14 @@ describeMysql("autonomous goal bootstrap on MySQL", () => {
       await ensureAutonomousGoalBootstrap({ store, appointmentStore: appointments, now: new Date(start.getTime() + hoursLater * 3_600_000) });
     }
     const rows = await cycles(t.tenantId, t.runId);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.id).toBe(tickId);
-    expect(live(rows)).toHaveLength(1);
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.id === tickId)?.status).toBe("dead_letter");
+    const next = live(rows);
+    expect(next).toHaveLength(1);
+    expect(next[0]!.idempotencyKey).toBe(`scheduled_tick:${t.runId}:after:${tickId}`);
     expect(rows.filter(r => String(r.idempotencyKey).startsWith("auto_tick:"))).toEqual([]);
-    // A dead tick is not revived sooner than an hour after it died.
-    expect(new Date(rows[0]!.availableAt).getTime()).toBeGreaterThanOrEqual(start.getTime() + 3_600_000 - 5_000);
+    // The next occurrence waits an hour from the dead letter.
+    expect(new Date(next[0]!.availableAt).getTime()).toBeGreaterThanOrEqual(start.getTime() + 3_600_000 - 5_000);
     expect(prep.prepare).toBe(0);
     expect(prep.schedule).toBe(0);
   });
@@ -117,7 +121,7 @@ describeMysql("autonomous goal bootstrap on MySQL", () => {
     }
     const rows = await cycles(t.tenantId, t.runId);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.idempotencyKey).toBe(`scheduled_tick:${t.runId}`);
+    expect(rows[0]!.idempotencyKey).toBe(`scheduled_tick:${t.runId}:after:first`);
     expect(live(rows)).toHaveLength(1);
     expect(prep.prepare).toBe(0);
     // Claimable: the worker only claims tenants that have a fairness row.

@@ -7777,11 +7777,17 @@ export const goalCycleObjectives = mysqlTable(
     windowEnd: varchar("windowEnd", { length: 32 }),
     loadoutJson: json("loadoutJson").notNull(),
     evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    /** The latest decision that re-selected this open objective (Stage 1 · 1B). Null until reused. */
+    latestDecisionId: varchar("latestDecisionId", { length: 36 }),
     completedAt: timestamp("completedAt", { fsp: 3 }),
     createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
   },
   table => ({
+    latestDecisionIdx: index("idx_goal_cycle_objectives_latest_decision").on(
+      table.tenantId,
+      table.latestDecisionId
+    ),
     decisionUnique: uniqueIndex("uq_goal_cycle_objectives_decision").on(
       table.tenantId,
       table.decisionId

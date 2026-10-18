@@ -4651,6 +4651,20 @@ await ensureRequiredIndex(
   ["tenantId", "canonicalOperatorId", "status", "businessDate"],
   "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_operator (tenantId,canonicalOperatorId,status,businessDate)"
 );
+// Stage 1 · 1B: every goal-cycle occurrence decides afresh; an open objective
+// for the same run, selection and business date is reused, not re-minted, and
+// records the latest decision that re-selected it. Additive and nullable.
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "latestDecisionId",
+  "ALTER TABLE goal_cycle_objectives ADD COLUMN latestDecisionId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_latest_decision",
+  ["tenantId", "latestDecisionId"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_latest_decision (tenantId,latestDecisionId)"
+);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",

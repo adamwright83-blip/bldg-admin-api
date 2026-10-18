@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { goalCycleObjectives } from "../../../drizzle/schema";
+import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { goalCycleObjectives, macroGoalRuns } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { isMysqlDuplicateKeyError } from "../../mysqlErrors";
 import type { ExecutionIntelligenceItem } from "../../../shared/executionIntelligence";
@@ -29,6 +29,19 @@ export const OBJECTIVE_STATUSES = [
 
 export type ObjectiveStatus = (typeof OBJECTIVE_STATUSES)[number];
 
+/**
+ * Open objectives a later decision may re-select instead of minting another.
+ * Terminal and blocked objectives are not reused; a fresh selection gets a
+ * fresh objective.
+ */
+export const REUSABLE_OBJECTIVE_STATUSES = [
+  "presented",
+  "accepted",
+  "in_progress",
+  "action_attempted",
+  "action_executed",
+] as const satisfies readonly ObjectiveStatus[];
+
 export type PersistentGrowthObjective = {
   id: string;
   tenantId: string;
@@ -53,6 +66,8 @@ export type PersistentGrowthObjective = {
   windowEnd: string | null;
   loadout: ExecutionIntelligenceItem[];
   evidenceRefs: string[];
+  /** The latest decision that re-selected this objective; null until reused. */
+  latestDecisionId?: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -123,6 +138,7 @@ function toRecord(
     windowEnd: row.windowEnd,
     loadout: loadoutItems(row.loadoutJson),
     evidenceRefs: arrayOfStrings(row.evidenceRefsJson),
+    latestDecisionId: row.latestDecisionId ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -148,22 +164,27 @@ export async function getGoalCycleObjective(input: {
   return row ? toRecord(row) : null;
 }
 
+/** The objective a decision created, or the open objective it re-selected. */
 export async function getGoalCycleObjectiveByDecision(input: {
   tenantId: string;
   decisionId: string;
 }): Promise<PersistentGrowthObjective | null> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const [row] = await db
+  const rows = await db
     .select()
     .from(goalCycleObjectives)
     .where(
       and(
         eq(goalCycleObjectives.tenantId, input.tenantId),
-        eq(goalCycleObjectives.decisionId, input.decisionId)
+        or(
+          eq(goalCycleObjectives.decisionId, input.decisionId),
+          eq(goalCycleObjectives.latestDecisionId, input.decisionId)
+        )
       )
     )
-    .limit(1);
+    .limit(2);
+  const row = rows.find(item => item.decisionId === input.decisionId) ?? rows[0];
   return row ? toRecord(row) : null;
 }
 
@@ -294,6 +315,45 @@ export async function materializeGoalCycleObjective(
   const content = deriveObjectiveContent(input);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const selectedRef = input.decision.selectedRef ?? "";
+
+  // A later occurrence that selects the same work for the same day re-selects
+  // the open objective instead of minting one per hour. The run row lock
+  // serializes this check with any concurrent materialization for the run.
+  const reused = await db.transaction(async tx => {
+    await tx
+      .select({ id: macroGoalRuns.id })
+      .from(macroGoalRuns)
+      .where(and(eq(macroGoalRuns.tenantId, input.tenantId), eq(macroGoalRuns.id, input.decision.goalRunId)))
+      .for("update");
+    const [open] = await tx
+      .select({ id: goalCycleObjectives.id })
+      .from(goalCycleObjectives)
+      .where(
+        and(
+          eq(goalCycleObjectives.tenantId, input.tenantId),
+          eq(goalCycleObjectives.goalRunId, input.decision.goalRunId),
+          eq(goalCycleObjectives.selectionKind, input.decision.selectionKind),
+          eq(goalCycleObjectives.selectedRef, selectedRef),
+          eq(goalCycleObjectives.businessDate, content.businessDate),
+          inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
+        )
+      )
+      .orderBy(asc(goalCycleObjectives.createdAt), asc(goalCycleObjectives.id))
+      .limit(1)
+      .for("update");
+    if (!open) return null;
+    await tx
+      .update(goalCycleObjectives)
+      .set({ latestDecisionId: input.decision.id })
+      .where(and(eq(goalCycleObjectives.tenantId, input.tenantId), eq(goalCycleObjectives.id, open.id)));
+    return open.id;
+  });
+  if (reused) {
+    const objective = await getGoalCycleObjective({ tenantId: input.tenantId, objectiveId: reused });
+    if (!objective) throw new Error("Failed to read re-selected objective");
+    return { objective, created: false };
+  }
 
   const id = randomUUID();
   const insertPayload = {
@@ -305,7 +365,7 @@ export async function materializeGoalCycleObjective(
     canonicalOperatorId: input.decision.canonicalOperatorId,
     operatorUserId: input.decision.operatorUserId,
     selectionKind: input.decision.selectionKind,
-    selectedRef: input.decision.selectedRef ?? "",
+    selectedRef,
     title: content.title,
     description: content.description,
     executionType: content.executionType,
