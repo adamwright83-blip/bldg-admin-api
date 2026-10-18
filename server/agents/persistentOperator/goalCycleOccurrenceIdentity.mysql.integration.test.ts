@@ -60,7 +60,7 @@ describeMysql("goal-cycle occurrence identity on MySQL", () => {
        VALUES (?, ?, ?, ?, ?, 'laundry_fluff_fold', 'active', '{}', 'active_customers', 50, 'customers', 'exact', 'complete', 'v1')`,
       [run.id, tenantId, run.canonicalOperatorId, operator, randomUUID()]
     );
-    await iso.insertRun(run);
+    await iso.insertRun({ ...run, verticalKey: "laundry_fluff_fold" });
     return run;
   }
 

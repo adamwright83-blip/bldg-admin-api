@@ -12,7 +12,7 @@ import mysql, { type Pool } from "mysql2/promise";
  */
 export async function createIsolatedGoalCycleDb(databaseUrl: string): Promise<{
   pool: Pool;
-  insertRun: (run: { id: string; tenantId: string; canonicalOperatorId: string; operatorUserId: string; status?: string }) => Promise<void>;
+  insertRun: (run: { id: string; tenantId: string; canonicalOperatorId: string; operatorUserId: string; verticalKey: string; status?: string }) => Promise<void>;
   drop: () => Promise<void>;
 }> {
   const url = new URL(databaseUrl);
@@ -34,8 +34,8 @@ export async function createIsolatedGoalCycleDb(databaseUrl: string): Promise<{
           (id, tenantId, canonicalOperatorId, operatorUserId, macroGoalId, verticalKey,
            status, goalSnapshotJson, metricKey, targetValue, unit, baselinePrecision,
            baselineCoverage, policyVersion)
-         VALUES (?, ?, ?, ?, ?, 'laundry_fluff_fold', ?, '{}', 'active_customers', 50, 'customers', 'exact', 'complete', 'v1')`,
-        [run.id, run.tenantId, run.canonicalOperatorId, run.operatorUserId, run.id, run.status ?? "active"]
+         VALUES (?, ?, ?, ?, ?, ?, ?, '{}', 'active_customers', 50, 'customers', 'exact', 'complete', 'v1')`,
+        [run.id, run.tenantId, run.canonicalOperatorId, run.operatorUserId, run.id, run.verticalKey, run.status ?? "active"]
       );
     },
     drop: async () => {
