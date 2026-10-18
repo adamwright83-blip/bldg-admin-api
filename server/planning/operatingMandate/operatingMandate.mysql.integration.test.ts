@@ -245,10 +245,11 @@ describeMysql("operating mandate on MySQL", () => {
       { activate: false }
     );
     const replacementId = `operator_macro_goals:${replacement.goal.id}`;
-    expect(await goalRows(t.tenantId)).toEqual([
-      expect.objectContaining({ id: customers.goalId, status: "superseded", supersededById: replacement.goal.id }),
-      expect.objectContaining({ id: replacement.goal.id, status: "active" }),
-    ]);
+    // Goals are stamped to the second, so two set in one second order by id: check each row by id.
+    const goalsById = new Map((await goalRows(t.tenantId)).map(g => [g.id, g]));
+    expect([...goalsById.keys()].sort()).toEqual([customers.goalId, replacement.goal.id].sort());
+    expect(goalsById.get(customers.goalId)).toMatchObject({ status: "superseded", supersededById: replacement.goal.id });
+    expect(goalsById.get(replacement.goal.id)).toMatchObject({ status: "active", supersededById: null });
     const { mandate } = await mandateOf(t);
     expect(mandate.outcomes.map(o => o.id)).toEqual([replacementId]);
     expect(mandate.leadingOutcome).toEqual({ id: replacementId, basis: "sole_outcome" });
@@ -268,10 +269,12 @@ describeMysql("operating mandate on MySQL", () => {
       registry: defaultVerticalRegistry,
       goal: replacement.goal,
     });
-    expect((await runRows(t.tenantId)).map(r => [r.id, r.status])).toEqual([
-      [t.run.id, "superseded"],
-      [run.id, "active"],
-    ]);
+    expect(sorted((await runRows(t.tenantId)).map(r => [r.id, r.status]))).toEqual(
+      sorted([
+        [t.run.id, "superseded"],
+        [run.id, "active"],
+      ])
+    );
   }, 300_000);
 
   it("5. two goals compete for the day's one primary piece of work: open until the operator chooses, and shared work is one objective", async () => {
