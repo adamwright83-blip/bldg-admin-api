@@ -261,6 +261,8 @@ jobs:
           server/planning/dayDirector/dayDirectorAdmission.callers.test.ts
           server/planning/dayDirector/dayDirectorAdmission.routers.test.ts
           server/planning/dayDirector/towerWarsPromises.test.ts
+          server/agents/persistentOperator/goalCycleStep.test.ts
+          server/agents/persistentOperator/decisionEngine.policyGate.test.ts
           server/experience/lanternCity/personalNumber/personalOutreachReplyService.test.ts
           shared/cozyVillagerEvidence.test.ts
           server/_core/sms.test.ts
@@ -283,6 +285,7 @@ jobs:
           server/messaging/businessLineInbox.mysql.integration.test.ts
           server/claire/proactive/boardService.noDayLine.mysql.integration.test.ts
           server/planning/dayDirector/dayDirectorAdmission.mysql.integration.test.ts
+          server/agents/persistentOperator/goalCyclePolicyGate.mysql.integration.test.ts
           server/experience/lanternCity/personalNumber/personalOutreachReplyService.mysql.integration.test.ts
           server/experience/lanternCity/personalNumber/personalOutreachReplyStopFailure.mysql.integration.test.ts
           server/integrations/cleancloud/browserSync/gumballCustomerTruth.mysql.integration.test.ts

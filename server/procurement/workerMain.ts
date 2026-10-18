@@ -8,8 +8,7 @@ import { ProcurementWorker, type ProcurementStepHandler } from "./worker";
 import { ProcurementWorkflowStore } from "./workflowStore";
 import { GoalCycleStore } from "../agents/persistentOperator/goalCycleStore";
 import { GoalCycleWorker } from "../agents/persistentOperator/goalCycleWorker";
-import { evaluateMacroGoalRunAndScheduleNext } from "../agents/persistentOperator/goalCycleService";
-import { decideGoalCycle } from "../agents/persistentOperator/decisionEngine";
+import { runGoalCycleStep } from "../agents/persistentOperator/goalCycleStep";
 import { defaultVerticalRegistry } from "../strategy/verticalTemplates/defaultRegistry";
 import { OperatorAppointmentStore } from "../agents/persistentOperator/operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "../agents/persistentOperator/operatorAppointmentWorker";
@@ -59,32 +58,12 @@ const goalCycleWorker = new GoalCycleWorker(
     concurrency: numberFromEnv("GOAL_CYCLE_WORKER_CONCURRENCY", 4),
     retryBaseMs: numberFromEnv("GOAL_CYCLE_WORKER_RETRY_BASE_MS", 5_000),
   },
-  async input => {
-    const evaluation = await evaluateMacroGoalRunAndScheduleNext({
-      tenantId: input.tenantId,
-      runId: input.runId,
+  // The same gated step as the in-process worker: one orchestration for every claimant.
+  input =>
+    runGoalCycleStep(input, {
       registry: defaultVerticalRegistry,
-    });
-    const decision = await decideGoalCycle({
-      tenantId: input.tenantId,
-      runId: input.runId,
-      cycleId: input.cycleId,
-      registry: defaultVerticalRegistry,
-    });
-    return {
-      runId: evaluation.run.id,
-      status: evaluation.run.status,
-      completed: evaluation.completed,
-      observation: evaluation.observation,
-      decisionId: decision.decision.id,
-      decisionCreated: decision.created,
-      objectiveId: decision.objective?.id ?? null,
-      selectionKind: decision.decision.selectionKind,
-      selectedRef: decision.decision.selectedRef,
-      selectedReasonCode: decision.decision.selectedReasonCode,
-      nextEvaluationAt: evaluation.run.nextEvaluationAt?.toISOString() ?? null,
-    };
-  }
+      appointmentStore: operatorAppointmentStore,
+    })
 );
 
 const operatorAppointmentStore = new OperatorAppointmentStore(pool);

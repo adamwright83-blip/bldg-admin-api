@@ -24,6 +24,7 @@ import type { VerticalRegistry } from "../../strategy/verticalTemplates/registry
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import { isLegacyDayforgeTenant } from "../../saas/tenantAccess";
 import { resolveCanonicalOperatorIdentity } from "./identity";
+import type { GoalCycleActionPolicy } from "./goalCyclePolicy";
 import {
   appendGoalCycleDecision,
   findDecisionForCycle,
@@ -351,6 +352,8 @@ export async function decideGoalCycle(input: {
   runId: string;
   cycleId: string;
   registry: VerticalRegistry;
+  /** The action policy's answer for this step. Anything but "allowed" records a wait. */
+  actionPolicy: GoalCycleActionPolicy;
   now?: Date;
 }): Promise<DecideGoalCycleResult> {
   const existing = await findDecisionForCycle({
@@ -427,7 +430,41 @@ export async function decideGoalCycle(input: {
           : [],
       blockedCandidates: [],
       priorComparableDecisionId: null,
-      sourceCoverage: { goalRun: run.status },
+      sourceCoverage: { goalRun: run.status, actionPolicy: input.actionPolicy ?? null },
+      loadout: [],
+      experiment: null,
+    });
+    return { ...decisionResult, objective: null };
+  }
+
+  // Stage 1 policy gate: without an allowed policy nothing is read, ranked or
+  // materialized for this cycle. The wait records why.
+  const actionPolicy = input.actionPolicy ?? null;
+  if (actionPolicy?.status !== "allowed") {
+    const decisionResult = await appendGoalCycleDecision({
+      tenantId: input.tenantId,
+      goalRunId: run.id,
+      cycleId: input.cycleId,
+      canonicalOperatorId: run.canonicalOperatorId,
+      operatorUserId: run.operatorUserId,
+      policyVersion: run.policyVersion,
+      weeklyIntentId: null,
+      weeklyIntentRevision: null,
+      weekStart: null,
+      candidateFingerprint: null,
+      candidateIds: [],
+      candidateReasonCodes: {},
+      missionDirectorPlanId: null,
+      missionDirectorRevision: null,
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedExecutionType: null,
+      selectedReasonCode:
+        actionPolicy?.status === "denied" ? "ACTION_POLICY_DENIED" : "ACTION_POLICY_NOT_EVALUATED",
+      evidenceRefs: [],
+      blockedCandidates: [],
+      priorComparableDecisionId: null,
+      sourceCoverage: { goalRun: run.status, actionPolicy },
       loadout: [],
       experiment: null,
     });
@@ -548,7 +585,7 @@ export async function decideGoalCycle(input: {
     candidateFeed: feedCoverage,
     obligations: obligationCoverage,
     missionDirector: missionDirectorCoverage,
-    actionPolicy: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+    actionPolicy,
     channelReadiness: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
   };
 
