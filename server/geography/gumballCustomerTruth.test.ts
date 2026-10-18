@@ -423,6 +423,7 @@ describe("digest stability for existing browser-sync tests", () => {
             storeId: importInput.storeId,
             from: importInput.from,
             to: importInput.to,
+            reportType: "orders_sales",
             csv: importInput.csv,
           })
         )

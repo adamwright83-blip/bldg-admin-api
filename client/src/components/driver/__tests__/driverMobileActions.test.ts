@@ -60,11 +60,11 @@ describe("driver mobile actions", () => {
     expect(goldlineSource).toContain("Goldline daily adventure map");
     expect(fieldHomeSource).toContain('href="/product/hunt"');
     expect(fieldHomeSource).toContain('href="/product/unload"');
-    expect(fieldHomeSource).toContain('href="/new-order"');
+    expect(fieldHomeSource.match(/href="\/product\//g)).toHaveLength(2);
     expect(fieldHomeSource).not.toContain("/commercial-missions");
     expect(walkInSource).toContain("props.onSaved?.(result)");
-    expect(walkInSource).toContain(
-      "if (!props.onSaved) window.location.assign"
+    expect(walkInSource).toMatch(
+      /if \(!props\.onSaved\) \{\s*window\.location\.assign/
     );
   });
 });

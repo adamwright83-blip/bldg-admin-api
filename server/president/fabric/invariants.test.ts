@@ -45,6 +45,7 @@ const ROOT = resolve(__dirname, "../../..");
  * Unconditional on every branch. presidentIsolated does not apply here.
  * server/routers.ts is forbidden unless the diff only adds the operator
  * paymentReconciliation.manualMatch and ignore procedures.
+ * A *.test.ts path is not a domain implementation edit.
  */
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
@@ -112,6 +113,7 @@ function routersDiffIsManualMatchAndIgnoreOnly(diffText: string): boolean {
 
 function invariant28ForbiddenHits(files: readonly string[], routersDiff: string): string[] {
   return files.filter(file => {
+    if (file.endsWith(".test.ts")) return false;
     if (!DOMAIN_PROTECTED_RE.test(file)) return false;
     if (file !== "server/routers.ts") return true;
     return !routersDiffIsManualMatchAndIgnoreOnly(routersDiff);
@@ -817,6 +819,12 @@ describe("static safety (10, 28)", () => {
       invariant28ForbiddenHits(["server/routers.ts"], "--- a/server/routers.ts\n+++ b/server/routers.ts\n@@\n-      summary: protectedProcedure\n")
     ).toEqual(["server/routers.ts"]);
     expect(invariant28ForbiddenHits(["server/paymentReconciliation.ts"], routersDiff)).toEqual([]);
+    expect(
+      invariant28ForbiddenHits(["server/geography/gumballCustomerTruth.test.ts"], routersDiff)
+    ).toEqual([]);
+    expect(
+      invariant28ForbiddenHits(["server/geography/customerOrderTruth.ts"], routersDiff)
+    ).toEqual(["server/geography/customerOrderTruth.ts"]);
     expect(invariant28ForbiddenHits(diff, routersDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.

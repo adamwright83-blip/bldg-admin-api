@@ -204,6 +204,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetDbForTesting();
     resetDayLineDepsForTesting();
   });
@@ -442,7 +443,7 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(insertedRows.get("goal_cycle_requests")?.length).toBe(1);
   });
 
-  it("verifies Day Line completion: objective completion creates durable outcome, commitment completion updates status", async () => {
+  it("keeps an unranked objective and an undesignated commitment off today's Day Line", async () => {
     const { store } = setupTestFranchiseDb();
 
     store.set("users", [
@@ -507,6 +508,10 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
+    setDayLineDepsForTesting({
+      planForDate: async () => ({ outcome: { status: "no_plan" } } as any),
+    });
+
     const caller = appRouter.createCaller({
       user: {
         id: 1,
@@ -520,39 +525,22 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       res: { clearCookie: () => {} } as any,
     });
 
-    // 1. Verify Day Line surfaces both items
     const todayLine = await caller.system.currentDayLine.today();
-    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(true);
-    expect(todayLine.items.some(i => i.id === "commit-morning-door-tags")).toBe(true);
+    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(false);
+    expect(todayLine.items.some(i => i.id === "commit-morning-door-tags")).toBe(false);
 
-    // 2. Complete Objective: succeeds with durable outcome
-    const objectiveRes = await caller.system.currentDayLine.completeItem({
-      itemId: "objective-conquest-1",
-      evidenceReference: "field_receipt_voice_01",
-      explanation: "Driver confirmed completed at Argyle House",
-    });
-    expect(objectiveRes.success).toBe(true);
-    expect(objectiveRes.lineageKind).toBe("objective");
-    expect(objectiveRes.itemId).toBe("objective-conquest-1");
+    await expect(
+      caller.system.currentDayLine.completeItem({
+        itemId: "objective-conquest-1",
+        evidenceReference: "field_receipt_voice_01",
+        explanation: "Driver confirmed completed at Argyle House",
+      })
+    ).rejects.toThrow("is not present on today's authoritative Day Line");
 
-    // Verify durable outcome created in goal_cycle_outcomes
     const outcomes = store.get("goal_cycle_outcomes") ?? [];
-    expect(outcomes.some(o => o.objectiveId === "objective-conquest-1")).toBe(true);
-
-    // 3. Complete Commitment: succeeds with durable mutation
-    const commitmentRes = await caller.system.currentDayLine.completeItem({
-      itemId: "commit-morning-door-tags",
-      evidenceReference: "field_receipt_voice_02",
-      explanation: "Driver confirmed door tags placed on Franklin corridor",
-    });
-    expect(commitmentRes.success).toBe(true);
-    expect(commitmentRes.lineageKind).toBe("commitment");
-    expect(commitmentRes.itemId).toBe("commit-morning-door-tags");
-
-    // Verify commitment status updated to completed in day_director_commitments
+    expect(outcomes.some(o => o.objectiveId === "objective-conquest-1")).toBe(false);
     const commitments = store.get("day_director_commitments") ?? [];
-    const updatedCommitment = commitments.find(c => c.id === "commit-morning-door-tags");
-    expect(updatedCommitment?.status).toBe("completed");
+    expect(commitments.find(c => c.id === "commit-morning-door-tags")?.status).toBe("open");
   });
 
   it("enforces campaign completion truth: generic assertion fails closed without required domain evidence", async () => {
@@ -683,6 +671,23 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       },
     ]);
 
+    setDayLineDepsForTesting({
+      planForDate: async () => ({
+        outcome: {
+          status: "planned",
+          ranking: [{ campaignId: "camp-lineage-probe" }],
+        },
+      } as any),
+      listCampaigns: async () => [
+        {
+          campaignId: "camp-lineage-probe",
+          title: "Lineage probe",
+          objective: "Stay on the ranked line",
+          completionCondition: "Ranked work only",
+        } as any,
+      ],
+    });
+
     const caller = appRouter.createCaller({
       user: {
         id: 1,
@@ -704,14 +709,18 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
       })
     ).rejects.toThrow("Item 'unregistered-phantom-stop' is not present on today's authoritative Day Line");
 
-    // 2. Forged client lineage (claiming an objective is a campaign) is rejected
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(i => i.id === "camp-lineage-probe")).toBe(true);
+    expect(todayLine.items.some(i => i.id === "objective-conquest-1")).toBe(false);
+
+    // 2. Forged client lineage (claiming ranked campaign work is an objective) is rejected
     await expect(
       caller.system.currentDayLine.completeItem({
-        itemId: "objective-conquest-1",
-        lineage: { kind: "campaign" },
+        itemId: "camp-lineage-probe",
+        lineage: { kind: "objective" },
         evidenceReference: "fake_proof",
       })
-    ).rejects.toThrow("Lineage conflict: client declared 'campaign' but authoritative Day Line item is 'objective'");
+    ).rejects.toThrow("Lineage conflict: client declared 'objective' but authoritative Day Line item is 'campaign'");
   });
 
   it("enforces platform-admin cross-tenant operator resolution: default admin inspects Austin operator without mutating admin user", async () => {
