@@ -184,6 +184,10 @@ describe("JOYSTICK tenant identity", () => {
     expect(
       isPlatformAdministrator({ openId: "oauth-platform-admin", role: "admin" })
     ).toBe(true);
+    expect(
+      isPlatformAdministrator({ openId: undefined as unknown as string, role: "admin" })
+    ).toBe(false);
+    expect(isPlatformAdministrator({ openId: "   ", role: "admin" })).toBe(false);
   });
 
   it("keeps the shared admin password as tenant membership, not platform authority", async () => {
