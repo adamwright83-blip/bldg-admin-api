@@ -132,6 +132,12 @@ export const towerWarsRouter = router({
         ...input,
         tenantId: ctx.tenantId,
         actorId: dayDirectorActorId(ctx),
+        admission: {
+          kind: "operator_instruction",
+          channel: "authenticated_app",
+          operatorActorId: dayDirectorActorId(ctx),
+          instructionRef: `tower_wars.activatePromise:${ctx.user.openId}:${input.promiseId}`,
+        },
       })
     ),
 });

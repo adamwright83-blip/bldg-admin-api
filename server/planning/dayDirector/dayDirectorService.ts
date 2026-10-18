@@ -27,6 +27,10 @@ import {
 import { getDb } from "../../db";
 import { invokeLLM } from "../../_core/llm";
 import { ENV } from "../../_core/env";
+import {
+  assertDayDirectorWriteAdmission,
+  type DayDirectorAdmission,
+} from "./dayDirectorAdmission";
 
 const proposalSchema = {
   name: "day_director_commitment",
@@ -362,9 +366,9 @@ export async function acceptProposalWithReceipt(input: {
   actorIds?: readonly string[];
   businessDate: string;
   proposal: DayDirectorProposal;
+  /** The operator's authority for this commitment. Without it nothing is written. */
+  admission: DayDirectorAdmission;
 }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
   const actorIds = [...new Set(
     [input.actorId, ...(input.actorIds ?? [])]
       .map(actorId => actorId.trim())
@@ -372,6 +376,16 @@ export async function acceptProposalWithReceipt(input: {
   )];
   if (actorIds.length === 0) throw new Error("Day Director actor identity is required");
   const businessDate = input.proposal.targetBusinessDate ?? input.businessDate;
+  const admission = await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds,
+    write: "accept",
+    proposal: input.proposal,
+    businessDate,
+  });
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const command = input.proposal.command ?? emptyCommandMetadata();
   const metadataJson = {
     prerequisites: input.proposal.prerequisites,
@@ -384,6 +398,7 @@ export async function acceptProposalWithReceipt(input: {
     ...(input.proposal.strategicApproval ? { strategicApproval: input.proposal.strategicApproval } : {}),
     ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
     ...("executionType" in input.proposal ? { executionType: input.proposal.executionType ?? null } : {}),
+    admission,
   };
 
   const existingRows = await db
@@ -543,12 +558,19 @@ export async function completeDayDirectorCommitment(input: {
   actorId: string;
   actorIds?: string[];
   commitmentId: string;
+  admission: DayDirectorAdmission;
 }) {
   const actorIds = [...new Set(
     (input.actorIds?.length ? input.actorIds : [input.actorId])
       .map(actorId => actorId.trim())
       .filter(Boolean)
   )];
+  await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds,
+    write: "complete",
+  });
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
@@ -617,7 +639,14 @@ export async function updateDayDirectorCommitment(input: {
     scheduleLabel?: string | null;
     executionType?: "mission" | "challenge" | "hybrid_objective" | null;
   };
+  admission: DayDirectorAdmission;
 }) {
+  await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds: [input.actorId],
+    write: "update",
+  });
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [existing] = await db
@@ -666,7 +695,14 @@ export async function moveDayDirectorCommitment(input: {
   commitmentId: string;
   fromBusinessDate: string;
   toBusinessDate: string;
+  admission: DayDirectorAdmission;
 }): Promise<boolean> {
+  await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds: [input.actorId],
+    write: "move",
+  });
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db
@@ -698,14 +734,21 @@ export async function designateDayDirectorPrimary(input: {
   nowIso: string;
   /** Defaults to the proposal-confirmation path. Operator mission commands pass "operator". */
   designatedBy?: "operator" | "operator_confirmed_proposal";
+  admission: DayDirectorAdmission;
 }): Promise<{ commitmentId: string }> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
   const actorIds = [...new Set(
     [input.actorId, ...(input.actorIds ?? [])]
       .map(actorId => actorId.trim())
       .filter(Boolean)
   )];
+  await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds,
+    write: "designate_primary",
+  });
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const rows = await db
     .select()
     .from(dayDirectorCommitments)

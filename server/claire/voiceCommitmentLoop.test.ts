@@ -137,6 +137,13 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
       actorId: "operator-1",
       businessDate: "2026-09-14",
       proposal: expect.objectContaining({ promptKey: "commitment:abc123" }),
+      // The spoken yes is the operator's instruction, and it names the operator who gave it.
+      admission: {
+        kind: "operator_instruction",
+        channel: "claire_voice",
+        operatorActorId: "operator-1",
+        instructionRef: "voice_commitment:call:commitment:abc123",
+      },
     });
     expect(state.pendingProposal).toBeNull();
   });

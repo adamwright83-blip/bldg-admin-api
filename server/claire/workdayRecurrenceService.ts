@@ -101,6 +101,8 @@ export async function projectRecurrenceForDate(
         intelligence: "manual_fallback",
         command,
       },
+      // The rule is the operator's confirmed instruction; the writer rechecks it is still active.
+      admission: { kind: "operator_recurrence_rule", ruleId: rule.id, operatorActorId: input.actorId },
     });
     const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
     if (id) {

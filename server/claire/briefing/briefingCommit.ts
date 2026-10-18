@@ -23,6 +23,7 @@ import {
 } from "../workdayCommandLanguage";
 import { emptyCommandMetadata } from "../../../shared/claireWorkdayCommand";
 import { confirmLinkedVehicleWork } from "../workdayCargoOrchestrator";
+import type { DayDirectorAdmission } from "../../planning/dayDirector/dayDirectorAdmission";
 
 /**
  * Turning a confirmed briefing into Day Line truth, without duplicates:
@@ -233,6 +234,13 @@ export async function commitBriefing(
     : readDayDirectorCanonicalCommitment);
 
   const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], commitmentIds: [], receipts: [] };
+  // Every item is the operator's own briefing in this conversation turn.
+  const admission: DayDirectorAdmission = {
+    kind: "operator_instruction",
+    channel: "claire_conversation",
+    operatorActorId: input.dayDirectorActorId,
+    instructionRef: `briefing:${input.conversationKey}`,
+  };
   const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string, checkType = true) => {
     const row = await readCanonical({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
       businessDate: item.businessDate, commitmentId: id });
@@ -261,7 +269,7 @@ export async function commitBriefing(
         let row = await verified(item, item.existing.id, item.existing.title, undefined, false);
         if (item.executionType && item.existing.executionType !== item.executionType) {
           await update({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
-            commitmentId: item.existing.id, patch: { executionType: item.executionType } });
+            commitmentId: item.existing.id, patch: { executionType: item.executionType }, admission });
           if (testMockStore && testMockStore.has(item.existing.id)) {
             testMockStore.get(item.existing.id).metadataJson = {
               ...testMockStore.get(item.existing.id).metadataJson,
@@ -280,7 +288,7 @@ export async function commitBriefing(
       if (item.kind === "new_work" && input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
         const linked = await linkVehicleWork({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
           vehicleId: input.vehicleId, businessDate: item.businessDate, requestId: keyFor(input.conversationKey, item),
-          transcript: item.quote, place: item.place, confirmed: true });
+          transcript: item.quote, place: item.place, confirmed: true, admission });
         if (linked.dayLine.ok) {
           if (testMockStore) {
             testMockStore.set(linked.dayLine.id, {
@@ -313,7 +321,7 @@ export async function commitBriefing(
             metadataJson: {},
           });
         }
-        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: item.existing.id });
+        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: item.existing.id, admission });
         if (testMockStore && testMockStore.has(item.existing.id)) {
           testMockStore.get(item.existing.id).status = "completed";
         }
@@ -333,7 +341,7 @@ export async function commitBriefing(
           detailNote: item.kind === "completed" ? "Operator reported this as already done" : detailNote(item),
           references: item.references ?? [], targetBusinessDate: item.businessDate, command: commandForItem(item, parsed),
           ...(item.executionType ? { executionType: item.executionType } : {}),
-        } });
+        }, admission });
       const receipt = accepted && "stored" in accepted ? accepted : { stored: accepted, created: true };
       const id = receipt.stored?.id;
       if (!id) throw new Error("Day Line write returned no persisted identity");
@@ -353,7 +361,7 @@ export async function commitBriefing(
       }
       let row = await verified(item, id);
       if (item.kind === "completed") {
-        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id });
+        await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id, admission });
         if (testMockStore && testMockStore.has(id)) {
           testMockStore.get(id).status = "completed";
         }
@@ -369,7 +377,7 @@ export async function commitBriefing(
           const scheduleKind = item.timing.kind === "at" ? "EXACT_TIME" : item.timing.kind === "daypart" ? "DAY" : "FLEXIBLE_WINDOW";
           try {
             await update({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id,
-              patch: { scheduleKind, scheduleLabel: item.timing.label } });
+              patch: { scheduleKind, scheduleLabel: item.timing.label }, admission });
             if (testMockStore && testMockStore.has(id)) {
               testMockStore.get(id).metadataJson = {
                 ...testMockStore.get(id).metadataJson,

@@ -280,6 +280,8 @@ describeMysql(
           command: emptyCommandMetadata(),
           executionType: "mission",
         },
+        // Fixture: a primary the operator placed in the app before the proposal.
+        admission: { kind: "operator_instruction", channel: "authenticated_app", operatorActorId: identity.dayDirectorActorId, instructionRef: `fixture:protected:${suffix}` },
       });
       expect(protectedResult.stored?.id).toBeTruthy();
       await designateDayDirectorPrimary({
@@ -289,6 +291,7 @@ describeMysql(
         businessDate: base.businessDate,
         commitmentId: protectedResult.stored!.id,
         nowIso: new Date().toISOString(),
+        admission: { kind: "operator_instruction", channel: "authenticated_app", operatorActorId: identity.dayDirectorActorId, instructionRef: `fixture:protected:${suffix}` },
       });
       for (const utterance of controls) {
         const proposal = await fresh(utterance);

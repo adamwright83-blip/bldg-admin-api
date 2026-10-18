@@ -11,6 +11,7 @@ import { UNKNOWN_CARGO_IDENTITY } from "../../shared/claireWorkdayCommand";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { confirmCargo, deliverCustodyToCustomer, proposeCargo } from "../goldlineCargo/cargoService";
 import { acceptProposal, completeDayDirectorCommitment, updateDayDirectorCommitment } from "../planning/dayDirector/dayDirectorService";
+import type { DayDirectorAdmission } from "../planning/dayDirector/dayDirectorAdmission";
 import { detectUnknownCargoIdentity } from "./workdayCommandLanguage";
 import { classifyDayDirectorKind } from "./workdayCommandKind";
 
@@ -57,6 +58,8 @@ export async function confirmLinkedVehicleWork(input: {
   transcript: string;
   place?: string | null;
   confirmed: boolean;
+  /** The operator instruction this work came from. */
+  admission: DayDirectorAdmission;
 }): Promise<LinkedVehicleWorkResult> {
   const receipts: MutationReceipt[] = [];
   if (!input.confirmed) {
@@ -144,6 +147,7 @@ export async function confirmLinkedVehicleWork(input: {
         detailNote: unknown ? `${UNKNOWN_CARGO_IDENTITY}${input.place ? ` · ${input.place}` : ""}` : null,
         command,
       },
+      admission: input.admission,
     });
     const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
     if (!id) throw new Error("Day Line item was not persisted");
@@ -157,6 +161,7 @@ export async function confirmLinkedVehicleWork(input: {
             ? `${UNKNOWN_CARGO_IDENTITY}${input.place ? ` · ${input.place}` : ""} · cargo ${cargo.kind}:${cargo.id}`
             : `cargo ${cargo.kind}:${cargo.id}`,
         },
+        admission: input.admission,
       }).catch(() => undefined);
     }
     dayLine = { ok: true, id };
@@ -176,6 +181,7 @@ export async function completeLinkedVehicleDelivery(input: {
   orderId?: number;
   fieldCargoId?: string;
   confirmed: boolean;
+  admission: DayDirectorAdmission;
 }): Promise<{
   cargoDelivered: boolean;
   dayLineCompleted: boolean;
@@ -214,6 +220,7 @@ export async function completeLinkedVehicleDelivery(input: {
       tenantId: input.tenantId,
       actorId: input.actorId,
       commitmentId: input.commitmentId,
+      admission: input.admission,
     });
     dayLineCompleted = Boolean(result?.ok);
     if (dayLineCompleted) {

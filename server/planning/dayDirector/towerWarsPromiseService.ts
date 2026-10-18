@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { dayDirectorCommitments, towerWarsPromises } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { getBusinessDayWindow } from "../../dashboardZoned";
+import { assertDayDirectorWriteAdmission, type DayDirectorAdmission } from "./dayDirectorAdmission";
 import { canExecuteTowerWarsPromise, type TowerWarsBuildingId, type TowerWarsPromiseType, type TowerWarsPermissionStatus, type TowerWarsPermissionChannel } from "../../../shared/towerWars";
 
 export async function listTowerWarsPromises(tenantId: string) {
@@ -63,7 +64,15 @@ export async function activateTowerWarsPromise(input: {
   tenantId: string;
   promiseId: string;
   actorId: string;
+  /** Putting the promised work on the Day Line is the operator's own instruction. */
+  admission: DayDirectorAdmission;
 }) {
+  const admission = await assertDayDirectorWriteAdmission({
+    admission: input.admission,
+    tenantId: input.tenantId,
+    actorIds: [input.actorId],
+    write: "accept",
+  });
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [promise] = await db
@@ -108,6 +117,7 @@ export async function activateTowerWarsPromise(input: {
         buildingId: promise.buildingId,
         sourceReference: promise.sourceReference,
         permissionEvidence: promise.permissionEvidence,
+        admission,
       },
     })
     .onDuplicateKeyUpdate({ set: { title } });

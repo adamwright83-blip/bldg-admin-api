@@ -174,6 +174,8 @@ describe.skipIf(!enabled)("Claire voice path, real models, disposable MySQL — 
             intelligence: "manual_fallback", detailState: "COMPLETE", missingDetails: [], detailNote: null, references: [], targetBusinessDate: businessDate,
             ...(executionType ? { executionType } : {}),
           } as never,
+          // Fixture: work the operator already placed on the line.
+          admission: { kind: "operator_instruction", channel: "authenticated_app", operatorActorId: identity.dayDirectorActorId, instructionRef: `fixture:${title}` },
         });
       await seed("Check whether 3 dry-cleaning orders were charged and charge any that weren't", today);
       await seed("Deliver 2 dry-cleaning orders tonight", today);

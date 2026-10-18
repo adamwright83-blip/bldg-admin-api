@@ -148,6 +148,7 @@ export async function respondToStrategicProposal(
           executionType: item.executionType,
           strategicApproval: approved,
         },
+        admission: { kind: "strategic_approval", approval: approved },
       });
       if (!result.stored?.id) throw new Error("No authoritative write receipt");
       // A separate canonical read validates identity, content, and exact approval lineage.

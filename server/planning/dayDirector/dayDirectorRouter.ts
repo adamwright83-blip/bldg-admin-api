@@ -117,6 +117,12 @@ export const dayDirectorRouter = router({
         actorId: identity.dayDirectorActorId,
         actorIds: identity.dayDirectorActorIds,
         ...input,
+        admission: {
+          kind: "operator_instruction",
+          channel: "authenticated_app",
+          operatorActorId: identity.dayDirectorActorId,
+          instructionRef: `day_director.accept:${identity.sourceOpenId}:${input.proposal.promptKey}`,
+        },
       });
       if (stored && created) {
         await recordPersistentOperatorDiagnosticEvent({
@@ -152,6 +158,12 @@ export const dayDirectorRouter = router({
         actorId: identity.dayDirectorActorId,
         actorIds: identity.dayDirectorActorIds,
         commitmentId: input.commitmentId,
+        admission: {
+          kind: "operator_instruction",
+          channel: "authenticated_app",
+          operatorActorId: identity.dayDirectorActorId,
+          instructionRef: `day_director.complete:${identity.sourceOpenId}:${input.commitmentId}`,
+        },
       });
       if (!result.alreadyCompleted) {
         await recordPersistentOperatorDiagnosticEvent({

@@ -15,6 +15,7 @@ import {
   updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
 import { cancelDayLineItem, editDayLineItem } from "../../planning/dayline/dayLineMutationService";
+import type { DayDirectorAdmission } from "../../planning/dayDirector/dayDirectorAdmission";
 import { joinList } from "../business/businessSpeech";
 import type { DayLineItemRef } from "../../../shared/goldlineDayLine";
 import type {
@@ -143,6 +144,13 @@ export async function applyWorkLedgerPlan(input: {
   const deps: WorkLedgerApplyDeps = { ...defaultWorkLedgerApplyDeps(), ...input.deps };
   const { plan, target, clock } = input;
   const byId = new Map(input.dayLine.map(item => [item.id, item]));
+  // A validated ledger plan carries only changes the operator asked for in this conversation.
+  const admission: DayDirectorAdmission = {
+    kind: "operator_instruction",
+    channel: "claire_conversation",
+    operatorActorId: target.dayDirectorActorId,
+    instructionRef: `work_ledger:${target.conversationKey}`,
+  };
   const failures: WorkLedgerApplyResult["failures"] = [];
   const expected: Array<
     | { kind: "created"; id: string; ref: string; held: LedgerHeldItem }
@@ -183,7 +191,7 @@ export async function applyWorkLedgerPlan(input: {
     const note = detailNoteFor(held.detail);
     if (note) {
       await deps
-        .update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: id, patch: { detailNote: note } })
+        .update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: id, patch: { detailNote: note }, admission })
         .catch(error => console.warn("[ClaireWorkLedger] detail note not saved", error instanceof Error ? error.message : error));
     }
     expected.push({ kind: "created", id, ref: held.ref, held });
@@ -205,6 +213,7 @@ export async function applyWorkLedgerPlan(input: {
           commitmentId: previous.id,
           fromBusinessDate: previous.businessDate,
           toBusinessDate: edit.moveTo,
+          admission,
         });
         if (!moved) throw new Error("the item changed before it could be moved");
         expected.push({ kind: "moved", id: previous.id, previous, toDate: edit.moveTo, newId: previous.id });
@@ -221,7 +230,7 @@ export async function applyWorkLedgerPlan(input: {
         if (edit.timing) patch.scheduleLabel = edit.timing;
         if (Object.keys(patch).length) {
           await deps
-            .update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: previous.id, patch })
+            .update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: previous.id, patch, admission })
             .catch(error => failures.push({ title: previous.title, error: `moved, but the timing did not save: ${error instanceof Error ? error.message : String(error)}` }));
         }
         continue;
@@ -235,7 +244,7 @@ export async function applyWorkLedgerPlan(input: {
       if (note) patch.detailNote = note;
       if (edit.timing) patch.scheduleLabel = edit.timing;
       if (Object.keys(patch).length) {
-        await deps.update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: previous.id, patch });
+        await deps.update({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: previous.id, patch, admission });
       }
       expected.push({
         kind: "updated",
@@ -257,7 +266,7 @@ export async function applyWorkLedgerPlan(input: {
     const previous = byId.get(id);
     if (!previous) continue;
     try {
-      await deps.complete({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: id });
+      await deps.complete({ tenantId: target.tenantId, actorId: target.dayDirectorActorId, commitmentId: id, admission });
       expected.push({ kind: "completed", id, previous });
       touchedDates.add(previous.businessDate);
     } catch (error) {

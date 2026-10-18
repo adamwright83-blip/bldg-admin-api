@@ -72,6 +72,11 @@ export async function acceptSalesInsightChallenge(input: {
   const result = await deps.accept({
     tenantId: input.tenantId, actorId: input.actorId, actorIds: input.actorIds,
     businessDate: input.businessDate, proposal,
+    // The operator's confirmation of this pending challenge, in this turn.
+    admission: {
+      kind: "operator_instruction", channel: "claire_conversation", operatorActorId: input.actorId,
+      instructionRef: `growth_challenge:${input.artifact.observationReference}`,
+    },
   });
   if (!result.stored?.id) throw new Error("Growth challenge did not persist");
   const row = await deps.readCommitment({

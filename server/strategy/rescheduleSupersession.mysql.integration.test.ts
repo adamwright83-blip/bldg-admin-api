@@ -32,6 +32,8 @@ describeMysql("rescheduling never leaves two active meetings", () => {
     (await acceptProposalWithReceipt({
       tenantId, actorId: identity.dayDirectorActorId, actorIds: identity.dayDirectorActorIds, businessDate: date,
       proposal: { promptKey: key, title: "Meet Maria at Sunset Junction", kind: "growth", quantity: null, sourceText: "Meeting", prerequisites: [], question: null, intelligence: "manual_fallback", targetBusinessDate: date, command: emptyCommandMetadata() },
+      // Fixture: a meeting the operator placed in the app.
+      admission: { kind: "operator_instruction", channel: "authenticated_app", operatorActorId: identity.dayDirectorActorId, instructionRef: `fixture:${key}` },
     })).stored!.id;
   const active = async (date: string) =>
     (await getDayDirectorState({ tenantId, actorId: identity.dayDirectorActorId, actorIds: identity.dayDirectorActorIds, businessDate: date })).commitments.map(c => c.id);

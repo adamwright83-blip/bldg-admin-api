@@ -157,6 +157,13 @@ export async function commitAccountFollowUp(
         missingDetails: [],
         detailNote: pending.note ? `Operator report, hearsay kept as hearsay: ${pending.note}` : null,
       },
+      // Only the operator's "yes" to this pending follow-up reaches here.
+      admission: {
+        kind: "operator_instruction",
+        channel: "claire_conversation",
+        operatorActorId: input.dayDirectorActorId,
+        instructionRef: `account_follow_up:${pending.requestId}`,
+      },
     });
     const storedId =
       accepted.stored && typeof accepted.stored === "object" && "id" in accepted.stored

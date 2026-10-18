@@ -28,6 +28,17 @@ import {
   type WeeklyPlanningSession,
 } from "./session";
 import { deriveInternalHypothesis, draftFromDossier, type WeeklyDossier } from "./dossier";
+import type { DayDirectorAdmission } from "../../planning/dayDirector/dayDirectorAdmission";
+
+/** Locking the week is the operator's instruction for every commitment the lock writes. */
+function weeklyLockAdmission(session: WeeklyPlanningSession): DayDirectorAdmission {
+  return {
+    kind: "operator_instruction",
+    channel: "claire_conversation",
+    operatorActorId: session.dayDirectorActorId,
+    instructionRef: `weekly_lock:${session.key}`,
+  };
+}
 
 type WeeklyAcceptedCommitment =
   Awaited<ReturnType<typeof acceptProposalWithReceipt>>["stored"];
@@ -161,6 +172,7 @@ export async function commitWeeklyPlan(
             businessDate: day.businessDate,
             commitmentId: existing.commitmentId,
             nowIso: now.toISOString(),
+            admission: weeklyLockAdmission(session),
           })
         ).commitmentId;
       } else if (day.primary.existingCommitmentId) {
@@ -183,6 +195,7 @@ export async function commitWeeklyPlan(
             businessDate: day.businessDate,
             commitmentId: day.primary.existingCommitmentId,
             nowIso: now.toISOString(),
+            admission: weeklyLockAdmission(session),
           })
         ).commitmentId;
       } else {
@@ -388,6 +401,7 @@ async function createPrimary(
     actorIds,
     businessDate,
     proposal,
+    admission: weeklyLockAdmission(session),
   });
   if (!accepted.stored?.id) throw new Error(`Primary was not stored for ${businessDate}`);
   if (testMockStore) {
@@ -417,6 +431,7 @@ async function createPrimary(
     businessDate,
     commitmentId: accepted.stored.id,
     nowIso: now.toISOString(),
+    admission: weeklyLockAdmission(session),
   });
   return { commitmentId: designated.commitmentId, created: accepted.created };
 }
@@ -454,6 +469,7 @@ async function createScheduledReadiness(
     actorIds,
     businessDate,
     proposal,
+    admission: weeklyLockAdmission(session),
   });
   if (!accepted.stored?.id) {
     throw new Error(`Scheduled readiness was not stored for ${businessDate}`);
@@ -487,6 +503,7 @@ async function createScheduledReadiness(
       scheduleKind: "EXACT_TIME",
       scheduleLabel: clock,
     },
+    admission: weeklyLockAdmission(session),
   });
   const readCommitment = ports.readCommitment ?? (testMockStore
     ? async (target: { tenantId: string; actorId: string; businessDate: string; commitmentId: string }) => {

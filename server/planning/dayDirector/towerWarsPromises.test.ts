@@ -15,6 +15,12 @@ import {
   getDayDirectorState,
 } from "./dayDirectorService";
 import { activateTowerWarsPromise } from "./towerWarsPromiseService";
+import { DayDirectorAdmissionError, type DayDirectorAdmission } from "./dayDirectorAdmission";
+
+/** What towerWars.activatePromise passes for the signed-in admin. */
+function appInstruction(actorId: string, ref: string): DayDirectorAdmission {
+  return { kind: "operator_instruction", channel: "authenticated_app", operatorActorId: actorId, instructionRef: ref };
+}
 
 type Row = Record<string, any>;
 
@@ -140,6 +146,7 @@ describe("Tower Wars → Day Director actor identity", () => {
       tenantId: "tenant-a",
       promiseId: memory.promise.id,
       actorId,
+      admission: appInstruction(actorId, `tower_wars.activatePromise:oauth-open-id-42:${memory.promise.id}`),
     });
     const state = await getDayDirectorState({
       tenantId: "tenant-a",
@@ -166,6 +173,7 @@ describe("Tower Wars → Day Director actor identity", () => {
       tenantId: "tenant-a",
       promiseId: memory.promise.id,
       actorId,
+      admission: appInstruction(actorId, `tower_wars.activatePromise:42:${memory.promise.id}`),
     });
     const commitmentId = String(memory.commitments[0]!.id);
 
@@ -173,6 +181,7 @@ describe("Tower Wars → Day Director actor identity", () => {
       tenantId: "tenant-a",
       actorId,
       commitmentId,
+      admission: appInstruction(actorId, `day_director.complete:42:${commitmentId}`),
     });
 
     expect(memory.commitments[0]).toMatchObject({ status: "completed" });
@@ -181,5 +190,45 @@ describe("Tower Wars → Day Director actor identity", () => {
       fulfillmentEvidence: `Completed through Day Director commitment ${commitmentId}`,
     });
     expect(memory.promise.fulfilledAt).toBeInstanceOf(Date);
+  });
+
+  it("records the admitting instruction on the commitment it writes", async () => {
+    const memory = memoryDb();
+    mocks.getDb.mockResolvedValue(memory.db);
+    await activateTowerWarsPromise({
+      tenantId: "tenant-a",
+      promiseId: memory.promise.id,
+      actorId: "42",
+      admission: appInstruction("42", "tower_wars.activatePromise:admin-42:p1"),
+    });
+    expect(memory.commitments[0]?.metadataJson).toMatchObject({
+      admission: {
+        kind: "operator_instruction",
+        channel: "authenticated_app",
+        instructionRef: "tower_wars.activatePromise:admin-42:p1",
+      },
+    });
+  });
+
+  it("refuses an activation without an admission, or for another operator, and writes nothing", async () => {
+    const memory = memoryDb();
+    mocks.getDb.mockResolvedValue(memory.db);
+    await expect(
+      activateTowerWarsPromise({
+        tenantId: "tenant-a",
+        promiseId: memory.promise.id,
+        actorId: "42",
+      } as unknown as Parameters<typeof activateTowerWarsPromise>[0])
+    ).rejects.toMatchObject({ name: "DayDirectorAdmissionError", reason: "admission_missing" });
+    await expect(
+      activateTowerWarsPromise({
+        tenantId: "tenant-a",
+        promiseId: memory.promise.id,
+        actorId: "42",
+        admission: appInstruction("7", "tower_wars.activatePromise:someone-else:p1"),
+      })
+    ).rejects.toBeInstanceOf(DayDirectorAdmissionError);
+    expect(memory.commitments).toHaveLength(0);
+    expect(memory.db.insert).not.toHaveBeenCalled();
   });
 });

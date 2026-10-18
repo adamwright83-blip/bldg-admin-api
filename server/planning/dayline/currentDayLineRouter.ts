@@ -259,6 +259,13 @@ export const currentDayLineRouter = router({
           actorId: identity.dayDirectorActorId,
           actorIds: identity.dayDirectorActorIds,
           commitmentId,
+          // The signed-in caller (a platform admin acting cross-tenant included) is who asked.
+          admission: {
+            kind: "operator_instruction",
+            channel: "authenticated_app",
+            operatorActorId: identity.dayDirectorActorId,
+            instructionRef: `day_line.completeItem:${ctx.user.openId}:${input.evidenceReference}`,
+          },
         });
 
         const bridged = await bridgeDriverAction({

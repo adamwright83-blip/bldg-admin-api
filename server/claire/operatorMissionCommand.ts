@@ -34,6 +34,7 @@
 import { createHash } from "node:crypto";
 import { AssertionGuard, type MutationReceipt } from "./assertionGuard";
 import { acceptProposal, designateDayDirectorPrimary, getDayDirectorState } from "../planning/dayDirector/dayDirectorService";
+import type { DayDirectorAdmission } from "../planning/dayDirector/dayDirectorAdmission";
 import { loadDailyCommand, type DailyCommand } from "./dailyCommandContract";
 import {
   applyWeeklyIntentToCommand,
@@ -681,6 +682,13 @@ export async function executeOperatorMissionCommand(
     const loadCommand = deps.loadCommand ?? loadDailyCommand;
     const latestIntent = deps.latestIntent ?? latestWeeklyIntent;
     const weekStart = weekStartMonday(businessDate);
+    // The parsed explicit command in this turn is the operator's instruction.
+    const admission: DayDirectorAdmission = {
+      kind: "operator_instruction",
+      channel: "claire_conversation",
+      operatorActorId: dayDirectorActorId,
+      instructionRef: `operator_mission:${sourceCommandRef}`,
+    };
     const intentOperatorIds = [
       ...new Set(
         [input.weeklyIntentOperatorId?.trim() || operatorUserId, operatorUserId, dayDirectorActorId].filter(Boolean)
@@ -720,6 +728,7 @@ export async function executeOperatorMissionCommand(
           commitmentId: equivalent.id,
           nowIso,
           designatedBy: "operator",
+          admission,
         });
         outcome = "updated";
       } else {
@@ -763,6 +772,7 @@ export async function executeOperatorMissionCommand(
         actorId: dayDirectorActorId,
         businessDate,
         proposal,
+        admission,
       });
       if (!stored?.id) return failure();
       commitmentId = stored.id;
@@ -774,6 +784,7 @@ export async function executeOperatorMissionCommand(
         commitmentId,
         nowIso,
         designatedBy: "operator",
+        admission,
       });
       outcome = hadOtherPrimary ? "updated" : "created";
     }

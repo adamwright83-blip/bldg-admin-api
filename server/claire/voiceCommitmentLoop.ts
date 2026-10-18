@@ -36,6 +36,7 @@ import {
   speakCommitmentDay,
 } from "./workdayCommandLanguage";
 import { confirmRecurrenceRule, recurrenceIdempotencyKey } from "./workdayRecurrenceService";
+import type { DayDirectorAdmission } from "../planning/dayDirector/dayDirectorAdmission";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { capabilityIsActionable } from "../../shared/goldlineCapabilities";
 import {
@@ -373,6 +374,13 @@ export async function handleVoiceCommitmentTurn(
   const editItem = dependencies.editItem ?? editDayLineItem;
   const cancelItem = dependencies.cancelItem ?? cancelDayLineItem;
   const approveEngineering = dependencies.approveEngineering ?? approveCapabilityEngineering;
+  // Every write below follows the operator's spoken "yes" to a pending proposal or update.
+  const voiceAdmission = (ref: string): DayDirectorAdmission => ({
+    kind: "operator_instruction",
+    channel: "claire_voice",
+    operatorActorId: input.actorId,
+    instructionRef: `voice_commitment:${input.conversationId ?? "call"}:${ref}`,
+  });
 
   async function operateDayLine(
     operation: "edit" | "cancel",
@@ -501,6 +509,7 @@ export async function handleVoiceCommitmentTurn(
         actorId: input.actorId,
         businessDate: input.businessDate,
         proposal,
+        admission: voiceAdmission(proposal.promptKey),
       });
       const storedId =
         stored && typeof stored === "object" && "id" in stored
@@ -557,6 +566,7 @@ export async function handleVoiceCommitmentTurn(
         actorId: input.actorId,
         commitmentId: pending.commitmentId,
         patch: pending.patch,
+        admission: voiceAdmission(`update:${pending.commitmentId}`),
       });
       recordClaireConversionJoin({
         tenantId: input.tenantId,
@@ -614,6 +624,7 @@ export async function handleVoiceCommitmentTurn(
               actorId: input.actorId,
               businessDate: input.businessDate,
               proposal,
+              admission: voiceAdmission(proposal.promptKey),
             });
             const id =
               stored && typeof stored === "object" && "id" in stored
@@ -631,6 +642,7 @@ export async function handleVoiceCommitmentTurn(
                 hearsay: pending.hearsay,
               }),
             },
+            admission: voiceAdmission(`field_capture:${input.state.lastAcceptedCommitmentId}`),
           });
           return { ok: true, id: input.state.lastAcceptedCommitmentId };
         });
