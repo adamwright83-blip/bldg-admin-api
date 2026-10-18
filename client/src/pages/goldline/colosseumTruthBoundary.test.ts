@@ -69,9 +69,10 @@ describe("a fictional win never borrows the feel of a real one", () => {
     const expected: Record<string, string[]> = {
       "ClockheadDuel.tsx": ["clockface_impact", "clockhead_roar", "clockhead_howl", "clock_tick"],
       "ColosseumBossGate.tsx": ["seal_break", "clockhead_sweep", "clockhead_charge"],
-      "ColosseumAftermath.tsx": ["level_complete", "radio_static", "radio_chirp", "voice_cut", "companion_join"],
+      "ColosseumAftermath.tsx": ["level_complete", "radio_static", "radio_chirp", "voice_cut"],
     };
     if (expected[file]) expect(cues, `${file} was scanned`).toEqual(expect.arrayContaining(expected[file]!));
+    if (file === "ColosseumAftermath.tsx") expect(cues).not.toContain("companion_join");
     for (const cue of cues) expect(cueCategory(cue), `${file} plays ${cue}`).not.toBe("victory");
   });
 });
@@ -134,18 +135,24 @@ describe("the finale is reachable only through the authoritative campaign", () =
     expect(duel).not.toMatch(/joinParty/);
   });
 
-  it("adds Rook to the party only at the controller's Colosseum-resolution boundary", () => {
+  it("owns Rook only after the Coastal Market catch, and Colosseum dismiss does not join the party", () => {
     const controller = read("../driver/GoldlineDriverController.tsx");
     expect(controller.match(/joinParty\(/g)).toHaveLength(1);
-    const boundary = controller.slice(controller.indexOf("onDismiss={() => {"));
-    const resolved = boundary.indexOf("markColosseumResolved(");
-    const joined = boundary.indexOf('joinParty(identity.data?.openId ?? null, "rook")');
-    expect(resolved).toBeGreaterThan(-1);
-    expect(joined).toBeGreaterThan(resolved);
-    expect(joined).toBeLessThan(boundary.indexOf("}}"));
-    expect(boundary).toContain("acknowledgeColosseumFinale.mutate");
-    expect(boundary).toContain("COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE");
-    expect(boundary).not.toMatch(/rookOwned\s*:/);
+    const caughtAt = controller.indexOf("onRookCaught={() => {");
+    const caught = controller.slice(caughtAt);
+    const recorded = caught.indexOf("completeCoastalRookCatch");
+    const joined = caught.indexOf('joinParty(identity.data?.openId ?? null, "rook")');
+    expect(caughtAt).toBeGreaterThan(-1);
+    expect(recorded).toBeGreaterThan(-1);
+    expect(joined).toBeGreaterThan(recorded);
+    expect(caughtAt + joined).toBeLessThan(controller.indexOf('if (driverScene === "wayward")'));
+    const dismiss = controller.slice(controller.indexOf("onDismiss={() => {"));
+    const dismissBody = dismiss.slice(0, dismiss.indexOf("setDriverScene(stageReturnScene)"));
+    expect(dismissBody).toContain("markColosseumResolved(");
+    expect(dismissBody).toContain("acknowledgeColosseumFinale.mutate");
+    expect(dismissBody).toContain("COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE");
+    expect(dismissBody).not.toMatch(/joinParty\s*\(/);
+    expect(dismissBody).not.toMatch(/rookOwned\s*:/);
   });
 
   it("still sends the real hunt through the unmodified field mission", () => {
