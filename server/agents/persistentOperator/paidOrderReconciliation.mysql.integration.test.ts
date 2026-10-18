@@ -95,7 +95,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
     // A restarted worker's sweep retries it from the persisted obligation; nothing is re-imported.
     const batches = await importBatches(t.tenantId);
     advance(5 * 60_000);
-    const first = await sweepObservationBridges({ leaseOwner: "worker-after-restart" });
+    const first = await sweepObservationBridges({ leaseOwner: "worker-after-restart", tenantId: t.tenantId });
     expect(first.errors).toEqual([]);
     expect(await loop.obligationOf(t.tenantId, beaOrder)).toMatchObject({ status: "bridged", attemptCount: 2 });
     let paid = await paidOutcomes(t.tenantId);
@@ -110,7 +110,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
     Object.assign(paidOrderObservationDeps, productionDeps);
     const almaOrder = await latestOrder(t.tenantId, ALMA.customerId);
     expect(await loop.obligationOf(t.tenantId, almaOrder)).toBeUndefined();
-    const reconciled = await sweepObservationBridges({ leaseOwner: "worker-after-restart" });
+    const reconciled = await sweepObservationBridges({ leaseOwner: "worker-after-restart", tenantId: t.tenantId });
     expect(reconciled.discovered).toBeGreaterThanOrEqual(1);
     expect(await loop.obligationOf(t.tenantId, almaOrder)).toMatchObject({ status: "bridged" });
 
@@ -119,13 +119,13 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
     await t.importLedger([paysToday(DANA)], new Date());
     Object.assign(paidOrderObservationDeps, productionDeps);
     const danaOrder = await latestOrder(t.tenantId, DANA.customerId);
-    await sweepObservationBridges({ leaseOwner: "discovery-only", limit: 0 });
+    await sweepObservationBridges({ leaseOwner: "discovery-only", limit: 0, tenantId: t.tenantId });
     const [leased] = await claimDueObservationObligations({ leaseOwner: "dead-worker", leaseMs: 2 * 60_000, tenantId: t.tenantId, now: new Date() });
     expect(leased?.sourceKey).toBe(danaOrder);
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, danaOrder)).toMatchObject({ status: "pending", attemptCount: 0 });
     advance(3 * 60_000); // the dead worker's lease expires
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, danaOrder)).toMatchObject({ status: "unrelated", attemptCount: 1 });
 
     // 4. Orders arrive with no customer identity. Each waits as unresolved, never as unrelated.
@@ -150,7 +150,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
     });
     await t.importLedger([], new Date());
     advance(31 * 60_000);
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, anonymousBea)).toMatchObject({ status: "bridged" });
     const almaUncounted = await loop.obligationOf(t.tenantId, anonymousAlma);
     expect(almaUncounted).toMatchObject({ status: "rejected" });
@@ -199,7 +199,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
        VALUES (?, 'orders_sales', 'legacy-unadmitted.csv', 0, ?, ?, ?, 1, 4800, ?, 'not_applicable')`,
       [t.tenantId, legacyOrderId, ALMA.customerId, ALMA.name, new Date()]
     );
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, legacyOrderId)).toMatchObject({ status: "rejected" });
     // The ledger does not count an unadmitted row, so the goal side never attributes it.
     expect(json((await loop.obligationOf(t.tenantId, legacyOrderId))!.resultJson).reason).toBe("payment_unverified_in_canonical_ledger");
@@ -207,7 +207,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
 
     // Settled classifications are final: a later sync and sweep never turn them into attribution.
     await t.importLedger([], new Date());
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, beaOrder)).toMatchObject({ status: "ambiguous_review" });
     expect(await paidOutcomes(t.tenantId)).toEqual([]);
 
@@ -246,7 +246,7 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
 
     // The sweep links the attempt first, then the order attaches to it.
     advance(5 * 60_000);
-    await sweepObservationBridges({ leaseOwner: "live-worker" });
+    await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, approved.commitmentId)).toMatchObject({ status: "bridged" });
     expect(await loop.obligationOf(t.tenantId, beaOrder)).toMatchObject({ status: "bridged" });
     const paid = await paidOutcomes(t.tenantId);

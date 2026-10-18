@@ -96,7 +96,7 @@ describeMysql("approved commitment → execution → observation on MySQL", () =
 
     // A retried completion and the reconciliation sweep replay to the same outcome.
     expect(await bridgeCommitmentCompletion({ tenantId: t.tenantId, commitmentId, evidenceReference: "voice_incab_receipt_retry", sourceSystem: "driver_cockpit_hud", actorId: t.openId })).toMatchObject({ status: "recorded", objectiveId });
-    await sweepObservationBridges({ leaseOwner: "test-sweep" });
+    await sweepObservationBridges({ leaseOwner: "test-sweep", tenantId: t.tenantId });
     expect(await outcomesOf(t.tenantId)).toHaveLength(1);
 
     // Bea, a targeted customer, pays inside the window. Cruz, not targeted, pays too.
@@ -186,7 +186,7 @@ describeMysql("approved commitment → execution → observation on MySQL", () =
     expect(await obligationOf(t.tenantId, second.commitmentId)).toMatchObject({ status: "pending", attemptCount: 1, lastError: "database unavailable" });
     expect((await readObservationBridgeBacklog({ tenantId: t.tenantId })).retrying).toBe(1);
     advance(5 * 60_000);
-    const swept = await sweepObservationBridges({ leaseOwner: "test-sweep" });
+    const swept = await sweepObservationBridges({ leaseOwner: "test-sweep", tenantId: t.tenantId });
     expect(swept.errors).toEqual([]);
     expect(await obligationOf(t.tenantId, second.commitmentId)).toMatchObject({ status: "bridged", attemptCount: 2 });
 
@@ -199,7 +199,7 @@ describeMysql("approved commitment → execution → observation on MySQL", () =
     await t.importLedger([], new Date());
     await t.dayDirector.complete({ commitmentId: third.commitmentId });
     expect(await obligationOf(t.tenantId, third.commitmentId)).toBeUndefined();
-    const reconciled = await sweepObservationBridges({ leaseOwner: "test-sweep" });
+    const reconciled = await sweepObservationBridges({ leaseOwner: "test-sweep", tenantId: t.tenantId });
     expect(reconciled).toMatchObject({ discovered: 1, errors: [] });
     expect(await obligationOf(t.tenantId, third.commitmentId)).toMatchObject({ status: "bridged" });
     const executions = (await outcomesOf(t.tenantId)).filter(o => o.outcomeKind === "action_verification");
@@ -212,7 +212,7 @@ describeMysql("approved commitment → execution → observation on MySQL", () =
     // still pending: not contradicted, not supported, and nothing learns a failure.
     advance(15 * DAY);
     await t.importLedger([], new Date());
-    await sweepObservationBridges({ leaseOwner: "test-sweep" });
+    await sweepObservationBridges({ leaseOwner: "test-sweep", tenantId: t.tenantId });
     await runOccurrence(t, store);
     for (const id of [second.commitmentId, third.commitmentId]) {
       const observation = (await metadataOf(t.tenantId, id)).observation;
