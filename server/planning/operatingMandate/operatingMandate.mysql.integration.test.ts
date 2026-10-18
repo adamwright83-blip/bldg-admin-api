@@ -14,6 +14,7 @@ import {
 import { activateMacroGoalRun, parseAuthoritativeMetricObservation } from "../../agents/persistentOperator/macroGoalRuns";
 import { persistentOperatorRouter } from "../../agents/persistentOperator/persistentOperatorRouter";
 import { readObjectiveArea } from "../../strategy/strategicEvidenceReaders";
+import { latestStrategicDiagnosis } from "../../strategy/strategicStore";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaultRegistry";
 import { SILVER_LAKE_LEDGER, type WorkThreadTenant } from "../../strategy/workThreadTenant.testSupport";
@@ -126,6 +127,12 @@ describeMysql("operating mandate on MySQL", () => {
     // The remark created no goal and touched no run.
     expect((await goalRows(t.tenantId)).map(g => [g.metricKey, g.status])).toEqual([["active_customers", "active"]]);
     expect((await runRows(t.tenantId)).map(r => [r.id, r.status])).toEqual([[t.run.id, "active"]]);
+
+    // Choosing the only goal as first changes no wording; the next preparation
+    // still carries it rather than reusing the hour-old diagnosis.
+    await operator(t).decideOperatingMandate({ kind: "primary_outcome", outcomeId: goal.id });
+    await proposalOf(t);
+    expect((await latestStrategicDiagnosis(t.identity))?.mandate).toMatchObject({ primaryOutcomeId: goal.id, leadingOutcomeId: goal.id });
   }, 300_000);
 
   it("2. a separate Silver Lake revenue target is its own goal and run; neither goal is first until the operator says so", async () => {
