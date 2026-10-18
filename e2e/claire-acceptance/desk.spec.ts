@@ -62,7 +62,8 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
 
     // 2. Exact approval of only the primary mission, with verified feedback and Day Line write.
     await primary.getByRole("button", { name: "Approve this mission", exact: true }).click();
-    await expect(page.getByTestId("approve-result")).toContainText("1 approved item(s) added and verified in the Day Line");
+    // No goal cycle runs in this suite, so the fixture has no goal objective: approval says so instead of claiming verified progress (Stage 1 Phase 3 c).
+    await expect(page.getByTestId("approve-result")).toContainText("1 approved item(s) added to the Day Line. Not linked to a goal objective");
     await expect(primary).toContainText("On your Day Line");
     const [rows]: any = await db.execute("SELECT id,title,businessDate FROM day_director_commitments WHERE tenantId=? AND title IN (?,?)", [owner.tenantId, fixture.items[0]!.title, fixture.items[1]!.title]);
     expect(rows.map((r: any) => r.title)).toEqual([fixture.items[0]!.title]);
