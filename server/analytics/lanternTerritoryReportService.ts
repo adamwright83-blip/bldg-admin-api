@@ -210,6 +210,15 @@ export async function readLanternTerritoryReport(input: {
         })
       : Promise.resolve(null),
   ]);
+  const resyncGap = (ledger.unverifiedPaymentAuthority ?? []).filter(
+    item => item.source === "cleancloud" && item.reason === "missing_or_invalid_receipt"
+  );
+  if (resyncGap.length) {
+    return withhold(
+      supported,
+      "CleanCloud paid orders in this read do not match a canonical observation receipt for their current import batch. A resync updates that batch without issuing a new receipt when the economic fields are unchanged, so the admitted total would omit those orders. Revenue, the prior-period comparison, and dormant-customer counts are withheld."
+    );
+  }
   const business = await runBusinessQuery(input.tenantId, query, {
     ...loaders.business,
     loadLedger: async () => ledger,

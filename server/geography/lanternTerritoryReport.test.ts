@@ -397,6 +397,55 @@ describe("lantern territory report service", () => {
     expect(result.territories.find(territory => territory.id === "silver-lake")?.revenueCents).toBe(1000);
   });
 
+  it("withholds territory figures when a CleanCloud resync leaves the current import without a receipt", async () => {
+    const ledger: PaidOrderLedger = {
+      startUtc: new Date("2025-01-01T00:00:00.000Z"),
+      endExclusiveUtc: new Date("2026-10-19T00:00:00.000Z"),
+      timeZone: TZ,
+      events: [order({ eventKey: "ada-now", businessDate: "2026-10-02", cents: 10000, identity: { phone: "3105550101" } })],
+      unverifiedNative: [],
+      unverifiedPaymentAuthority: [{
+        eventKey: "cleancloud:sl-1",
+        businessDate: "2026-10-03",
+        source: "cleancloud",
+        cents: 4500,
+        reason: "missing_or_invalid_receipt",
+      }],
+      provenDuplicateExclusions: [],
+      loadedSources: ["laundry_butler", "cleancloud"],
+      failedSources: ["cleancloud"],
+      completeness: "partial",
+    };
+    const result = await readLanternTerritoryReport({
+      tenantId: "tenant-a",
+      windowDays: 30,
+      now: NOW,
+      loaders: {
+        business: {
+          ...defaultBusinessQueryDeps,
+          loadLedger: async () => ledger,
+          now: () => NOW,
+          timeZone: () => TZ,
+          readSourceCoverage: async () => null,
+        },
+        loadGeography: async () => ({ basis: "tenant_location", areas: [laArea] }),
+        loadCustomers: async () => [
+          customer({ identityKey: "ada", latitude: 34.0989, longitude: -118.33919, identityKeys: ["phone:3105550101"] }),
+          customer({ identityKey: "bea", latitude: 34.09825, longitude: -118.26459, identityKeys: ["phone:3105550102"] }),
+        ],
+      },
+    });
+    expect(result.status).toBe("unavailable");
+    expect(result.partitionedRevenueCents).toBeNull();
+    expect(result.comparison.mostRecordedRevenue).toBeNull();
+    expect(result.comparison.steepestDecline).toBeNull();
+    expect(result.comparison.dormantOpportunities).toEqual([]);
+    expect(result.territories.every(territory => territory.revenueCents == null)).toBe(true);
+    expect(result.reason).toMatch(/current import batch/);
+    expect(JSON.stringify(result.territories)).not.toContain("10000");
+    expect(JSON.stringify(result.territories)).not.toContain("4500");
+  });
+
   it("does not read the paid-order book when geography is unsupported", async () => {
     const loadLedger = vi.fn();
     const result = await readLanternTerritoryReport({
