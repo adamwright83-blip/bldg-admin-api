@@ -6,25 +6,28 @@ import { formatInTimeZone } from "date-fns-tz";
 import { PERSISTENT_OPERATOR_ENTITLEMENT } from "../../shared/saasTenant";
 import { addCalendarDays } from "../../shared/weeklyGrowthCandidates";
 import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
-import type { ProactiveObligation } from "../../shared/claireProactive";
+import { DEFAULT_DOCTRINE, type ProactiveObligation } from "../../shared/claireProactive";
 import type { StrategicPlanningProposal } from "../../shared/strategicIntelligence";
-import { resolveCanonicalOperatorIdentity, type CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
+import { bindOperatorIdentityAlias, resolveCanonicalOperatorIdentity, type CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import { upsertPersistentOperatorObligation } from "../agents/persistentOperator/obligationStore";
-import { loadOperatorSalesHold, saveOperatorDoctrine } from "../agents/persistentOperator/operatorDoctrineStore";
+import { loadOperatorDoctrine, loadOperatorSalesHold, saveOperatorDoctrine } from "../agents/persistentOperator/operatorDoctrineStore";
+import { handleDoctrineTurn } from "../claire/proactive/boardService";
 import { captureShowrunnerSalesHold } from "../claire/showrunner/showrunnerTurn";
 import { loadRankingContext } from "../planning/missionDirector/missionDirectorService";
 import { rankMissionDirectorWork } from "../planning/missionDirector/rankableWork";
 import { loadWeeklyGrowthCandidates } from "../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
 import { respondToStrategicProposal } from "./strategicApproval";
 import { persistStrategicProposal } from "./strategicStore";
-import { DEFAULT_DOCTRINE } from "../../shared/claireProactive";
 
 /**
- * Real-MySQL proof: an operator's "no sales today", said on a scheduled call,
- * is saved, and every planner that could put sales work in front of them that
- * day honors it. Mission Director does not rank held sales work (recovery
- * still ranks), and approval refuses sales work dated on the held day, so it
- * never reaches the Day Line. The next day is untouched.
+ * Real-MySQL proof of the operator's one-day sales hold:
+ * - "No sales today", said on a call, holds acquisition, upselling, promotion
+ *   and win-backs; a narrower instruction holds only what it names.
+ * - Mission Director does not rank held work, and approval refuses it, so it
+ *   never reaches the Day Line. The next day is untouched.
+ * - "Resume sales now" lifts the hold everywhere it was saved, and starts
+ *   nothing: held work only becomes rankable and approvable again.
+ * - The hold is dated in the business's own time zone.
  */
 const describeMysql = process.env.DATABASE_URL ? describe : describe.skip;
 const zone = "America/Los_Angeles";
@@ -38,23 +41,69 @@ describeMysql("the operator's sales hold on MySQL", () => {
     await sql?.end();
   });
 
-  async function operator() {
+  async function user(tenantId: string, openId: string) {
+    await sql.execute("INSERT INTO users (tenantId,openId,name,email,role,loginMethod) VALUES (?,?,?,?,'user','password')", [tenantId, openId, "Op", "op@example.invalid"]);
+    await sql.execute("INSERT INTO dayforge_saas_memberships (tenantId,userOpenId,role,active) VALUES (?,?,'owner',true)", [tenantId, openId]);
+  }
+
+  async function operator(timeZone = zone, withAlias = false) {
     const suffix = randomUUID().replaceAll("-", "").slice(0, 10);
     const tenantId = `hold-${suffix}`;
     const openId = `hold-owner-${suffix}`;
     await sql.execute(
       "INSERT INTO dayforge_saas_tenants (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status,strategyVerticalKey) VALUES (?,?,?,?,?,?,?,?,'active','laundry_fluff_fold')",
-      [tenantId, tenantId, "Sales hold test", "Sales hold test", "#123456", "Op", "op@example.invalid", zone]
+      [tenantId, tenantId, "Sales hold test", "Sales hold test", "#123456", "Op", "op@example.invalid", timeZone]
     );
-    await sql.execute("INSERT INTO users (tenantId,openId,name,email,role,loginMethod) VALUES (?,?,?,?,'user','password')", [tenantId, openId, "Op", "op@example.invalid"]);
-    await sql.execute("INSERT INTO dayforge_saas_memberships (tenantId,userOpenId,role,active) VALUES (?,?,'owner',true)", [tenantId, openId]);
+    await user(tenantId, openId);
     await sql.execute("INSERT INTO dayforge_saas_entitlements (tenantId,entitlementKey,source,enabled) VALUES (?,?,'manual',true)", [tenantId, PERSISTENT_OPERATOR_ENTITLEMENT]);
+    const aliasOpenId = `hold-desk-${suffix}`;
+    if (withAlias) {
+      await user(tenantId, aliasOpenId);
+      await bindOperatorIdentityAlias({ tenantId, canonicalOpenId: openId, aliasOpenId, surface: "operator", createdByOpenId: openId });
+    }
     const resolved = await resolveCanonicalOperatorIdentity({ tenantId, source: { type: "open_id", value: openId }, subsystem: "sales_hold_test" });
     if (!resolved.ok) throw new Error("identity");
-    return resolved.identity;
+    return { identity: resolved.identity, aliasOpenId };
   }
 
   const openIds = (identity: CanonicalOperatorIdentity) => [identity.canonicalOpenId, ...identity.aliases.map(a => a.openId)];
+  const call = (identity: CanonicalOperatorIdentity, businessDate: string) => ({
+    tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, businessDate, timeZone: zone,
+  });
+
+  async function obligations(identity: CanonicalOperatorIdentity, today: string) {
+    const obligation = (kind: ProactiveObligation["kind"], key: string): ProactiveObligation => ({
+      // claire_proactive_obligations is keyed by id alone, so ids must not repeat across test tenants.
+      id: `${kind === "sales_follow_up" ? "sales" : "recovery"}:${key}:${identity.tenantId}:${today}`,
+      kind,
+      subjectKey: kind === "sales_follow_up" ? `account:${key}` : `customer:${key}`,
+      subjectName: key,
+      status: "scheduled",
+      dueDate: today,
+      title: kind === "sales_follow_up" ? `Follow up: ${key}` : `Win back ${key}`,
+      why: kind === "sales_follow_up" ? `${key} asked for a call back.` : `${key} has not ordered in 40 days.`,
+      draft: null,
+      historyIntact: true,
+      moveCount: 0,
+    });
+    const sales = obligation("sales_follow_up", "Sunset Towers");
+    const recovery = obligation("dormant_recovery", "Ines");
+    for (const o of [sales, recovery])
+      await upsertPersistentOperatorObligation({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, obligation: o });
+    return { sales, recovery };
+  }
+
+  async function ranked(identity: CanonicalOperatorIdentity, businessDate: string, now: Date, of: { sales: ProactiveObligation; recovery: ProactiveObligation }) {
+    const feed = await loadWeeklyGrowthCandidates({
+      tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, dayDirectorActorId: identity.dayDirectorActorId,
+      remainingDates: [businessDate], businessDate, now, timeZone: zone,
+    });
+    const context = await loadRankingContext({ tenantId: identity.tenantId, operatorUserIds: openIds(identity), businessDate });
+    const plan = rankMissionDirectorWork({ candidates: feed.candidates, campaigns: [], campaignPrepReady: {}, context, pockets: [] });
+    const held = (o: ProactiveObligation) =>
+      plan.ranking.find(r => r.sourceRefs.some(ref => ref.sourceId === o.id))!.blockedReasons.includes("SALES_HELD_BY_OPERATOR");
+    return { hold: context.salesHold ?? null, sales: held(of.sales), recovery: held(of.recovery) };
+  }
 
   async function proposal(identity: CanonicalOperatorIdentity, now: Date, items: Array<{ key: string; businessDate: string; missionType: string }>) {
     const businessDate = formatInTimeZone(now, zone, "yyyy-MM-dd");
@@ -97,75 +146,48 @@ describeMysql("the operator's sales hold on MySQL", () => {
     return rows.map(r => String(r.title));
   }
 
-  it("said on a call, the hold is saved and Mission Director skips sales work that day, not recovery", async () => {
-    const identity = await operator();
+  it("'no sales today' on a call holds the follow-up and the win-back; 'resume sales now' lifts it and starts nothing", async () => {
+    const { identity } = await operator();
     const now = new Date();
     const today = formatInTimeZone(now, zone, "yyyy-MM-dd");
-    const tomorrow = addCalendarDays(today, 1);
-    const obligation = (kind: ProactiveObligation["kind"], key: string): ProactiveObligation => ({
-      // claire_proactive_obligations is keyed by id alone, so ids must not repeat across test tenants.
-      id: `${kind === "sales_follow_up" ? "sales" : "recovery"}:${key}:${identity.tenantId}:${today}`,
-      kind,
-      subjectKey: kind === "sales_follow_up" ? `account:${key}` : `customer:${key}`,
-      subjectName: key,
-      status: "scheduled",
-      dueDate: today,
-      title: kind === "sales_follow_up" ? `Follow up: ${key}` : `Win back ${key}`,
-      why: kind === "sales_follow_up" ? `${key} asked for a call back.` : `${key} has not ordered in 40 days.`,
-      draft: null,
-      historyIntact: true,
-      moveCount: 0,
-    });
-    const sales = obligation("sales_follow_up", "Sunset Towers");
-    const recovery = obligation("dormant_recovery", "Ines");
-    for (const o of [sales, recovery])
-      await upsertPersistentOperatorObligation({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, obligation: o });
+    const work = await obligations(identity, today);
+    expect(await ranked(identity, today, now, work)).toMatchObject({ hold: null, sales: false, recovery: false });
 
-    const ranked = async (businessDate: string) => {
-      const feed = await loadWeeklyGrowthCandidates({
-        tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, dayDirectorActorId: identity.dayDirectorActorId,
-        remainingDates: [businessDate], businessDate, now, timeZone: zone,
-      });
-      const context = await loadRankingContext({ tenantId: identity.tenantId, operatorUserIds: openIds(identity), businessDate });
-      const plan = rankMissionDirectorWork({ candidates: feed.candidates, campaigns: [], campaignPrepReady: {}, context, pockets: [] });
-      const of = (o: ProactiveObligation) =>
-        plan.ranking.find(r => r.sourceRefs.some(ref => ref.sourceId === o.id))!;
-      return { context, sales: of(sales), recovery: of(recovery) };
-    };
-
-    const before = await ranked(today);
-    expect(before.context.salesHold).toBeUndefined();
-    expect(before.sales.blockedReasons).not.toContain("SALES_HELD_BY_OPERATOR");
-
-    // Morning call: the operator holds sales for today.
-    const speak = await captureShowrunnerSalesHold(
-      { tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, businessDate: today },
-      "Just today, don't give me sales work until payroll is finished."
+    // Morning call.
+    expect(await captureShowrunnerSalesHold(call(identity, today), "Just today, don't give me sales work until payroll is finished.", now)).toBe(
+      'Just today I\'ll hold all sales work until payroll is finished: new-customer outreach, upselling, promotions and win-backs. Customer service and existing orders go ahead. Say "resume sales" when you\'re ready.'
     );
-    expect(speak).toBe("Just today I'll hold sales work until payroll is finished. That doesn't change the standing rule.");
     // Not a hold: falls through to the normal turn, nothing saved.
-    expect(
-      await captureShowrunnerSalesHold({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, businessDate: today }, "Skip the OPUS pickup today.")
-    ).toBeNull();
+    expect(await captureShowrunnerSalesHold(call(identity, today), "Skip the OPUS pickup today.", now)).toBeNull();
+    expect(await ranked(identity, today, now, work)).toMatchObject({ hold: { until: today }, sales: true, recovery: true });
+    expect(await ranked(identity, addCalendarDays(today, 1), now, work)).toMatchObject({ hold: null, sales: false, recovery: false });
 
-    const held = await ranked(today);
-    expect(held.context.salesHold).toMatchObject({ until: today });
-    expect(held.sales).toMatchObject({ eligible: false });
-    expect(held.sales.blockedReasons).toContain("SALES_HELD_BY_OPERATOR");
-    expect(held.recovery.blockedReasons).not.toContain("SALES_HELD_BY_OPERATOR");
-
-    const next = await ranked(tomorrow);
-    expect(next.context.salesHold).toBeUndefined();
-    expect(next.sales.blockedReasons).not.toContain("SALES_HELD_BY_OPERATOR");
+    // Later, in Desk Comms.
+    expect(await captureShowrunnerSalesHold({ ...call(identity, today) }, "Resume sales now.", now)).toBe(
+      "Sales work is back on. Nothing that was held starts by itself; I'll bring it back as a proposal for your OK."
+    );
+    expect(await ranked(identity, today, now, work)).toMatchObject({ hold: null, sales: false, recovery: false });
+    expect(await commitments(identity.tenantId)).toEqual([]);
+    expect((await loadOperatorDoctrine({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId })).salesHoldLiftedAt).toBe(now.toISOString());
   });
 
-  it("approval refuses sales work on the held day and writes nothing; recovery and the next day still approve", async () => {
-    const identity = await operator();
+  it("a narrower instruction holds only what it names", async () => {
+    const { identity } = await operator();
     const now = new Date();
     const today = formatInTimeZone(now, zone, "yyyy-MM-dd");
-    const tomorrow = addCalendarDays(today, 1);
+    const work = await obligations(identity, today);
+    expect(
+      await handleDoctrineTurn({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, utterance: "No new-customer outreach today.", today, now })
+    ).toBe('Just today I\'ll hold new-customer outreach. Everything else goes ahead. Say "resume sales" when you\'re ready.');
+    expect(await ranked(identity, today, now, work)).toMatchObject({ hold: { scope: ["acquisition"] }, sales: true, recovery: false });
+  });
+
+  it("approval refuses held work and writes nothing; after 'resume sales' the same items approve", async () => {
+    const { identity } = await operator();
+    const now = new Date();
+    const today = formatInTimeZone(now, zone, "yyyy-MM-dd");
     // The held day is tomorrow so the 5 PM execution window never decides this test.
-    const heldDay = tomorrow;
+    const heldDay = addCalendarDays(today, 1);
     await saveOperatorDoctrine({
       tenantId: identity.tenantId,
       operatorUserId: identity.canonicalOpenId,
@@ -173,7 +195,7 @@ describeMysql("the operator's sales hold on MySQL", () => {
     });
     // Read across every open id the operator may have spoken from; an unknown id adds nothing.
     expect(await loadOperatorSalesHold({ tenantId: identity.tenantId, operatorUserIds: [`not-${identity.canonicalOpenId}`, ...openIds(identity)] }))
-      .toEqual({ until: heldDay, reason: "Skip sales until payroll is done." });
+      .toMatchObject({ until: heldDay, reason: "Skip sales until payroll is done." });
     const afterHold = addCalendarDays(heldDay, 1);
     const p = await proposal(identity, now, [
       { key: "sunset-towers", businessDate: heldDay, missionType: "account_acquisition" },
@@ -183,14 +205,36 @@ describeMysql("the operator's sales hold on MySQL", () => {
     const approve = (itemIds: string[]) =>
       respondToStrategicProposal({ identity, proposalId: p.id, revision: p.revision, action: "approve", itemIds, source: "authenticated_voice", now });
 
-    // "Approve all" with held sales work in it: nothing is approved.
+    // "Approve all" with held work in it, win-back included: nothing is approved.
     await expect(approve(p.items.map(i => i.id))).rejects.toThrow(
-      `You asked to hold sales work through ${heldDay}, and "Call sunset-towers" is sales work on that day. Move it to another day before approving; nothing was approved.`
+      `You asked to hold all sales work through ${heldDay}, and "Call sunset-towers", "Call ines" are held work on those days. Move them to another day, or say "resume sales", before approving; nothing was approved.`
     );
     expect(await commitments(identity.tenantId)).toEqual([]);
+    expect((await approve([`${afterHold}:the-wilshire`])).failedItems).toEqual([]);
+    expect(await commitments(identity.tenantId)).toEqual(["Call the-wilshire"]);
 
-    const allowed = await approve([`${heldDay}:ines`, `${afterHold}:the-wilshire`]);
-    expect(allowed.failedItems).toEqual([]);
-    expect(await commitments(identity.tenantId)).toEqual(["Call ines", "Call the-wilshire"]);
+    // Resuming approves nothing by itself; the operator's approval still does.
+    await handleDoctrineTurn({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, utterance: "Resume sales now.", today, now });
+    expect(await commitments(identity.tenantId)).toEqual(["Call the-wilshire"]);
+    expect((await approve([`${heldDay}:sunset-towers`, `${heldDay}:ines`])).failedItems).toEqual([]);
+    expect(await commitments(identity.tenantId)).toEqual(["Call ines", "Call sunset-towers", "Call the-wilshire"]);
+  });
+
+  it("is dated in the business's own time zone, and resuming clears it under every open id", async () => {
+    const { identity, aliasOpenId } = await operator("Asia/Tokyo", true);
+    expect(openIds(identity)).toContain(aliasOpenId);
+    // 09:00 in Los Angeles on the 19th is already the 20th in Tokyo.
+    const now = new Date("2026-10-19T16:00:00.000Z");
+    const dashboardToday = formatInTimeZone(now, zone, "yyyy-MM-dd");
+    expect(dashboardToday).toBe("2026-10-19");
+
+    // Said from the desk alias in open conversation; the turn's own date is the dashboard's.
+    await handleDoctrineTurn({ tenantId: identity.tenantId, operatorUserId: aliasOpenId, utterance: "No sales today.", today: dashboardToday, now });
+    expect((await loadOperatorDoctrine({ tenantId: identity.tenantId, operatorUserId: aliasOpenId })).skipSalesUntil).toBe("2026-10-20");
+    expect(await loadOperatorSalesHold({ tenantId: identity.tenantId, operatorUserIds: openIds(identity) })).toMatchObject({ until: "2026-10-20" });
+
+    // Lifted on a scheduled call under the canonical id: the alias's hold is cleared too.
+    await captureShowrunnerSalesHold({ tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, businessDate: "2026-10-20", timeZone: "Asia/Tokyo" }, "Resume sales now.", now);
+    expect(await loadOperatorSalesHold({ tenantId: identity.tenantId, operatorUserIds: openIds(identity) })).toBeNull();
   });
 });

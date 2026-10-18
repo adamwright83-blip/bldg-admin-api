@@ -1,6 +1,6 @@
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { classifyObjectiveExecution } from "../../../shared/objectiveExecution";
-import { isSalesHoldMotion } from "../../../shared/claireProactive";
+import { describeSalesHoldScope, salesHoldCovers } from "../../../shared/claireProactive";
 import {
   GOAL_CONTRIBUTION_POLICY_VERSION,
   goalContribution,
@@ -179,12 +179,12 @@ function rankOne(input: {
     blockedReasons.push("DISCRETIONARY_TIME_PROTECTED");
   }
 
-  // The operator held sales through this date. Recovery is not sales work.
+  // The operator held this kind of sales work through this date.
   const salesHold = input.context.salesHold;
-  if (salesHold && isSalesHoldMotion(candidate.motion)) {
+  if (salesHoldCovers(salesHold, input.context.businessDate, candidate.motion)) {
     blockedReasons.push("SALES_HELD_BY_OPERATOR");
     warnings.push(
-      `You asked to hold sales work through ${salesHold.until}${salesHold.reason ? ` ("${salesHold.reason}")` : ""}; this is not ranked for that day.`
+      `You asked to hold ${describeSalesHoldScope(salesHold!.scope)} through ${salesHold!.until}${salesHold!.reason ? ` ("${salesHold!.reason}")` : ""}; this is not ranked for that day.`
     );
   }
 

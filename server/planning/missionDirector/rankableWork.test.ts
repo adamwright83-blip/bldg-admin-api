@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidates";
 import { rankMissionDirectorWork } from "./rankableWork";
+import { SALES_HOLD_SCOPES, type SalesHoldScope } from "../../../shared/claireProactive";
 
 function candidate(
   id: string,
@@ -355,27 +356,33 @@ describe("ranking by contribution to the operator's goal", () => {
     expect(goalEffect(rank("active_customers", [reputation]), "reviews")?.effect).toBe(0);
   });
 
-  it("an operator's sales hold blocks sales work for that day, not recovery", () => {
+  it("an operator's sales hold blocks the sales work it names for that day; operations and investigation are never held", () => {
     const desk = "Call the customer and record the answer";
     const followUp = candidate("follow", "Follow up with the office manager", "Cold call the office manager", { observedDueDate: "2026-10-05" });
     const pitch = candidate("pitch", "Pitch the building", "Cold call the property manager", { motion: "account_acquisition" });
     const hangers = candidate("hangers", "Door hangers on Sunset", "Cold call the property manager", { motion: "territory_expansion" });
     const recovery = candidate("winback", "Win back Ines", desk, { sourceKind: "customer_recovery", motion: "customer_recovery" });
-    const all = [followUp, pitch, hangers, recovery];
-    const plan = (salesHold: { until: string; reason: string | null } | null) =>
+    const reviews = candidate("reviews", "Ask for reviews", desk, { motion: "reputation" });
+    const audit = candidate("audit", "Audit lapsed customers", desk, { motion: "investigation" });
+    const all = [followUp, pitch, hangers, recovery, reviews, audit];
+    const plan = (salesHold: { until: string; reason: string | null; scope: SalesHoldScope[] } | null) =>
       rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context: { ...context, salesHold }, pockets: [] });
+    const blocked = (p: ReturnType<typeof plan>) =>
+      p.ranking.filter(r => r.blockedReasons.includes("SALES_HELD_BY_OPERATOR")).map(r => r.workId).sort();
 
-    const held = plan({ until: "2026-10-05", reason: "Just today, no sales until payroll is finished." });
-    for (const id of ["follow", "pitch", "hangers"]) {
-      const item = held.ranking.find(r => r.workId === id)!;
-      expect(item.eligible).toBe(false);
-      expect(item.blockedReasons).toContain("SALES_HELD_BY_OPERATOR");
-      expect(item.warnings.join(" ")).toContain("hold sales work through 2026-10-05");
-    }
-    expect(held.ranking.find(r => r.workId === "winback")!.blockedReasons).not.toContain("SALES_HELD_BY_OPERATOR");
-    expect(held.primary?.workId).toBe("winback");
+    // "No sales today": acquisition, promotion and win-backs alike.
+    const all4 = plan({ until: "2026-10-05", reason: "Just today, no sales until payroll is finished.", scope: [...SALES_HOLD_SCOPES] });
+    expect(blocked(all4)).toEqual(["follow", "hangers", "pitch", "reviews", "winback"]);
+    expect(all4.ranking.find(r => r.workId === "pitch")!.warnings.join(" ")).toContain("hold all sales work through 2026-10-05");
+    expect(all4.primary?.workId).toBe("audit");
 
-    // No hold: ranking is exactly as before.
+    // "No new-customer outreach today": win-backs and review asks still rank.
+    const acquisition = plan({ until: "2026-10-05", reason: "No new-customer outreach today.", scope: ["acquisition"] });
+    expect(blocked(acquisition)).toEqual(["follow", "hangers", "pitch"]);
+    expect(acquisition.ranking.find(r => r.workId === "follow")!.warnings.join(" ")).toContain("hold new-customer outreach through");
+
+    // A hold that ended yesterday holds nothing; no hold ranks exactly as before.
+    expect(blocked(plan({ until: "2026-10-04", reason: null, scope: [...SALES_HOLD_SCOPES] }))).toEqual([]);
     expect(plan(null)).toEqual(rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context, pockets: [] }));
     expect(plan(null).primary?.workId).toBe("follow");
   });

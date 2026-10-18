@@ -14,7 +14,7 @@ import {
 } from "../planning/dayDirector/dayDirectorService";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { proposalItemExecutionWindow } from "../../shared/weeklyMissionReadiness";
-import { isSalesHoldMotion, salesHeldOn } from "../../shared/claireProactive";
+import { describeSalesHoldScope, salesHoldCovers, salesScopeOfMotion } from "../../shared/claireProactive";
 import { loadOperatorSalesHold } from "../agents/persistentOperator/operatorDoctrineStore";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
@@ -75,16 +75,16 @@ export async function respondToStrategicProposal(
     // A proposal prepared before the operator held sales can still carry sales
     // work on a held day; approving it must not put that work on the Day Line.
     const selected = p.items.filter(i => itemIds.includes(i.id));
-    const hold = selected.some(i => isSalesHoldMotion(i.missionType))
+    const hold = selected.some(i => salesScopeOfMotion(i.missionType))
       ? await loadOperatorSalesHold({
           tenantId: input.identity.tenantId,
           operatorUserIds: [input.identity.canonicalOpenId, ...input.identity.aliases.map(a => a.openId)],
         })
       : null;
-    const held = hold ? selected.filter(i => isSalesHoldMotion(i.missionType) && salesHeldOn({ skipSalesUntil: hold.until }, i.businessDate)) : [];
+    const held = selected.filter(i => salesHoldCovers(hold, i.businessDate, i.missionType));
     if (held.length)
       throw new Error(
-        `You asked to hold sales work through ${hold!.until}, and ${held.map(i => `"${i.title}"`).join(", ")} ${held.length === 1 ? "is sales work on that day. Move it" : "are sales work on those days. Move them"} to another day before approving; nothing was approved.`
+        `You asked to hold ${describeSalesHoldScope(hold!.scope)} through ${hold!.until}, and ${held.map(i => `"${i.title}"`).join(", ")} ${held.length === 1 ? "is held work on that day. Move it" : "are held work on those days. Move them"} to another day, or say "resume sales", before approving; nothing was approved.`
       );
   }
   const response = {

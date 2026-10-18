@@ -7,13 +7,8 @@ import {
 import { invokeLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
 import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
-import {
-  applyDoctrineUtterance,
-  classifyDoctrineUtterance,
-  DEFAULT_DOCTRINE,
-  type DoctrineRules,
-} from "../../../shared/claireProactive";
-import { loadOperatorDoctrine, saveOperatorDoctrine } from "../../agents/persistentOperator/operatorDoctrineStore";
+import { parseSalesHoldInstruction } from "../../../shared/claireProactive";
+import { recordOperatorSalesHoldInstruction } from "../../agents/persistentOperator/salesHoldInstruction";
 import type { ShowrunnerBriefing } from "./showrunnerBriefing";
 import { driverDayLineStopIds } from "./driverDayLineCall";
 import { contactEditsForAnalysisSelection,
@@ -27,32 +22,32 @@ import {
 } from "./showrunnerDebrief";
 
 /**
- * The operator's "no sales today" on this call, saved to their doctrine, or
- * null when the utterance is not that hold. Only the sales hold is taken here:
- * any other doctrine-like phrase ("skip the pickup today") falls through to the
- * normal turn. Saved under the call's operator open id for the call's business
- * date, which every planner reads.
+ * The operator's "no sales today" or "resume sales" on this call, recorded in
+ * their doctrine, or null when the utterance is neither. Only the sales hold is
+ * taken here: any other phrase ("skip the pickup today") falls through to the
+ * normal turn. Dated on the call's business date, which every planner reads.
  */
 export async function captureShowrunnerSalesHold(
-  state: Pick<ShowrunnerCallState, "tenantId" | "operatorUserId" | "businessDate">,
-  utterance: string
+  state: Pick<ShowrunnerCallState, "tenantId" | "operatorUserId" | "businessDate" | "timeZone">,
+  utterance: string,
+  now: Date = new Date()
 ): Promise<string | null> {
-  if (classifyDoctrineUtterance(utterance) !== "temporary") return null;
-  const holds = (rules: DoctrineRules) => {
-    const applied = applyDoctrineUtterance(rules, utterance, state.businessDate);
-    return applied && "rules" in applied &&
-      applied.rules.skipSalesUntil === state.businessDate && applied.rules.skipSalesReason === utterance.trim()
-      ? applied
-      : null;
-  };
-  if (!holds(DEFAULT_DOCTRINE)) return null;
+  const instruction = parseSalesHoldInstruction(utterance);
+  if (!instruction) return null;
   try {
-    const applied = holds(await loadOperatorDoctrine({ tenantId: state.tenantId, operatorUserId: state.operatorUserId }));
-    if (!applied) return null;
-    await saveOperatorDoctrine({ tenantId: state.tenantId, operatorUserId: state.operatorUserId, rules: applied.rules });
-    return applied.speak;
+    return await recordOperatorSalesHoldInstruction({
+      tenantId: state.tenantId,
+      operatorUserId: state.operatorUserId,
+      instruction,
+      utterance,
+      now,
+      businessDate: state.businessDate,
+      fallbackTimeZone: state.timeZone,
+    });
   } catch {
-    return "I couldn't save that just now, so sales work is not on hold. Tell me again in a moment.";
+    return instruction.kind === "hold"
+      ? "I couldn't save that just now, so sales work is not on hold. Tell me again in a moment."
+      : "I couldn't save that just now, so sales work is still on hold. Tell me again in a moment.";
   }
 }
 
@@ -280,8 +275,8 @@ export async function runShowrunnerTurn(input: {
       state,
     };
   }
-  // "No sales today" said on a scheduled call or in Desk Comms is saved, as it is in open conversation.
-  const salesHold = await (input.salesHold ?? captureShowrunnerSalesHold)(state, input.utterance);
+  // "No sales today" and "resume sales" said on a scheduled call or in Desk Comms are recorded, as in open conversation.
+  const salesHold = await (input.salesHold ?? captureShowrunnerSalesHold)(state, input.utterance, now);
   if (salesHold) return { speak: salesHold, end: false, state, saved: [salesHold] };
 
   // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.

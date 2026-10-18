@@ -115,8 +115,8 @@ export async function loadRankingContext(input: {
       });
     }
   }
-  // The operator's "no sales today": held prospect and account work is not
-  // ranked for that date, whichever planner asks.
+  // The operator's "no sales today": held sales work is not ranked for that
+  // date, whichever planner asks.
   const hold = await loadOperatorSalesHold({ tenantId: input.tenantId, operatorUserIds: input.operatorUserIds });
   const salesHold = hold && salesHeldOn({ skipSalesUntil: hold.until }, input.businessDate) ? hold : null;
   return { businessDate: input.businessDate, macroGoal, openTasks, ...(salesHold ? { salesHold } : {}) };
