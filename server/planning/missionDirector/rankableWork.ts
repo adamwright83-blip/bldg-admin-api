@@ -123,6 +123,18 @@ function protectedPrimaryMatches(
 /** Overdue work older than this no longer receives an urgency bonus. */
 export const STALE_OVERDUE_DAYS = 14;
 
+/**
+ * Learned outcomes move ranking within fixed bounds. A contradicted hypothesis
+ * is direct evidence against this work and demotes it hard; a supported result
+ * is only consistent with the work (no causal claim, BEHAVIORAL_SCIENCE_FOUNDATION
+ * §2.3), so its boost is small and capped below a direct goal contribution.
+ * Learning demotes; it never forbids work the operator may still choose.
+ */
+export const OUTCOME_LEARNING_CONTRADICTED_EFFECT = -300;
+export const OUTCOME_LEARNING_MAX_DEMOTION = -600;
+export const OUTCOME_LEARNING_SUPPORTED_EFFECT = 60;
+export const OUTCOME_LEARNING_MAX_BOOST = 120;
+
 function rankOne(input: {
   candidate: WeeklyGrowthCandidate;
   campaigns: readonly GrowthCampaign[];
@@ -286,6 +298,29 @@ function rankOne(input: {
       input.context.macroGoal ? "high" : "unknown"
     )
   );
+
+  const lessons = (input.context.outcomeLessons ?? []).filter(lesson =>
+    candidateSourceIds(candidate).has(lesson.selectedRef)
+  );
+  if (lessons.length > 0) {
+    const contradicted = lessons.filter(lesson => lesson.result === "contradicted").length;
+    const supported = lessons.length - contradicted;
+    const effect =
+      Math.max(OUTCOME_LEARNING_MAX_DEMOTION, contradicted * OUTCOME_LEARNING_CONTRADICTED_EFFECT) +
+      Math.min(OUTCOME_LEARNING_MAX_BOOST, supported * OUTCOME_LEARNING_SUPPORTED_EFFECT);
+    factors.push(
+      factor(
+        "outcome_learning_delta",
+        `contradicted:${contradicted},supported:${supported}`,
+        `goal_cycle_learned_deltas for outcomes ${lessons.map(lesson => lesson.outcomeId).join(",")}`,
+        effect,
+        contradicted > 0 ? "high" : "low"
+      )
+    );
+    if (contradicted > 0) {
+      warnings.push("A verified outcome contradicted this work's hypothesis; it is demoted, not forbidden.");
+    }
+  }
 
   if (candidate.sourceKind === "strategy_diagnosis") {
     factors.push(factor("evidence_linked_strategy", candidate.observedSignals.find(s => s.label === "strategic_driver")?.value ?? null, candidate.provenance.sourceIds.join(","), 100, "low"));

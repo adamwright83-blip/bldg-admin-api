@@ -355,3 +355,61 @@ describe("ranking by contribution to the operator's goal", () => {
     expect(goalEffect(rank("active_customers", [reputation]), "reviews")?.effect).toBe(0);
   });
 });
+
+describe("Mission Director ranking consumes learned outcomes (Stage 1 Phase 3 e)", () => {
+  const desk = "Call the customer";
+  const x = candidate("work-x", "Call customer X", desk, {
+    sourceRefs: [
+      { sourceKind: "commercial_follow_up", sourceType: "commercial_follow_up", sourceId: "work-x" },
+      { sourceKind: "proactive_obligation", sourceType: "proactive_obligation", sourceId: "obligation-x" },
+    ],
+    alreadyInFlight: true,
+  });
+  const y = candidate("work-y", "Call customer Y", desk, { observedDueDate: "2026-10-05" });
+  const lesson = (selectedRef: string, result: "supported" | "contradicted", n: number) => ({
+    outcomeId: `outcome-${selectedRef}-${result}-${n}`,
+    selectedRef,
+    result,
+    deltaIds: [`delta-${n}`],
+  });
+  const rank = (outcomeLessons?: ReturnType<typeof lesson>[]) => {
+    const plan = rankMissionDirectorWork({
+      candidates: [x, y],
+      campaigns: [],
+      campaignPrepReady: {},
+      context: outcomeLessons ? { ...context, outcomeLessons } : context,
+      pockets: [],
+    });
+    if (plan.status !== "ranked") throw new Error(plan.status);
+    return plan;
+  };
+  const learning = (plan: ReturnType<typeof rank>, id: string) =>
+    plan.ranking.find(item => item.workId === id)?.factors.find(f => f.name === "outcome_learning_delta");
+
+  it("with no lessons, ranking is exactly what it was", () => {
+    const before = rank();
+    expect(before.primary.workId).toBe("work-x");
+    expect(rank([])).toEqual(before);
+    expect(rank([lesson("someone-else", "contradicted", 1)])).toEqual(before);
+    expect(learning(before, "work-x")).toBeUndefined();
+  });
+
+  it("a contradicted lesson demotes the work behind an eligible alternative, without forbidding it", () => {
+    const plan = rank([lesson("work-x", "contradicted", 1)]);
+    expect(plan.primary.workId).toBe("work-y");
+    const demoted = plan.ranking.find(item => item.workId === "work-x")!;
+    expect(demoted.eligible).toBe(true);
+    expect(learning(plan, "work-x")).toMatchObject({ effect: -300, value: "contradicted:1,supported:0", confidence: "high" });
+    // Matched through the obligation it was selected as, too, and bounded.
+    const repeated = rank([1, 2, 3].map(n => lesson("obligation-x", "contradicted", n)));
+    expect(learning(repeated, "work-x")?.effect).toBe(-600);
+  });
+
+  it("a supported lesson gives a small boost, capped", () => {
+    expect(learning(rank([lesson("work-y", "supported", 1)]), "work-y")).toMatchObject({ effect: 60, confidence: "low" });
+    const capped = rank([1, 2, 3, 4].map(n => lesson("work-y", "supported", n)));
+    expect(learning(capped, "work-y")?.effect).toBe(120);
+    const score = (plan: ReturnType<typeof rank>) => plan.ranking.find(item => item.workId === "work-y")!.score;
+    expect(score(capped) - score(rank())).toBe(120);
+  });
+});

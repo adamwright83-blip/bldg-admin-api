@@ -19,12 +19,27 @@ export type RankingMacroGoal = {
   objective: string;
 };
 
+/**
+ * A settled goal-cycle outcome the learning layer has learned from, tied to the
+ * work it judged. Only outcomes that read as supported or contradicted are
+ * lessons; an inconclusive outcome says nothing about the work and is left out.
+ */
+export type RankingOutcomeLesson = {
+  outcomeId: string;
+  /** The judged objective's selectedRef: the candidate or obligation id it was selected as. */
+  selectedRef: string;
+  result: "supported" | "contradicted";
+  deltaIds: readonly string[];
+};
+
 export type RankingContext = {
   businessDate: string;
   macroGoal: RankingMacroGoal | null;
   openTasks: readonly RankingOpenTask[];
   /** Explicit operator campaign priority when stored on the campaign row. */
   campaignPriorityById?: Record<string, number>;
+  /** Learned outcome lessons for this operator, oldest first. */
+  outcomeLessons?: readonly RankingOutcomeLesson[];
 };
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {
