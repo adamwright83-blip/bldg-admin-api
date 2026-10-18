@@ -160,8 +160,12 @@ export async function refreshStrategicDiagnosis(input: {
   const workThreadIds = await resolveDiagnosisWorkThreads(diagnosis, input.identity, now);
   if (Object.keys(workThreadIds).length)
     diagnosis = assembleStrategicDiagnosis({ ...facts, workThreadIds }, registry);
-  const content = (d: typeof diagnosis) =>
-    canonicalJsonStringify({
+  const content = (d: typeof diagnosis) => {
+    // What the diagnosis took from the operating mandate. The mandate's own
+    // revision moves with every commitment and thread, so it is left out.
+    const { revision: _revision, ...fromMandate } = d.mandate ?? { revision: "" };
+    void _revision;
+    return canonicalJsonStringify({
       verticalKey: d.verticalKey,
       doctrineVersion: d.doctrineVersion,
       goal: d.goal,
@@ -171,7 +175,10 @@ export async function refreshStrategicDiagnosis(input: {
       diagnosis: d.diagnosis,
       outcomes: d.outcomeRefs,
       uncertainty: d.uncertainty,
+      mandate: d.mandate ? fromMandate : null,
+      objective: d.objective ?? null,
     });
+  };
   if (
     prior &&
     now.getTime() >= Date.parse(prior.generatedAt) &&
