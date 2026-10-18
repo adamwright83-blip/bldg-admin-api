@@ -186,8 +186,9 @@ export type MandateSources = {
   commitments: readonly MandateCommitmentSource[];
   /**
    * Admitted orders on record in each area an unconfirmed remark names. Null
-   * means the count could not be read. A remark about an area the business
-   * has no orders in is not applied until the operator confirms it.
+   * means the count could not be read in full (an outage), which is not
+   * evidence of absence. A remark about an area the business verifiably has no
+   * orders in is not applied until the operator confirms it.
    */
   areaOrders: Readonly<Record<string, number | null>>;
 };
@@ -538,7 +539,14 @@ export function resolveMandateFocuses(
     } else if (!sources.areaPlanning) {
       focuses.push(finish({ ...base, status: "not_applicable", statusReason: "no_physical_service_area" }));
     } else if (sources.areaOrders[r.area.key] == null) {
-      focuses.push(finish({ ...base, status: "not_applicable", statusReason: "area_orders_unreadable" }));
+      // Unknown is not absence: while the orders cannot be read the remark
+      // stays, and the readers that measure it withhold its figures.
+      candidates.push({
+        ...base,
+        status: "active",
+        statusReason: "area_orders_unknown",
+        uncertainty: [...base.uncertainty, `Whether the business has orders in ${r.area.label} could not be read.`],
+      });
     } else if (sources.areaOrders[r.area.key] === 0) {
       // A neighborhood the business has never sold in is not a focus until the operator confirms it.
       focuses.push(finish({ ...base, status: "not_applicable", statusReason: "no_orders_in_area" }));
