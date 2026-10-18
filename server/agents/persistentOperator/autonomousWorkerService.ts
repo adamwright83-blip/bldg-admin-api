@@ -17,12 +17,11 @@
 
 import crypto from "node:crypto";
 import os from "node:os";
-import { and, desc, eq, inArray, like, lt, ne, or } from "drizzle-orm";
+import { and, desc, eq, like, lt, ne, or } from "drizzle-orm";
 import {
   commercialMissionEvents,
   goalCycleObjectives,
   goalCycleOutcomes,
-  goalCycleRequests,
   macroGoalRuns,
   operatorMacroGoals,
 } from "../../../drizzle/schema";
@@ -36,10 +35,8 @@ import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
 import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
 import { resolveCanonicalOperatorIdentity } from "./identity";
-import { scheduleAuthorizedStrategicCall } from "./strategicCallAuthorization";
-import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
-import { ensureSundayPlanningAppointment, resolveOperatorTimeZone } from "./operatorAppointmentPolicy";
+import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
 
 export type AutonomousWorkerOptions = {
   enabled?: boolean;
@@ -50,13 +47,22 @@ export type AutonomousWorkerOptions = {
   bootstrapIntervalMs?: number;
 };
 
+/**
+ * Bootstrap sweep, outside the worker lease. It only makes sure each active
+ * operator goal has an active run and exactly one live goal cycle. It never
+ * prepares, plans or decides: the leased GoalCycleWorker occurrence is the one
+ * place that does (runGoalCycleOccurrence), with retry/backoff on failure.
+ * Each goal is isolated, so one failing tenant cannot abort the sweep.
+ */
 export async function ensureAutonomousGoalBootstrap(input: {
-  store: GoalCycleStore;
+  store: Pick<GoalCycleStore, "ensureLiveScheduledTick">;
   appointmentStore: OperatorAppointmentStore;
   registry?: typeof defaultVerticalRegistry;
-}): Promise<void> {
+  now?: Date;
+}): Promise<{ checked: number; queued: number; failed: Array<{ tenantId: string; goalId: string; error: string }> }> {
+  const outcome = { checked: 0, queued: 0, failed: [] as Array<{ tenantId: string; goalId: string; error: string }> };
   const db = await getDb();
-  if (!db) return;
+  if (!db) return outcome;
   const registry = input.registry ?? defaultVerticalRegistry;
 
   // 1. Ensure Sunday planning appointment for the configured owner
@@ -69,29 +75,28 @@ export async function ensureAutonomousGoalBootstrap(input: {
     console.warn("[AutonomousWorkers] Sunday planning appointment check deferred:", err);
   }
 
-  // 2. Discover active operator macro goals and ensure active macro_goal_runs + cycle requests
+  // 2. Discover active operator macro goals and ensure an active run with one live cycle
+  let activeGoals: Array<typeof operatorMacroGoals.$inferSelect>;
   try {
-    const activeGoals = await db
+    activeGoals = await db
       .select()
       .from(operatorMacroGoals)
       .where(eq(operatorMacroGoals.status, "active"));
+  } catch (err) {
+    console.warn("[AutonomousWorkers] Error listing active goals:", err);
+    return outcome;
+  }
 
-    for (const goal of activeGoals) {
-      if (!goal.tenantId || !goal.operatorUserId) continue;
-
+  for (const goal of activeGoals) {
+    if (!goal.tenantId || !goal.operatorUserId) continue;
+    outcome.checked += 1;
+    try {
       const resolution = await resolveCanonicalOperatorIdentity({
         tenantId: goal.tenantId,
         subsystem: "autonomous_goal_bootstrap",
         source: { type: "open_id", value: goal.operatorUserId },
       });
       if (!resolution.ok) continue;
-
-      // Preparation succeeds independently of outbound permission or reader support.
-      const timeZone = await resolveOperatorTimeZone(goal.tenantId);
-      if (!timeZone) continue;
-      await prepareStrategicProposal({ identity: resolution.identity, timeZone }).then(proposal => scheduleAuthorizedStrategicCall({ identity: resolution.identity, timeZone, proposalId: proposal.id, store: input.appointmentStore })).catch(error => {
-        console.warn("[AutonomousWorkers] Strategy preparation failed", { tenantId: goal.tenantId, reason: error instanceof Error ? error.message : String(error) });
-      });
 
       // Check if an active macro_goal_run exists
       const [existingRun] = await db
@@ -129,41 +134,32 @@ export async function ensureAutonomousGoalBootstrap(input: {
       }
 
       if (targetRunId) {
-        // Check if an active/queued cycle request already exists
-        const [activeCycle] = await db
-          .select({ id: goalCycleRequests.id, status: goalCycleRequests.status })
-          .from(goalCycleRequests)
-          .where(
-            and(
-              eq(goalCycleRequests.tenantId, goal.tenantId),
-              eq(goalCycleRequests.goalRunId, targetRunId),
-              // A running cycle is live too; missing it here enqueued a duplicate tick on every restart mid-cycle.
-              inArray(goalCycleRequests.status, ["queued", "retry_scheduled", "leased", "running"])
-            )
-          )
-          .limit(1);
-
-        if (!activeCycle) {
-          // If no active or queued cycle request exists, enqueue an autonomous scheduled tick
-          const enqueued = await input.store.enqueue({
-            tenantId: goal.tenantId,
-            goalRunId: targetRunId,
-            triggerType: "scheduled_tick",
-            triggerSourceReference: "autonomous_supervisor:heartbeat",
-            idempotencyKey: `auto_tick:${targetRunId}:${new Date().toISOString().slice(0, 13)}`,
-            availableAt: new Date(),
-          });
-          if (enqueued.created) {
-            console.info(
-              `[AutonomousWorkers] Enqueued autonomous goal cycle ${enqueued.id} for run ${targetRunId}`
-            );
-          }
+        // A running cycle is live too. The store checks every live cycle for the
+        // run under the run's row lock, and revives the run's one scheduled tick
+        // rather than minting a new row per sweep or per hour.
+        const ensured = await input.store.ensureLiveScheduledTick({
+          tenantId: goal.tenantId,
+          goalRunId: targetRunId,
+          now: input.now,
+        });
+        if (ensured.queued) {
+          outcome.queued += 1;
+          console.info(
+            `[AutonomousWorkers] Queued goal cycle ${ensured.id} for run ${targetRunId}`
+          );
         }
       }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      outcome.failed.push({ tenantId: goal.tenantId, goalId: goal.id, error });
+      console.warn("[AutonomousWorkers] Goal bootstrap failed for one goal; continuing", {
+        tenantId: goal.tenantId,
+        goalId: goal.id,
+        error,
+      });
     }
-  } catch (err) {
-    console.warn("[AutonomousWorkers] Error during goal bootstrap:", err);
   }
+  return outcome;
 }
 
 export async function sweepUnbridgedParkingLotDebriefs(input: {
