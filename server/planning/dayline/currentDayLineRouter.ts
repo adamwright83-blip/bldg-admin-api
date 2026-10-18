@@ -229,6 +229,9 @@ export const currentDayLineRouter = router({
           objectiveId,
           evidenceReference: input.evidenceReference,
           sourceSystem: input.sourceSystem ?? "driver_cockpit_hud",
+          // A Day Line objective is action verification. visit_completed is the
+          // commercial-mission contract and refuses a completion with no mission.
+          outcomeKind: "action_verification",
           explanation: input.explanation ?? `Day Line objective completed via HUD: ${objectiveId}`,
         });
 

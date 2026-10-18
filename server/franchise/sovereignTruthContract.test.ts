@@ -543,6 +543,189 @@ describe("Sovereign Truth Contract — Security, Auth, & Tenant Isolation", () =
     expect(commitments.find(c => c.id === "commit-morning-door-tags")?.status).toBe("open");
   });
 
+  it("verifies Day Line completion: objective completion creates durable outcome, commitment completion updates status", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-18T20:00:00.000Z"));
+    const businessDate = "2026-10-18";
+    const now = new Date("2026-10-18T20:00:00.000Z");
+    const { store } = setupTestFranchiseDb();
+
+    store.set("users", [
+      {
+        id: 1,
+        tenantId: "default",
+        openId: "admin-owner-user",
+        role: "admin",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("dayforge_saas_memberships", [
+      {
+        tenantId: "default",
+        userOpenId: "admin-owner-user",
+        role: "owner",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("goal_cycle_objectives", [
+      {
+        tenantId: "default",
+        id: "objective-conquest-1",
+        goalRunId: "run-1",
+        cycleId: "cycle-1",
+        decisionId: "decision-1",
+        canonicalOperatorId: "tenant:default:operator:admin-owner-user",
+        operatorUserId: "admin-owner-user",
+        selectionKind: "obligation",
+        selectedRef: "ref-1",
+        title: "Conquest Argyle House",
+        description: "Visit building",
+        executionType: "mission",
+        authority: "HUMAN_EXECUTION",
+        status: "presented",
+        businessDate,
+        windowStart: "08:00",
+        windowEnd: "17:00",
+        loadoutJson: [],
+        evidenceRefsJson: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    store.set("day_director_commitments", [
+      {
+        tenantId: "default",
+        id: "commit-morning-door-tags",
+        actorId: "1",
+        businessDate,
+        status: "open",
+        title: "Franklin corridor door tags",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const ranking = [
+      {
+        workId: "objective-conquest-1",
+        title: "Conquest Argyle House",
+        objective: "Visit building",
+        completionCondition: "Driver confirms the visit",
+        eligible: true,
+        executionType: "mission" as const,
+        sourceRefs: [
+          {
+            sourceKind: "unfinished_growth_work" as const,
+            sourceType: "goal_cycle_objective",
+            sourceId: "objective-conquest-1",
+          },
+        ],
+      },
+      {
+        workId: "commit-morning-door-tags",
+        title: "Franklin corridor door tags",
+        objective: "Place the door tags",
+        completionCondition: "Door tags placed on the Franklin corridor",
+        eligible: true,
+        executionType: "challenge" as const,
+        sourceRefs: [
+          {
+            sourceKind: "unfinished_growth_work" as const,
+            sourceType: "day_director_commitment",
+            sourceId: "commit-morning-door-tags",
+          },
+        ],
+      },
+    ];
+    const outcome = {
+      status: "planned" as const,
+      workPlan: { status: "ranked" as const, ranking },
+    };
+    store.set("mission_director_plans", [
+      {
+        id: "plan-positive-completion",
+        tenantId: "default",
+        operatorId: "1",
+        businessDate,
+        stableKey: "plan-positive-completion",
+        revision: 1,
+        inputFingerprint: "ranked-objective-and-commitment",
+        outcomeJson: outcome,
+        usageOutcome: null,
+        createdAt: now,
+      },
+    ]);
+
+    setDayLineDepsForTesting({
+      planForDate: async () => ({ outcome } as any),
+      listCampaigns: async () => [],
+      getDayDirectorState: async () => ({
+        processingLocation: null,
+        dismissedPromptKeys: [],
+        intelligenceAvailable: false,
+        commitments: [
+          {
+            id: "commit-morning-door-tags",
+            businessDate,
+            title: "Franklin corridor door tags",
+            status: "open",
+            sourceText: "Franklin corridor door tags",
+            command: {
+              role: "primary",
+              designatedAt: "2026-10-18T15:00:00.000Z",
+            },
+            operatorMission: {
+              completionCondition: "Door tags placed on the Franklin corridor",
+            },
+          },
+        ],
+      } as any),
+    });
+
+    const caller = appRouter.createCaller({
+      user: {
+        id: 1,
+        openId: "admin-owner-user",
+        name: "Admin User",
+        email: "admin@test.com",
+        role: "admin",
+      },
+      tenantId: "default",
+      req: { headers: {} } as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    const todayLine = await caller.system.currentDayLine.today();
+    expect(todayLine.items.some(item => item.id === "objective-conquest-1")).toBe(true);
+    expect(todayLine.items.some(item => item.id === "commit-morning-door-tags")).toBe(true);
+    expect(todayLine.designated?.id).toBe("commit-morning-door-tags");
+
+    const objectiveRes = await caller.system.currentDayLine.completeItem({
+      itemId: "objective-conquest-1",
+      evidenceReference: "field_receipt_voice_01",
+      explanation: "Driver confirmed completed at Argyle House",
+    });
+    expect(objectiveRes.success).toBe(true);
+    expect(objectiveRes.lineageKind).toBe("objective");
+    expect(objectiveRes.itemId).toBe("objective-conquest-1");
+    const outcomes = store.get("goal_cycle_outcomes") ?? [];
+    expect(outcomes.some(outcomeRow => outcomeRow.objectiveId === "objective-conquest-1")).toBe(true);
+
+    const commitmentRes = await caller.system.currentDayLine.completeItem({
+      itemId: "commit-morning-door-tags",
+      evidenceReference: "field_receipt_voice_02",
+      explanation: "Driver confirmed door tags placed on Franklin corridor",
+    });
+    expect(commitmentRes.success).toBe(true);
+    expect(commitmentRes.lineageKind).toBe("commitment");
+    expect(commitmentRes.itemId).toBe("commit-morning-door-tags");
+    const commitments = store.get("day_director_commitments") ?? [];
+    expect(commitments.find(row => row.id === "commit-morning-door-tags")?.status).toBe("completed");
+  });
+
   it("enforces campaign completion truth: generic assertion fails closed without required domain evidence", async () => {
     const { store } = setupTestFranchiseDb();
 
