@@ -1,6 +1,42 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- 0143: Reassign CleanCloud data, goal lineage, and recovery contacts to Laundry Farm
 -- Preserves Laundry Butler as tenant `default` and keeps all Stripe native orders in `default`.
 -- Idempotent and safe for rerun.
+
+CREATE TABLE IF NOT EXISTS `cleancloud_browser_sync_bindings` (
+  `tenantId` VARCHAR(64) PRIMARY KEY,
+  `id` VARCHAR(36) NOT NULL,
+  `storeId` VARCHAR(32) NOT NULL,
+  `storeLabel` VARCHAR(255) NOT NULL,
+  `createdBy` VARCHAR(128) NOT NULL,
+  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `lastSuccessAt` TIMESTAMP NULL
+);
+
+CREATE TABLE IF NOT EXISTS `cleancloud_browser_sync_receipts` (
+  `id` VARCHAR(36) PRIMARY KEY,
+  `tenantId` VARCHAR(64) NOT NULL,
+  `requestId` VARCHAR(36) NOT NULL,
+  `digest` VARCHAR(64) NOT NULL,
+  `storeId` VARCHAR(32) NOT NULL,
+  `importBatchId` INT NOT NULL,
+  `receiptJson` JSON NOT NULL,
+  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_cc_browser_sync_request` (`tenantId`, `requestId`)
+);
+
+CREATE TABLE IF NOT EXISTS `cleancloud_browser_sync_attempts` (
+  `id` VARCHAR(36) PRIMARY KEY,
+  `tenantId` VARCHAR(64) NOT NULL,
+  `requestId` VARCHAR(36) NULL,
+  `outcome` VARCHAR(32) NOT NULL,
+  `message` VARCHAR(512) NULL,
+  `rangeFrom` VARCHAR(10) NULL,
+  `rangeTo` VARCHAR(10) NULL,
+  `rowCount` INT NULL,
+  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `idx_cc_browser_sync_attempts_tenant` (`tenantId`, `createdAt`)
+);
 
 -- 1. CleanCloud browser sync bindings for Store #34145
 -- Move binding to `laundry_farm`. If `laundry_farm` binding already exists, keep it.
