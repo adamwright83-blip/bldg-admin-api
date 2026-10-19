@@ -1,5 +1,6 @@
 import type { StrategicDiagnosis } from "../../shared/strategicIntelligence";
 import type { WeeklyGrowthCandidate } from "../../shared/weeklyGrowthCandidates";
+import { workThreadCandidateId } from "../../shared/workThread";
 import { resolveCanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import { latestStrategicDiagnosis } from "./strategicStore";
 
@@ -16,7 +17,12 @@ export function diagnosisCandidates(
   )
     return [];
   return d.actions.map(a => ({
-    id: `${d.id}:${a.id}`,
+    // The Work Thread is the candidate's identity, so an hourly re-diagnosis
+    // (a new diagnosis id) is the same candidate, objective and lessons.
+    // Pre-thread diagnoses keep their diagnosis-scoped id.
+    id: a.workThreadId ? workThreadCandidateId(a.workThreadId) : `${d.id}:${a.id}`,
+    ...(a.workThreadId ? { workThreadId: a.workThreadId } : {}),
+    ...(a.opportunity?.kind === "strategy_opportunity" && a.opportunity.area ? { scopeArea: a.opportunity.area } : {}),
     sourceKind: "strategy_diagnosis",
     motion: a.motion,
     title: a.title,
@@ -45,6 +51,18 @@ export function diagnosisCandidates(
         source: d.id,
         sourceIds: a.evidenceRefs,
       },
+      // The operator's stated method is challenged by evidence. Mission
+      // Director carries it on this work and never ranks the alternative.
+      ...(d.challenge
+        ? [
+            {
+              label: "strategic_challenge",
+              value: d.challenge.id,
+              source: d.id,
+              sourceIds: d.challenge.evidenceAgainst.map(e => e.ref),
+            },
+          ]
+        : []),
     ],
     assumptions: [
       {

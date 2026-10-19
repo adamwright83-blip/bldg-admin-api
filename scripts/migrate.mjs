@@ -4674,6 +4674,54 @@ await ensureRequiredIndex(
   ["tenantId", "latestDecisionId"],
   objectiveLatestDecisionIndexDdl
 );
+// Phase 2 · Slice A: durable Work Thread identity. One table plus a nullable
+// thread id on decisions and objectives. Additive; existing rows stay
+// unthreaded and keep the 1B same-day reuse rule.
+await applyIdempotentSqlFile("../drizzle/0137_work_threads.sql", "Work threads");
+await assertRequiredColumns("work_threads", [
+  "id", "tenantId", "opportunityKey", "opportunityKeyHash", "generation", "openSlot",
+  "status", "kind", "opportunityJson", "title", "createdByOperatorId", "firstSourceRef",
+  "lastSourceRef", "lastObservedAt", "closedReason", "closedAt", "createdAt", "updatedAt",
+]);
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_objectives ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_work_thread",
+  ["tenantId", "workThreadId", "status"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_work_thread (tenantId,workThreadId,status)"
+);
+await ensureRequiredColumn(
+  "goal_cycle_decisions",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_decisions ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_work_thread",
+  ["tenantId", "workThreadId", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_work_thread (tenantId,workThreadId,createdAt)"
+);
+// Phase 2 · Slices C and D: durable observation-bridge obligations. A failed
+// bridge from a completed commitment or a paid order is owned by a row with
+// its status, error and next attempt, never only a "deferred" log line.
+await applyIdempotentSqlFile("../drizzle/0138_observation_bridge_obligations.sql", "Observation bridge obligations");
+await assertRequiredColumns("observation_bridge_obligations", [
+  "id", "tenantId", "sourceKind", "sourceKey", "status", "payloadJson", "resultJson",
+  "attemptCount", "nextAttemptAt", "leaseOwner", "leaseExpiresAt", "lastError",
+  "resolvedAt", "createdAt", "updatedAt",
+]);
+// Phase 2 · Slice B: operator decisions that settle the operating mandate
+// (which goal comes first, a confirmed or dismissed focus, a stated method).
+await applyIdempotentSqlFile("../drizzle/0139_operating_mandate_decisions.sql", "Operating mandate decisions");
+await assertRequiredColumns("operating_mandate_decisions", [
+  "id", "tenantId", "canonicalOperatorId", "kind", "subjectKey", "payloadJson", "status",
+  "activeSlot", "supersedesId", "supersededById", "decidedByOpenId", "source", "decidedAt",
+  "createdAt", "updatedAt",
+]);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",

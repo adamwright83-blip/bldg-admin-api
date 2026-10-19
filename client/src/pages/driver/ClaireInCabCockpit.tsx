@@ -333,13 +333,17 @@ export default function ClaireInCabCockpit() {
 
         if (result.success) {
           setCompletedObjectives((prev) => [...prev, stopToComplete.id]);
-          setLastReceipt(`Durable receipt confirmed for: ${stopToComplete.name}`);
+          setLastReceipt(`Marked done on the Day Line: ${stopToComplete.name}`);
 
           const nextIndex = (currentStopIndex + 1) % activeStops.length;
           const nextStop = activeStops[nextIndex];
 
+          // Done on the Day Line is the operator's report. Say what the goal
+          // evidence actually is (pending, unlinked, retrying); never "verified".
+          const goalEvidence =
+            "goalEvidence" in result && result.goalEvidence ? ` ${result.goalEvidence.message}` : "";
           speakAsClaire(
-            `Objective completed and verified on Day Line for ${stopToComplete.name}. Next objective: ${nextStop.name}.`
+            `Marked done on your Day Line: ${stopToComplete.name}.${goalEvidence} Next objective: ${nextStop.name}.`
           );
 
           setTimeout(() => {

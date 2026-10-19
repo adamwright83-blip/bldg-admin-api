@@ -3,6 +3,7 @@
  * The database is a local disposable schema created by this file. DATABASE_URL stays unset.
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
@@ -335,11 +336,17 @@ describe("source-backed analysis becomes an approved Day Line item", () => {
         windowEnd varchar(32) NULL,
         loadoutJson json NOT NULL,
         evidenceRefsJson json NOT NULL,
+        workThreadId varchar(36) NULL,
         completedAt timestamp(3) NULL,
         createdAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         updatedAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         PRIMARY KEY (id)
       )`,
+      // Strategy preparation resolves each opportunity to its durable Work Thread.
+      (await readFile(new URL("../../drizzle/0137_work_threads.sql", import.meta.url), "utf8"))
+        .replace(/^\s*--.*$/gm, "")
+        .trim()
+        .replace(/;$/, ""),
     ];
     for (const statement of statements) await pool.query(statement);
     for (const [id, slug] of [

@@ -3,6 +3,8 @@ import { softwareTemplate } from "./software";
 import { laundryFluffFoldTemplate } from "./laundryFluffFold";
 import {
   laundryActiveCustomersMetricReader,
+  laundryAreaNetSalesMetricReader,
+  laundryAreaPaidOrdersMetricReader,
   laundryNetSalesMetricReader,
   laundryNewPayingCustomersMetricReader,
   laundryPaidOrdersMetricReader,
@@ -35,6 +37,14 @@ defaultVerticalRegistry.registerMetricReader(
 defaultVerticalRegistry.registerMetricReader(
   "strategy.net_sales_per_period.v1",
   laundryNetSalesMetricReader
+);
+defaultVerticalRegistry.registerAreaMetricReader(
+  "strategy.net_sales_per_period.area.v1",
+  laundryAreaNetSalesMetricReader
+);
+defaultVerticalRegistry.registerAreaMetricReader(
+  "strategy.paid_orders_per_period.area.v1",
+  laundryAreaPaidOrdersMetricReader
 );
 
 defaultVerticalRegistry.registerMetricReader(

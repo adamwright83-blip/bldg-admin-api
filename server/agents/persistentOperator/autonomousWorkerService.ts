@@ -33,7 +33,19 @@ import { defaultVerticalRegistry } from "../../strategy/verticalTemplates/defaul
 import { OperatorAppointmentStore } from "./operatorAppointmentStore";
 import { OperatorAppointmentWorker } from "./operatorAppointmentWorker";
 import { processPendingOutcomeLearnings } from "./learningStore";
-import { activateCurrentMacroGoalRun } from "./macroGoalRuns";
+import {
+  COMMITMENT_COMPLETION_SOURCE,
+  commitmentCompletionHandler,
+  enqueueCompletedCommitmentObligations,
+} from "./commitmentExecutionBridge";
+import { drainObservationBridgeObligations, type ObservationBridgeHandler } from "./observationBridgeStore";
+import {
+  CLEANCLOUD_PAID_ORDER_SOURCE,
+  enqueueUnbridgedPaidOrderObligations,
+  paidOrderObservationHandler,
+} from "./paidOrderObservationBridge";
+import { activateMacroGoalRun } from "./macroGoalRuns";
+import { normalizeMacroGoalRow } from "../../planning/macroGoalStore";
 import { resolveCanonicalOperatorIdentity } from "./identity";
 import { resolveTenantVerticalKey } from "../../strategy/marketContext";
 import { ensureSundayPlanningAppointment } from "./operatorAppointmentPolicy";
@@ -115,15 +127,17 @@ export async function ensureAutonomousGoalBootstrap(input: {
 
       if (!targetRunId) {
         const verticalKey = await resolveTenantVerticalKey(goal.tenantId);
-        let template;
-        try { template = registry.get(verticalKey); } catch { continue; }
-        if (!template.metricCatalog.some(metric => metric.metricKey === goal.metricKey)) continue;
-        const activated = await activateCurrentMacroGoalRun({
+        // The vertical must measure this goal's metric (and its area scope, if any).
+        try { registry.resolveMetric(verticalKey, goal.metricKey); } catch { continue; }
+        // Every active goal gets its own run. Several goals can be active at
+        // once; activating "the most recent goal" here left the others unpursued.
+        const activated = await activateMacroGoalRun({
           tenantId: goal.tenantId,
           identity: resolution.identity,
           verticalKey,
           policyVersion: "v1",
           registry,
+          goal: normalizeMacroGoalRow(goal),
         });
         if (activated) {
           targetRunId = activated.id;
@@ -407,6 +421,42 @@ export async function sweepUnpropagatedConquestWins(input: {
   return { processedCount, errors };
 }
 
+/** Completed commitments and paid orders look back this far for a missing obligation. */
+const OBSERVATION_RECONCILIATION_DAYS = 30;
+
+/**
+ * Reconcile observation bridges. Source events with no obligation (a crash
+ * after the commit, a completion path that never bridged) get one; then due
+ * obligations are retried, commitment completions before paid orders, so an
+ * order whose attempt was just linked is not judged before its attempt.
+ * Per-item errors are returned, never swallowed.
+ */
+export async function sweepObservationBridges(input: {
+  leaseOwner: string;
+  now?: Date;
+  limit?: number;
+  /** One tenant only: a targeted repair, or a test that must not touch other tenants' obligations. The worker sweeps every tenant. */
+  tenantId?: string;
+}) {
+  const now = input.now ?? new Date();
+  const since = new Date(now.getTime() - OBSERVATION_RECONCILIATION_DAYS * 86_400_000);
+  const scope = input.tenantId ? { tenantId: input.tenantId } : {};
+  const commitments = await enqueueCompletedCommitmentObligations({ since, now, ...scope });
+  const paidOrders = await enqueueUnbridgedPaidOrderObligations({ since, now, ...scope });
+  const passes: Array<Record<string, ObservationBridgeHandler>> = [
+    { [COMMITMENT_COMPLETION_SOURCE]: commitmentCompletionHandler },
+    { [CLEANCLOUD_PAID_ORDER_SOURCE]: paidOrderObservationHandler },
+  ];
+  const summary = { discovered: commitments.enqueued + paidOrders.enqueued, attempted: 0, byStatus: {} as Record<string, number>, errors: [] as Array<{ id: string; sourceKind: string; sourceKey: string; error: string }> };
+  for (const handlers of passes) {
+    const drained = await drainObservationBridgeObligations({ handlers, leaseOwner: input.leaseOwner, limit: input.limit ?? 25, now, ...scope });
+    summary.attempted += drained.attempted;
+    for (const [status, count] of Object.entries(drained.byStatus)) summary.byStatus[status] = (summary.byStatus[status] ?? 0) + (count ?? 0);
+    summary.errors.push(...drained.errors);
+  }
+  return summary;
+}
+
 export function startAutonomousPersistentOperatorWorkers(
   options: AutonomousWorkerOptions = {}
 ): () => Promise<void> {
@@ -480,6 +530,18 @@ export function startAutonomousPersistentOperatorWorkers(
     if (learningSweeperActive) return;
     learningSweeperActive = true;
     try {
+      // Step 0: Durable observation bridges (completed commitments → their goal objective)
+      const bridges = await sweepObservationBridges({ leaseOwner: `${leaseOwner}:observation-bridge` });
+      if (bridges.attempted > 0 || bridges.discovered > 0) {
+        console.info(
+          `[AutonomousWorkers] Observation bridges: ${bridges.discovered} discovered, ${bridges.attempted} attempted`,
+          bridges.byStatus
+        );
+      }
+      for (const error of bridges.errors) {
+        console.warn("[AutonomousWorkers] Observation bridge will retry", error);
+      }
+
       // Step A: Sweep unbridged parking-lot debriefs into outcomes
       const debriefResult = await sweepUnbridgedParkingLotDebriefs();
       if (debriefResult.processedCount > 0) {

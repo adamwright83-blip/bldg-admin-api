@@ -68,6 +68,8 @@ export type PersistentGrowthObjective = {
   evidenceRefs: string[];
   /** The latest decision that re-selected this objective; null until reused. */
   latestDecisionId?: string | null;
+  /** The durable Work Thread this objective pursues; null for pre-thread objectives. */
+  workThreadId?: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -139,6 +141,7 @@ function toRecord(
     loadout: loadoutItems(row.loadoutJson),
     evidenceRefs: arrayOfStrings(row.evidenceRefsJson),
     latestDecisionId: row.latestDecisionId ?? null,
+    workThreadId: row.workThreadId ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -317,35 +320,72 @@ export async function materializeGoalCycleObjective(
   if (!db) throw new Error("Database unavailable");
   const selectedRef = input.decision.selectedRef ?? "";
 
-  // A later occurrence that selects the same work for the same day re-selects
-  // the open objective instead of minting one per hour. The run row lock
-  // serializes this check with any concurrent materialization for the run.
+  const workThreadId = input.decision.workThreadId ?? null;
+  // A later occurrence that selects the same work re-selects the open
+  // objective instead of minting one per hour. Threaded work (Phase 2 ·
+  // Slice A) has one open objective per operator and Work Thread, whatever the
+  // day, wording or goal run: an operator pursuing several goals (Slice B) has
+  // one run per goal, and the work they share is one objective, not one per
+  // goal. Presented work is re-presented for the newer day in its newest
+  // wording; work already accepted keeps its date. Pre-thread work keeps the
+  // 1B rule (same selection, same day), per operator. Locking the operator's
+  // run rows, in id order, serializes this check across their runs.
   const reused = await db.transaction(async tx => {
     await tx
       .select({ id: macroGoalRuns.id })
       .from(macroGoalRuns)
-      .where(and(eq(macroGoalRuns.tenantId, input.tenantId), eq(macroGoalRuns.id, input.decision.goalRunId)))
-      .for("update");
-    const [open] = await tx
-      .select({ id: goalCycleObjectives.id })
-      .from(goalCycleObjectives)
       .where(
         and(
-          eq(goalCycleObjectives.tenantId, input.tenantId),
-          eq(goalCycleObjectives.goalRunId, input.decision.goalRunId),
-          eq(goalCycleObjectives.selectionKind, input.decision.selectionKind),
-          eq(goalCycleObjectives.selectedRef, selectedRef),
-          eq(goalCycleObjectives.businessDate, content.businessDate),
-          inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
+          eq(macroGoalRuns.tenantId, input.tenantId),
+          or(
+            eq(macroGoalRuns.id, input.decision.goalRunId),
+            eq(macroGoalRuns.canonicalOperatorId, input.decision.canonicalOperatorId)
+          )
         )
+      )
+      .orderBy(asc(macroGoalRuns.id))
+      .for("update");
+    const [open] = await tx
+      .select({
+        id: goalCycleObjectives.id,
+        status: goalCycleObjectives.status,
+        businessDate: goalCycleObjectives.businessDate,
+      })
+      .from(goalCycleObjectives)
+      .where(
+        workThreadId
+          ? and(
+              eq(goalCycleObjectives.tenantId, input.tenantId),
+              eq(goalCycleObjectives.canonicalOperatorId, input.decision.canonicalOperatorId),
+              eq(goalCycleObjectives.workThreadId, workThreadId),
+              inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
+            )
+          : and(
+              eq(goalCycleObjectives.tenantId, input.tenantId),
+              eq(goalCycleObjectives.canonicalOperatorId, input.decision.canonicalOperatorId),
+              eq(goalCycleObjectives.selectionKind, input.decision.selectionKind),
+              eq(goalCycleObjectives.selectedRef, selectedRef),
+              eq(goalCycleObjectives.businessDate, content.businessDate),
+              inArray(goalCycleObjectives.status, [...REUSABLE_OBJECTIVE_STATUSES])
+            )
       )
       .orderBy(asc(goalCycleObjectives.createdAt), asc(goalCycleObjectives.id))
       .limit(1)
       .for("update");
     if (!open) return null;
+    const represented = Boolean(workThreadId) && open.status === "presented";
     await tx
       .update(goalCycleObjectives)
-      .set({ latestDecisionId: input.decision.id })
+      .set({
+        latestDecisionId: input.decision.id,
+        ...(represented
+          ? {
+              title: content.title,
+              description: content.description,
+              ...(content.businessDate > open.businessDate ? { businessDate: content.businessDate } : {}),
+            }
+          : {}),
+      })
       .where(and(eq(goalCycleObjectives.tenantId, input.tenantId), eq(goalCycleObjectives.id, open.id)));
     return open.id;
   });
@@ -380,6 +420,7 @@ export async function materializeGoalCycleObjective(
     windowEnd: null,
     loadoutJson: input.decision.loadout,
     evidenceRefsJson: input.decision.evidenceRefs,
+    workThreadId,
     completedAt: null,
   };
 

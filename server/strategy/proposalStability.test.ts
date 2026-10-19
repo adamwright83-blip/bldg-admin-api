@@ -73,4 +73,12 @@ describe("a re-prepared proposal keeps the open one while the decision is the sa
     const limited = { ...open, uncertainty: [...open.uncertainty, "2026-10-21: no_plan"] };
     expect(proposalDecisionUnchanged(limited, next({ limitations: ["2026-10-21: no_plan"] }), now)).toBe(true);
   });
+
+  it("replaces it when a challenge to the operator's stated method appears, changes or is withdrawn", () => {
+    const challenged = { ...open, diagnosis: { challenge: { id: "challenge_a" } as never } };
+    expect(proposalDecisionUnchanged(challenged, { ...next(), challengeId: "challenge_a" }, now)).toBe(true);
+    expect(proposalDecisionUnchanged(challenged, { ...next(), challengeId: "challenge_b" }, now)).toBe(false);
+    expect(proposalDecisionUnchanged(challenged, next(), now)).toBe(false);
+    expect(proposalDecisionUnchanged(open, { ...next(), challengeId: "challenge_a" }, now)).toBe(false);
+  });
 });

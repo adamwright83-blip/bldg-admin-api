@@ -393,36 +393,22 @@ export async function executeCleanCloudIngestion(
     return receipt;
   });
 
-  // 4. Bridge paid orders to Persistent Growth Operator ledger
+  // 4. Paid orders → their goal observations, through durable obligations.
+  // The import is committed; a failure here is owned by the obligation (or,
+  // if none was written, by the reconciliation sweep), never just logged.
   if (paidToBridge.length > 0) {
     try {
-      const { bridgeCleanCloudPaidOrder } = await import(
-        "../../../agents/persistentOperator/fieldEventBridge"
+      const { paidOrderObservationDeps } = await import(
+        "../../../agents/persistentOperator/paidOrderObservationBridge"
       );
-      for (const order of paidToBridge) {
-        await bridgeCleanCloudPaidOrder({
-          tenantId: input.tenantId,
-          cleancloudOrderId: String(order.cleancloudOrderId),
-          cleancloudCustomerId:
-            order.cleancloudCustomerId != null
-              ? String(order.cleancloudCustomerId)
-              : undefined,
-          customerEmail: order.customerEmail ?? undefined,
-          customerPhone: order.customerPhone ?? undefined,
-          paid: true,
-          totalCents: order.totalCents,
-          paidDateUtc: order.paidAt,
-          sourceFileName: `${sourcePrefix}_sync:${input.requestId}`,
-        }).catch((err: unknown) => {
-          console.warn(
-            "[CleanCloudSync] order bridge deferred",
-            err instanceof Error ? err.message : err
-          );
-        });
-      }
+      await paidOrderObservationDeps.afterImport({
+        tenantId: input.tenantId,
+        cleancloudOrderIds: paidToBridge.map(order => String(order.cleancloudOrderId)),
+        sourceRef: `${sourcePrefix}_sync:${input.requestId}`,
+      });
     } catch (err) {
       console.warn(
-        "[CleanCloudSync] failed to load fieldEventBridge",
+        "[CleanCloudSync] paid-order observations will be reconciled by the sweep",
         err instanceof Error ? err.message : err
       );
     }

@@ -43,6 +43,25 @@ import {
   materializeGoalCycleObjective,
   type PersistentGrowthObjective,
 } from "./objectiveStore";
+import { resolveCandidateWorkThread, type WorkThreadResolution } from "./workThreadStore";
+import { outcomeContribution, type ResolvedOperatingMandate } from "../../../shared/operatingMandate";
+import { loadOperatingMandate } from "../../planning/operatingMandate/loadOperatingMandate";
+
+/** The goals the selected work moves, among the mandate's active goals. */
+function servedOutcomeIds(mandate: ResolvedOperatingMandate, candidate: WeeklyGrowthCandidate | null): string[] {
+  if (!candidate) return [];
+  return mandate.outcomes
+    .filter(o => (outcomeContribution(o, { motion: candidate.motion, area: candidate.scopeArea ?? null })?.tier ?? "none") !== "none")
+    .map(o => o.id);
+}
+
+/** How the decision's Work Thread was established, recorded in sourceCoverage. */
+function workThreadCoverage(resolution: WorkThreadResolution | null) {
+  if (!resolution) return { status: "not_applicable" as const };
+  return resolution.status === "resolved"
+    ? { status: "resolved" as const, id: resolution.thread.id, generation: resolution.thread.generation }
+    : { status: "unresolved" as const, reason: resolution.reason, references: resolution.references };
+}
 
 type CycleChoice = {
   selectionKind: GoalCycleSelectionKind;
@@ -503,6 +522,80 @@ export async function decideGoalCycle(input: {
     return { ...decisionResult, objective: null };
   }
 
+  // The operating mandate this occurrence decides under. Its revision is
+  // recorded; a run whose goal the operator replaced or closed (an explicit
+  // replacement can change the metric) decides nothing more for that goal.
+  let mandate: ResolvedOperatingMandate;
+  try {
+    mandate = await loadOperatingMandate({ identity: identity.identity, now, timeZone });
+  } catch (error) {
+    const decisionResult = await appendGoalCycleDecision({
+      tenantId: input.tenantId,
+      goalRunId: run.id,
+      cycleId: input.cycleId,
+      canonicalOperatorId: run.canonicalOperatorId,
+      operatorUserId: run.operatorUserId,
+      policyVersion: run.policyVersion,
+      weeklyIntentId: null,
+      weeklyIntentRevision: null,
+      weekStart: null,
+      candidateFingerprint: null,
+      candidateIds: [],
+      candidateReasonCodes: {},
+      missionDirectorPlanId: null,
+      missionDirectorRevision: null,
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedExecutionType: null,
+      selectedReasonCode: "OPERATING_MANDATE_UNAVAILABLE",
+      evidenceRefs: [],
+      blockedCandidates: [],
+      priorComparableDecisionId: null,
+      sourceCoverage: {
+        goalRun: run.status,
+        actionPolicy: input.actionPolicy,
+        mandate: { status: "unavailable", reason: error instanceof Error ? error.message : String(error) },
+      },
+      loadout: [],
+      experiment: null,
+    });
+    return { ...decisionResult, objective: null };
+  }
+  const runOutcomeId = `operator_macro_goals:${run.macroGoalId}`;
+  if (!mandate.outcomes.some(o => o.id === runOutcomeId)) {
+    const decisionResult = await appendGoalCycleDecision({
+      tenantId: input.tenantId,
+      goalRunId: run.id,
+      cycleId: input.cycleId,
+      canonicalOperatorId: run.canonicalOperatorId,
+      operatorUserId: run.operatorUserId,
+      policyVersion: run.policyVersion,
+      weeklyIntentId: null,
+      weeklyIntentRevision: null,
+      weekStart: null,
+      candidateFingerprint: null,
+      candidateIds: [],
+      candidateReasonCodes: {},
+      missionDirectorPlanId: null,
+      missionDirectorRevision: null,
+      selectionKind: "wait",
+      selectedRef: null,
+      selectedExecutionType: null,
+      selectedReasonCode: "GOAL_OUTCOME_NOT_ACTIVE",
+      evidenceRefs: [runOutcomeId, `operating_mandate:${mandate.revision}`],
+      blockedCandidates: [],
+      priorComparableDecisionId: null,
+      sourceCoverage: {
+        goalRun: run.status,
+        actionPolicy: input.actionPolicy,
+        mandate: { status: "available", revision: mandate.revision, outcomeId: runOutcomeId, outcomeActive: false },
+      },
+      loadout: [],
+      experiment: null,
+    });
+    return { ...decisionResult, objective: null };
+  }
+
   const today = businessToday(now, timeZone);
   const localTime = formatInTimeZone(now, timeZone, "HH:mm");
   const currentHorizon = remainingWeekHorizon({
@@ -575,6 +668,26 @@ export async function decideGoalCycle(input: {
     };
   }
 
+  const choice = selectDeterministicCycleChoice({
+    weeklyIntentLocked: weeklyIntent !== null,
+    candidates: feed?.candidates ?? [],
+    obligations: openObligations,
+    dueObligations,
+    missionDirectorPlan: plan,
+  });
+
+  // The selected work's durable Work Thread. A reference that cannot be
+  // verified leaves the decision unthreaded, with the reason, rather than
+  // attaching it to a guessed thread.
+  const workThread = choice.selectedCandidate
+    ? await resolveCandidateWorkThread({
+        tenantId: input.tenantId,
+        candidate: choice.selectedCandidate,
+        canonicalOperatorId: run.canonicalOperatorId,
+        now,
+      })
+    : null;
+
   const sourceCoverage = {
     tenantTimeZone: { status: "available", timeZone },
     weeklyIntent: {
@@ -587,15 +700,25 @@ export async function decideGoalCycle(input: {
     missionDirector: missionDirectorCoverage,
     actionPolicy: input.actionPolicy,
     channelReadiness: { status: "not_applicable", reason: "no_machine_action_selected_in_pr4" },
+    workThread: workThreadCoverage(workThread),
+    mandate: {
+      status: "available",
+      revision: mandate.revision,
+      outcomeId: runOutcomeId,
+      outcomeActive: true,
+      leadingOutcomeId: mandate.leadingOutcome?.id ?? null,
+      primaryOutcomeId: mandate.primaryOutcomeId,
+      // The selected work may serve this run's goal, another goal, or several.
+      selectedWorkServesOutcomeIds: servedOutcomeIds(mandate, choice.selectedCandidate),
+      unresolvedConflicts: mandate.conflicts.filter(c => c.status === "unresolved").map(c => c.id),
+    },
+    // An evidence-backed challenge to the operator's stated method travels
+    // with the selected work; the operator, not this decision, settles it.
+    strategicChallenge: (() => {
+      const signal = choice.selectedCandidate?.observedSignals.find(s => s.label === "strategic_challenge");
+      return signal ? { status: "raised", id: String(signal.value) } : { status: "none" };
+    })(),
   };
-
-  const choice = selectDeterministicCycleChoice({
-    weeklyIntentLocked: weeklyIntent !== null,
-    candidates: feed?.candidates ?? [],
-    obligations: openObligations,
-    dueObligations,
-    missionDirectorPlan: plan,
-  });
 
   const execution =
     choice.selectedCandidate
@@ -659,17 +782,21 @@ export async function decideGoalCycle(input: {
     selectedRef: choice.selectedRef,
     selectedExecutionType,
     selectedReasonCode: choice.selectedReasonCode,
-    evidenceRefs: evidenceReferences({
-      weeklyIntentId: weeklyIntent?.id ?? null,
-      plan,
-      candidate: choice.selectedCandidate,
-      obligation: choice.selectedObligation,
-    }),
+    evidenceRefs: [
+      ...evidenceReferences({
+        weeklyIntentId: weeklyIntent?.id ?? null,
+        plan,
+        candidate: choice.selectedCandidate,
+        obligation: choice.selectedObligation,
+      }),
+      `operating_mandate:${mandate.revision}`,
+    ],
     blockedCandidates: choice.blockedCandidates,
     priorComparableDecisionId: prior?.id ?? null,
     sourceCoverage,
     loadout,
     experiment: null,
+    ...(workThread?.status === "resolved" ? { workThreadId: workThread.thread.id } : {}),
   });
 
   let objective: PersistentGrowthObjective | null = null;

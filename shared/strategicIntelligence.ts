@@ -1,3 +1,5 @@
+import type { StrategyOpportunity } from "./workThread";
+
 /** StrategyEngine evidence and reasoning; never execution or ranking authority. */
 export type BusinessDriver =
   | "acquisition"
@@ -70,7 +72,23 @@ export type StrategyAction = {
   evidenceRefs: string[];
   reviewCondition: string;
   territoryId: string | null;
+  /**
+   * The opportunity this action pursues, from structured scope only. A revised
+   * tactic or a revisited hypothesis keeps it; wording never changes it.
+   * Absent on diagnoses persisted before Work Threads.
+   */
+  opportunity?: StrategyOpportunity;
+  /** The durable Work Thread the opportunity resolved to when the diagnosis was prepared. */
+  workThreadId?: string;
+  /**
+   * The customers this action names, by analytical identity key. They belong
+   * to this action and its execution, never to the thread's identity.
+   */
+  targets?: StrategyActionTarget[];
+  /** Days after execution in which a target's paid order is observed as this action's result. */
+  observationWindowDays?: number;
 };
+export type StrategyActionTarget = { identityKey: string; displayName: string };
 export type StrategyOption = {
   id: string;
   approach: string;
@@ -92,9 +110,104 @@ export type StrategyOption = {
   uncertainty?: string;
   nextMeasurableAction?: string;
 };
+/** One customer in a prepared cohort, read from the business's own paid orders. */
+export type StrategicCohortMember = {
+  identityKey: string;
+  displayName: string;
+  lastOrderDate: string | null;
+  paidOrders: number;
+  revenueCents: number;
+};
+
+/**
+ * An evidence-backed challenge to the operator's stated method (Phase 2 ·
+ * Slice E). Raised only when recorded evidence favors a different approach
+ * for the same goal and that approach survives the operator's confirmed
+ * constraints. It is a prepared comparison, never a decision: Claire contacts
+ * no one, spends nothing and changes no approach without the operator.
+ */
+export type StrategicChallenge = {
+  /** Deterministic: the method, the alternative and the cohort it rests on. */
+  id: string;
+  status: "raised";
+  statedMethod: {
+    id: string;
+    statement: string;
+    lever: BusinessDriver;
+    population: string;
+    area: string | null;
+  };
+  /** The confirmed goal the stated method is meant to move. */
+  outcome: { id: string; statement: string } | null;
+  /** The Work Thread the stated method is pursued in. */
+  workThreadId: string | null;
+  /** The challenge in one sentence, from observed facts only. */
+  claim: string;
+  /** Recorded evidence for the stated method, and for the alternative (against the method). */
+  evidenceFor: Array<{ ref: string; statement: string }>;
+  evidenceAgainst: Array<{ ref: string; statement: string }>;
+  uncertainty: string[];
+  alternative: {
+    approach: string;
+    opportunity: StrategyOpportunity;
+    /** An open thread already pursuing the alternative, if one exists; none is opened for it. */
+    workThreadId: string | null;
+    cohort: {
+      /** How the cohort was read: the query, its definition and when. */
+      basis: string;
+      sourceRef: string;
+      members: StrategicCohortMember[];
+      /** Customers the alternative leaves out, and why (operator rules first). */
+      exclusions: Array<{ identityKey: string | null; displayName: string; reason: string; constraintRef: string | null }>;
+    };
+    nextMeasurableAction: string;
+  };
+  autonomy: {
+    /** What Claire prepared on her own: reads and drafts only. */
+    preparedWithoutApproval: string[];
+    /** What happens only if the operator approves it. */
+    requiresApproval: string[];
+  };
+};
+
+/** Why a stated method was not challenged. Abstaining is the default. */
+export type StrategicChallengeAbstention = {
+  reason:
+    | "method_matches_evidence"
+    | "method_on_hold"
+    | "insufficient_evidence"
+    | "constraint_precludes_alternative"
+    | "alternative_contradicted";
+  detail: string;
+  /** Confirmed operator constraints that decided it, when one did. */
+  constraintRefs: string[];
+};
+
+/** The operating mandate a diagnosis was prepared under (Phase 2 · Slice B). */
+export type StrategicDiagnosisMandate = {
+  revision: string;
+  /** Active goals the recommended work moves (a ranking-policy judgment, not a forecast). */
+  servesOutcomeIds: string[];
+  /** The confirmed primary goal, or the only active goal. Null when several are active and none is first. */
+  leadingOutcomeId: string | null;
+  primaryOutcomeId: string | null;
+  focus: { id: string; area: string; confirmation: "confirmed" | "inferred" } | null;
+  statedMethodId: string | null;
+  /** Whether the operator's stated method set the recommendation. */
+  methodApplied: boolean;
+};
+
 export type StrategicDiagnosis = {
-  /** The operator's stated objective this diagnosis serves, when one exists. */
-  objective?: { statement: string; area: string };
+  /**
+   * The area focus this diagnosis plans around, when one applies. Inferred
+   * means it was only mentioned in conversation; it is never a confirmed goal.
+   */
+  objective?: { statement: string; area: string; confirmation?: "confirmed" | "inferred" };
+  mandate?: StrategicDiagnosisMandate;
+  /** Present when the operator stated a method and the evidence favors another approach. */
+  challenge?: StrategicChallenge;
+  /** Present when the operator stated a method and it was not challenged, with why. */
+  challengeAbstained?: StrategicChallengeAbstention;
   id: string;
   schemaVersion: 1;
   doctrineVersion: string;
@@ -152,6 +265,12 @@ export type StrategicProposalItem = {
   planId: string;
   planRevision: number;
   evidenceRefs: string[];
+  /** The durable Work Thread this item continues; absent on pre-thread proposals and unresolved work. */
+  workThreadId?: string;
+  /** The customers this item names (strategy items only); observed after execution. */
+  customerTargets?: StrategyActionTarget[];
+  /** Days after execution in which those customers' paid orders count as this item's result. */
+  observationWindowDays?: number;
 };
 export type StrategicPlanningProposal = {
   id: string;

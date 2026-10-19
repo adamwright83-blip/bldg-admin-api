@@ -27,6 +27,7 @@ import {
   bridgeDriverAction,
   bridgeCleanCloudPaidOrder,
 } from "./fieldEventBridge";
+import { STATED_METHOD_LEVERS, STATED_METHOD_POPULATIONS } from "../../../shared/operatingMandate";
 
 function identityFailure(error: unknown): never {
   if (error instanceof CanonicalOperatorIdentityError) {
@@ -101,6 +102,101 @@ export const persistentOperatorRouter = router({
           dayDirectorActorId: identity.dayDirectorActorId,
           dayDirectorActorIds: identity.dayDirectorActorIds,
         });
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
+
+  /**
+   * Observation-bridge backlog (Phase 2 · Slices C and D): source events that
+   * have not reached their goal objective, by status, the oldest still
+   * retrying, and the ones that need a person. Read-only.
+   */
+  observationBacklog: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        const identity = await requireEffectiveOperatorIdentityForTenant({
+          callerUser: ctx.user,
+          callerTenantId: ctx.tenantId,
+          targetTenantId: input?.targetTenantId,
+          subsystem: "persistent_operator.observation_backlog",
+        });
+        const { readObservationBridgeBacklog, listObservationObligationsNeedingAttention } = await import("./observationBridgeStore");
+        return {
+          ...(await readObservationBridgeBacklog({ tenantId: identity.tenantId })),
+          attention: await listObservationObligationsNeedingAttention({ tenantId: identity.tenantId }),
+        };
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
+
+  /**
+   * The operator's resolved operating mandate (Phase 2 · Slice B): active
+   * goals, focuses, stated methods and open Work Threads, constraints, open
+   * commitments, conflicts and uncertainty, with its revision. Each verified
+   * result is attributed once to every goal it advances. Read-only.
+   */
+  operatingMandate: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ targetTenantId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        const identity = await requireEffectiveOperatorIdentityForTenant({
+          callerUser: ctx.user,
+          callerTenantId: ctx.tenantId,
+          targetTenantId: input?.targetTenantId,
+          subsystem: "persistent_operator.operating_mandate",
+        });
+        const { loadOperatingMandate, loadMandateEvidence } = await import("../../planning/operatingMandate/loadOperatingMandate");
+        const mandate = await loadOperatingMandate({ identity });
+        return { mandate, evidence: await loadMandateEvidence({ mandate }) };
+      } catch (error) {
+        identityFailure(error);
+      }
+    }),
+
+  /**
+   * The operator settles part of their mandate: which goal comes first, an
+   * area to focus on or set aside, or how they want a goal pursued. Their own
+   * tenant only; append-only; a repeated decision records nothing new.
+   */
+  decideOperatingMandate: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("primary_outcome"), outcomeId: z.string().trim().min(1).max(191).nullable() }),
+        z.object({
+          kind: z.literal("focus"),
+          action: z.enum(["confirm", "dismiss"]),
+          area: z.string().trim().min(1).max(80),
+          statement: z.string().trim().min(1).max(500),
+          servesOutcomeId: z.string().trim().min(1).max(191).nullable().optional(),
+        }),
+        z.object({
+          kind: z.literal("method"),
+          outcomeId: z.string().trim().min(1).max(191).nullable(),
+          lever: z.enum(STATED_METHOD_LEVERS),
+          population: z.enum(STATED_METHOD_POPULATIONS),
+          area: z.string().trim().min(1).max(80).nullable(),
+          statement: z.string().trim().min(1).max(500),
+          withdrawn: z.boolean().optional(),
+        }),
+      ])
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const identity = await requireCanonicalOperatorIdentityForUser({
+          tenantId: ctx.tenantId,
+          user: ctx.user,
+          subsystem: "persistent_operator.operating_mandate_decision",
+        });
+        const { recordOperatingMandateDecision, MandateDecisionRejected } = await import("../../planning/operatingMandate/mandateDecisions");
+        try {
+          return await recordOperatingMandateDecision({ identity, decidedByOpenId: ctx.user.openId, decision: input });
+        } catch (error) {
+          if (error instanceof MandateDecisionRejected) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+          throw error;
+        }
       } catch (error) {
         identityFailure(error);
       }

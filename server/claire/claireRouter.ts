@@ -193,6 +193,8 @@ export const claireRouter = router({
         targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
         source: z.enum(["operator_attested", "admin"]),
         sourceNote: z.string().trim().min(1).max(512),
+        /** Explicitly replaces this active goal, even on a different metric. Otherwise a new metric is an additional goal. */
+        replacesGoalId: z.string().trim().min(1).max(36).nullable().optional(),
       })
     )
     .mutation(({ ctx, input }) => setActiveMacroGoal({ tenantId: ctx.tenantId, ...input })),
