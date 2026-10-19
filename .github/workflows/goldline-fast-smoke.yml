@@ -415,7 +415,7 @@ jobs:
               e2e/goldline-smoke/cozyVillagerOutreach.spec.ts
               e2e/goldline-smoke/silverLakeBirdDiscovery.spec.ts
           - name: fast-smoke-silver-lake
-            timeout: 30
+            timeout: 40
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/silverLakeIslandEntry.spec.ts

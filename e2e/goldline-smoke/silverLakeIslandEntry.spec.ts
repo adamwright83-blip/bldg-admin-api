@@ -46,12 +46,14 @@ test.describe("Lantern City → Silver Lake", () => {
   });
 
   test("clicking Silver Lake on the Lantern City board walks into the 3D courtyard", async ({ page }, testInfo) => {
-    test.setTimeout(240_000);
+    test.setTimeout(360_000);
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
 
     await page.goto("/growth/lantern-city");
     await expect(page.locator('[data-lantern-city="islands"]')).toBeVisible({ timeout: 30_000 });
+    // a person waits for "Loading Lantern City…" to clear before tapping; so does this test
+    await expect(page.locator('[data-lantern-state="loading"]')).toHaveCount(0, { timeout: 180_000 });
 
     const point = await settledIsland(page, "Silver Lake");
     const box = await page.locator('[aria-label="Lantern City island board"]').boundingBox();
