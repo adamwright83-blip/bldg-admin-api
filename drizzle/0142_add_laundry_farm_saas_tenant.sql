@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- Tenant registration for Laundry Farm.
 -- Establishes Laundry Farm as an independent first-class SaaS tenant
 -- while preserving Laundry Butler as tenant `default`.

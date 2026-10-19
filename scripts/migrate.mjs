@@ -16,6 +16,8 @@
  * - drizzle/0067 and drizzle/0068 (chapter state / event binding). Gated
  *   release path only, until Adam applies them.
  * - drizzle/0077_goldline_capability_gaps.sql until Adam approves it.
+ * - drizzle/0142_add_laundry_farm_saas_tenant.sql (business tenant separation).
+ *   Gated operational path only via `scripts/migrate-laundry-farm-attribution.mjs` until Adam reviews and authorizes execution.
  * - `bldg_users` and `service_requests` (resident app owns those tables).
  * - `procurement/migrations` (separate runner).
  * - Historical non-idempotent dayforge DDL. Replaying it here is unsafe.
@@ -5621,13 +5623,5 @@ await assertRequiredColumns("personal_outreach_replies", [
     throw new Error(`claire_proactive_obligations primary key is (${verified.join(", ")}); expected (tenantId, id)`);
 }
 
-// 0142: Laundry Farm SaaS tenant registration & operator memberships
-{
-  const statements = await readSqlStatements("../drizzle/0142_add_laundry_farm_saas_tenant.sql");
-  const label = "0142 register laundry_farm saas tenant and operator memberships";
-  for (const sql of statements) {
-    await runRequired(sql, label);
-  }
-}
 console.log("\nMigration complete.");
 await conn.end();
