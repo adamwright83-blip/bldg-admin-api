@@ -390,6 +390,34 @@ describe("Brain V2 primary — scheduled and Desk planning sessions", () => {
   });
 });
 
+describe("Brain V2 primary — review regressions", () => {
+  it("a refused pending item is cleared, so a later 'okay' cannot commit it", async () => {
+    const h = harness();
+    const state: ClaireV2PrimaryState = {};
+    await runClaireV2PrimaryTurn(turnInput(state, "I need to call Dana Tuesday."), h.deps);
+    expect(state.pendingBriefing).toBeTruthy();
+    await runClaireV2PrimaryTurn(turnInput(state, "No."), h.deps);
+    expect(state.pendingBriefing).toBeNull();
+    const later = await runClaireV2PrimaryTurn(turnInput(state, "Okay."), h.deps);
+    expect(later.brainV2.actionClasses).not.toContain("commit_briefing");
+    expect(h.executeGrant).toHaveBeenCalledTimes(1);
+  });
+
+  it("ordinary answers during an active weekly interview go back to the interview", async () => {
+    const h = harness();
+    const routeWeekly = vi.fn(async () => ({ speak: "Tuesday afternoon it is. What's Wednesday for?" }));
+    const deps = { ...h.deps, routeWeekly: routeWeekly as never };
+    const state: ClaireV2PrimaryState = { sessionKind: "weekly_planning", weeklyPlanningWeekStart: "2026-10-19" };
+    const answer = await runClaireV2PrimaryTurn(turnInput(state, "Tuesday afternoon"), deps);
+    expect(answer.brainV2.composition).toBe("weekly");
+    expect(routeWeekly).toHaveBeenCalledWith(expect.objectContaining({ intent: "weekly_continue" }));
+    // A business question still leaves the interview for V2's own answer.
+    const sales = await runClaireV2PrimaryTurn(turnInput(state, "What were my last five sales?"), deps);
+    expect(sales.brainV2.composition).toBe("deterministic");
+    expect(routeWeekly).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("unlicensedFigures", () => {
   it("allows figures present in evidence and flags invented ones", () => {
     expect(unlicensedFigures("Revenue was $1,240 and 12% up.", "Revenue: $1,240 total, up 12% on last week.")).toEqual([]);

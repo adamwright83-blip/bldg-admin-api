@@ -198,6 +198,16 @@ const FACT_INTENTS = new Set([
 const EXPLICIT_WEEKLY_CONTROL =
   /\b(?:weekly plan|plan the week|review the week|look at the week|back to (?:the )?week|back to weekly planning|lock the week|that(?:'s| is) the week|forget the week|stop planning)\b/i;
 
+const LEAVES_WEEKLY_INTERVIEW = new Set<SemanticReading["turnKind"]>([
+  "business_fact_question",
+  "business_list_question",
+  "daily_briefing_request",
+  "challenge_prior_claim",
+  "ask_source_of_prior_claim",
+  "personal_question_to_claire",
+  "leave_taking",
+]);
+
 export const V2_RECOVERY_SPEECH = "Sorry, I lost that thought. Say it once more?";
 
 function remember(
@@ -615,7 +625,25 @@ export async function runClaireV2PrimaryTurn(
     if (state.weeklyPlanningWeekStart && state.weeklyPlanningWeekStart < weekStartMonday(input.businessDate)) {
       state.weeklyPlanningWeekStart = null;
     }
-    const weekly = weeklyIntent(utterance, state);
+    /**
+     * An active weekly interview owns the operator's ordinary answers ("Tuesday
+     * afternoon") the way the legacy weekly disposition did. V2 reads the turn
+     * first: only a question about the business, a briefing request, a personal
+     * question, a prior-claim challenge, or a goodbye leaves the interview.
+     */
+    let earlyReading: SemanticReading | null = null;
+    let weekly = weeklyIntent(utterance, state);
+    const interviewActive = state.sessionKind === "weekly_planning" && Boolean(state.weeklyPlanningWeekStart);
+    if (!weekly && interviewActive && deps.interpretPerception) {
+      earlyReading = await deps.interpretPerception({
+        tenantId: input.tenantId,
+        utterance,
+        recentTurns: recentForModel.map(entry => ({ speaker: entry.speaker, text: entry.text })),
+        hasPriorClaims: Boolean(state.claimReceipts?.length),
+        holdingPending: Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp),
+      }).catch(() => null);
+      if (!earlyReading || !LEAVES_WEEKLY_INTERVIEW.has(earlyReading.turnKind)) weekly = "weekly_continue";
+    }
     if (weekly) {
       const routed = await deps.routeWeekly({ utterance, intent: weekly, state });
       if (routed) {
@@ -695,7 +723,8 @@ export async function runClaireV2PrimaryTurn(
                   hasPriorClaims: Boolean(state.claimReceipts?.length),
                   holdingPending: Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp),
                 },
-                deps.interpretPerception!
+                // Reuse the reading already taken for weekly routing; never ask twice.
+                earlyReading ? async () => earlyReading : deps.interpretPerception!
               );
               semanticReading = refined.reading;
               return refined.perceived;
@@ -707,6 +736,14 @@ export async function runClaireV2PrimaryTurn(
     const decision = turn.decision;
     state.brainV2Memory = updateShadowMemory(memory, decision, nowMs);
     const actionClasses = decision.actionGrants.map(grant => grant.actionClass);
+    // A refused pending item is finished. Clear it so a later "okay" cannot bind
+    // to it and commit work the operator already declined.
+    if (decision.attention.pendingDisposition === "reject") {
+      state.pendingBriefing = null;
+      state.pendingProposal = null;
+      state.pendingAccountFollowUp = null;
+      state.heldBriefingItems = [];
+    }
 
     // A half-turn that perception would not release is held, never answered.
     if (decision.inhibitedCandidates.some(item => item.kind === "half_turn")) {
