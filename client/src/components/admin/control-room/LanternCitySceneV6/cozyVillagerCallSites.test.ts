@@ -18,7 +18,10 @@ describe("cozy villager call sites", () => {
   });
 
   it("opens the v6 scene for the existing cozy query instead of the island board", () => {
-    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake")).toBe("silverLake3d");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake&walk=0")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake", { legacySilverLake: true })).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=v6")).toBe("v6");
     expect(lanternSceneFor("/growth/lantern-city", "")).toBe("islands");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=atlas")).toBe("atlas");
   });

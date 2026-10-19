@@ -58,7 +58,21 @@ export function isAdminCommandCenterPath(path: string): boolean {
   return path === "/" || path === "/home" || path.startsWith("/home/");
 }
 
-export type LanternScene = "islands" | "map" | "v6" | "atlas" | null;
+export type LanternScene = "islands" | "map" | "v6" | "atlas" | "silverLake3d" | null;
+
+/**
+ * Silver Lake is walkable in 3D (pages/goldline/silverLake3d). The painted V6 encounter is kept dormant:
+ * `?walk=0`, `?scene=v6`, or this localStorage key set to "1" still open it.
+ */
+export const SILVER_LAKE_LEGACY_STORAGE_KEY = "goldline.silverLake.legacy";
+
+export function silverLakeLegacyRequested(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(SILVER_LAKE_LEGACY_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 /**
  * Which Lantern City a path shows. The island board is the one Lantern City: the returning-user
  * home and /growth/lantern-city both mount it. The street map (V7) and the older scenes survive
@@ -66,12 +80,17 @@ export type LanternScene = "islands" | "map" | "v6" | "atlas" | null;
  * ?scene=v5 its old name). Anywhere else no world is mounted, so no 3D scene runs hidden behind
  * another page.
  */
-export function lanternSceneFor(path: string, search: string): LanternScene {
+export function lanternSceneFor(path: string, search: string, opts: { legacySilverLake?: boolean } = {}): LanternScene {
   if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
   const scene = new URLSearchParams(search).get("scene");
   if (scene === "map" || scene === "v7") return "map";
   const params = new URLSearchParams(search);
-  if (scene === "v6" || params.get("cozy") === "1" || params.get("encounter") === "1") return "v6";
+  if (scene === "v6") return "v6";
+  if (params.get("cozy") === "1" || params.get("encounter") === "1") {
+    const territory = params.get("territory") ?? "silver-lake";
+    const legacy = params.get("walk") === "0" || opts.legacySilverLake === true;
+    return territory === "silver-lake" && !legacy && path === "/growth/lantern-city" ? "silverLake3d" : "v6";
+  }
   if (scene === "atlas" || scene === "v5") return "atlas";
   return "islands";
 }
