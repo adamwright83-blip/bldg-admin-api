@@ -17,6 +17,11 @@
  */
 
 import { defaultBusinessQuery, type BusinessMetric, type BusinessQuery } from "../../../analytics/businessQuery";
+import {
+  companyQuestionFromParameters,
+  companyViewRequest,
+  matchLaundryFarmCompanyQuestion,
+} from "../../../analytics/laundryFarmCompanyView";
 import type { AttentionPlan } from "../contracts/attention";
 import type { EvidenceItem } from "../contracts/evidence";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
@@ -164,10 +169,16 @@ export function planRetrievalPassA(
       }
       // A bounded semantic planner may choose query CRITERIA, never facts or numbers.
       // If it is absent or fails, the deterministic parser remains the fallback.
-      const query =
-        semanticBusinessQuery ??
-        buildBusinessQuery(perceived) ??
-        requeryUsingPriorParameters(perceived, memory);
+      // A company question replaces that query: the company reader is the authority.
+      const company = matchLaundryFarmCompanyQuestion(
+        perceived.assembledText,
+        companyQuestionFromParameters(memory.orderedQuery?.parameters)
+      );
+      const query = company
+        ? companyViewRequest(company)
+        : semanticBusinessQuery ??
+          buildBusinessQuery(perceived) ??
+          requeryUsingPriorParameters(perceived, memory);
       if (query) requests.push({ compartment: "businessMemory", kind: "business_query", query });
     }
   }

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { formatInTimeZone } from "date-fns-tz";
+import { companyBuildingTableRows } from "../laundryFarmCompanyView";
 import { loadPaidOrderLedger, type PaidOrderEvent } from "../paidOrderLedger";
 import {
   reconcileLedgerSpan,
@@ -358,6 +359,22 @@ export const APPROVED_VIEWS: readonly ApprovedView[] = [
         definition:
           "Business-local completion date (YYYY-MM-DD) when completed, else NULL.",
       },
+    ],
+  },
+  {
+    name: "company_buildings",
+    description:
+      "Building buckets for this authenticated tenant's canonical recorded sales. OPUS LA and Century Park East are attributed from address or property slug, not from tenant id. A luxury sale whose building is not confident is unassigned_building, never regular_apartments. payment_rail is secondary (stripe or cleancloud_clearant). Summing these rows gives this tenant only. The combined Laundry Farm company total, including both laundry_farm and default, is readLaundryFarmCompanyView and is not this table.",
+    columns: [
+      { name: "bucket", type: "TEXT", definition: "opus_la | century_park_east | another building id | unassigned_building | regular_apartments." },
+      { name: "label", type: "TEXT", definition: "Building name, Unassigned building, or Regular apartments / other." },
+      { name: "payment_rail", type: "TEXT", definition: "stripe | cleancloud_clearant | other." },
+      { name: "recorded_sales_cents", type: "INTEGER", definition: "Positive recorded sales in this bucket and rail." },
+      { name: "captured_payments_cents", type: "INTEGER", definition: "Captured payments when every sale in the row has capture evidence, else NULL. Not zero." },
+      { name: "refund_cents", type: "INTEGER", definition: "Signed refunds. Negative when a refund was recorded." },
+      { name: "net_revenue_cents", type: "INTEGER", definition: "Canonical admitted cents for the row. Not a deduplicated cross-rail total." },
+      { name: "order_count", type: "INTEGER", definition: "Positive recorded sales in the row." },
+      { name: "unpaid_balance_cents", type: "INTEGER", definition: "NULL in this view. Unpaid balances are not invented here." },
     ],
   },
   {
@@ -749,6 +766,7 @@ export async function buildApprovedDataset(input: {
       commercial_accounts: commercialAccounts,
       outreach_interventions: outreachInterventions,
       day_line_commitments: dayLineCommitments,
+      company_buildings: companyBuildingTableRows(book.includedEvents, tenantId),
       excluded_sales: excluded,
       coverage,
     },

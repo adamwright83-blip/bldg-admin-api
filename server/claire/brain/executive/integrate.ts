@@ -10,7 +10,13 @@
  * two minds disagreed.
  */
 
-import { joinList, speakBusinessResult } from "../../business/businessSpeech";
+import { joinList, speakBusinessResult, Speech } from "../../business/businessSpeech";
+import { speakLaundryFarmCompanyView } from "../../business/companyViewSpeech";
+import {
+  companyViewRequest,
+  isCompanyViewEvidencePayload,
+  LAUNDRY_FARM_COMPANY_TIME_ZONE,
+} from "../../../analytics/laundryFarmCompanyView";
 import { businessQueryFingerprint, resolvedMembers } from "../businessMemory/evidence";
 import type { BusinessQueryResult } from "../../../analytics/businessQuery";
 import type { EvidenceItem, EvidenceRef, PriorClaimRecheckResult } from "../contracts/evidence";
@@ -160,6 +166,15 @@ function speakResult(
   perceived: PerceivedTurn,
   ctx: IntegrationContext
 ): { text: string; presentedMemberIds: string[] } {
+  if (isCompanyViewEvidencePayload(item.payload)) {
+    try {
+      const speech = new Speech(ctx.surface, LAUNDRY_FARM_COMPANY_TIME_ZONE, ctx.today);
+      speakLaundryFarmCompanyView(item.payload.view, item.payload.aspect, speech);
+      return { text: speech.text(), presentedMemberIds: [] };
+    } catch {
+      return { text: "", presentedMemberIds: [] };
+    }
+  }
   const result = item.payload as BusinessQueryResult;
   try {
     const spoken = speakBusinessResult(result, {
@@ -353,6 +368,19 @@ function integrateBusiness(input: {
 
     // Remember the whole result and the part actually spoken, so a later
     // "the other four" walks this same result instead of re-querying.
+    if (isCompanyViewEvidencePayload(item.payload) && !orderedQueryUpdate) {
+      const request = companyViewRequest({ aspect: item.payload.aspect, period: item.payload.questionPeriod });
+      orderedQueryUpdate = {
+        queryFingerprint: `company_view:${request.aspect}:${item.payload.view.period.start}`,
+        parameters: request,
+        requestedCardinality: null,
+        ordering: null,
+        anchorEntity: null,
+        resolved: [],
+        presented: [],
+        sourceEvidence: item,
+      };
+    }
     const result = item.payload as Parameters<typeof resolvedMembers>[0];
     const members = resolvedMembers(result);
     if (members.length && !orderedQueryUpdate) {
