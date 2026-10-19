@@ -19,6 +19,7 @@ import {
 } from "../planning/dayDirector/workdayRecurrenceStore";
 import { weekdayOf } from "./briefing/briefingTiming";
 import { acceptProposal } from "../planning/dayDirector/dayDirectorService";
+import { recurrenceRuleAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import type { DayDirectorKind } from "../../shared/claireWorkdayCommand";
 
@@ -101,6 +102,8 @@ export async function projectRecurrenceForDate(
         intelligence: "manual_fallback",
         command,
       },
+      // The operator confirmed this rule; the write boundary re-checks it is still active.
+      admission: recurrenceRuleAdmission(rule.id),
     });
     const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
     if (id) {

@@ -1,5 +1,11 @@
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { classifyTerritory } from "@shared/lanternTerritories";
+import {
+  isCenturyParkEastTower,
+  streetIdentity,
+} from "@shared/lanternTerritoryAttribution";
+
+export { streetIdentity };
 
 export type GeographicCustomer = {
   identityKey: string;
@@ -54,7 +60,7 @@ export function canonicalLanternTerritory(
   const location = customer.location;
   if (!location) return null;
   const street = streetIdentity(location.canonicalAddress ?? customer.address);
-  if (street === "2160 century" || street === "2170 century") {
+  if (isCenturyParkEastTower(street)) {
     return { id: "century-city", name: "Century City" };
   }
   const territory = classifyTerritory(location.latitude, location.longitude);
@@ -252,21 +258,6 @@ export function mergeClusters(
     merged.dark += cluster.dark;
   }
   return merged;
-}
-
-/**
- * Street number + first street token of an address: "2170 Century Park E,
- * Los Angeles" and "2170 Century Park East, Century City" are the same
- * premise. Unit tokens and city/ZIP never take part.
- */
-export function streetIdentity(
-  address: string | null | undefined
-): string | null {
-  const match = (address ?? "")
-    .toLowerCase()
-    .trim()
-    .match(/^(\d+[a-z]?)\s+(?:[nsew]\.?\s+)?([a-z]+)/);
-  return match ? `${match[1]} ${match[2]}` : null;
 }
 
 /**

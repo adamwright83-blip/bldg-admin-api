@@ -8,10 +8,10 @@ import {
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { optionalReceiptRows } from "./operationReceipt";
+import { interpretStoredOutcome } from "./outcomeInterpretation";
 import {
   getGoalCycleLearnedDelta,
   listGoalCycleLearnedDeltas,
-  processPendingOutcomeLearnings,
   type GoalCycleLearnedDeltaRecord,
 } from "./learningStore";
 import { operationReceipt } from "./operationReceipt";
@@ -142,12 +142,9 @@ export async function getAuthoritativeScoreboard(input: {
     activeRun?.canonicalOperatorId ??
     "unspecified";
 
-  // 2. Reconcile any pending outcome learnings to guarantee eventual consistency
-  await processPendingOutcomeLearnings({ tenantId: input.tenantId }).catch(err => {
-    console.warn("[proofReadModels] processPendingOutcomeLearnings deferred", err);
-  });
-
-  // 3. Query decisions, objectives, outcomes, and learned deltas
+  // 2. Query decisions, objectives, outcomes, and learned deltas. A report read
+  // never runs learning: outcomes learn when recorded, and the worker's
+  // learning sweeper catches any that were missed.
   const [decisions, objectives, outcomes, learnedDeltas] = await Promise.all([
     optionalReceiptRows(() =>
       db
@@ -210,13 +207,14 @@ export async function getAuthoritativeScoreboard(input: {
       o.status === "action_attempted"
   ).length;
 
-  const successfulOutcomesCount = outcomes.filter(
-    o => o.epistemicStatus === "verified" && !o.outcomeKind.includes("failed") && !o.outcomeKind.includes("blocked")
+  // Shared reading with learning and diagnosis: a contradicted hypothesis is a
+  // failure here, never a success.
+  const interpreted = outcomes.map(o => interpretStoredOutcome(o).result);
+  const successfulOutcomesCount = interpreted.filter(
+    result => result === "supported" || result === "inconclusive"
   ).length;
 
-  const failedOutcomesCount = outcomes.filter(
-    o => o.epistemicStatus === "rejected" || o.outcomeKind.includes("failed") || o.outcomeKind.includes("blocked")
-  ).length;
+  const failedOutcomesCount = interpreted.filter(result => result === "contradicted").length;
 
   const unresolvedOutcomesCount = outcomes.filter(
     o => o.epistemicStatus === "unverified" || o.epistemicStatus === "disputed"
@@ -346,10 +344,6 @@ export async function getLoadoutDelta(input: {
   deltaId?: string;
   canonicalOperatorId?: string;
 }): Promise<LoadoutDeltaExplainable | null> {
-  await processPendingOutcomeLearnings({ tenantId: input.tenantId }).catch(err => {
-    console.warn("[proofReadModels] processPendingOutcomeLearnings deferred", err);
-  });
-
   let delta: GoalCycleLearnedDeltaRecord | null = null;
   if (input.deltaId) {
     delta = await getGoalCycleLearnedDelta({

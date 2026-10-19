@@ -6,6 +6,9 @@ import {
   isLiveLanternCustomer,
   type GeographicCustomer,
 } from "../customerGeography";
+import { normalizeTerritoryName } from "@shared/lanternTerritories";
+import type { LanternReportWindowDays } from "@shared/lanternTerritoryReport";
+import LanternReportPanel from "./LanternReportPanel";
 import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
 import { buildingsWithResidents } from "./towerStack";
@@ -66,6 +69,11 @@ export default function LanternCityIslands({
   const [inSuitcase, setInSuitcase] = useState(false);
   const [operationsHubTip, setOperationsHubTip] = useState<{ x: number; y: number } | null>(null);
   const [suitcaseTip, setSuitcaseTip] = useState<{ x: number; y: number } | null>(null);
+  const [mode, setMode] = useState<"explore" | "report">("explore");
+  const [windowDays, setWindowDays] = useState<LanternReportWindowDays>(30);
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // The normal world always reads the authenticated tenant, never platform support authority.
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
@@ -74,6 +82,10 @@ export default function LanternCityIslands({
     refetchInterval: 15_000,
     retry: 1,
   });
+  const territoryReport = trpc.system.geographicTruth.territoryReport.useQuery(
+    { windowDays },
+    { enabled: Boolean(user) && mode === "report", staleTime: 15_000, retry: 1 }
+  );
   const usingSample = import.meta.env.DEV && atlas.isError;
   const allCustomers = useMemo<GeographicCustomer[]>(
     () =>
@@ -98,12 +110,15 @@ export default function LanternCityIslands({
         onReady: () => setReady(true),
         onError: e => { console.error("Lantern City failed to load", e); setFailed(true); },
         onStats: setStats,
-        onIsland: setIsland,
+        onIsland: info => {
+          setIsland(info);
+          if (modeRef.current === "report" && info?.name) setSelectedTerritoryId(normalizeTerritoryName(info.name));
+        },
         onHover: setHover,
-        onTower: setTower,
-        onOperationsHub: () => window.location.assign("/operations/floor"),
+        onTower: towerId => { if (modeRef.current === "explore") setTower(towerId); },
+        onOperationsHub: () => { if (modeRef.current === "explore") window.location.assign("/operations/floor"); },
         onOperationsHubHover: setOperationsHubTip,
-        onSuitcase: () => setInSuitcase(true),
+        onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
       });
     } catch (e) {
@@ -133,6 +148,17 @@ export default function LanternCityIslands({
   }, [customers, atlas.data, atlas.isError, usingSample]);
 
   useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
+  useEffect(() => {
+    if (mode !== "report" || !territoryReport.data) return;
+    if (selectedTerritoryId && territoryReport.data.territories.some(territory => territory.id === selectedTerritoryId)) return;
+    const fromIsland = island ? normalizeTerritoryName(island.name) : null;
+    const match = territoryReport.data.territories.find(territory => territory.id === fromIsland);
+    setSelectedTerritoryId(match?.id ?? territoryReport.data.territories[0]?.id ?? null);
+  }, [mode, territoryReport.data, island, selectedTerritoryId]);
+  const chooseMode = (next: "explore" | "report") => {
+    setMode(next);
+    if (next === "report") setInSuitcase(false);
+  };
   const leaveSuitcase = () => {
     setInSuitcase(false);
     board.current?.focusIsland("Hollywood");
@@ -143,6 +169,10 @@ export default function LanternCityIslands({
   return (
     <div className={styles.scene} data-lantern-city="islands">
       <div ref={host} className={styles.stage} aria-label="Lantern City island board" />
+      <div className={styles.modeSwitch} role="tablist" aria-label="Lantern City mode" data-lantern-mode={mode}>
+        <button type="button" role="tab" aria-selected={mode === "explore"} onClick={() => chooseMode("explore")}>Explore</button>
+        <button type="button" role="tab" aria-selected={mode === "report"} onClick={() => chooseMode("report")}>Report</button>
+      </div>
       {showBrand ? (
         <>
           <header className={styles.top}>
@@ -158,7 +188,7 @@ export default function LanternCityIslands({
               </div>
             ) : null}
           </header>
-          {ownBuildings.length ? (
+          {mode === "explore" && ownBuildings.length ? (
             <div className={styles.towers}>
               {ownBuildings.map(building => (
                 <button key={building.id} type="button" onClick={() => setTower(building.id)}>{building.name} floors</button>
@@ -167,14 +197,16 @@ export default function LanternCityIslands({
           ) : null}
         </>
       ) : null}
-      <ObjectiveMarksLayer
-        board={board}
-        ready={ready}
-        onNavigate={onNavigate}
-        driverCurrentStop={driverCurrentStop}
-      />
+      {mode === "explore" ? (
+        <ObjectiveMarksLayer
+          board={board}
+          ready={ready}
+          onNavigate={onNavigate}
+          driverCurrentStop={driverCurrentStop}
+        />
+      ) : null}
 
-      {island ? (
+      {mode === "explore" && island ? (
         <section className={styles.card} aria-label={island.name}>
           <h2>{island.name}</h2>
           <p>
@@ -218,18 +250,36 @@ export default function LanternCityIslands({
           <span className={styles.tipHint}>Click to enter</span>
         </div>
       ) : null}
-      {inSuitcase ? (
+      {mode === "report" ? (
+        <LanternReportPanel
+          report={territoryReport.data}
+          isLoading={territoryReport.isLoading}
+          isError={territoryReport.isError}
+          windowDays={windowDays}
+          onWindowDays={setWindowDays}
+          selectedId={selectedTerritoryId}
+          onSelect={territoryId => {
+            setSelectedTerritoryId(territoryId);
+            const territory = territoryReport.data?.territories.find(item => item.id === territoryId);
+            if (territory) board.current?.focusIsland(territory.name);
+          }}
+          onOpenCustomer={onOpenCustomer}
+          onRetry={() => { void territoryReport.refetch(); }}
+        />
+      ) : null}
+
+      {mode === "explore" && inSuitcase ? (
         <Suspense fallback={<div className={styles.loading} role="status">Opening Small Comforts…</div>}>
           <SmallComforts onExit={leaveSuitcase} />
         </Suspense>
       ) : null}
 
-      {tower ? (
+      {mode === "explore" && tower ? (
         <TowerFloors buildingId={tower} customers={allCustomers} onClose={() => setTower(null)} onOpenCustomer={phone => onOpenCustomer(phone)} />
       ) : null}
 
       {usingSample ? <div className={styles.sample}>Sample customers · dev build, no database</div> : null}
-      {showUtilityDock && !inSuitcase ? (
+      {showUtilityDock && mode === "explore" && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
           <button type="button" onClick={() => onNavigate?.("/customers")}>Located customers <b className={styles.count}>{customers.length}</b></button>

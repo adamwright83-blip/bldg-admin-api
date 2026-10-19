@@ -168,6 +168,7 @@ export async function applyWorkLedgerPlan(input: {
       result = await deps.commit(parsed, {
         tenantId: target.tenantId,
         dayDirectorActorId: target.dayDirectorActorId,
+        operatorUserId: target.operatorUserId,
         conversationKey: `${target.conversationKey}:ledger`,
         vehicleId: target.operatorUserId,
       });

@@ -2,6 +2,7 @@
 import {
   bigint,
   boolean,
+  char,
   customType,
   datetime,
   double,
@@ -12,6 +13,7 @@ import {
   mediumtext,
   mysqlEnum,
   mysqlTable,
+  primaryKey,
   text,
   timestamp,
   tinyint,
@@ -7530,7 +7532,8 @@ export type InsertOperatorMacroGoal = typeof operatorMacroGoals.$inferInsert;
 export const claireProactiveObligations = mysqlTable(
   "claire_proactive_obligations",
   {
-    id: varchar("id", { length: 191 }).primaryKey(),
+    // Unique only within a tenant; the primary key is (tenantId, id), 0140.
+    id: varchar("id", { length: 191 }).notNull(),
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
     canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
@@ -7550,6 +7553,7 @@ export const claireProactiveObligations = mysqlTable(
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
   table => ({
+    pk: primaryKey({ columns: [table.tenantId, table.id] }),
     openIdx: index("idx_claire_proactive_open").on(
       table.tenantId,
       table.operatorUserId,
@@ -7727,9 +7731,16 @@ export const goalCycleDecisions = mysqlTable(
     loadoutJson: json("loadoutJson").notNull(),
     experimentJson: json("experimentJson"),
     decisionFingerprint: varchar("decisionFingerprint", { length: 64 }).notNull(),
+    /** The durable Work Thread (Phase 2 · Slice A) the selected work belongs to. Null for waits and pre-thread decisions. */
+    workThreadId: varchar("workThreadId", { length: 36 }),
     createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
   },
   table => ({
+    workThreadIdx: index("idx_goal_cycle_decisions_work_thread").on(
+      table.tenantId,
+      table.workThreadId,
+      table.createdAt
+    ),
     cycleUnique: uniqueIndex("uq_goal_cycle_decisions_cycle").on(
       table.tenantId,
       table.cycleId
@@ -7777,11 +7788,24 @@ export const goalCycleObjectives = mysqlTable(
     windowEnd: varchar("windowEnd", { length: 32 }),
     loadoutJson: json("loadoutJson").notNull(),
     evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    /** The latest decision that re-selected this open objective (Stage 1 · 1B). Null until reused. */
+    latestDecisionId: varchar("latestDecisionId", { length: 36 }),
+    /** The durable Work Thread (Phase 2 · Slice A) this objective pursues. Null for pre-thread objectives. */
+    workThreadId: varchar("workThreadId", { length: 36 }),
     completedAt: timestamp("completedAt", { fsp: 3 }),
     createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
   },
   table => ({
+    latestDecisionIdx: index("idx_goal_cycle_objectives_latest_decision").on(
+      table.tenantId,
+      table.latestDecisionId
+    ),
+    workThreadIdx: index("idx_goal_cycle_objectives_work_thread").on(
+      table.tenantId,
+      table.workThreadId,
+      table.status
+    ),
     decisionUnique: uniqueIndex("uq_goal_cycle_objectives_decision").on(
       table.tenantId,
       table.decisionId
@@ -7799,6 +7823,139 @@ export const goalCycleObjectives = mysqlTable(
     ),
   })
 );
+
+/**
+ * Phase 2 · Slice A: one underlying business opportunity, durable across hourly
+ * decisions, re-diagnoses, wording, worker restarts and proposal revisions.
+ * `id` is the identity; `opportunityKey` only finds the open thread for a newly
+ * observed opportunity (one open thread per key; a closed key mints a new
+ * generation). See shared/workThread.ts.
+ */
+export const workThreads = mysqlTable(
+  "work_threads",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    opportunityKey: varchar("opportunityKey", { length: 512 }).notNull(),
+    opportunityKeyHash: char("opportunityKeyHash", { length: 64 }).notNull(),
+    generation: int("generation").notNull().default(1),
+    /** 1 while open, NULL once closed: at most one open thread per key. */
+    openSlot: tinyint("openSlot").default(1),
+    status: varchar("status", { length: 16 }).notNull().default("open"),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    opportunityJson: json("opportunityJson").notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    createdByOperatorId: varchar("createdByOperatorId", { length: 191 }),
+    firstSourceRef: varchar("firstSourceRef", { length: 191 }),
+    lastSourceRef: varchar("lastSourceRef", { length: 191 }),
+    lastObservedAt: timestamp("lastObservedAt", { fsp: 3 }),
+    closedReason: varchar("closedReason", { length: 64 }),
+    closedAt: timestamp("closedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    openUnique: uniqueIndex("uq_work_threads_open").on(
+      table.tenantId,
+      table.opportunityKeyHash,
+      table.openSlot
+    ),
+    generationUnique: uniqueIndex("uq_work_threads_generation").on(
+      table.tenantId,
+      table.opportunityKeyHash,
+      table.generation
+    ),
+    tenantStatusIdx: index("idx_work_threads_tenant_status").on(
+      table.tenantId,
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
+
+export type WorkThreadRow = typeof workThreads.$inferSelect;
+
+/**
+ * Phase 2 · Slices C and D: a durable source event (a completed commitment, a
+ * paid CleanCloud order) that must be connected to its goal objective. The row
+ * owns the retry instead of a "deferred" log line. See
+ * server/agents/persistentOperator/observationBridgeStore.ts.
+ */
+export const observationBridgeObligations = mysqlTable(
+  "observation_bridge_obligations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    sourceKind: varchar("sourceKind", { length: 48 }).notNull(),
+    sourceKey: varchar("sourceKey", { length: 191 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("pending"),
+    payloadJson: json("payloadJson").notNull(),
+    resultJson: json("resultJson"),
+    attemptCount: int("attemptCount").notNull().default(0),
+    nextAttemptAt: timestamp("nextAttemptAt", { fsp: 3 }).notNull().defaultNow(),
+    leaseOwner: varchar("leaseOwner", { length: 191 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { fsp: 3 }),
+    lastError: text("lastError"),
+    resolvedAt: timestamp("resolvedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    sourceUnique: uniqueIndex("uq_observation_bridge_source").on(
+      table.tenantId,
+      table.sourceKind,
+      table.sourceKey
+    ),
+    dueIdx: index("idx_observation_bridge_due").on(table.status, table.nextAttemptAt),
+    tenantStatusIdx: index("idx_observation_bridge_tenant_status").on(
+      table.tenantId,
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
+
+export type ObservationBridgeObligationRow = typeof observationBridgeObligations.$inferSelect;
+
+/**
+ * Phase 2 · Slice B: operator decisions that settle the operating mandate.
+ * Append-only; one decision in force per subject (`activeSlot` 1, NULL once superseded).
+ */
+export const operatingMandateDecisions = mysqlTable(
+  "operating_mandate_decisions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    subjectKey: varchar("subjectKey", { length: 191 }).notNull(),
+    payloadJson: json("payloadJson").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    activeSlot: tinyint("activeSlot").default(1),
+    supersedesId: varchar("supersedesId", { length: 36 }),
+    supersededById: varchar("supersededById", { length: 36 }),
+    decidedByOpenId: varchar("decidedByOpenId", { length: 128 }).notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    decidedAt: timestamp("decidedAt", { fsp: 3 }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { fsp: 3 }).notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeUnique: uniqueIndex("uq_operating_mandate_decisions_active").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.subjectKey,
+      table.activeSlot
+    ),
+    operatorIdx: index("idx_operating_mandate_decisions_operator").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.decidedAt
+    ),
+  })
+);
+
+export type OperatingMandateDecisionRow = typeof operatingMandateDecisions.$inferSelect;
 
 export type GoalCycleObjective = typeof goalCycleObjectives.$inferSelect;
 export type InsertGoalCycleObjective = typeof goalCycleObjectives.$inferInsert;

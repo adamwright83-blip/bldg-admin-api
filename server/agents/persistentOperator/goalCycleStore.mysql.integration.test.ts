@@ -136,19 +136,22 @@ describe.skipIf(!DATABASE_URL)("goal cycle store — real MySQL", () => {
       expect(await store.completeStep(step!, { nextEvaluationAt })).toBe(true);
     }
     const live = await rows<RowDataPacket>(
-      "SELECT id, availableAt FROM goal_cycle_requests WHERE goalRunId = ? AND triggerType = 'scheduled_tick' AND status IN ('queued','retry_scheduled','leased','running')",
+      "SELECT id, idempotencyKey, availableAt FROM goal_cycle_requests WHERE goalRunId = ? AND triggerType = 'scheduled_tick' AND status IN ('queued','retry_scheduled','leased','running')",
       [runId]
     );
     expect(live).toHaveLength(1);
+    // Every occurrence finishes under its own id (Stage 1 · 1B); the first five hand
+    // the chain to a tick still live, and the last one queues the single successor.
     const [{ completed }] = await rows<RowDataPacket>(
       "SELECT COUNT(*) AS completed FROM goal_cycle_requests WHERE goalRunId = ? AND status = 'completed'",
       [runId]
     );
-    expect(Number(completed)).toBe(5);
+    expect(Number(completed)).toBe(6);
+    expect(String(live[0]!.idempotencyKey)).toMatch(new RegExp(`^scheduled_tick:${runId}:after:`));
     expect(await store.claimNextStep({ leaseOwner: "worker-a", leaseMs: 30_000 })).toBeNull();
   });
 
-  it("a single scheduled tick still re-queues itself for the next evaluation", async () => {
+  it("a scheduled tick finishes and queues a new occurrence for the next evaluation", async () => {
     const runId = await insertRun({ tenantId: "tenant-a" });
     const store = new GoalCycleStore(pool);
     const queued = await store.enqueue({
@@ -163,9 +166,16 @@ describe.skipIf(!DATABASE_URL)("goal cycle store — real MySQL", () => {
     await store.markRunning(step!);
     const nextEvaluationAt = new Date(Date.now() + 3_600_000);
     expect(await store.completeStep(step!, { nextEvaluationAt: nextEvaluationAt.toISOString() })).toBe(true);
-    const [row] = await rows<RowDataPacket>("SELECT status, availableAt FROM goal_cycle_requests WHERE id = ?", [queued.id]);
-    expect(row.status).toBe("queued");
-    expect(new Date(row.availableAt).getTime()).toBeGreaterThan(Date.now() + 3_000_000);
+    // The occurrence keeps its id and finishes; its id is its decision identity.
+    const [row] = await rows<RowDataPacket>("SELECT status FROM goal_cycle_requests WHERE id = ?", [queued.id]);
+    expect(row.status).toBe("completed");
+    const [next] = await rows<RowDataPacket>(
+      "SELECT id, status, availableAt FROM goal_cycle_requests WHERE tenantId = 'tenant-a' AND idempotencyKey = ?",
+      [`scheduled_tick:${runId}:after:${queued.id}`]
+    );
+    expect(next.id).not.toBe(queued.id);
+    expect(next.status).toBe("queued");
+    expect(new Date(next.availableAt).getTime()).toBeGreaterThan(Date.now() + 3_000_000);
   });
 
   it("rejects an idempotency key that is already bound to a different goal run", async () => {

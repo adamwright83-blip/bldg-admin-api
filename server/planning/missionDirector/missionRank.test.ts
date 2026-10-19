@@ -398,6 +398,20 @@ describe("Mission Director planning fingerprint", () => {
     expect(before).not.toBe(after);
   });
 
+  it("an operator's sales hold invalidates a stored plan; no hold leaves the fingerprint as it was", () => {
+    const before = computePlanningFingerprint(baseInput);
+    expect(computePlanningFingerprint({ ...baseInput, rankingContext: { ...sparseContext, salesHold: null } })).toBe(before);
+    expect(
+      computePlanningFingerprint({ ...baseInput, rankingContext: { ...sparseContext, salesHold: { until: "2026-09-15", reason: null, scope: ["acquisition"] } } })
+    ).not.toBe(before);
+    // Widening the hold changes what ranks, so it is a new plan too.
+    expect(
+      computePlanningFingerprint({ ...baseInput, rankingContext: { ...sparseContext, salesHold: { until: "2026-09-15", reason: null, scope: ["acquisition", "winback"] } } })
+    ).not.toBe(
+      computePlanningFingerprint({ ...baseInput, rankingContext: { ...sparseContext, salesHold: { until: "2026-09-15", reason: null, scope: ["acquisition"] } } })
+    );
+  });
+
   it("does not invalidate when only presentation title changes", () => {
     const before = computePlanningFingerprint(baseInput);
     const after = computePlanningFingerprint({

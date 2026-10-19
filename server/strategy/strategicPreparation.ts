@@ -24,8 +24,96 @@ import {
   persistStrategicProposal,
 } from "./strategicStore";
 import { planForDate } from "../planning/missionDirector/missionDirectorService";
+import { describeSalesHoldScope, salesHoldCovers, salesScopeOfMotion, type SalesHold } from "../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../agents/persistentOperator/operatorDoctrineStore";
 import { readWeeklyDossierFacts } from "../claire/weeklyMission/productionReaders";
 import type { VerticalRegistry } from "./verticalTemplates/registry";
+import type { StrategicDiagnosis } from "../../shared/strategicIntelligence";
+import type { MissionWorkSelection } from "../../shared/missionDirector";
+import { workThreadCandidateId, workThreadOpportunityKey } from "../../shared/workThread";
+import {
+  resolveCandidateWorkThread,
+  resolveWorkThread,
+  findOpenWorkThread,
+} from "../agents/persistentOperator/workThreadStore";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { dayDirectorCommitments } from "../../drizzle/schema";
+import { readDayLineOverlay } from "../../shared/goldlineDayLine";
+import { getDb } from "../db";
+
+/**
+ * Whether the operator already has open, approved Day Line work on this
+ * thread. While that execution is open the opportunity is not proposed again;
+ * the commitment itself carries the work forward.
+ */
+async function workThreadInFlight(identity: CanonicalOperatorIdentity, workThreadId: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Durable proposal database unavailable");
+  const rows = await db
+    .select({ metadataJson: dayDirectorCommitments.metadataJson })
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, identity.tenantId),
+        inArray(dayDirectorCommitments.actorId, identity.dayDirectorActorIds),
+        eq(dayDirectorCommitments.status, "open"),
+        sql`JSON_UNQUOTE(JSON_EXTRACT(${dayDirectorCommitments.metadataJson}, '$.workThread.id')) = ${workThreadId}`
+      )
+    );
+  return rows.some(row => {
+    const overlay = readDayLineOverlay(row.metadataJson);
+    return !overlay.cancelledAt && !overlay.notPursuing;
+  });
+}
+
+/**
+ * Each opportunity in the diagnosis resolves to its durable Work Thread, keyed
+ * by opportunity. Wording, the customers named this hour and the diagnosis id
+ * play no part, so an hourly re-diagnosis lands on the same thread.
+ */
+async function resolveDiagnosisWorkThreads(
+  d: StrategicDiagnosis,
+  identity: CanonicalOperatorIdentity,
+  now: Date
+): Promise<Record<string, string>> {
+  const ids: Record<string, string> = {};
+  for (const action of d.actions) {
+    if (!action.opportunity) continue;
+    const thread = await resolveWorkThread({
+      tenantId: identity.tenantId,
+      opportunity: action.opportunity,
+      title: action.title,
+      sourceRef: `strategic_diagnosis:${d.businessDate}`,
+      canonicalOperatorId: identity.canonicalOperatorId,
+      now,
+    });
+    ids[workThreadOpportunityKey(action.opportunity)] = thread.id;
+  }
+  // A challenge's alternative names the thread already pursuing it, if one is
+  // open. None is opened for it: the alternative is a comparison, not work.
+  if (d.challenge) {
+    const open = await findOpenWorkThread({ tenantId: identity.tenantId, opportunity: d.challenge.alternative.opportunity });
+    if (open) ids[workThreadOpportunityKey(d.challenge.alternative.opportunity)] = open.id;
+  }
+  return ids;
+}
+
+const threadIdsOf = (d: StrategicDiagnosis) => d.actions.map(a => a.workThreadId ?? null);
+
+/** The open Work Thread Mission Director's selected work continues, if one can be established without guessing. */
+async function rankedWorkThreadId(
+  identity: CanonicalOperatorIdentity,
+  primary: MissionWorkSelection,
+  now: Date
+): Promise<string | undefined> {
+  const resolved = await resolveCandidateWorkThread({
+    tenantId: identity.tenantId,
+    candidate: { id: primary.workId, title: primary.title, sourceKind: primary.sourceKind, workThreadId: primary.workThreadId },
+    canonicalOperatorId: identity.canonicalOperatorId,
+    now,
+  });
+  return resolved.status === "resolved" ? resolved.thread.id : undefined;
+}
 
 export async function refreshStrategicDiagnosis(input: {
   identity: CanonicalOperatorIdentity;
@@ -75,9 +163,18 @@ export async function refreshStrategicDiagnosis(input: {
       });
     }
   }
-  const diagnosis = assembleStrategicDiagnosis(facts, registry);
-  const content = (d: typeof diagnosis) =>
-    canonicalJsonStringify({
+  let diagnosis = assembleStrategicDiagnosis(facts, registry);
+  // Stamp each action with its Work Thread before the diagnosis is identified
+  // and stored. Reassembly is pure, so the opportunities are the same ones.
+  const workThreadIds = await resolveDiagnosisWorkThreads(diagnosis, input.identity, now);
+  if (Object.keys(workThreadIds).length)
+    diagnosis = assembleStrategicDiagnosis({ ...facts, workThreadIds }, registry);
+  const content = (d: typeof diagnosis) => {
+    // What the diagnosis took from the operating mandate. The mandate's own
+    // revision moves with every commitment and thread, so it is left out.
+    const { revision: _revision, ...fromMandate } = d.mandate ?? { revision: "" };
+    void _revision;
+    return canonicalJsonStringify({
       verticalKey: d.verticalKey,
       doctrineVersion: d.doctrineVersion,
       goal: d.goal,
@@ -87,12 +184,19 @@ export async function refreshStrategicDiagnosis(input: {
       diagnosis: d.diagnosis,
       outcomes: d.outcomeRefs,
       uncertainty: d.uncertainty,
+      mandate: d.mandate ? fromMandate : null,
+      objective: d.objective ?? null,
+      // A challenge is identified by what it rests on; volatile evidence refs are not part of it.
+      challenge: d.challenge?.id ?? null,
+      challengeAbstained: d.challengeAbstained ?? null,
     });
+  };
   if (
     prior &&
     now.getTime() >= Date.parse(prior.generatedAt) &&
     now.getTime() - Date.parse(prior.generatedAt) < 3600000 &&
-    content(prior) === content(diagnosis)
+    content(prior) === content(diagnosis) &&
+    JSON.stringify(threadIdsOf(prior)) === JSON.stringify(threadIdsOf(diagnosis))
   )
     return prior;
   diagnosis.quality = await reviewStrategicQuality(diagnosis);
@@ -108,17 +212,22 @@ const LIMITATION_LINE = /^\d{4}-\d{2}-\d{2}: /;
  * mints new ones); dates, titles, objectives, types, timing and constraints are not.
  */
 export function proposalDecisionUnchanged(
-  current: Pick<StrategicPlanningProposal, "businessDate" | "expiresAt" | "items" | "constraints" | "uncertainty">,
+  current: Pick<StrategicPlanningProposal, "businessDate" | "expiresAt" | "items" | "constraints" | "uncertainty"> & {
+    diagnosis?: Pick<StrategicDiagnosis, "challenge">;
+  },
   next: {
     businessDate: string;
     items: StrategicPlanningProposal["items"];
     constraints: string[];
     limitations: string[];
+    /** The open challenge to the operator's stated method, if any: a different one is a different decision. */
+    challengeId?: string | null;
   },
   now: Date
 ): boolean {
   if (current.businessDate !== next.businessDate) return false;
   if (Date.parse(current.expiresAt) <= now.getTime()) return false;
+  if ((current.diagnosis?.challenge?.id ?? null) !== (next.challengeId ?? null)) return false;
   const decision = (items: StrategicPlanningProposal["items"]) =>
     canonicalJsonStringify(
       items.map(i => ({
@@ -129,6 +238,7 @@ export function proposalDecisionUnchanged(
         missionType: i.missionType ?? null,
         window: i.timeWindow?.window ?? null,
         source: i.planId.startsWith("strategic_diagnosis:") ? "strategy" : i.candidateId,
+        workThreadId: i.workThreadId ?? null,
       }))
     );
   const limitations = (current.uncertainty ?? []).filter(line => LIMITATION_LINE.test(line));
@@ -137,6 +247,19 @@ export function proposalDecisionUnchanged(
     canonicalJsonStringify(current.constraints) === canonicalJsonStringify(next.constraints) &&
     canonicalJsonStringify(limitations) === canonicalJsonStringify(next.limitations)
   );
+}
+
+/**
+ * The day Claire's selected strategy action is proposed for: the first plan
+ * date, unless the operator held that kind of sales work on that day, then the
+ * first open day (none when every plan date is held).
+ */
+export function strategyActionDate(
+  planDates: readonly string[],
+  motion: string | null | undefined,
+  hold: SalesHold | null
+): string | undefined {
+  return planDates.find(date => !salesHoldCovers(hold, date, motion));
 }
 
 /** Existing autonomous evaluator and appointment executor share this preparation.
@@ -185,20 +308,40 @@ export async function prepareStrategicProposal(input: {
   // provenance to the diagnosis. Mission Director's ranked work fills later days,
   // so stale unrelated follow-ups cannot displace the current strategic priority.
   const selectedAction = diagnosis.actions[0];
-  const strategyDate = planDates[0];
+  // A sales action never lands on a day the operator held that kind of sales
+  // work; it takes the first open day (Mission Director already skips held work).
+  const salesHold = selectedAction && salesScopeOfMotion(selectedAction.motion)
+    ? await loadOperatorSalesHold({ tenantId: identity.tenantId, operatorUserIds: operatorIds })
+    : null;
+  const strategyDate = strategyActionDate(planDates, selectedAction?.motion, salesHold);
+  if (salesHold && strategyDate !== planDates[0])
+    limitations.push(`${planDates[0]}: ${describeSalesHoldScope(salesHold.scope)} is held through ${salesHold.until} at your request, so "${selectedAction!.title}" ${strategyDate ? `is proposed for ${strategyDate}` : "is not proposed this week"}.`);
+
+  // The strategy item names its Work Thread, and its candidate id is the one
+  // the goal cycle selects, so approval binds to the thread's open objective.
+  // An opportunity whose approved execution is still open is not proposed again.
+  const strategyThreadId = selectedAction?.workThreadId;
+  const strategyInFlight = strategyThreadId ? await workThreadInFlight(identity, strategyThreadId) : false;
+  if (strategyInFlight && strategyDate)
+    limitations.push(`${strategyDate}: "${selectedAction!.title}" is already approved and still open on the Day Line`);
   const strategyItem =
-    selectedAction && strategyDate && !diagnosis.quality.structuralErrors.length
+    selectedAction && strategyDate && !diagnosis.quality.structuralErrors.length && !strategyInFlight
       ? {
           id: `${strategyDate}:${diagnosis.id}:${selectedAction.id}`,
           businessDate: strategyDate,
           title: selectedAction.title,
           objective: selectedAction.completionCondition,
           executionType: "challenge" as const,
-          candidateId: `${diagnosis.id}:${selectedAction.id}`,
+          candidateId: strategyThreadId
+            ? workThreadCandidateId(strategyThreadId)
+            : `${diagnosis.id}:${selectedAction.id}`,
           missionType: selectedAction.motion,
           planId: `strategic_diagnosis:${diagnosis.id}`,
           planRevision: 0,
           evidenceRefs: [`strategic_diagnosis:${diagnosis.id}`, ...diagnosis.supportingEvidence],
+          ...(strategyThreadId ? { workThreadId: strategyThreadId } : {}),
+          ...(selectedAction.targets?.length ? { customerTargets: selectedAction.targets } : {}),
+          ...(selectedAction.observationWindowDays ? { observationWindowDays: selectedAction.observationWindowDays } : {}),
         }
       : null;
   if (strategyItem) {
@@ -230,6 +373,7 @@ export async function prepareStrategicProposal(input: {
       work.primary.executionType !== "challenge"
     )
       continue;
+    const workThreadId = await rankedWorkThreadId(identity, work.primary, now);
     items.push({
       id: `${date}:${work.primary.workId}`,
       businessDate: date,
@@ -244,6 +388,7 @@ export async function prepareStrategicProposal(input: {
         `mission_director_plan:${plan.id}:revision:${plan.revision}`,
         ...diagnosis.supportingEvidence,
       ],
+      ...(workThreadId ? { workThreadId } : {}),
     });
   }
   // Daphne's consented, operator-wide timing preference shapes proposed timing.
@@ -289,7 +434,7 @@ export async function prepareStrategicProposal(input: {
   if (
     current &&
     !closedGeneration &&
-    proposalDecisionUnchanged(current, { businessDate, items, constraints, limitations }, now)
+    proposalDecisionUnchanged(current, { businessDate, items, constraints, limitations, challengeId: diagnosis.challenge?.id ?? null }, now)
   )
     return current;
   const revision = createHash("sha256")
@@ -367,7 +512,14 @@ export function buildWeeklyProductionPlan(input: {
   const used = new Set(input.items.map(i => i.businessDate));
   const buffer = input.planDates.filter(date => !used.has(date));
   return {
-    objective: d.objective?.statement ?? d.goal.statement,
+    // A remark from conversation shapes where the work happens; it is never
+    // presented as the operator's objective in place of their confirmed goal.
+    objective:
+      d.objective && d.objective.confirmation !== "inferred"
+        ? d.objective.statement
+        : d.objective
+          ? `${d.goal.statement} (starting in ${d.objective.area})`
+          : d.goal.statement,
     outcomes: [action?.leadingIndicator, ...d.successMeasures].filter((x): x is string => Boolean(x)).slice(0, 3),
     evidence: selected?.observedBasis ?? d.currentCondition,
     sequence: input.items.map(i => ({

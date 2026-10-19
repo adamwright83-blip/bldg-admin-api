@@ -170,6 +170,17 @@ export async function listPersistentOperatorObligationPayloads(input: {
   tenantId: string;
   operatorUserId: string;
 }): Promise<ProactiveObligation[]> {
+  return (await listPersistentOperatorObligationRecords(input)).map(record => record.payload);
+}
+
+/**
+ * The same board, with the goal-cycle lineage stored beside each payload
+ * (such as the execution type a decision recorded), for readers that rank it.
+ */
+export async function listPersistentOperatorObligationRecords(input: {
+  tenantId: string;
+  operatorUserId: string;
+}): Promise<PersistentObligation[]> {
   const tenantId = input.tenantId.trim();
   const operatorUserId = input.operatorUserId.trim();
   if (!tenantId) throw new Error("tenantId is required");
@@ -180,7 +191,7 @@ export async function listPersistentOperatorObligationPayloads(input: {
 
   const rows = await queryOptionalMysqlTable(async () =>
     db
-      .select({ payloadJson: claireProactiveObligations.payloadJson })
+      .select()
       .from(claireProactiveObligations)
       .where(
         and(
@@ -190,11 +201,7 @@ export async function listPersistentOperatorObligationPayloads(input: {
       )
   );
 
-  return rows.map(row => {
-    const payload = row.payloadJson as ProactiveObligation;
-    assertDraftInvariant(payload);
-    return payload;
-  });
+  return rows.map(toRecord);
 }
 
 export async function upsertPersistentOperatorObligation(input: {

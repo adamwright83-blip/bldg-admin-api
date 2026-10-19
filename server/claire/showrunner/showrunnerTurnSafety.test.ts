@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isUnambiguousAgreement, runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
+import { captureShowrunnerSalesHold, isUnambiguousAgreement, runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
 
 const state = (over: Partial<ShowrunnerCallState> = {}): ShowrunnerCallState => ({
   purpose: "evening_debrief",
@@ -35,6 +35,43 @@ describe("unambiguous agreement only", () => {
       invoke: model(quiet), record: async () => undefined, approve });
     expect(approve).toHaveBeenCalledTimes(1);
     expect(out.speak).toContain("verified in the Day Line");
+  });
+});
+
+describe("the operator's sales hold on a call", () => {
+  it("is saved and confirmed before the model runs", async () => {
+    const invoke = vi.fn(model(quiet));
+    const salesHold = vi.fn(async () => "Just today I'll hold all sales work.");
+    const now = new Date("2026-10-20T15:00:00.000Z");
+    const out = await runShowrunnerTurn({ state: state({ purpose: "morning_readiness" }), history: [], utterance: "Just today, no sales.",
+      sourceEventId: "e", conversationKey: "k", invoke, record: async () => undefined, salesHold, now });
+    expect(salesHold).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "t", operatorUserId: "u", businessDate: "2026-10-20", timeZone: "America/Los_Angeles" }),
+      "Just today, no sales.",
+      now
+    );
+    expect(out).toMatchObject({ speak: "Just today I'll hold all sales work.", end: false });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("anything else goes to the normal turn", async () => {
+    const invoke = vi.fn(model({ ...quiet, speak: "Got it." }));
+    const out = await runShowrunnerTurn({ state: state(), history: [], utterance: "Skip the OPUS pickup today.",
+      sourceEventId: "e", conversationKey: "k", invoke, record: async () => undefined, replan: async () => null, salesHold: async () => null });
+    expect(invoke).toHaveBeenCalled();
+    expect(out.speak).toBe("Got it.");
+  });
+
+  it("only the sales hold is taken, and an unsaved hold is never confirmed", async () => {
+    const s = { tenantId: "t", operatorUserId: "u", businessDate: "2026-10-20", timeZone: "America/Los_Angeles" };
+    expect(await captureShowrunnerSalesHold(s, "Skip the OPUS pickup today.")).toBeNull();
+    expect(await captureShowrunnerSalesHold(s, "What did we sell today?")).toBeNull();
+    // No database in the unit environment: the save fails, so Claire does not claim the hold.
+    expect(await captureShowrunnerSalesHold(s, "Just today, no sales.")).toBe(
+      "I couldn't save that just now, so sales work is not on hold. Tell me again in a moment."
+    );
+    // Nothing is held here, so a release changes nothing and says so.
+    expect(await captureShowrunnerSalesHold(s, "Resume sales now.")).toBe("Sales work isn't on hold, so nothing changed.");
   });
 });
 

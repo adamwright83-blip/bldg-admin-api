@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { cleancloudPaidOrders, goalCycleOutcomes } from "../../../drizzle/schema";
 import { getDb } from "../../db";
-import { cleanCloudPaidObservationReceiptMatches } from "../../integrations/cleancloud/cleancloudPaidEvidence";
+import {
+  currentCleanCloudPaidObservationReceipt,
+  readCleanCloudPaidObservationReceipts,
+} from "../../integrations/cleancloud/cleancloudPaidEvidence";
 import {
   getAuthorityReceiptById,
   findAuthoritativeExternalReceipt,
@@ -363,6 +366,8 @@ async function assertConsequentialOutcomeAuthority(
         paid: cleancloudPaidOrders.paid,
         totalCents: cleancloudPaidOrders.totalCents,
         importBatchId: cleancloudPaidOrders.importBatchId,
+        paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+        paidDateUtc: cleancloudPaidOrders.paidDateUtc,
       })
       .from(cleancloudPaidOrders)
       .where(
@@ -371,18 +376,29 @@ async function assertConsequentialOutcomeAuthority(
           eq(cleancloudPaidOrders.cleancloudOrderId, subjectId)
         )
       );
+    const expectation = {
+      tenantId: input.tenantId,
+      subjectType: "cleancloud_order" as const,
+      subjectId,
+      sourceType: "cleancloud_paid_order" as const,
+      sourceRef: null,
+    };
+    const orderReceipts = await readCleanCloudPaidObservationReceipts({
+      tenantId: input.tenantId,
+      expectations: [expectation],
+    });
+    // The cited receipt must be the one for the order's current economic
+    // revision; a re-sync into a new import batch that changed no money keeps it.
     const amountMatches = rows.some(
       row =>
         row.paid === true &&
         (row.totalCents ?? 0) > 0 &&
         row.totalCents === input.monetaryValueCents &&
-        cleanCloudPaidObservationReceiptMatches(receipt, {
-          tenantId: input.tenantId,
-          subjectType: "cleancloud_order",
-          subjectId,
-          sourceType: "cleancloud_paid_order",
-          sourceRef: `cleancloud-import:${row.importBatchId}:${subjectId}`,
-        })
+        currentCleanCloudPaidObservationReceipt(orderReceipts, {
+          ...expectation,
+          importBatchId: row.importBatchId,
+          paymentAt: (row.paymentDateUtc ?? row.paidDateUtc)?.toISOString() ?? null,
+        })?.id === receipt.id
     );
     if (!amountMatches) {
       throw new Error(

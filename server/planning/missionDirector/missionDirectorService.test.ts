@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  computePlanningFingerprint,
   legacyCampaignCompatibilityCandidates,
   planForDate,
   planningExecutionConstraint,
@@ -155,5 +156,39 @@ describe("Mission Director — intelligence boundary (§5 invariant)", () => {
     expect(result.intelligence).toBe("deterministic_fallback");
     expect(result.explanation).toContain("Referral Ask");
     ENV.anthropicApiKey = savedKey;
+  });
+});
+
+describe("Mission Director — learned outcomes in the planning fingerprint (Stage 1 Phase 3 e)", () => {
+  const rankingContext = {
+    businessDate: "2026-10-19",
+    macroGoal: { metricKey: "active_customers", targetValue: 50, objective: "Get to 50 active customers" },
+    openTasks: [],
+  };
+  const fp = (context: Parameters<typeof computePlanningFingerprint>[0]["rankingContext"]) =>
+    computePlanningFingerprint({
+      businessDate: "2026-10-19",
+      fieldItemIds: ["stop-1"],
+      fieldScheduledAts: ["2026-10-19T17:00:00.000Z"],
+      campaigns: [],
+      prepReady: {},
+      rankingContext: context,
+      commandFingerprint: "cmd",
+      candidateFingerprint: "cand",
+      executionConstraint: null,
+    });
+  const lesson = { outcomeId: "outcome-1", selectedRef: "work-x", result: "contradicted" as const, deltaIds: ["delta-1"] };
+
+  it("with no lessons the fingerprint is the one stored plans already carry, so nothing re-plans or re-explains", () => {
+    // Pinned from the code before this change, for the same inputs.
+    expect(fp(rankingContext)).toBe("f0830b426d4fcd2f");
+    expect(fp({ ...rankingContext, outcomeLessons: [] })).toBe("f0830b426d4fcd2f");
+  });
+
+  it("a new lesson changes it; another delta for an outcome already counted does not", () => {
+    const one = fp({ ...rankingContext, outcomeLessons: [lesson] });
+    expect(one).not.toBe("f0830b426d4fcd2f");
+    expect(fp({ ...rankingContext, outcomeLessons: [{ ...lesson, deltaIds: ["delta-1", "delta-2"] }] })).toBe(one);
+    expect(fp({ ...rankingContext, outcomeLessons: [lesson, { ...lesson, outcomeId: "outcome-2" }] })).not.toBe(one);
   });
 });

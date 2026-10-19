@@ -4651,6 +4651,77 @@ await ensureRequiredIndex(
   ["tenantId", "canonicalOperatorId", "status", "businessDate"],
   "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_operator (tenantId,canonicalOperatorId,status,businessDate)"
 );
+// Stage 1 · 1B: every goal-cycle occurrence decides afresh; an open objective
+// for the same run, selection and business date is reused, not re-minted, and
+// records the latest decision that re-selected it. Additive and nullable. The
+// numbered file is replayed once on fresh databases; here each statement runs
+// only when its column or index is missing, so this boot stays idempotent.
+const [objectiveLatestDecisionColumnDdl, objectiveLatestDecisionIndexDdl] = (
+  await readFile(new URL("../drizzle/0137_goal_cycle_objective_latest_decision.sql", import.meta.url), "utf8")
+)
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(sql => sql.trim())
+  .filter(Boolean);
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "latestDecisionId",
+  objectiveLatestDecisionColumnDdl
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_latest_decision",
+  ["tenantId", "latestDecisionId"],
+  objectiveLatestDecisionIndexDdl
+);
+// Phase 2 · Slice A: durable Work Thread identity. One table plus a nullable
+// thread id on decisions and objectives. Additive; existing rows stay
+// unthreaded and keep the 1B same-day reuse rule.
+await applyIdempotentSqlFile("../drizzle/0138_work_threads.sql", "Work threads");
+await assertRequiredColumns("work_threads", [
+  "id", "tenantId", "opportunityKey", "opportunityKeyHash", "generation", "openSlot",
+  "status", "kind", "opportunityJson", "title", "createdByOperatorId", "firstSourceRef",
+  "lastSourceRef", "lastObservedAt", "closedReason", "closedAt", "createdAt", "updatedAt",
+]);
+await ensureRequiredColumn(
+  "goal_cycle_objectives",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_objectives ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_objectives",
+  "idx_goal_cycle_objectives_work_thread",
+  ["tenantId", "workThreadId", "status"],
+  "ALTER TABLE goal_cycle_objectives ADD KEY idx_goal_cycle_objectives_work_thread (tenantId,workThreadId,status)"
+);
+await ensureRequiredColumn(
+  "goal_cycle_decisions",
+  "workThreadId",
+  "ALTER TABLE goal_cycle_decisions ADD COLUMN workThreadId VARCHAR(36) NULL"
+);
+await ensureRequiredIndex(
+  "goal_cycle_decisions",
+  "idx_goal_cycle_decisions_work_thread",
+  ["tenantId", "workThreadId", "createdAt"],
+  "ALTER TABLE goal_cycle_decisions ADD KEY idx_goal_cycle_decisions_work_thread (tenantId,workThreadId,createdAt)"
+);
+// Phase 2 · Slices C and D: durable observation-bridge obligations. A failed
+// bridge from a completed commitment or a paid order is owned by a row with
+// its status, error and next attempt, never only a "deferred" log line.
+await applyIdempotentSqlFile("../drizzle/0139_observation_bridge_obligations.sql", "Observation bridge obligations");
+await assertRequiredColumns("observation_bridge_obligations", [
+  "id", "tenantId", "sourceKind", "sourceKey", "status", "payloadJson", "resultJson",
+  "attemptCount", "nextAttemptAt", "leaseOwner", "leaseExpiresAt", "lastError",
+  "resolvedAt", "createdAt", "updatedAt",
+]);
+// Phase 2 · Slice B: operator decisions that settle the operating mandate
+// (which goal comes first, a confirmed or dismissed focus, a stated method).
+await applyIdempotentSqlFile("../drizzle/0140_operating_mandate_decisions.sql", "Operating mandate decisions");
+await assertRequiredColumns("operating_mandate_decisions", [
+  "id", "tenantId", "canonicalOperatorId", "kind", "subjectKey", "payloadJson", "status",
+  "activeSlot", "supersedesId", "supersededById", "decidedByOpenId", "source", "decidedAt",
+  "createdAt", "updatedAt",
+]);
 
 await ensureRequiredIndex(
   "goal_cycle_outcomes",
@@ -5537,5 +5608,17 @@ await assertRequiredColumns("personal_outreach_replies", [
   "reported_at",
   "created_at",
 ]);
+// 0141: obligations are keyed by (tenantId, id); an id is unique only within a
+// tenant. Rows, ids and references are unchanged. Applied once, verified after.
+{
+  const [tenantKeyDdl] = await readSqlStatements("../drizzle/0141_claire_proactive_obligations_tenant_key.sql");
+  const label = "claire_proactive_obligations primary key (tenantId, id)";
+  const primary = await getIndexColumns("claire_proactive_obligations", "PRIMARY");
+  if (primary.join(",") === "tenantId,id") console.log("→ already exists, skipping:", label);
+  else await runRequired(tenantKeyDdl, label);
+  const verified = await getIndexColumns("claire_proactive_obligations", "PRIMARY");
+  if (verified.join(",") !== "tenantId,id")
+    throw new Error(`claire_proactive_obligations primary key is (${verified.join(", ")}); expected (tenantId, id)`);
+}
 console.log("\nMigration complete.");
 await conn.end();

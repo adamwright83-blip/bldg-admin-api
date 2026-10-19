@@ -1,5 +1,6 @@
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { classifyObjectiveExecution } from "../../../shared/objectiveExecution";
+import { describeSalesHoldScope, salesHoldCovers } from "../../../shared/claireProactive";
 import {
   GOAL_CONTRIBUTION_POLICY_VERSION,
   goalContribution,
@@ -12,8 +13,46 @@ import type {
   RankFactor,
   TimePocket,
 } from "../../../shared/missionDirector";
+import { NON_PRIMARY_OUTCOME_WEIGHT, outcomeContribution } from "../../../shared/operatingMandate";
 import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
-import type { RankingContext, RankingOpenTask } from "./missionRank";
+import {
+  MANDATE_ALIGNMENT_POLICY_VERSION,
+  usesMandateAlignment,
+  type RankingContext,
+  type RankingOpenTask,
+} from "./missionRank";
+
+/**
+ * How directly work moves the operator's goals. With several goals (or one
+ * limited to an area) every goal counts: a goal limited to an area only for
+ * work in that area, and a goal not confirmed as first at a reduced weight
+ * while another is. The strongest alignment is the factor; none is invented.
+ */
+function mandateAlignment(context: RankingContext, candidate: WeeklyGrowthCandidate): RankFactor {
+  const outcomes = context.outcomes ?? [];
+  const hasPrimary = outcomes.some(o => o.primary);
+  let best: { outcome: (typeof outcomes)[number]; tier: string; reason: string; effect: number; weighted: boolean } | null = null;
+  for (const outcome of outcomes) {
+    const contribution = outcomeContribution(
+      { baseMetricKey: outcome.metricKey, area: outcome.area },
+      { motion: candidate.motion, area: candidate.scopeArea ?? null }
+    );
+    if (!contribution) continue;
+    const weighted = hasPrimary && !outcome.primary;
+    const effect = Math.round(contribution.effect * (weighted ? NON_PRIMARY_OUTCOME_WEIGHT : 1));
+    if (!best || effect > best.effect || (effect === best.effect && outcome.primary && !best.outcome.primary))
+      best = { outcome, tier: contribution.tier, reason: contribution.reason, effect, weighted };
+  }
+  if (!best)
+    return factor("macro_goal_alignment", false, `${MANDATE_ALIGNMENT_POLICY_VERSION}: no active goal covers this work's area`, 0, "high");
+  return factor(
+    "macro_goal_alignment",
+    `${best.outcome.metricKey}${best.outcome.area ? `@${best.outcome.area}` : ""}:${candidate.motion}:${best.tier}${best.weighted ? ":not_primary" : ""}`,
+    `${MANDATE_ALIGNMENT_POLICY_VERSION}: ${best.reason}${best.weighted ? "; another goal is confirmed as first" : ""} (${best.outcome.id})`,
+    best.effect,
+    "high"
+  );
+}
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {
   emergency: 400,
@@ -123,6 +162,18 @@ function protectedPrimaryMatches(
 /** Overdue work older than this no longer receives an urgency bonus. */
 export const STALE_OVERDUE_DAYS = 14;
 
+/**
+ * Learned outcomes move ranking within fixed bounds. A contradicted hypothesis
+ * is direct evidence against this work and demotes it hard; a supported result
+ * is only consistent with the work (no causal claim, BEHAVIORAL_SCIENCE_FOUNDATION
+ * §2.3), so its boost is small and capped below a direct goal contribution.
+ * Learning demotes; it never forbids work the operator may still choose.
+ */
+export const OUTCOME_LEARNING_CONTRADICTED_EFFECT = -300;
+export const OUTCOME_LEARNING_MAX_DEMOTION = -600;
+export const OUTCOME_LEARNING_SUPPORTED_EFFECT = 60;
+export const OUTCOME_LEARNING_MAX_BOOST = 120;
+
 function rankOne(input: {
   candidate: WeeklyGrowthCandidate;
   campaigns: readonly GrowthCampaign[];
@@ -176,6 +227,15 @@ function rankOne(input: {
     !protectedPrimaryMatches(candidate, input.protectedSourceIds)
   ) {
     blockedReasons.push("DISCRETIONARY_TIME_PROTECTED");
+  }
+
+  // The operator held this kind of sales work through this date.
+  const salesHold = input.context.salesHold;
+  if (salesHoldCovers(salesHold, input.context.businessDate, candidate.motion)) {
+    blockedReasons.push("SALES_HELD_BY_OPERATOR");
+    warnings.push(
+      `You asked to hold ${describeSalesHoldScope(salesHold!.scope)} through ${salesHold!.until}${salesHold!.reason ? ` ("${salesHold!.reason}")` : ""}; this is not ranked for that day.`
+    );
   }
 
   const knownPocket = bestKnownPocket(candidate, input.pockets);
@@ -276,19 +336,57 @@ function rankOne(input: {
     ? goalContribution(input.context.macroGoal.metricKey, candidate.motion)
     : null;
   factors.push(
-    factor(
-      "macro_goal_alignment",
-      contribution ? `${input.context.macroGoal!.metricKey}:${candidate.motion}:${contribution.tier}` : false,
-      contribution
-        ? `${GOAL_CONTRIBUTION_POLICY_VERSION}: ${contribution.reason}`
-        : "no active macro goal",
-      contribution?.effect ?? 0,
-      input.context.macroGoal ? "high" : "unknown"
-    )
+    usesMandateAlignment(input.context)
+      ? mandateAlignment(input.context, candidate)
+      : factor(
+          "macro_goal_alignment",
+          contribution ? `${input.context.macroGoal!.metricKey}:${candidate.motion}:${contribution.tier}` : false,
+          contribution
+            ? `${GOAL_CONTRIBUTION_POLICY_VERSION}: ${contribution.reason}`
+            : "no active macro goal",
+          contribution?.effect ?? 0,
+          input.context.macroGoal ? "high" : "unknown"
+        )
   );
+
+  const lessons = (input.context.outcomeLessons ?? []).filter(lesson =>
+    candidateSourceIds(candidate).has(lesson.selectedRef)
+  );
+  if (lessons.length > 0) {
+    const contradicted = lessons.filter(lesson => lesson.result === "contradicted").length;
+    const supported = lessons.length - contradicted;
+    const effect =
+      Math.max(OUTCOME_LEARNING_MAX_DEMOTION, contradicted * OUTCOME_LEARNING_CONTRADICTED_EFFECT) +
+      Math.min(OUTCOME_LEARNING_MAX_BOOST, supported * OUTCOME_LEARNING_SUPPORTED_EFFECT);
+    factors.push(
+      factor(
+        "outcome_learning_delta",
+        `contradicted:${contradicted},supported:${supported}`,
+        `goal_cycle_learned_deltas for outcomes ${lessons.map(lesson => lesson.outcomeId).join(",")}`,
+        effect,
+        contradicted > 0 ? "high" : "low"
+      )
+    );
+    if (contradicted > 0) {
+      warnings.push("A verified outcome contradicted this work's hypothesis; it is demoted, not forbidden.");
+    }
+  }
 
   if (candidate.sourceKind === "strategy_diagnosis") {
     factors.push(factor("evidence_linked_strategy", candidate.observedSignals.find(s => s.label === "strategic_driver")?.value ?? null, candidate.provenance.sourceIds.join(","), 100, "low"));
+    // A challenge to the operator's stated method is carried, not scored:
+    // the operator decides between the approaches, Mission Director does not.
+    const challenge = candidate.observedSignals.find(s => s.label === "strategic_challenge");
+    if (challenge)
+      factors.push(
+        factor(
+          "strategic_challenge",
+          challenge.value,
+          "strategic diagnosis: an evidence-backed alternative is prepared for the operator to decide on; it does not change this ranking",
+          0,
+          "low"
+        )
+      );
   }
 
   factors.push(
@@ -344,6 +442,7 @@ function rankOne(input: {
     sourceKind: candidate.sourceKind,
     motion: candidate.motion,
     sourceRefs: candidate.sourceRefs,
+    ...(candidate.workThreadId ? { workThreadId: candidate.workThreadId } : {}),
     score,
     confidence,
     executionType: execution.executionType,
@@ -372,6 +471,7 @@ function selectionFrom(
     sourceKind: evidence.sourceKind,
     motion: evidence.motion,
     sourceRefs: evidence.sourceRefs,
+    ...(evidence.workThreadId ? { workThreadId: evidence.workThreadId } : {}),
     executionType: evidence.executionType,
     rankEvidence: evidence,
   };

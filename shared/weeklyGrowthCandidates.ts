@@ -139,6 +139,19 @@ export type WeeklyGrowthCandidate = {
    * authority; Mission Director owns all priority effects.
    */
   rankReasons: WeeklyGrowthRankReason[];
+  /**
+   * The durable Work Thread this work already belongs to: strategy work from
+   * its diagnosis, approved work from the commitment that carries it. Absent
+   * when the source names none; the goal cycle then resolves one from `id`.
+   */
+  workThreadId?: string;
+  /** Records grouped into this candidate named different threads; no thread is guessed. */
+  conflictingWorkThreadIds?: string[];
+  /**
+   * The neighborhood this work is in (a normalized area key), when its source
+   * scopes it. Work without one is never credited to a goal limited to an area.
+   */
+  scopeArea?: string;
 };
 
 export type WeeklyGrowthSourceReport =

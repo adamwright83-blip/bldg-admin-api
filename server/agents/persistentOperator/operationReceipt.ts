@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import {
   agentEvents,
   claireProactiveObligations,
@@ -134,7 +134,11 @@ export async function operationReceipt(input: {
           .where(
             and(
               eq(goalCycleObjectives.tenantId, input.tenantId),
-              eq(goalCycleObjectives.decisionId, input.decisionId)
+              // The objective this decision created or (Stage 1 · 1B) re-selected.
+              or(
+                eq(goalCycleObjectives.decisionId, input.decisionId),
+                eq(goalCycleObjectives.latestDecisionId, input.decisionId)
+              )
             )
           )
           .limit(1)

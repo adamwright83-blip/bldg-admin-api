@@ -2,8 +2,10 @@
  * Deterministic Mission Director ranking. LLM never ranks.
  * campaignId is the final equal-score tie-break only.
  */
+import { NON_PRIMARY_OUTCOME_WEIGHT } from "../../../shared/operatingMandate";
 import type { GrowthCampaign, MissionCategory } from "../../campaignLibrary/campaignLibraryTypes";
 import type { MissionRankEvidence, RankFactor, TimePocket } from "./missionDirectorTypes";
+import type { SalesHoldScope } from "../../../shared/claireProactive";
 
 export type RankingOpenTask = {
   id?: string;
@@ -19,12 +21,56 @@ export type RankingMacroGoal = {
   objective: string;
 };
 
+/**
+ * A settled goal-cycle outcome the learning layer has learned from, tied to the
+ * work it judged. Only outcomes that read as supported or contradicted are
+ * lessons; an inconclusive outcome says nothing about the work and is left out.
+ */
+export type RankingOutcomeLesson = {
+  outcomeId: string;
+  /** The judged objective's selectedRef: the candidate or obligation id it was selected as. */
+  selectedRef: string;
+  result: "supported" | "contradicted";
+  deltaIds: readonly string[];
+};
+
+/** An active goal from the operating mandate, as ranking sees it. */
+export type RankingOutcome = {
+  id: string;
+  /** The base metric; an area goal's scope is `area`. */
+  metricKey: string;
+  area: string | null;
+  primary: boolean;
+  statement: string;
+};
+
+/** Bump when mandate-aware alignment changes, so stored Mission Director plans recompute. */
+export const MANDATE_ALIGNMENT_POLICY_VERSION = "mandate-alignment-v1";
+
+/**
+ * Whether ranking must use the mandate's goals rather than the single legacy
+ * goal: several goals, or one limited to an area. One business-wide goal ranks
+ * exactly as it always has.
+ */
+export function usesMandateAlignment(context: Pick<RankingContext, "outcomes">): boolean {
+  const outcomes = context.outcomes ?? [];
+  return outcomes.length > 1 || outcomes.some(o => o.area !== null);
+}
+
 export type RankingContext = {
   businessDate: string;
+  /** The goal work is addressed to: the confirmed primary, or the only goal. Null when several are active and none is first. */
   macroGoal: RankingMacroGoal | null;
+  /** Every active goal in the operator's operating mandate. */
+  outcomes?: readonly RankingOutcome[];
+  mandateRevision?: string | null;
   openTasks: readonly RankingOpenTask[];
   /** Explicit operator campaign priority when stored on the campaign row. */
   campaignPriorityById?: Record<string, number>;
+  /** Learned outcome lessons for this operator, oldest first. */
+  outcomeLessons?: readonly RankingOutcomeLesson[];
+  /** Set only when the operator held sales work through `businessDate`. */
+  salesHold?: { until: string; reason: string | null; scope: readonly SalesHoldScope[] } | null;
 };
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {
@@ -133,7 +179,32 @@ function rankOne(
   }
 
   const goal = context.macroGoal;
-  if (goal?.metricKey === "active_customers" && ACTIVE_CUSTOMER_CATEGORIES.has(campaign.missionCategory)) {
+  // Campaigns carry no area: only business-wide goals can be served by one.
+  const mandateGoal = usesMandateAlignment(context)
+    ? (context.outcomes ?? [])
+        .filter(o => o.area === null && o.metricKey === "active_customers")
+        .sort((a, b) => Number(b.primary) - Number(a.primary))[0] ?? null
+    : null;
+  if (usesMandateAlignment(context)) {
+    const weight = mandateGoal && (context.outcomes ?? []).some(o => o.primary) && !mandateGoal.primary ? NON_PRIMARY_OUTCOME_WEIGHT : 1;
+    factors.push(
+      mandateGoal && ACTIVE_CUSTOMER_CATEGORIES.has(campaign.missionCategory)
+        ? factor(
+            "macro_goal_alignment",
+            `${mandateGoal.metricKey}:${campaign.missionCategory}${weight < 1 ? ":not_primary" : ""}`,
+            `${MANDATE_ALIGNMENT_POLICY_VERSION}: operator_macro_goals.metricKey + goldline_campaigns.missionCategory (${mandateGoal.id})`,
+            Math.round(150 * weight),
+            "high"
+          )
+        : factor(
+            "macro_goal_alignment",
+            campaign.missionCategory,
+            `${MANDATE_ALIGNMENT_POLICY_VERSION}: no active business-wide goal this campaign category moves`,
+            0,
+            "high"
+          )
+    );
+  } else if (goal?.metricKey === "active_customers" && ACTIVE_CUSTOMER_CATEGORIES.has(campaign.missionCategory)) {
     factors.push(
       factor(
         "macro_goal_alignment",

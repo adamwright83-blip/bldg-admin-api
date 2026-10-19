@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GrowthCampaign } from "../../campaignLibrary/campaignLibraryTypes";
 import type { WeeklyGrowthCandidate } from "../../../shared/weeklyGrowthCandidates";
 import { rankMissionDirectorWork } from "./rankableWork";
+import { SALES_HOLD_SCOPES, type SalesHoldScope } from "../../../shared/claireProactive";
 
 function candidate(
   id: string,
@@ -353,5 +354,94 @@ describe("ranking by contribution to the operator's goal", () => {
     expect(noGoal.ranking[0].factors.find(f => f.name === "macro_goal_alignment")).toMatchObject({ effect: 0, value: false });
     const reputation = candidate("reviews", "Ask for reviews", desk, { motion: "reputation" });
     expect(goalEffect(rank("active_customers", [reputation]), "reviews")?.effect).toBe(0);
+  });
+
+  it("an operator's sales hold blocks the sales work it names for that day; operations and investigation are never held", () => {
+    const desk = "Call the customer and record the answer";
+    const followUp = candidate("follow", "Follow up with the office manager", "Cold call the office manager", { observedDueDate: "2026-10-05" });
+    const pitch = candidate("pitch", "Pitch the building", "Cold call the property manager", { motion: "account_acquisition" });
+    const hangers = candidate("hangers", "Door hangers on Sunset", "Cold call the property manager", { motion: "territory_expansion" });
+    const recovery = candidate("winback", "Win back Ines", desk, { sourceKind: "customer_recovery", motion: "customer_recovery" });
+    const reviews = candidate("reviews", "Ask for reviews", desk, { motion: "reputation" });
+    const audit = candidate("audit", "Audit lapsed customers", desk, { motion: "investigation" });
+    const all = [followUp, pitch, hangers, recovery, reviews, audit];
+    const plan = (salesHold: { until: string; reason: string | null; scope: SalesHoldScope[] } | null) =>
+      rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context: { ...context, salesHold }, pockets: [] });
+    const blocked = (p: ReturnType<typeof plan>) =>
+      p.ranking.filter(r => r.blockedReasons.includes("SALES_HELD_BY_OPERATOR")).map(r => r.workId).sort();
+
+    // "No sales today": acquisition, promotion and win-backs alike.
+    const all4 = plan({ until: "2026-10-05", reason: "Just today, no sales until payroll is finished.", scope: [...SALES_HOLD_SCOPES] });
+    expect(blocked(all4)).toEqual(["follow", "hangers", "pitch", "reviews", "winback"]);
+    expect(all4.ranking.find(r => r.workId === "pitch")!.warnings.join(" ")).toContain("hold all sales work through 2026-10-05");
+    expect(all4.primary?.workId).toBe("audit");
+
+    // "No new-customer outreach today": win-backs and review asks still rank.
+    const acquisition = plan({ until: "2026-10-05", reason: "No new-customer outreach today.", scope: ["acquisition"] });
+    expect(blocked(acquisition)).toEqual(["follow", "hangers", "pitch"]);
+    expect(acquisition.ranking.find(r => r.workId === "follow")!.warnings.join(" ")).toContain("hold new-customer outreach through");
+
+    // A hold that ended yesterday holds nothing; no hold ranks exactly as before.
+    expect(blocked(plan({ until: "2026-10-04", reason: null, scope: [...SALES_HOLD_SCOPES] }))).toEqual([]);
+    expect(plan(null)).toEqual(rankMissionDirectorWork({ candidates: all, campaigns: [], campaignPrepReady: {}, context, pockets: [] }));
+    expect(plan(null).primary?.workId).toBe("follow");
+  });
+});
+
+describe("Mission Director ranking consumes learned outcomes (Stage 1 Phase 3 e)", () => {
+  const desk = "Call the customer";
+  const x = candidate("work-x", "Call customer X", desk, {
+    sourceRefs: [
+      { sourceKind: "commercial_follow_up", sourceType: "commercial_follow_up", sourceId: "work-x" },
+      { sourceKind: "proactive_obligation", sourceType: "proactive_obligation", sourceId: "obligation-x" },
+    ],
+    alreadyInFlight: true,
+  });
+  const y = candidate("work-y", "Call customer Y", desk, { observedDueDate: "2026-10-05" });
+  const lesson = (selectedRef: string, result: "supported" | "contradicted", n: number) => ({
+    outcomeId: `outcome-${selectedRef}-${result}-${n}`,
+    selectedRef,
+    result,
+    deltaIds: [`delta-${n}`],
+  });
+  const rank = (outcomeLessons?: ReturnType<typeof lesson>[]) => {
+    const plan = rankMissionDirectorWork({
+      candidates: [x, y],
+      campaigns: [],
+      campaignPrepReady: {},
+      context: outcomeLessons ? { ...context, outcomeLessons } : context,
+      pockets: [],
+    });
+    if (plan.status !== "ranked") throw new Error(plan.status);
+    return plan;
+  };
+  const learning = (plan: ReturnType<typeof rank>, id: string) =>
+    plan.ranking.find(item => item.workId === id)?.factors.find(f => f.name === "outcome_learning_delta");
+
+  it("with no lessons, ranking is exactly what it was", () => {
+    const before = rank();
+    expect(before.primary.workId).toBe("work-x");
+    expect(rank([])).toEqual(before);
+    expect(rank([lesson("someone-else", "contradicted", 1)])).toEqual(before);
+    expect(learning(before, "work-x")).toBeUndefined();
+  });
+
+  it("a contradicted lesson demotes the work behind an eligible alternative, without forbidding it", () => {
+    const plan = rank([lesson("work-x", "contradicted", 1)]);
+    expect(plan.primary.workId).toBe("work-y");
+    const demoted = plan.ranking.find(item => item.workId === "work-x")!;
+    expect(demoted.eligible).toBe(true);
+    expect(learning(plan, "work-x")).toMatchObject({ effect: -300, value: "contradicted:1,supported:0", confidence: "high" });
+    // Matched through the obligation it was selected as, too, and bounded.
+    const repeated = rank([1, 2, 3].map(n => lesson("obligation-x", "contradicted", n)));
+    expect(learning(repeated, "work-x")?.effect).toBe(-600);
+  });
+
+  it("a supported lesson gives a small boost, capped", () => {
+    expect(learning(rank([lesson("work-y", "supported", 1)]), "work-y")).toMatchObject({ effect: 60, confidence: "low" });
+    const capped = rank([1, 2, 3, 4].map(n => lesson("work-y", "supported", n)));
+    expect(learning(capped, "work-y")?.effect).toBe(120);
+    const score = (plan: ReturnType<typeof rank>) => plan.ranking.find(item => item.workId === "work-y")!.score;
+    expect(score(capped) - score(rank())).toBe(120);
   });
 });

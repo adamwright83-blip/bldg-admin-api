@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   legacyDayforgeSaasTenants,
   macroGoalRuns,
+  operatorMacroGoals,
   type MacroGoalRun as MacroGoalRunRow,
 } from "../../../drizzle/schema";
 import {
@@ -232,6 +233,37 @@ const databasePersistence: MacroGoalRunPersistence = {
               inArray(macroGoalRuns.status, ["active", "paused"])
             )
           );
+        // A run whose goal the operator replaced or closed (an explicit
+        // replacement can change the metric) stops with its goal.
+        const orphaned = await tx
+          .select({ id: macroGoalRuns.id })
+          .from(macroGoalRuns)
+          .innerJoin(
+            operatorMacroGoals,
+            and(
+              eq(operatorMacroGoals.tenantId, macroGoalRuns.tenantId),
+              eq(operatorMacroGoals.id, macroGoalRuns.macroGoalId)
+            )
+          )
+          .where(
+            and(
+              eq(macroGoalRuns.tenantId, input.tenantId),
+              eq(macroGoalRuns.canonicalOperatorId, input.canonicalOperatorId),
+              inArray(macroGoalRuns.status, ["active", "paused"]),
+              ne(operatorMacroGoals.status, "active")
+            )
+          );
+        if (orphaned.length)
+          await tx
+            .update(macroGoalRuns)
+            .set({ status: "superseded", nextEvaluationAt: null })
+            .where(
+              and(
+                eq(macroGoalRuns.tenantId, input.tenantId),
+                inArray(macroGoalRuns.id, orphaned.map(run => run.id)),
+                inArray(macroGoalRuns.status, ["active", "paused"])
+              )
+            );
 
         await tx.insert(macroGoalRuns).values({
           id: input.id,

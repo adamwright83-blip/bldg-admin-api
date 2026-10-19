@@ -40,13 +40,19 @@ export async function listActiveDayLineItems(input: {
   operatorUserId?: string;
   businessDate: string;
 }): Promise<DayLineItemRef[]> {
-  await ensureAdamBoard({
-    tenantId: input.tenantId,
-    operatorUserId: input.operatorUserId ?? input.actorId,
-    actorId: input.actorId,
-  }).catch(error => {
-    console.warn("[ClaireProactive] board sweep skipped", error instanceof Error ? error.message : error);
-  });
+  // The board reads the operator's doctrine (their "no sales today") and files
+  // obligations by open id. A Day Director actor id is another identity space:
+  // swept under it, the hold is never found and sales follow-ups reach the Day
+  // Line on a held day. Without the operator's open id, skip the sweep.
+  if (input.operatorUserId) {
+    await ensureAdamBoard({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      actorId: input.actorId,
+    }).catch(error => {
+      console.warn("[ClaireProactive] board sweep skipped", error instanceof Error ? error.message : error);
+    });
+  }
   const actorIds = Array.from(
     new Set([input.actorId, input.operatorUserId].filter((value): value is string => Boolean(value)))
   );

@@ -5,15 +5,28 @@ import {
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
 import { getGoalCycleObjective } from "../agents/persistentOperator/objectiveStore";
+import { getWorkThread } from "../agents/persistentOperator/workThreadStore";
+import { interpretStoredOutcome } from "../agents/persistentOperator/outcomeInterpretation";
 import { loadStrategicDiagnosis } from "./strategicStore";
 import { getDb } from "../db";
-import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
 import { parseAuthoritativeMetricObservation } from "../agents/persistentOperator/macroGoalRuns";
+import {
+  appliedMandateFocus,
+  mandateOutcome,
+  statedMandateMethod,
+  type MandateFocus,
+} from "../../shared/operatingMandate";
+import {
+  areaLedgerFilters,
+  loadAppliedMandateFocus,
+  loadOperatingMandate,
+} from "../planning/operatingMandate/loadOperatingMandate";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import type { VerticalRegistry } from "./verticalTemplates/registry";
 import { readLaundryMatureRepeatCohort } from "./verticalTemplates/laundryCohortReader";
 import { buildStrategySnapshot } from "./snapshotBuilder";
 import { readCanonicalRevenue } from "../analytics/canonicalRevenue";
+import { salesSourceOutage } from "../analytics/salesSourceOutage";
 import { addDaysYmd } from "../analytics/businessPeriods";
 import { identityKeysFor } from "../analytics/customerIdentityResolution";
 import type { PaidOrderEvent } from "../analytics/paidOrderLedger";
@@ -26,8 +39,6 @@ import type {
   StrategyEvidence,
 } from "../../shared/strategicIntelligence";
 import type { DiagnosisInput } from "./strategicDiagnosis";
-import { listActiveDaphneGoals } from "../agents/daphne/goalsPreferences";
-import { addressScope } from "../claire/business/businessLanguage";
 import {
   defaultBusinessQuery,
   defaultBusinessQueryDeps,
@@ -50,33 +61,51 @@ export async function readStrategicDiagnosisInputs(input: {
     verticalKey,
     now
   );
-  const goal = await getActiveMacroGoalForOperators({
-    tenantId: identity.tenantId,
-    operatorUserIds: [
-      identity.canonicalOpenId,
-      ...identity.aliases.map(a => a.openId),
-    ],
-  });
+  // The operating mandate decides which goal the work is addressed to: the
+  // confirmed primary, or the only active goal. Several active goals with none
+  // confirmed as first are all kept; none is picked by recency.
+  const mandate = await loadOperatingMandate({ identity, now, timeZone: input.timeZone });
+  const leading = mandateOutcome(mandate, mandate.leadingOutcome?.id);
+  const goal = leading
+    ? { id: leading.goalId, objective: leading.statement, metricKey: leading.metricKey, targetValue: leading.target }
+    : null;
   const evidence: StrategyEvidence[] = [];
   let sourceGaps: DiagnosisInput["sourceGaps"];
   let recordedFigures: DiagnosisInput["recordedFigures"];
   const metrics: DiagnosisInput["metrics"] = {};
   const goalRef = goal
     ? `operator_macro_goals:${goal.id}`
-    : `goal_unavailable:${identity.canonicalOperatorId}`;
+    : mandate.outcomes.length
+      ? `operating_mandate:${mandate.revision}`
+      : `goal_unavailable:${identity.canonicalOperatorId}`;
   evidence.push({
     id: goalRef,
     tenantId: identity.tenantId,
-    source: "macroGoalService",
+    source: goal ? "macroGoalService" : "operating mandate",
     capturedAt: now.toISOString(),
     classification: "operator_input",
-    value: goal?.objective ?? null,
+    value: goal?.objective ?? (mandate.outcomes.length ? mandate.outcomes.map(o => o.statement).join("; ") : null),
     unit: "goal",
-    quality: goal ? "complete" : "unavailable",
+    quality: goal || mandate.outcomes.length ? "complete" : "unavailable",
     description: goal
       ? "Operator-declared goal, not measured performance"
-      : "No active operator goal",
+      : mandate.outcomes.length
+        ? "Several operator goals are active and none is confirmed as first"
+        : "No active operator goal",
   });
+  for (const o of mandate.outcomes)
+    if (o.id !== goalRef)
+      evidence.push({
+        id: o.id,
+        tenantId: identity.tenantId,
+        source: "macroGoalService",
+        capturedAt: now.toISOString(),
+        classification: "operator_input",
+        value: o.statement,
+        unit: "goal",
+        quality: "complete",
+        description: "Operator-declared goal, not measured performance",
+      });
   let current: number | null = null;
   if (goal) {
     try {
@@ -310,15 +339,20 @@ export async function readStrategicDiagnosisInputs(input: {
       });
     }
   }
-  // The operator's durable objective (Daphne goal) and its neighborhood evidence.
-  const focus = await readObjectiveFocus({
-    tenantId: identity.tenantId,
-    canonicalOperatorId: identity.canonicalOperatorId,
-    timeZone: input.timeZone,
-    now,
-    outage: Boolean(sourceGaps),
-  }).catch(() => null);
+  // The mandate's applied area focus (confirmed first, else a remark in an
+  // area the business sells in) and that neighborhood's evidence.
+  const appliedFocus = appliedMandateFocus(mandate);
+  const focus = appliedFocus
+    ? await measureObjectiveFocus({
+        tenantId: identity.tenantId,
+        timeZone: input.timeZone,
+        now,
+        outage: Boolean(sourceGaps),
+        focus: appliedFocus,
+      }).catch(() => null)
+    : null;
   if (focus) evidence.push(...focus.evidence);
+  const method = statedMandateMethod(mandate);
   for (const observation of market.observations)
     evidence.push({
       id: observation.id,
@@ -364,23 +398,30 @@ export async function readStrategicDiagnosisInputs(input: {
       tenantId: identity.tenantId,
       objectiveId: row.objectiveId,
     });
-    const diagnosisId = objective?.selectedRef.split(":strategy-")[0];
+    // The lever an outcome speaks to: its objective's strategy Work Thread or,
+    // for a pre-thread objective, the diagnosis its old candidate id named.
+    const thread = objective?.workThreadId
+      ? await getWorkThread({ tenantId: identity.tenantId, threadId: objective.workThreadId })
+      : null;
+    const threadLever = thread?.opportunity.kind === "strategy_opportunity" ? thread.opportunity.lever : null;
+    const diagnosisId = threadLever ? undefined : objective?.selectedRef.split(":strategy-")[0];
     const originating = diagnosisId?.startsWith("diagnosis_")
       ? await loadStrategicDiagnosis(identity, diagnosisId)
       : null;
+    const actionDriver = threadLever ?? originating?.primaryConstraint ?? null;
     if (
-      originating &&
+      actionDriver &&
       objective?.canonicalOperatorId === identity.canonicalOperatorId
     ) {
-      // The existing outcome authority supplies the result. A completed task or
-      // revenue event alone cannot prove the hypothesized mechanism worked.
-      const contradicted = /failed|blocked|hypothesis_contradicted/.test(
-        row.outcomeKind
-      );
+      // The shared outcome reading (also used by learning and the proof
+      // scoreboard). "supported" is a verified revenue or conversion result on
+      // this objective: consistent with the approach, never proof the mechanism
+      // caused it. A completed task alone stays inconclusive.
+      const interpretation = interpretStoredOutcome(row).result;
       outcomes.push({
         id: row.id,
-        actionDriver: originating.primaryConstraint,
-        result: contradicted ? "contradicted" : "inconclusive",
+        actionDriver,
+        result: interpretation === "supported" || interpretation === "contradicted" ? interpretation : "inconclusive",
         evidenceRef: ref,
       });
     }
@@ -396,11 +437,36 @@ export async function readStrategicDiagnosisInputs(input: {
     businessDate: input.businessDate,
     now,
     goal: {
-      statement: goal?.objective ?? "Clarify the operator's goal",
-      metricKey: goal?.metricKey ?? "unavailable",
+      statement:
+        goal?.objective ??
+        (mandate.outcomes.length
+          ? `Goals with none confirmed as first: ${mandate.outcomes.map(o => o.statement).join("; ")}`
+          : "Clarify the operator's goal"),
+      metricKey: goal?.metricKey ?? (mandate.outcomes.length ? "unprioritized_goals" : "unavailable"),
       target: goal ? Number(goal.targetValue) : 0,
       current,
       evidenceRef: goalRef,
+    },
+    mandate: {
+      revision: mandate.revision,
+      outcomes: mandate.outcomes.map(o => ({
+        id: o.id,
+        statement: o.statement,
+        metricKey: o.metricKey,
+        baseMetricKey: o.baseMetricKey,
+        area: o.area,
+        primary: o.primary,
+      })),
+      leadingOutcomeId: mandate.leadingOutcome?.id ?? null,
+      primaryOutcomeId: mandate.primaryOutcomeId,
+      focus: appliedFocus?.area && focus ? { id: appliedFocus.id, area: appliedFocus.area, confirmation: appliedFocus.confirmation } : null,
+      method:
+        method && (method.population === "lapsed_customers" || method.population === "new_customers")
+          ? { id: method.id, lever: method.lever, population: method.population, area: method.area, statement: method.statement, outcomeId: method.outcomeId }
+          : null,
+      unresolvedConflicts: mandate.conflicts.filter(c => c.status === "unresolved").map(c => c.description),
+      notes: mandate.uncertainty,
+      constraints: mandate.constraints.map(c => ({ id: c.id, key: c.key, value: c.value, origin: c.origin, statement: c.statement })),
     },
     evidence,
     metrics,
@@ -476,79 +542,68 @@ export function summarizeComparablePeriods(
   };
 }
 
-/**
- * Pure: the source conditions that mean sales data is actually missing.
- * A source that loaded but has orders without payment receipts is not an outage.
- */
-export function salesSourceOutage(
-  revenue:
-    | { status: "unavailable"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
-    | { status: "ok"; coverage: { cleanCloudStatus: string | null; snapshotRead: boolean; loadedSources: readonly string[]; failedSources: readonly string[] } }
-): string[] {
-  const c = revenue.coverage;
-  if (revenue.status === "unavailable") return ["sales sources could not be read"];
-  return [
-    ...(c.cleanCloudStatus && !["fresh", "not_held"].includes(c.cleanCloudStatus)
-      ? [`CleanCloud ${c.cleanCloudStatus}`]
-      : []),
-    ...c.failedSources
-      .filter(s => !c.loadedSources.includes(s))
-      .map(s => `${s} could not be loaded`),
-    ...(!c.snapshotRead ? ["source coverage contract unreadable"] : []),
-  ];
-}
+export { salesSourceOutage } from "../analytics/salesSourceOutage";
 
 const FOCUS_WINDOW_DAYS = 90;
 
-/** The operator's latest active Daphne goal that names a neighborhood, as business-query address filters. */
+/**
+ * The operator's applied area focus, by the operating mandate's rule: an area
+ * the operator confirmed first, else the newest conversational remark naming
+ * a neighborhood the business has orders in. Returned as business-query
+ * address filters for the area's call sheets and rosters.
+ */
 export async function readObjectiveArea(input: { tenantId: string; canonicalOperatorId: string }) {
-  const goals = await listActiveDaphneGoals({
-    tenantId: input.tenantId,
-    canonicalOperatorId: input.canonicalOperatorId,
-  });
-  const goal = [...goals]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map(g => ({ g, scope: addressScope(g.statement) }))
-    .find(x => x.scope?.addressAny?.length);
-  if (!goal) return null;
-  const label = goal.scope!.addressLabel!.replace(/^in\s+/i, "");
-  const filters = { addressAny: goal.scope!.addressAny, addressLabel: goal.scope!.addressLabel };
-  return { goal, label, filters };
+  const focus = await loadAppliedMandateFocus({ tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId });
+  if (!focus?.area) return null;
+  const filters = areaLedgerFilters(focus.area);
+  if (!filters) return null;
+  const label = filters.addressLabel.replace(/^in\s+/i, "");
+  const scope = { addressAny: filters.addressAny, addressTerms: null, addressLabel: filters.addressLabel };
+  return {
+    goal: { g: { id: focus.id.split(":").slice(1).join(":"), statement: focus.statement, createdAt: focus.effectiveFrom }, scope },
+    label,
+    filters: { addressAny: filters.addressAny, addressLabel: filters.addressLabel },
+    focus,
+  };
 }
 
 /**
- * Reads the operator's latest active Daphne goal that names a neighborhood and
- * measures that neighborhood with the same canonical business query Claire's
- * conversation uses: two equal completed trailing windows, and lapsed customers.
+ * Measures the applied focus's neighborhood with the same canonical business
+ * query Claire's conversation uses: two equal completed trailing windows, and
+ * lapsed customers.
  */
-export async function readObjectiveFocus(input: {
+export async function measureObjectiveFocus(input: {
   tenantId: string;
-  canonicalOperatorId: string;
   timeZone: string;
   now: Date;
   outage: boolean;
+  focus: MandateFocus;
 }): Promise<{ focus: NonNullable<DiagnosisInput["focus"]>; evidence: StrategyEvidence[] } | null> {
-  const area = await readObjectiveArea(input);
+  const area = input.focus.area ? areaLedgerFilters(input.focus.area) : null;
   if (!area) return null;
-  const { goal, label, filters } = area;
+  const label = area.addressLabel.replace(/^in\s+/i, "");
+  const filters = { addressAny: area.addressAny, addressLabel: area.addressLabel };
+  const confirmed = input.focus.confirmation === "confirmed";
   const deps = { ...defaultBusinessQueryDeps, now: () => input.now, timeZone: () => input.timeZone };
   const capturedAt = input.now.toISOString();
-  const goalRef = `daphne_goals:${goal.g.id}`;
+  const goalRef = input.focus.sourceRef;
   const evidence: StrategyEvidence[] = [
     {
       id: goalRef,
       tenantId: input.tenantId,
-      source: "Daphne durable operator goal",
+      source: confirmed ? "Operator mandate decision" : "Daphne conversational remark",
       capturedAt,
       classification: "operator_input",
-      value: goal.g.statement,
+      value: input.focus.statement,
       unit: "operator_objective",
       quality: "complete",
-      description: "Operator's stated objective",
+      description: confirmed
+        ? "Area the operator confirmed to focus on"
+        : "Area the operator mentioned in conversation; not a confirmed goal",
     },
   ];
   const focus: NonNullable<DiagnosisInput["focus"]> = {
-    statement: goal.g.statement,
+    statement: input.focus.statement,
     area: label,
     evidenceRef: goalRef,
     windowDays: FOCUS_WINDOW_DAYS,
@@ -561,6 +616,7 @@ export async function readObjectiveFocus(input: {
     dormantRef: null,
     dormantTop: [],
     figuresVerified: false,
+    confirmation: input.focus.confirmation,
   };
   if (input.outage) return { focus, evidence };
   const revenue = await runBusinessQuery(
@@ -599,7 +655,15 @@ export async function readObjectiveFocus(input: {
       .filter(m => m.matched)
       .sort((a, b) => b.revenueCents - a.revenueCents)
       .slice(0, 5)
-      .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents }));
+      .map(m => ({ name: m.displayName, lastOrderDate: m.lastOrderDate, revenueCents: m.revenueCents, identityKey: m.identityId }));
+    focus.dormantMembers = dormant.data.population.members.map(m => ({
+      identityKey: m.matched ? m.identityId : null,
+      name: m.displayName,
+      lastOrderDate: m.lastOrderDate,
+      revenueCents: m.revenueCents,
+      paidOrders: m.orderCount,
+      matched: m.matched,
+    }));
     focus.dormantRef = `objective_area_dormant:${input.tenantId}:${label}:${capturedAt}`;
     evidence.push({
       id: focus.dormantRef,

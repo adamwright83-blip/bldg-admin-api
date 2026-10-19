@@ -3,6 +3,7 @@ import {
   acceptProposalWithReceipt,
   readDayDirectorCanonicalCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
+import { operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { loadSalesInsight, type SalesInsightArtifact } from "./salesInsights";
 
@@ -46,6 +47,8 @@ type GrowthChallengeDeps = {
 export async function acceptSalesInsightChallenge(input: {
   tenantId: string;
   actorId: string;
+  /** The authenticated operator who said yes. Required for Day Line admission. */
+  operatorUserId: string;
   actorIds?: readonly string[];
   businessDate: string;
   artifact: SalesInsightArtifact;
@@ -72,6 +75,11 @@ export async function acceptSalesInsightChallenge(input: {
   const result = await deps.accept({
     tenantId: input.tenantId, actorId: input.actorId, actorIds: input.actorIds,
     businessDate: input.businessDate, proposal,
+    admission: operatorInstructionAdmission({
+      operatorUserId: input.operatorUserId ?? "",
+      surface: "claire_turn",
+      sourceRef: proposal.promptKey,
+    }),
   });
   if (!result.stored?.id) throw new Error("Growth challenge did not persist");
   const row = await deps.readCommitment({

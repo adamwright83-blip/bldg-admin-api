@@ -5,7 +5,9 @@ import { loadBusinessSourceCoverage } from "../../analytics/sourceCoverage";
 import { getDashboardTimeZone, zonedYmd } from "../../dashboardZoned";
 import { getStrategyGrowthMetrics } from "../growthMetrics";
 import type { AuthoritativeMetricObservation } from "../../agents/persistentOperator/macroGoalRuns";
-import type { MetricReader } from "./registry";
+import { applyLineageFilters } from "../../analytics/businessLineage";
+import { findNeighborhood } from "../../analytics/laNeighborhoods";
+import type { AreaMetricReader, MetricReader } from "./registry";
 
 function trailingThirtyDayPeriod(asOf: Date, timeZone: string) {
   const endYmd = zonedYmd(asOf, timeZone);
@@ -166,3 +168,45 @@ export const laundryNetSalesMetricReader: MetricReader<AuthoritativeMetricObserv
       observedAt: now.toISOString(),
     };
   };
+
+/**
+ * Net sales or paid orders over the trailing 30 days, limited to the tenant's
+ * own admitted orders in one area. Membership is the recorded address carrying
+ * one of the area's ZIP codes or its name (the same rule Claire's area answers
+ * state). The figure is exact only when the ledger is exact and every order in
+ * the window has an address; an order without one could belong to the area,
+ * so the total is then a recorded lower bound and can never complete a goal.
+ */
+function laundryAreaMetricReader(kind: "net_sales" | "paid_orders"): AreaMetricReader<AuthoritativeMetricObservation> {
+  return async ({ tenantId, asOf, timeZone: configuredTimeZone, area }) => {
+    const now = asOf ?? new Date();
+    const timeZone = configuredTimeZone ?? getDashboardTimeZone();
+    const period = trailingThirtyDayPeriod(now, timeZone);
+    const neighborhood = findNeighborhood(area.replace(/_/g, " "));
+    const missing: AuthoritativeMetricObservation = {
+      value: null,
+      observationRef: null,
+      precision: "missing",
+      coverage: "unavailable",
+      observedAt: now.toISOString(),
+    };
+    if (!neighborhood) return missing;
+    const result = await readCanonicalRevenue({ tenantId, from: period.startYmd, to: period.endYmd, timeZone, now });
+    if (result.status === "unavailable") return missing;
+    const inArea = applyLineageFilters(result.includedEvents, {
+      addressAny: [...neighborhood.zips, neighborhood.label.toLowerCase()],
+    });
+    const unaddressed = result.includedEvents.filter(event => !event.address?.trim()).length;
+    const exact = result.mayStateExact && unaddressed === 0;
+    return {
+      value: kind === "net_sales" ? inArea.reduce((sum, event) => sum + event.cents, 0) / 100 : inArea.filter(event => event.cents > 0).length,
+      observationRef: `strategy.${kind === "net_sales" ? "net_sales_per_period" : "paid_orders_per_period"}.area.v1:${tenantId}:${area}:${period.startYmd}:${period.endYmd}:${now.toISOString()}`,
+      precision: exact ? "exact" : "recorded_only",
+      coverage: exact ? "complete" : result.coverage.bookStatus === "stale" ? "stale" : "partial",
+      observedAt: now.toISOString(),
+    };
+  };
+}
+
+export const laundryAreaNetSalesMetricReader = laundryAreaMetricReader("net_sales");
+export const laundryAreaPaidOrdersMetricReader = laundryAreaMetricReader("paid_orders");

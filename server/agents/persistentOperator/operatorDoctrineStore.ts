@@ -2,7 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { json, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import {
   DEFAULT_DOCTRINE,
+  salesHoldOf,
   type DoctrineRules,
+  type SalesHold,
 } from "../../../shared/claireProactive";
 import { getDb } from "../../db";
 import { isMysqlMissingTableError } from "../../mysqlErrors";
@@ -57,6 +59,30 @@ export async function loadOperatorDoctrine(input: {
     if (isMysqlMissingTableError(error)) return DEFAULT_DOCTRINE;
     throw error;
   }
+}
+
+export type OperatorSalesHold = SalesHold & { reason: string | null };
+
+/**
+ * The operator's "no sales today" hold, or null. Claire saves doctrine under
+ * the open id the operator spoke from (an alias, or the canonical id on a
+ * scheduled call), so every open id of the operator is read. The latest hold
+ * wins; holds for the same day cover everything any of them names.
+ * Day Director actor ids are another identity space and never match.
+ */
+export async function loadOperatorSalesHold(input: {
+  tenantId: string;
+  operatorUserIds: readonly string[];
+}): Promise<OperatorSalesHold | null> {
+  let hold = null as OperatorSalesHold | null;
+  for (const operatorUserId of [...new Set(input.operatorUserIds.map(id => id.trim()).filter(Boolean))]) {
+    const rules = await loadOperatorDoctrine({ tenantId: input.tenantId, operatorUserId });
+    const next = salesHoldOf(rules);
+    if (!next) continue;
+    if (!hold || next.until > hold.until) hold = { ...next, reason: rules.skipSalesReason ?? null };
+    else if (next.until === hold.until) hold = { ...hold, scope: [...new Set([...hold.scope, ...next.scope])] };
+  }
+  return hold;
 }
 
 export async function saveOperatorDoctrine(input: {

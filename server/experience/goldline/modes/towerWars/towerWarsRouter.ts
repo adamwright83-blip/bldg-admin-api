@@ -6,6 +6,7 @@ import {
   getTowerWarsToday,
 } from "./towerWarsService";
 import { dayDirectorActorId } from "../../../../planning/dayDirector/dayDirectorActor";
+import { operatorInstructionAdmission } from "../../../../planning/dayDirector/dayLineAdmission";
 import { sandboxFixture, SANDBOX_SCENARIOS } from "@shared/sandboxScenarios";
 import { settleTowerWars } from "@shared/towerWarsSettlement";
 import { isCompletedReplayDate, requireSandboxEnabled, sandboxEnabled } from "./sandboxGate";
@@ -132,6 +133,12 @@ export const towerWarsRouter = router({
         ...input,
         tenantId: ctx.tenantId,
         actorId: dayDirectorActorId(ctx),
+        // The authenticated admin activated this promise in the Tower Wars UI.
+        admission: operatorInstructionAdmission({
+          operatorUserId: dayDirectorActorId(ctx),
+          surface: "tower_wars_ui",
+          sourceRef: `tower_wars.activate_promise:${input.promiseId}`,
+        }),
       })
     ),
 });

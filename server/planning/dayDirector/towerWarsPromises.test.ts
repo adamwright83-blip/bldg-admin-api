@@ -15,6 +15,7 @@ import {
   getDayDirectorState,
 } from "./dayDirectorService";
 import { activateTowerWarsPromise } from "./towerWarsPromiseService";
+import { operatorInstructionAdmission } from "./dayLineAdmission";
 
 type Row = Record<string, any>;
 
@@ -140,6 +141,11 @@ describe("Tower Wars → Day Director actor identity", () => {
       tenantId: "tenant-a",
       promiseId: memory.promise.id,
       actorId,
+      admission: operatorInstructionAdmission({
+        operatorUserId: actorId,
+        surface: "tower_wars_ui",
+        sourceRef: `tower_wars.activate_promise:${memory.promise.id}`,
+      }),
     });
     const state = await getDayDirectorState({
       tenantId: "tenant-a",
@@ -166,6 +172,11 @@ describe("Tower Wars → Day Director actor identity", () => {
       tenantId: "tenant-a",
       promiseId: memory.promise.id,
       actorId,
+      admission: operatorInstructionAdmission({
+        operatorUserId: actorId,
+        surface: "tower_wars_ui",
+        sourceRef: `tower_wars.activate_promise:${memory.promise.id}`,
+      }),
     });
     const commitmentId = String(memory.commitments[0]!.id);
 

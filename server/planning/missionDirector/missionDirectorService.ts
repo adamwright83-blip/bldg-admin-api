@@ -3,8 +3,15 @@
  * See docs/goldline/SLICE_4_MISSION_DIRECTOR.md.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { missionDirectorPlans, opsTasks, legacyDayforgeSaasTenants } from "../../../drizzle/schema";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import {
+  goalCycleLearnedDeltas,
+  goalCycleObjectives,
+  goalCycleOutcomes,
+  missionDirectorPlans,
+  opsTasks,
+  legacyDayforgeSaasTenants,
+} from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import { getFieldToday } from "../../field/fieldTodayService";
@@ -12,7 +19,10 @@ import { listCampaigns } from "../../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoalForOperators } from "../../claire/macroGoalService";
 import { loadDailyCommand } from "../../claire/dailyCommandContract";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
-import { GOAL_CONTRIBUTION_POLICY_VERSION } from "../../../shared/weeklyGrowthCandidates";
+import { addCalendarDays, GOAL_CONTRIBUTION_POLICY_VERSION } from "../../../shared/weeklyGrowthCandidates";
+import { interpretStoredOutcome } from "../../agents/persistentOperator/outcomeInterpretation";
+import { salesHeldOn } from "../../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../../agents/persistentOperator/operatorDoctrineStore";
 import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
@@ -26,7 +36,15 @@ import { explainMissionPlan } from "./explainPlan";
 import { computePrepReadiness } from "./prepReadiness";
 import { rankMissionDirectorWork } from "./rankableWork";
 import { loadWeeklyGrowthCandidates } from "../../weeklyGrowthCandidates/loadWeeklyGrowthCandidates";
-import type { RankingContext, RankingOpenTask } from "./missionRank";
+import {
+  MANDATE_ALIGNMENT_POLICY_VERSION,
+  usesMandateAlignment,
+  type RankingContext,
+  type RankingOpenTask,
+  type RankingOutcome,
+  type RankingOutcomeLesson,
+} from "./missionRank";
+import { loadOperatingMandateForOperatorIds } from "../operatingMandate/loadOperatingMandate";
 import type { MissionDirectorPlan, MissionPlanOutcome } from "./missionDirectorTypes";
 
 function fingerprint(value: unknown): string {
@@ -54,26 +72,110 @@ function missionOperatorIds(input: {
   return [...new Set([input.operatorId, ...(input.operatorIds ?? [])].map(id => id.trim()).filter(Boolean))];
 }
 
-async function loadRankingContext(input: {
+/** Lessons learned longer ago than this stop moving ranking; the learned deltas themselves stay. */
+export const OUTCOME_LEARNING_LOOKBACK_DAYS = 90;
+
+/**
+ * The operator's learned outcomes, one lesson per outcome, read through the
+ * same outcome interpretation learning and the scoreboard use. Only outcomes
+ * the learning layer has already learned from count: ranking never learns.
+ */
+async function loadOutcomeLessons(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  input: { tenantId: string; operatorUserIds: readonly string[]; businessDate: string }
+): Promise<RankingOutcomeLesson[]> {
+  if (input.operatorUserIds.length === 0) return [];
+  const since = new Date(`${addCalendarDays(input.businessDate, -OUTCOME_LEARNING_LOOKBACK_DAYS)}T00:00:00.000Z`);
+  const rows = await db
+    .select({
+      deltaId: goalCycleLearnedDeltas.id,
+      outcomeId: goalCycleLearnedDeltas.outcomeId,
+      selectedRef: goalCycleObjectives.selectedRef,
+      outcomeKind: goalCycleOutcomes.outcomeKind,
+      impactClass: goalCycleOutcomes.impactClass,
+      epistemicStatus: goalCycleOutcomes.epistemicStatus,
+      monetaryValueCents: goalCycleOutcomes.monetaryValueCents,
+    })
+    .from(goalCycleLearnedDeltas)
+    .innerJoin(
+      goalCycleOutcomes,
+      and(
+        eq(goalCycleOutcomes.tenantId, goalCycleLearnedDeltas.tenantId),
+        eq(goalCycleOutcomes.id, goalCycleLearnedDeltas.outcomeId)
+      )
+    )
+    .innerJoin(
+      goalCycleObjectives,
+      and(
+        eq(goalCycleObjectives.tenantId, goalCycleLearnedDeltas.tenantId),
+        eq(goalCycleObjectives.id, goalCycleLearnedDeltas.objectiveId)
+      )
+    )
+    .where(
+      and(
+        eq(goalCycleLearnedDeltas.tenantId, input.tenantId),
+        inArray(goalCycleLearnedDeltas.operatorUserId, [...input.operatorUserIds]),
+        gte(goalCycleLearnedDeltas.createdAt, since)
+      )
+    )
+    .orderBy(asc(goalCycleLearnedDeltas.createdAt), asc(goalCycleLearnedDeltas.id));
+
+  const byOutcome = new Map<string, RankingOutcomeLesson & { deltaIds: string[] }>();
+  for (const row of rows) {
+    const existing = byOutcome.get(row.outcomeId);
+    if (existing) {
+      existing.deltaIds.push(row.deltaId);
+      continue;
+    }
+    const { result } = interpretStoredOutcome(row);
+    if (result !== "supported" && result !== "contradicted") continue;
+    byOutcome.set(row.outcomeId, {
+      outcomeId: row.outcomeId,
+      selectedRef: row.selectedRef,
+      result,
+      deltaIds: [row.deltaId],
+    });
+  }
+  return [...byOutcome.values()];
+}
+export async function loadRankingContext(input: {
   tenantId: string;
   operatorUserIds: readonly string[];
   businessDate: string;
+  timeZone?: string;
 }): Promise<RankingContext> {
   let macroGoal: RankingContext["macroGoal"] = null;
-  try {
-    const goal = await getActiveMacroGoalForOperators({
-      tenantId: input.tenantId,
-      operatorUserIds: input.operatorUserIds,
-    });
-    if (goal) {
-      macroGoal = {
-        metricKey: goal.metricKey,
-        targetValue: Number(goal.targetValue),
-        objective: goal.objective,
-      };
+  let outcomes: RankingOutcome[] | undefined;
+  let mandateRevision: string | null = null;
+  // The operating mandate's goals: every active one, the confirmed primary (or
+  // the only goal) as the goal work is addressed to, none picked by recency.
+  const mandate = await loadOperatingMandateForOperatorIds({
+    tenantId: input.tenantId,
+    operatorUserIds: input.operatorUserIds,
+    timeZone: input.timeZone,
+  }).catch(() => null);
+  if (mandate) {
+    mandateRevision = mandate.revision;
+    outcomes = mandate.outcomes.map(o => ({ id: o.id, metricKey: o.baseMetricKey, area: o.area, primary: o.primary, statement: o.statement }));
+    const leading = mandate.outcomes.find(o => o.id === mandate.leadingOutcome?.id);
+    macroGoal = leading ? { metricKey: leading.metricKey, targetValue: leading.target, objective: leading.statement } : null;
+  } else {
+    // An operator with no canonical identity keeps the single-goal read.
+    try {
+      const goal = await getActiveMacroGoalForOperators({
+        tenantId: input.tenantId,
+        operatorUserIds: input.operatorUserIds,
+      });
+      if (goal) {
+        macroGoal = {
+          metricKey: goal.metricKey,
+          targetValue: Number(goal.targetValue),
+          objective: goal.objective,
+        };
+      }
+    } catch {
+      macroGoal = null;
     }
-  } catch {
-    macroGoal = null;
   }
   const db = await getDb();
   const openTasks: RankingOpenTask[] = [];
@@ -113,7 +215,19 @@ async function loadRankingContext(input: {
       });
     }
   }
-  return { businessDate: input.businessDate, macroGoal, openTasks };
+  const outcomeLessons = db ? await loadOutcomeLessons(db, input) : [];
+  // The operator's "no sales today": held sales work is not ranked for that
+  // date, whichever planner asks.
+  const hold = await loadOperatorSalesHold({ tenantId: input.tenantId, operatorUserIds: input.operatorUserIds });
+  const salesHold = hold && salesHeldOn({ skipSalesUntil: hold.until }, input.businessDate) ? hold : null;
+  return {
+    businessDate: input.businessDate,
+    macroGoal,
+    ...(outcomes ? { outcomes, mandateRevision } : {}),
+    openTasks,
+    outcomeLessons,
+    ...(salesHold ? { salesHold } : {}),
+  };
 }
 
 export function legacyCampaignCompatibilityCandidates<T extends { campaignId: string }>(
@@ -176,6 +290,17 @@ export function computePlanningFingerprint(input: {
       policyVersion: GOAL_CONTRIBUTION_POLICY_VERSION,
       businessDate: input.rankingContext.businessDate,
       macroGoal: input.rankingContext.macroGoal,
+      // Only the goals ranking reads, and only when it reads them (several
+      // goals, or an area goal): one business-wide goal keeps its fingerprint,
+      // and a mandate change ranking ignores never re-plans.
+      ...(usesMandateAlignment(input.rankingContext)
+        ? {
+            mandateAlignment: {
+              policyVersion: MANDATE_ALIGNMENT_POLICY_VERSION,
+              outcomes: (input.rankingContext.outcomes ?? []).map(o => [o.id, o.metricKey, o.area, o.primary]),
+            },
+          }
+        : {}),
       openTasks: input.rankingContext.openTasks.map(task => ({
         id: task.id ?? null,
         taskType: task.taskType,
@@ -184,6 +309,18 @@ export function computePlanningFingerprint(input: {
         dueAt: task.dueAt,
       })),
       campaignPriorityById: input.rankingContext.campaignPriorityById ?? {},
+      // A new lesson re-plans; with none the fingerprint is unchanged, so
+      // stored plans are not recomputed (or re-explained) for nothing.
+      ...(input.rankingContext.outcomeLessons?.length
+        ? {
+            outcomeLearning: fingerprint(
+              input.rankingContext.outcomeLessons.map(lesson => [lesson.outcomeId, lesson.selectedRef, lesson.result])
+            ),
+          }
+        : {}),
+      // Only a hold changes ranking, so a stored pre-hold plan is never reused;
+      // without one the fingerprint is exactly as before.
+      ...(input.rankingContext.salesHold ? { salesHold: input.rankingContext.salesHold } : {}),
     },
     travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
     unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,
@@ -323,6 +460,7 @@ export async function computeMissionPlan(input: {
     tenantId: input.tenantId,
     operatorUserIds,
     businessDate: input.businessDate,
+    timeZone,
   });
   let candidateFeed: Awaited<ReturnType<typeof loadWeeklyGrowthCandidates>> | null = null;
   let candidateFeedFailure: string | null = null;

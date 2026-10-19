@@ -18,6 +18,8 @@ export type CleanCloudPaidObservationExpectation = {
   subjectId: string;
   sourceType: "cleancloud_paid_order";
   sourceRef: string | null;
+  /** The order's economic payment time (`paymentDateUtc ?? paidDateUtc`), ISO. */
+  paymentAt?: string | null;
 };
 
 export function requireCleanCloudTenantId(
@@ -191,6 +193,56 @@ export function cleanCloudPaidObservationReceiptMatches(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * The receipt for a CleanCloud order's current economic revision, or null.
+ *
+ * A paid observation is admitted only when the order's economics change
+ * (enqueueEconomicSnapshot), and it carries the payment time it observed. So
+ * the newest receipt that observed this row's payment time is the one for its
+ * current revision, whichever import batch later re-observed the row. A
+ * re-sync that changes no money (a customer id filled in, the same file
+ * imported again) moves the row to a new batch and correctly admits nothing;
+ * the import batch is provenance of the latest write, not the payment's
+ * identity, so it does not decide which receipt applies.
+ *
+ * The payment time, not recency alone, selects the receipt: the Sales and the
+ * Revenue report describe one order with their own payment times, and each
+ * import of one admits a receipt for its time. The newest receipt for the
+ * order can therefore be the other report's.
+ *
+ * Fail-closed: the newest receipt for this payment time must pass its
+ * admission policy (an older one is never substituted). No receipt for the
+ * row's payment time means no import observed this payment. A row with no
+ * import batch is never admitted (no import observed it).
+ */
+export function currentCleanCloudPaidObservationReceipt(
+  receipts: readonly AuthorityReceipt[],
+  expected: CleanCloudPaidObservationExpectation & { importBatchId?: number | null }
+): AuthorityReceipt | null {
+  if (expected.importBatchId == null || !expected.paymentAt) return null;
+  const paymentAt = Date.parse(expected.paymentAt);
+  if (!Number.isFinite(paymentAt)) return null;
+  const newest = receipts
+    .filter(
+      receipt =>
+        receipt.tenantId === expected.tenantId &&
+        receipt.claimType === "cleancloud_paid_observed" &&
+        receipt.subjectType === "cleancloud_order" &&
+        receipt.subjectId === expected.subjectId &&
+        receipt.sourceType === "cleancloud_paid_order" &&
+        receipt.occurredAt != null &&
+        Date.parse(receipt.occurredAt) === paymentAt
+    )
+    .sort((a, b) => b.admittedAt.localeCompare(a.admittedAt) || b.id.localeCompare(a.id))[0];
+  if (!newest) return null;
+  try {
+    assertAuthorityClaimPolicy(newest);
+    return newest;
+  } catch {
+    return null;
   }
 }
 

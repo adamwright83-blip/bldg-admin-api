@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
   PersistentGrowthScoreboard,
@@ -180,6 +182,16 @@ describe("Persistent Growth Proof & Read Models (Slice K)", () => {
       expect(historyItem.objective?.status).toBe("completed");
       expect(historyItem.outcome.monetaryValueCents).toBe(50000);
       expect(historyItem.learningDelta.deltaType).toBe("boost");
+    });
+  });
+
+  describe("Report reads are read-only (Stage 1 Phase 3 b)", () => {
+    it("the read models never run learning; the worker's sweeper owns it", () => {
+      const source = readFileSync(join(import.meta.dirname, "proofReadModels.ts"), "utf8");
+      expect(source).not.toMatch(/processPendingOutcomeLearnings|evaluateOutcomeAndRecordLearning|recordGoalCycleLearnedDelta/);
+      expect(source).not.toMatch(/\.(insert|update|delete)\(/);
+      const worker = readFileSync(join(import.meta.dirname, "autonomousWorkerService.ts"), "utf8");
+      expect(worker).toMatch(/await processPendingOutcomeLearnings\(\)/);
     });
   });
 });

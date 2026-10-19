@@ -3,7 +3,7 @@ export { NATIVE_CUSTOMER_HISTORY_COLUMNS as NATIVE_ORDER_TRUTH_COLUMNS } from ".
 import { nativeCapturedAmountCents, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
 import type { AuthorityReceipt } from "../platform/authority/authorityReceipt";
 import { eq } from "drizzle-orm";
-import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../integrations/cleancloud/cleancloudPaidEvidence";
+import { currentCleanCloudPaidObservationReceipt, readCleanCloudPaidObservationReceipts } from "../integrations/cleancloud/cleancloudPaidEvidence";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
 import { computeRecencyStatus } from "../../shared/customerStatus";
@@ -456,8 +456,8 @@ export async function loadCustomerOrderTruth(
       byOrder.set(receipt.subjectId, bucket);
     }
     rows.forEach((row, index) => {
-      const admitted = isPaidFlag(row.paid) && (byOrder.get(row.cleancloudOrderId) ?? []).some(receipt =>
-        cleanCloudPaidObservationReceiptMatches(receipt, expectations[index]!));
+      const admitted = isPaidFlag(row.paid) && currentCleanCloudPaidObservationReceipt(byOrder.get(row.cleancloudOrderId) ?? [], { ...expectations[index]!,
+        importBatchId: row.importBatchId, paymentAt: (asDate(row.paymentDateUtc) ?? asDate(row.paidDateUtc))?.toISOString() ?? null }) !== null;
       cleancloudRows.push({ ...row, paid: admitted, totalCents: admitted ? row.totalCents : null });
     });
   }

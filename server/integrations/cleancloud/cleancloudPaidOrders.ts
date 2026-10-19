@@ -165,7 +165,7 @@ export function parseCleanCloudPacificDate(value: unknown): Date | null {
     const meridiem = meridiemRaw?.toUpperCase();
     if (meridiem === "PM" && hour < 12) hour += 12;
     if (meridiem === "AM" && hour === 12) hour = 0;
-    const localIso = `${yearRaw}-${String(Number(monthRaw)).padStart(2, "0")}-${String(Number(dayRaw)).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${minuteRaw}:00`;
+    const localIso = `${yearRaw}-${String(Number(monthRaw)).padStart(2, "0")}-${String(Number(dayRaw)).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(Number(minuteRaw)).padStart(2, "0")}:00`;
     return fromZonedTime(localIso, PACIFIC_TIME_ZONE);
   }
 
@@ -464,27 +464,19 @@ export async function importCleanCloudPaidOrders(input: {
     })
     .where(eq(cleancloudImportBatches.id, importBatchId));
 
-  // Post-import: Bridge paid orders to Persistent Growth Operator ledger
+  // Post-import: paid orders → their goal observations, through durable
+  // obligations. The import is committed; a failure here is owned by the
+  // obligation (or the reconciliation sweep), never just logged as deferred.
   if (paidOrdersToBridge.length > 0) {
     try {
-      const { bridgeCleanCloudPaidOrder } = await import("../../agents/persistentOperator/fieldEventBridge");
-      for (const order of paidOrdersToBridge) {
-        await bridgeCleanCloudPaidOrder({
-          tenantId,
-          cleancloudOrderId: String(order.cleancloudOrderId),
-          cleancloudCustomerId: order.cleancloudCustomerId != null ? String(order.cleancloudCustomerId) : undefined,
-          customerEmail: order.customerEmail ?? undefined,
-          customerPhone: order.customerPhone ?? undefined,
-          paid: true,
-          totalCents: order.totalCents,
-          paidDateUtc: order.paidAt,
-          sourceFileName,
-        }).catch((err: unknown) => {
-          console.warn("[PersistentOperator] cleancloud paid order bridge deferred", err);
-        });
-      }
+      const { paidOrderObservationDeps } = await import("../../agents/persistentOperator/paidOrderObservationBridge");
+      await paidOrderObservationDeps.afterImport({
+        tenantId,
+        cleancloudOrderIds: paidOrdersToBridge.map(order => String(order.cleancloudOrderId)),
+        sourceRef: sourceFileName,
+      });
     } catch (err) {
-      console.warn("[PersistentOperator] failed to load fieldEventBridge for cleancloud import", err);
+      console.warn("[PersistentOperator] paid-order observations will be reconciled by the sweep", err);
     }
   }
 

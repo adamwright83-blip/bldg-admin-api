@@ -7,6 +7,8 @@ import {
 import { invokeLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
 import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
+import { parseSalesHoldInstruction } from "../../../shared/claireProactive";
+import { recordOperatorSalesHoldInstruction } from "../../agents/persistentOperator/salesHoldInstruction";
 import type { ShowrunnerBriefing } from "./showrunnerBriefing";
 import { driverDayLineStopIds } from "./driverDayLineCall";
 import { contactEditsForAnalysisSelection,
@@ -18,6 +20,36 @@ import {
   type DebriefDevelopment,
   type DebriefMissionUpdate,
 } from "./showrunnerDebrief";
+
+/**
+ * The operator's "no sales today" or "resume sales" on this call, recorded in
+ * their doctrine, or null when the utterance is neither. Only the sales hold is
+ * taken here: any other phrase ("skip the pickup today") falls through to the
+ * normal turn. Dated on the call's business date, which every planner reads.
+ */
+export async function captureShowrunnerSalesHold(
+  state: Pick<ShowrunnerCallState, "tenantId" | "operatorUserId" | "businessDate" | "timeZone">,
+  utterance: string,
+  now: Date = new Date()
+): Promise<string | null> {
+  const instruction = parseSalesHoldInstruction(utterance);
+  if (!instruction) return null;
+  try {
+    return await recordOperatorSalesHoldInstruction({
+      tenantId: state.tenantId,
+      operatorUserId: state.operatorUserId,
+      instruction,
+      utterance,
+      now,
+      businessDate: state.businessDate,
+      fallbackTimeZone: state.timeZone,
+    });
+  } catch {
+    return instruction.kind === "hold"
+      ? "I couldn't save that just now, so sales work is not on hold. Tell me again in a moment."
+      : "I couldn't save that just now, so sales work is still on hold. Tell me again in a moment.";
+  }
+}
 
 /**
  * Daily showrunner conversation: morning readiness and evening debrief. Every
@@ -191,6 +223,8 @@ export async function runShowrunnerTurn(input: {
   approve?: typeof approveShowrunnerReplan;
   replan?: typeof replanFromShowrunnerCall;
   deskReplan?: typeof replanFromDeskEdits;
+  /** Saves an operator's "no sales today"; injectable for tests. */
+  salesHold?: typeof captureShowrunnerSalesHold;
   now?: Date;
   /**
    * Claire's work ledger owns work in this conversation (server/claire/workLedger):
@@ -241,6 +275,10 @@ export async function runShowrunnerTurn(input: {
       state,
     };
   }
+  // "No sales today" and "resume sales" said on a scheduled call or in Desk Comms are recorded, as in open conversation.
+  const salesHold = await (input.salesHold ?? captureShowrunnerSalesHold)(state, input.utterance, now);
+  if (salesHold) return { speak: salesHold, end: false, state, saved: [salesHold] };
+
   // The same read-only conversation capability is available on OPEN COMMS and scheduled calls.
   // A pending proposal approval above retains priority; analytical turns cannot record outcomes or plan edits.
   if (

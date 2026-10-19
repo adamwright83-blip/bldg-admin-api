@@ -12,7 +12,6 @@ import {
 } from "../../strategy/dormantOutreachGate";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
-import { acceptProposalWithReceipt } from "../../planning/dayDirector/dayDirectorService";
 import { listOpenCommercialFollowUps } from "../../domains/commercial/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,
@@ -22,8 +21,11 @@ import {
   isDormantEligible,
   morningChiefOfStaffBrief,
   overloadJudgment,
+  parseSalesHoldInstruction,
   proposeRecoveryObligation,
   salesFollowUpObligation,
+  salesHeldOn,
+  salesHoldCovers,
   scheduleRecoveryDays,
   supersedeIfReordered,
   whyPushingSales,
@@ -50,6 +52,11 @@ import {
   loadOperatorDoctrine,
   saveOperatorDoctrine,
 } from "../../agents/persistentOperator/operatorDoctrineStore";
+import {
+  loadOperatorSalesHoldFor,
+  operatorBusinessDate,
+  recordOperatorSalesHoldInstruction,
+} from "../../agents/persistentOperator/salesHoldInstruction";
 
 // Compatibility export: persistent-operator core owns the durable obligation table.
 export { claireProactiveObligations };
@@ -114,37 +121,6 @@ async function backfillObligationCommercialFollowUpRef(input: {
   await backfillPersistentOperatorCommercialFollowUpRef(input);
 }
 
-async function placeOnDayLine(input: {
-  tenantId: string;
-  actorId: string;
-  dueDate: string;
-  title: string;
-  idempotencyKey: string;
-  sourceText: string;
-}): Promise<void> {
-  const result = await acceptProposalWithReceipt({
-    tenantId: input.tenantId,
-    actorId: input.actorId,
-    businessDate: input.dueDate,
-    proposal: {
-      promptKey: input.idempotencyKey.slice(0, 191),
-      title: input.title.slice(0, 255),
-      kind: "growth",
-      quantity: null,
-      sourceText: input.sourceText,
-      prerequisites: [],
-      question: null,
-      intelligence: "manual_fallback",
-      detailState: "COMPLETE",
-      missingDetails: [],
-      targetBusinessDate: input.dueDate,
-    },
-  });
-  if (!result.stored?.id) {
-    throw new Error("Proactive Day Line item was not persisted");
-  }
-}
-
 /**
  * Structured, fact-preserving spoken summary. Never infers dormancy, rewrites
  * customer history, or speaks every recovery identity without a request.
@@ -155,6 +131,8 @@ export function conciseOperatorBoardSpeech(input: {
   sales: readonly ProactiveObligation[];
   overload: ReturnType<typeof overloadJudgment>;
   skipSales: boolean;
+  /** The operator held win-backs today: recovery is not pushed. */
+  skipRecovery?: boolean;
 }): string {
   const lines: string[] = [];
   const warning = input.warnings[0];
@@ -165,7 +143,7 @@ export function conciseOperatorBoardSpeech(input: {
     else lines.push(warning); // Unknown critical warnings must not be dropped.
   }
   if (input.overload.kind !== "ok") lines.push(input.overload.speak);
-  const recoveries = input.recoveries.filter(item =>
+  const recoveries = input.skipRecovery ? [] : input.recoveries.filter(item =>
     item.status === "scheduled" || item.status === "draft_prepared"
   );
   if (recoveries.length) {
@@ -302,7 +280,11 @@ export async function ensureOperatorBoard(input: {
   const eligible = mayNameCustomers
     ? customers.filter(customer => isDormantEligible(customer, rules, today, live).eligible)
     : [];
-  const skipSales = rules.skipSalesUntil === today;
+  // The operator's hold, read across every open id: held follow-ups are not
+  // created, and held win-backs are neither placed on a held day nor pushed.
+  const hold = await loadOperatorSalesHoldFor({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+  const skipSales = salesHoldCovers(hold, today, "commercial_follow_up");
+  const skipRecovery = salesHoldCovers(hold, today, "customer_recovery");
   const placed = scheduleRecoveryDays({
     today,
     customers: eligible.slice(0, 8),
@@ -312,6 +294,7 @@ export async function ensureOperatorBoard(input: {
   });
 
   for (const { customer, dueDate } of placed) {
+    if (salesHoldCovers(hold, dueDate, "customer_recovery")) continue;
     const current = await loadObligations(input.tenantId, input.operatorUserId);
     const check = isDormantEligible(customer, rules, today, current);
     if (!check.eligible) continue;
@@ -337,15 +320,9 @@ export async function ensureOperatorBoard(input: {
       lastServiceLabel: input.recoveryDraftIdentity.serviceLabel,
     });
     const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
+    // Prepared, never committed: the obligation reaches Mission Director as a
+    // candidate, and only the operator's approval puts it on the Day Line.
     await upsertObligation(input.tenantId, input.operatorUserId, obligation);
-    await placeOnDayLine({
-      tenantId: input.tenantId,
-      actorId: input.actorId,
-      dueDate,
-      title: obligation.title,
-      idempotencyKey: `claire-proactive:${obligation.id}`,
-      sourceText: `${obligation.why} Rook draft is prepared; sending still needs you.`,
-    });
     created += 1;
   }
 
@@ -386,14 +363,6 @@ export async function ensureOperatorBoard(input: {
           obligation,
           { commercialFollowUpRef: follow.id }
         );
-        await placeOnDayLine({
-          tenantId: input.tenantId,
-          actorId: input.actorId,
-          dueDate: dueDate < today ? today : dueDate,
-          title: obligation.title,
-          idempotencyKey: `claire-proactive:${obligation.id}`,
-          sourceText: obligation.why,
-        });
         created += 1;
       }
     } catch (error) {
@@ -437,10 +406,10 @@ export async function ensureOperatorBoard(input: {
     created,
     salesArtifacts: freshInsight ? [freshInsight] : [],
     brief: [freshInsight?.speech, morningChiefOfStaffBrief({
-      recoveries, sales, warnings, overload, skipSales,
+      recoveries, sales, warnings, overload, skipSales, skipRecovery,
     })].filter(Boolean).join(" "),
     conciseBrief: conciseOperatorBoardSpeech({
-      recoveries, sales, warnings, overload, skipSales,
+      recoveries, sales, warnings, overload, skipSales, skipRecovery,
     }),
   };
 }
@@ -468,9 +437,10 @@ export async function ensureAdamBoard(input: {
 
 export async function explainProactive(tenantId: string, operatorUserId: string, utterance: string): Promise<string | null> {
   const lower = utterance.toLowerCase();
-  const rules = await loadDoctrine(tenantId, operatorUserId);
   if (/\bsales\b/.test(lower) && /\bpush(?:ing)?|why are you\b/.test(lower)) {
-    return whyPushingSales(rules.skipSalesUntil === businessToday(new Date(), getDashboardTimeZone()));
+    const hold = await loadOperatorSalesHoldFor({ tenantId, operatorUserId });
+    const today = await operatorBusinessDate(tenantId, new Date(), getDashboardTimeZone());
+    return whyPushingSales(hold != null && salesHeldOn({ skipSalesUntil: hold.until }, today));
   }
   const items = await loadObligations(tenantId, operatorUserId);
   const hit = items.find(item => {
@@ -485,7 +455,20 @@ export async function handleDoctrineTurn(input: {
   operatorUserId: string;
   utterance: string;
   today: string;
+  now?: Date;
 }): Promise<string | null> {
+  // "No sales today" / "resume sales": dated in the business's own time zone
+  // (not the dashboard zone `today` uses) and applied across every open id.
+  const sales = parseSalesHoldInstruction(input.utterance);
+  if (sales)
+    return recordOperatorSalesHoldInstruction({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      instruction: sales,
+      utterance: input.utterance,
+      now: input.now ?? new Date(),
+      fallbackTimeZone: getDashboardTimeZone(),
+    });
   const rules = await loadDoctrine(input.tenantId, input.operatorUserId);
   const applied = applyDoctrineUtterance(rules, input.utterance, input.today);
   if (!applied) return null;

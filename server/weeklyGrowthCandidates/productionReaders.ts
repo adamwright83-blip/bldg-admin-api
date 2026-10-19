@@ -9,7 +9,10 @@ import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { listOperatorRuns } from "../campaignRuns/campaignRunService";
 import { getLatestChurnScan } from "../churnRadar/customerChurnService";
 import { getActiveMacroGoalForOperators } from "../claire/macroGoalService";
-import { loadObligations } from "../claire/proactive/boardService";
+import {
+  listPersistentOperatorObligationRecords,
+  type PersistentObligation,
+} from "../agents/persistentOperator/obligationStore";
 import { listCommercialMissions } from "../commercialMissions/commercialMissionStore";
 import { getDb } from "../db";
 import { listOpsTasks, type OpsTaskType } from "../opsTasks";
@@ -169,6 +172,8 @@ async function readCommitments(input: {
         metadata.executionType === "mission" || metadata.executionType === "challenge"
           ? metadata.executionType
           : null,
+      // Approved work continues the Work Thread it was approved under.
+      workThreadId: stringField(asRecord(metadata.workThread), "id"),
       campaignId,
       followUpId,
       missionId,
@@ -326,9 +331,12 @@ async function readObligations(input: {
 }): Promise<SourceAvailability<WeeklyGrowthRawRecord>> {
   const groups = await Promise.all(
     operatorUserIds(input).map(async operatorUserId => {
-      const obligations = await loadObligations(input.tenantId, operatorUserId);
+      const obligations = await listPersistentOperatorObligationRecords({
+        tenantId: input.tenantId,
+        operatorUserId,
+      });
       return obligations.map(obligation =>
-        obligationRecord({ tenantId: input.tenantId, operatorUserId }, obligation)
+        obligationRecord({ tenantId: input.tenantId, operatorUserId }, obligation.payload, obligation.executionType)
       );
     })
   );
@@ -340,7 +348,8 @@ async function readObligations(input: {
 
 function obligationRecord(
   input: { tenantId: string; operatorUserId: string },
-  obligation: ProactiveObligation
+  obligation: ProactiveObligation,
+  executionType: PersistentObligation["executionType"]
 ): WeeklyGrowthRawRecord {
   const dormant = obligation.kind === "dormant_recovery";
   return emptyRawRecord({
@@ -364,6 +373,9 @@ function obligationRecord(
     customerKey: dormant ? obligation.subjectKey : null,
     missionId: obligation.kind === "sales_follow_up" ? obligation.subjectKey : null,
     dueDate: obligation.dueDate,
+    // The execution type a goal-cycle decision stored for this obligation;
+    // ranking must not re-derive it from text and lose it.
+    storedExecutionType: executionType === "mission" || executionType === "challenge" ? executionType : null,
     alreadyInFlight: obligation.status === "awaiting_result",
     fixture: obligation.id.startsWith("fixture:") || obligation.subjectKey.startsWith("fixture:"),
   });
