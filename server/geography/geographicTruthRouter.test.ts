@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), membership: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), membership: vi.fn(), report: vi.fn() }));
 vi.mock("./geographicTruthService", () => ({
   getGeographicTruth: mocks.read,
   geocodePendingLocations: vi.fn(),
+}));
+vi.mock("../analytics/lanternTerritoryReportService", () => ({
+  readLanternTerritoryReport: mocks.report,
 }));
 vi.mock("../saas/tenantAccess", async importOriginal => ({
   ...(await importOriginal<any>()),
@@ -24,6 +27,12 @@ function caller(
   });
 }
 beforeEach(() => {
+  mocks.report.mockReset().mockImplementation(async ({ tenantId, windowDays }) => ({
+    tenantId,
+    windowDays,
+    figuresAreLive: true,
+    status: "ready",
+  }));
   mocks.read
     .mockReset()
     .mockImplementation(async ({ tenantId }) => ({
@@ -71,6 +80,16 @@ describe("tenant atlas and platform support separation", () => {
         targetTenantId: "tenant-b",
       })
     ).resolves.toMatchObject({ tenantId: "tenant-b" });
+  });
+  it("territory report reads only the authenticated tenant and cannot target another", async () => {
+    await expect(
+      caller("tenant-a", "member:tenant-a", "user").territoryReport({ windowDays: 90 })
+    ).resolves.toMatchObject({ tenantId: "tenant-a", windowDays: 90 });
+    expect(mocks.report).toHaveBeenCalledWith({ tenantId: "tenant-a", windowDays: 90 });
+    await expect(
+      caller("tenant-b", "member:tenant-a", "user").territoryReport({ windowDays: 30 })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(mocks.report).toHaveBeenCalledTimes(1);
   });
   it("propagates geographic read failure instead of returning an empty atlas", async () => {
     mocks.read.mockRejectedValue(new Error("geography unavailable"));

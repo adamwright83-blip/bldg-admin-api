@@ -48,6 +48,7 @@ const ROOT = resolve(__dirname, "../../..");
  * A *.test.ts path is not a domain implementation edit.
  * server/geography/customerOrderTruth.ts is forbidden unless the diff is
  * exactly the owner-approved CleanCloud receipt-matcher change below.
+ * geographicTruthRouter.ts is forbidden unless the diff only adds territoryReport.
  */
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
@@ -106,12 +107,36 @@ function diffBodyLines(diffText: string, marker: "+" | "-"): string[] {
     .map(line => line.slice(1));
 }
 
-function routersDiffIsManualMatchAndIgnoreOnly(diffText: string): boolean {
+function additionOnly(diffText: string, expected: string): boolean {
   const removed = diffBodyLines(diffText, "-");
   const added = diffBodyLines(diffText, "+");
   if (removed.length > 0 || added.length === 0) return false;
-  return added.join("\n") === PAYMENT_RECONCILIATION_ROUTER_ADDITIONS;
+  return added.join("\n") === expected;
 }
+
+function routersDiffIsManualMatchAndIgnoreOnly(diffText: string): boolean {
+  return additionOnly(diffText, PAYMENT_RECONCILIATION_ROUTER_ADDITIONS);
+}
+
+const LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS = [
+  'import { readLanternTerritoryReport } from "../analytics/lanternTerritoryReportService";',
+  "  /**",
+  "   * Read-only Report Mode for the authenticated tenant's Lantern City.",
+  "   * No target tenant, and no write. Does not overlap unit-suite trust (#620).",
+  "   */",
+  "  territoryReport: legacyDayforgeTenantOperatorProcedure",
+  "    .input(",
+  "      z",
+  "        .object({ windowDays: z.union([z.literal(30), z.literal(90)]).default(30) })",
+  "        .optional()",
+  "    )",
+  "    .query(({ ctx, input }) =>",
+  "      readLanternTerritoryReport({",
+  "        tenantId: ctx.tenantId,",
+  "        windowDays: input?.windowDays ?? 30,",
+  "      })",
+  "    ),",
+].join("\n");
 
 /**
  * Customer order truth admits a CleanCloud paid row on the receipt for its
@@ -139,13 +164,21 @@ function customerOrderTruthDiffIsReceiptMatcherOnly(diffText: string): boolean {
   );
 }
 
-function invariant28ForbiddenHits(files: readonly string[], routersDiff: string, customerOrderTruthDiff = ""): string[] {
+function invariant28ForbiddenHits(
+  files: readonly string[],
+  routersDiff: string,
+  customerOrderTruthDiff = "",
+  geographyRouterDiff = ""
+): string[] {
   return files.filter(file => {
     if (file.endsWith(".test.ts")) return false;
     if (!DOMAIN_PROTECTED_RE.test(file)) return false;
+    if (file === "server/routers.ts") return !routersDiffIsManualMatchAndIgnoreOnly(routersDiff);
     if (file === "server/geography/customerOrderTruth.ts") return !customerOrderTruthDiffIsReceiptMatcherOnly(customerOrderTruthDiff);
-    if (file !== "server/routers.ts") return true;
-    return !routersDiffIsManualMatchAndIgnoreOnly(routersDiff);
+    if (file === "server/geography/geographicTruthRouter.ts") {
+      return !additionOnly(geographyRouterDiff, LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS);
+    }
+    return true;
   });
 }
 
@@ -823,6 +856,14 @@ describe("static safety (10, 28)", () => {
       "git diff origin/main...HEAD -- server/routers.ts; git diff HEAD -- server/routers.ts",
       { cwd: ROOT }
     ).toString();
+    const geographyRouterDiff = execSync(
+      "git diff origin/main...HEAD -- server/geography/geographicTruthRouter.ts; git diff HEAD -- server/geography/geographicTruthRouter.ts",
+      { cwd: ROOT }
+    ).toString();
+    const customerOrderTruthDiff = execSync(
+      "git diff origin/main...HEAD -- server/geography/customerOrderTruth.ts; git diff HEAD -- server/geography/customerOrderTruth.ts",
+      { cwd: ROOT }
+    ).toString();
     const headRef = (
       process.env.GITHUB_HEAD_REF ||
       process.env.GITHUB_REF_NAME ||
@@ -869,11 +910,27 @@ describe("static safety (10, 28)", () => {
     expect(
       invariant28ForbiddenHits(["server/geography/gumballCustomerTruth.ts"], routersDiff, matcherChange())
     ).toEqual(["server/geography/gumballCustomerTruth.ts"]);
-    const customerOrderTruthDiff = execSync(
-      "git diff origin/main...HEAD -- server/geography/customerOrderTruth.ts; git diff HEAD -- server/geography/customerOrderTruth.ts",
-      { cwd: ROOT }
-    ).toString();
-    expect(invariant28ForbiddenHits(diff, routersDiff, customerOrderTruthDiff)).toEqual([]);
+
+    expect(
+      invariant28ForbiddenHits(["server/geography/geographicTruthRouter.ts"], routersDiff)
+    ).toEqual(["server/geography/geographicTruthRouter.ts"]);
+    expect(
+      invariant28ForbiddenHits(
+        ["server/geography/geographicTruthRouter.ts"],
+        routersDiff,
+        "",
+        LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS.split("\n").map(line => `+${line}`).join("\n")
+      )
+    ).toEqual([]);
+    expect(
+      invariant28ForbiddenHits(
+        ["server/geography/geographicTruthRouter.ts"],
+        routersDiff,
+        "",
+        `${LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS.split("\n").map(line => `+${line}`).join("\n")}\n-  geocodePending: legacyAdminRoleProcedure`
+      )
+    ).toEqual(["server/geography/geographicTruthRouter.ts"]);
+    expect(invariant28ForbiddenHits(diff, routersDiff, customerOrderTruthDiff, geographyRouterDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.
     const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");

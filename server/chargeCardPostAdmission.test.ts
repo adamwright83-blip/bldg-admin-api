@@ -1,4 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const RECEIPT_WEBHOOK_URL = "https://app.bldg.chat/api/webhooks/receipt";
+const realFetch = globalThis.fetch.bind(globalThis);
+
+function isReceiptWebhook(input: RequestInfo | URL): boolean {
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url;
+  return url === RECEIPT_WEBHOOK_URL;
+}
 
 const mocks = vi.hoisted(() => ({
   getOrderById: vi.fn(),
@@ -97,8 +110,32 @@ function caller() {
 }
 
 describe("chargeCard post-admission fault isolation and failure injection", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The success path posts a receipt webhook. These tests stub every other
+    // side effect; leaving that call on the live network lets a timed-out
+    // request resolve during the next test and call writeOrderToSheet again.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (isReceiptWebhook(input)) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ error: "Missing Authorization header" }),
+              {
+                status: 401,
+                headers: { "content-type": "application/json" },
+              }
+            )
+          );
+        }
+        return realFetch(input, init);
+      })
+    );
     process.env.STRIPE_SECRET_KEY_OVERRIDE = "sk_test_post_admission_proof_123456789";
     process.env.JWT_SHARED_SECRET = "super-secret-jwt-signing-key-for-test-suite";
 
