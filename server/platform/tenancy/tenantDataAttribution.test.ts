@@ -42,13 +42,13 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
     expect(sql).toContain("INSERT INTO `commercial_account_contacts`");
   });
 
-  it("registers migration 0143 in scripts/migrate.mjs", () => {
+  it("documents migration 0143 as gated path in scripts/migrate.mjs", () => {
     const migrateMjs = readFileSync(
       new URL("../../../scripts/migrate.mjs", import.meta.url),
       "utf8"
     );
     expect(migrateMjs).toContain("0143_reassign_cleancloud_and_goal_lineage_to_laundry_farm.sql");
-    expect(migrateMjs).toContain("0143 reassign cleancloud data, goal lineage, and recovery contacts to laundry_farm");
+    expect(migrateMjs).toContain("scripts/migrate-laundry-farm-attribution.mjs");
   });
 
   it("laundryFarmSheetSync queries laundry_farm tenant orders", () => {

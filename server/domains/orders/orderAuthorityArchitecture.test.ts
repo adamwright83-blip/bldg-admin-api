@@ -51,7 +51,12 @@ function productionFiles(dir: string): string[] {
 
 function violations(path: string, source: string): string[] {
   const found: string[] = [];
-  if (fixtures.has(path) || path === "scripts/migrate.mjs") return found;
+  if (
+    fixtures.has(path) ||
+    path === "scripts/migrate.mjs" ||
+    path === "scripts/migrate-laundry-farm-attribution.mjs"
+  )
+    return found;
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
   const orderNames = new Set(["orders"]);
   const helperNames = new Set(rawHelpers);
