@@ -63,6 +63,21 @@ UPDATE `cleancloud_paid_orders`
 SET `tenantId` = 'laundry_farm'
 WHERE `tenantId` = 'default';
 
+-- 2b. Paid-observation receipts follow the order.
+-- The ledger admits a receipt only when its tenant and payment time match the
+-- current row. Boot backfill idempotency does not include tenantId, so a later
+-- boot cannot insert a second receipt for the new tenant. Move the existing
+-- receipt. Re-running after an earlier order-only move still repairs receipts
+-- that were left on `default`.
+UPDATE `authority_receipts` ar
+JOIN `cleancloud_paid_orders` o
+  ON ar.`subjectType` = 'cleancloud_order'
+ AND ar.`claimType` = 'cleancloud_paid_observed'
+ AND ar.`subjectId` = o.`cleancloudOrderId`
+ AND ar.`tenantId` = 'default'
+ AND o.`tenantId` = 'laundry_farm'
+SET ar.`tenantId` = 'laundry_farm';
+
 -- 3. Historical CleanCloud cadence orders in `orders`
 -- Identified by residentClientRequestId with 'goldline:cadence:%'.
 -- Preserves native Stripe orders (Order #707, etc.) firmly in `default`.

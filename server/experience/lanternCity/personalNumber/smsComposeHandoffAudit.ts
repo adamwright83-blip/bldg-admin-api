@@ -11,6 +11,7 @@ import { smsComposeHandoffAudits } from "../../../../drizzle/schema";
 import { getDb } from "../../../db";
 import { ANDROID_DEVICE_SENDER } from "./androidDeviceSender";
 import {
+  PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
   SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
   approvedBodyDigest,
@@ -231,6 +232,46 @@ export async function reportSmsComposeOperatorSent(input: {
     androidUnattendedStatus: ANDROID_DEVICE_SENDER.status,
     outboxEffect: outboxEffectFor(input.outbox),
   };
+}
+
+export async function recordExplicitOutreachApproval(input: {
+  tenantId: string;
+  operatorId: string;
+  messageId: string;
+  revisionCount: number;
+  approvedBody: string;
+  confirmation: string;
+  surface: SmsComposeSurface;
+}): Promise<SmsComposeHandoffEvent> {
+  if (input.confirmation !== PERSONAL_OUTREACH_SCHEDULE_APPROVAL) {
+    throw new Error("The exact message, recipient, and send time must be explicitly approved.");
+  }
+  assertScope(input);
+  const approvedBody = input.approvedBody.trim();
+  if (!approvedBody) throw new Error("An approved message body is required.");
+  const bodyDigest = approvedBodyDigest(approvedBody);
+  const events = await listEvents(input.tenantId, input.operatorId);
+  const existing = events.find(
+    event =>
+      event.messageId === input.messageId &&
+      event.revisionCount === input.revisionCount &&
+      event.bodyDigest === bodyDigest &&
+      event.handoffState === "approved"
+  );
+  if (existing) return existing;
+  const event: SmsComposeHandoffEvent = {
+    id: `sch_${randomUUID()}`,
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    messageId: input.messageId,
+    revisionCount: input.revisionCount,
+    bodyDigest,
+    handoffState: "approved",
+    surface: input.surface,
+    invokedAt: new Date().toISOString(),
+  };
+  await append(event);
+  return event;
 }
 
 export async function smsComposeHandoffSnapshot(input: {

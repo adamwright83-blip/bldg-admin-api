@@ -19,6 +19,12 @@ import {
   describeMissionAdjustment,
   type DaphneMissionAdjustment,
 } from "./daphneMissionPresentation";
+import {
+  projectSilverLakeOutreachStatus,
+  type SilverLakeHandoffEvent,
+  type SilverLakeOutreachSnapshot,
+  type SilverLakeTrustedSend,
+} from "./silverLakeOutreachStatus";
 
 export const COZY_VILLAGER_EVIDENCE_CONTRACT = {
   draftPrepared:
@@ -36,7 +42,7 @@ export const COZY_VILLAGER_EVIDENCE_CONTRACT = {
   reply:
     "Unavailable. The personal-number outbox stores no inbound reply. Spirit-human inbound SMS is a different rail and is not read as a reply.",
   paidOrder:
-    "Unavailable unless an admitted paid-order reference is supplied for the same customer id. Dossier paid-order counts are history, not a new payment. A message is not a paid order.",
+    "Unavailable unless an admitted paid-order reference includes an authority receipt and a positive amount. An order id alone is not verified revenue. A message is not a paid order and does not cause one.",
   world:
     "This projection does not append recovery_outreach_completed or customer_recovered. Those world events are written from customer-recovery interventions, not from the cozy outbox.",
   objective:
@@ -97,12 +103,17 @@ export type CozyOutreachEvidenceRow = {
   dispatchedAt: string | null;
   externalMessageId: string | null;
   failureReason: string | null;
+  revisionCount?: number;
+  dispatchAttemptedAt?: string | null;
+  cancelledAt?: string | null;
 };
 
 export type CozyPaidOrderEvidence = {
   customerId: string;
   orderId: string;
   paidAt: string;
+  cents?: number | null;
+  authorityReceiptId?: string | null;
 };
 
 export type CozyObjectiveRef = {
@@ -239,6 +250,7 @@ export type CozyProjectedTarget = CozyCustomerTarget & {
   outreachActionComplete: boolean;
   /** The recovery objective is never completed by this projection. */
   objectiveComplete: false;
+  silverLakeStatus: SilverLakeOutreachSnapshot;
 };
 
 export type CozyRecoveryDayLineCard = {
@@ -264,6 +276,7 @@ export type CozyRecoveryDayLineCard = {
   reply: CozyReplyProjection;
   paidOrder: CozyPaidOrderProjection;
   world: CozyWorldProjection;
+  silverLakeStatus: SilverLakeOutreachSnapshot;
 };
 
 export type CozyRecoverySurfaces = {
@@ -414,6 +427,13 @@ function paidOrderFor(
 ): CozyPaidOrderProjection {
   const match = evidence.find(item => item.customerId === customerId && item.orderId && item.paidAt);
   if (!match) return PAID_ORDER_UNAVAILABLE;
+  const cents = match.cents;
+  if (!match.authorityReceiptId?.trim() || typeof cents !== "number" || !Number.isFinite(cents) || cents <= 0) {
+    return {
+      status: "unavailable",
+      reason: "An order reference without an admitted payment receipt is not verified revenue.",
+    };
+  }
   return { status: "verified", orderId: match.orderId, paidAt: match.paidAt };
 }
 
@@ -647,7 +667,14 @@ function projectOne(
   target: CozyCustomerTarget,
   rows: readonly CozyOutreachEvidenceRow[],
   paidOrders: readonly CozyPaidOrderEvidence[],
-  events: readonly CozyPersonalReplyEvidence[]
+  events: readonly CozyPersonalReplyEvidence[],
+  context: {
+    tenantId: string;
+    operatorId: string;
+    handoffEvents: readonly SilverLakeHandoffEvent[];
+    unsavedBody: string | null;
+    now: Date;
+  }
 ): CozyProjectedTarget {
   const row = chooseOutreachEvidence(rows.filter(item => item.customerId === target.customerId));
   const outboundEvent = chooseOutboundEventEvidence(
@@ -675,6 +702,53 @@ function projectOne(
   const pose = poseForCommunicationState(communicationState);
   const frame = POSE_FRAMES[target.villagerVariant][pose];
   const paidOrder = paidOrderFor(target.customerId, paidOrders);
+  const paidMatch = paidOrders.find(item => item.customerId === target.customerId && item.orderId && item.paidAt) ?? null;
+  const trustedSend: SilverLakeTrustedSend | null =
+    outboundEvent && isTrustedMessageEvidenceSource(eventSourceOf(outboundEvent))
+      ? {
+          messageId: outboundEvent.messageId,
+          body: eventBodyOf(outboundEvent),
+          source: eventSourceOf(outboundEvent) as SilverLakeTrustedSend["source"],
+        }
+      : null;
+  const silverLakeStatus = projectSilverLakeOutreachStatus({
+    tenantId: context.tenantId,
+    operatorId: context.operatorId,
+    customerId: target.customerId,
+    suggestedBody: target.suggestedMessage,
+    unsavedBody: context.unsavedBody,
+    row: row
+      ? {
+          id: row.id,
+          tenantId: row.tenantId,
+          operatorId: row.operatorId,
+          customerId: row.customerId,
+          currentMessageBody: row.currentMessageBody,
+          status: row.status,
+          deliveryIntent: row.deliveryIntent,
+          scheduledFor: row.scheduledFor,
+          timezone: row.timezone,
+          revisionCount: row.revisionCount,
+          dispatchedAt: row.dispatchedAt,
+          externalMessageId: row.externalMessageId,
+          failureReason: row.failureReason,
+          dispatchAttemptedAt: row.dispatchAttemptedAt,
+          cancelledAt: row.cancelledAt,
+        }
+      : null,
+    handoffEvents: context.handoffEvents,
+    trustedSend,
+    replyObserved: reply.status !== "unavailable",
+    order: paidMatch
+      ? {
+          orderId: paidMatch.orderId,
+          paidAt: paidMatch.paidAt,
+          cents: paidMatch.cents,
+          authorityReceiptId: paidMatch.authorityReceiptId,
+        }
+      : null,
+    now: context.now,
+  });
   const preparedMessage =
     reply.status !== "unavailable" && reply.preparedFollowUpDraft
       ? reply.preparedFollowUpDraft
@@ -705,6 +779,7 @@ function projectOne(
     paidOrder,
     outreachActionComplete,
     objectiveComplete: false,
+    silverLakeStatus,
     status:
       communicationState === "send_observed"
         ? "accepted"
@@ -749,29 +824,6 @@ function projectOne(
   };
 }
 
-function nextActionCopy(state: CozyCommunicationState, windowPassed: boolean): string {
-  switch (state) {
-    case "draft_prepared":
-      return "Review the prepared draft, then Send Now or Schedule. Nothing has been sent.";
-    case "scheduled":
-      return windowPassed
-        ? "The scheduled window has passed and the message is still unsent."
-        : "Scheduled. This is not a send.";
-    case "awaiting_sender":
-      return "Awaiting sender. This is not a send.";
-    case "claimed":
-      return "Claimed for send. No send has been observed.";
-    case "failed":
-      return "The send failed. It is not sent.";
-    case "send_not_observed":
-      return "A dispatch was recorded without a send observation.";
-    case "consent_blocked":
-      return "Consent or a verified phone is missing. Do not send.";
-    case "send_observed":
-      return "This outreach action has a send observation. The recovery objective is still open.";
-  }
-}
-
 function applyPresentation(input: {
   statement: string;
   missionTitle: string;
@@ -807,6 +859,8 @@ export function projectCozyRecoverySurfaces(input: {
   paidOrderEvidence?: readonly CozyPaidOrderEvidence[];
   replies?: readonly CozyPersonalReplyEvidence[];
   messageEvents?: readonly CozyPersonalReplyEvidence[];
+  handoffEvents?: readonly SilverLakeHandoffEvent[];
+  unsavedDrafts?: readonly { customerId: string; body: string }[];
   now?: Date;
   timeZone?: string;
 }): CozyRecoverySurfaces {
@@ -822,11 +876,19 @@ export function projectCozyRecoverySurfaces(input: {
   const slotted = assignHouseSlots(input.mission.targets, rows);
   const targets = slotted.map(target => {
     const anchor = COZY_SLOT_ANCHORS[target.slotId];
+    const unsaved = input.unsavedDrafts?.find(item => item.customerId === target.customerId)?.body ?? null;
     return projectOne(
       { ...target, villagerVariant: anchor?.defaultVariant ?? target.villagerVariant },
       rows,
       paid,
-      events
+      events,
+      {
+        tenantId: input.tenantId,
+        operatorId: input.operatorId,
+        handoffEvents: input.handoffEvents ?? [],
+        unsavedBody: unsaved,
+        now,
+      }
     );
   });
   const repliedWithOpenFollowUp = [...targets]
@@ -877,7 +939,7 @@ export function projectCozyRecoverySurfaces(input: {
           focusReply.status !== "unavailable"
             ? focusReply.nextAction
             : focus
-              ? nextActionCopy(focus.communicationState, windowPassed)
+              ? focus.silverLakeStatus.detail
               : "No unfinished outreach action. The recovery objective stays open until a paid order is admitted.",
         nextActionId:
           focusReply.status !== "unavailable" && focus
@@ -908,6 +970,14 @@ export function projectCozyRecoverySurfaces(input: {
         reply: focusReply,
         paidOrder: focus ? focus.paidOrder : PAID_ORDER_UNAVAILABLE,
         world: WORLD_NONE,
+        silverLakeStatus: focus
+          ? focus.silverLakeStatus
+          : projectSilverLakeOutreachStatus({
+              tenantId: input.tenantId,
+              operatorId: input.operatorId,
+              customerId: "",
+              now,
+            }),
       }
     : null;
 
