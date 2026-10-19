@@ -47,17 +47,18 @@ export function useSilverLakeOutreach(territoryId: string) {
   const [selectedSlotId, setSelectedSlotId] = useState<CozySlotId | null>(null);
 
   const utils = trpc.useUtils();
-  const memoryQuery = trpc.system.goldlineWorld.getNeighborhoodMemory.useQuery({ territoryId }, { staleTime: 5000, refetchOnWindowFocus: true });
+  // the synthetic preview is isolated: it neither reads nor writes the real neighbourhood memory
+  const memoryQuery = trpc.system.goldlineWorld.getNeighborhoodMemory.useQuery({ territoryId }, { staleTime: 5000, refetchOnWindowFocus: true, enabled: !isSyntheticPreview });
   const saveFeatureMutation = trpc.system.goldlineWorld.saveNeighborhoodFeature.useMutation();
   const recordInteractionMutation = trpc.system.goldlineWorld.recordVillagerInteraction.useMutation();
   const saveDraftMutation = trpc.system.goldlineWorld.saveUnfinishedLetterDraft.useMutation();
 
   useEffect(() => {
-    if (memoryQuery.data) {
+    if (memoryQuery.data && !isSyntheticPreview) {
       setNeighborhoodMemory(memoryQuery.data as NeighborhoodMemoryState);
       saveNeighborhoodMemory(memoryQuery.data as NeighborhoodMemoryState, TENANT_ID);
     }
-  }, [memoryQuery.data]);
+  }, [memoryQuery.data, isSyntheticPreview]);
 
   const missionQuery = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
     { territoryId, requestedCustomerId: requestedId ?? undefined, limit: 8 },
@@ -258,6 +259,7 @@ export function useSilverLakeOutreach(territoryId: string) {
     setIsSyntheticPreview,
     targets,
     loading: !isSyntheticPreview && missionQuery.isLoading,
+    loadFailed: !isSyntheticPreview && missionQuery.isError,
     objectiveId: (missionQuery.data?.objectiveId ?? null) as string | null,
     isSending: sendMutation.isPending || scheduleMutation.isPending,
     neighborhoodMemory,

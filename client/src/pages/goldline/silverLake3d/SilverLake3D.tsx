@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { COZY_SLOT_ANCHORS, COZY_SLOT_IDS, VILLAGER_VARIANTS, type CozySlotId, type VillagerVariant } from "@shared/cozyVillagerOutreach";
-import { villagerSprite, type CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
-import { getVillagerPersonality } from "@shared/playableVillagers";
+import {
+  COZY_SLOT_ANCHORS,
+  COZY_SLOT_IDS,
+  VILLAGER_VARIANTS,
+  type CozySlotId,
+  type VillagerVariant,
+} from "@shared/cozyVillagerOutreach";
+import {
+  villagerSprite,
+  type CozyProjectedTarget,
+} from "@shared/cozyVillagerEvidence";
 import { PlayableLetterDesk } from "@/components/admin/control-room/LanternCitySceneV6/PlayableLetterDesk";
 import { CozyMessageComposer } from "@/components/admin/control-room/LanternCitySceneV6/CozyMessageComposer";
 import { NeighborhoodCourtyardFeature } from "@/components/admin/control-room/LanternCitySceneV6/NeighborhoodCourtyardFeature";
-import { createSilverLake, type SilverLakeHandle, type VillagerView } from "./silverLakeRuntime";
+import {
+  createSilverLake,
+  type SilverLakeHandle,
+  type VillagerView,
+} from "./silverLakeRuntime";
 import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
 import styles from "./silver-lake-3d.module.css";
 
@@ -23,14 +35,50 @@ const ASSET_BASE = "/assets/goldline/silver-lake-3d/";
 
 /** Clean full-body art for the 3D cards. Some 2D sprites carry a painted name along the bottom, cropped here. */
 const CARD_ART: Record<VillagerVariant, { src: string; crop: number }> = {
-  fox: { src: "/assets/lantern-villager-outreach/villagers/animations/fox-wave.png", crop: 0 },
-  bear: { src: "/assets/lantern-villager-outreach/villagers/villager-02.png", crop: 0.13 },
-  otter: { src: "/assets/lantern-villager-outreach/villagers/villager-03.png", crop: 0.13 },
-  bunny: { src: "/assets/lantern-villager-outreach/villagers/animations/bunny-wave.png", crop: 0 },
-  squirrel: { src: "/assets/lantern-villager-outreach/villagers/villager-05.png", crop: 0 },
-  badger: { src: "/assets/lantern-villager-outreach/villagers/animations/badger-wave.png", crop: 0 },
-  hedgehog: { src: "/assets/lantern-villager-outreach/villagers/villager-07.png", crop: 0 },
-  cat: { src: "/assets/lantern-villager-outreach/villagers/villager-08.png", crop: 0 },
+  fox: {
+    src: "/assets/lantern-villager-outreach/villagers/animations/fox-wave.png",
+    crop: 0,
+  },
+  bear: {
+    src: "/assets/lantern-villager-outreach/villagers/villager-02.png",
+    crop: 0.13,
+  },
+  otter: {
+    src: "/assets/lantern-villager-outreach/villagers/villager-03.png",
+    crop: 0.13,
+  },
+  bunny: {
+    src: "/assets/lantern-villager-outreach/villagers/animations/bunny-wave.png",
+    crop: 0,
+  },
+  squirrel: {
+    src: "/assets/lantern-villager-outreach/villagers/villager-05.png",
+    crop: 0,
+  },
+  badger: {
+    src: "/assets/lantern-villager-outreach/villagers/animations/badger-wave.png",
+    crop: 0,
+  },
+  hedgehog: {
+    src: "/assets/lantern-villager-outreach/villagers/villager-07.png",
+    crop: 0,
+  },
+  cat: {
+    src: "/assets/lantern-villager-outreach/villagers/villager-08.png",
+    crop: 0,
+  },
+};
+
+/** Fictional neighbours on empty doorsteps: one name each, never a customer. */
+const AMBIENT_NAMES: Record<VillagerVariant, string> = {
+  fox: "Fennel",
+  bear: "Bruno",
+  otter: "Oliver",
+  bunny: "Bella",
+  squirrel: "Sammy",
+  badger: "Bramble",
+  hedgehog: "Henry",
+  cat: "Cleo",
 };
 
 const AMBIENT_LINES: Record<VillagerVariant, string> = {
@@ -60,7 +108,10 @@ export interface SilverLake3DProps {
   onExit: () => void;
 }
 
-export default function SilverLake3D({ territoryId = "silver-lake", onExit }: SilverLake3DProps) {
+export default function SilverLake3D({
+  territoryId = "silver-lake",
+  onExit,
+}: SilverLake3DProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<SilverLakeHandle | null>(null);
   const [loading, setLoading] = useState(0);
@@ -81,12 +132,20 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       const slot = COZY_SLOT_IDS.indexOf(t.slotId as CozySlotId);
       if (slot < 0) continue;
       used.add(slot);
-      const art = CARD_ART[t.villagerVariant] ?? { src: villagerSprite({ variant: t.villagerVariant, communicationState: t.communicationState }).src, crop: 0 };
+      const art = CARD_ART[t.villagerVariant] ?? {
+        src: villagerSprite({
+          variant: t.villagerVariant,
+          communicationState: t.communicationState,
+        }).src,
+        crop: 0,
+      };
       out.push({
         key: customerKey(t),
         slot,
         name: t.displayName,
-        status: t.communicationLabel || (isDone(t) ? "Letter on its way" : "Could use a hello"),
+        status:
+          t.communicationLabel ||
+          (isDone(t) ? "Letter on its way" : "Could use a hello"),
         sprite: art.src,
         cropBottom: art.crop,
         ambient: false,
@@ -96,11 +155,10 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
     COZY_SLOT_IDS.forEach((_, slot) => {
       if (used.has(slot)) return;
       const variant = VILLAGER_VARIANTS[slot % VILLAGER_VARIANTS.length];
-      const persona = getVillagerPersonality(variant);
       out.push({
         key: `ambient:${variant}`,
         slot,
-        name: persona.canonicalName.split(" ")[0] || variant,
+        name: AMBIENT_NAMES[variant],
         status: "Neighbour",
         sprite: CARD_ART[variant].src,
         cropBottom: CARD_ART[variant].crop,
@@ -112,7 +170,10 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
   }, [targets]);
 
   const viewByKey = useMemo(() => new Map(views.map(v => [v.key, v])), [views]);
-  const targetByKey = useMemo(() => new Map(targets.map(t => [customerKey(t), t])), [targets]);
+  const targetByKey = useMemo(
+    () => new Map(targets.map(t => [customerKey(t), t])),
+    [targets]
+  );
 
   const openCustomer = useCallback(
     (t: CozyProjectedTarget, walk: boolean) => {
@@ -151,7 +212,11 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
         runtimeRef.current = h;
         setReady(true);
       })
-      .catch(err => !cancelled && setFailed(err instanceof Error ? err.message : String(err)));
+      .catch(
+        err =>
+          !cancelled &&
+          setFailed(err instanceof Error ? err.message : String(err))
+      );
     return () => {
       cancelled = true;
       handle?.dispose();
@@ -168,11 +233,16 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
   }, [ready, views]);
 
   useEffect(() => {
-    if (ready) runtimeRef.current?.setFeature(o.neighborhoodMemory.featureChoice ?? null);
+    if (ready)
+      runtimeRef.current?.setFeature(
+        o.neighborhoodMemory.featureChoice ?? null
+      );
   }, [ready, o.neighborhoodMemory.featureChoice]);
 
   useEffect(() => {
-    runtimeRef.current?.setPaused(Boolean(selectedTarget) || Boolean(ambientKey));
+    runtimeRef.current?.setPaused(
+      Boolean(selectedTarget) || Boolean(ambientKey)
+    );
   }, [selectedTarget, ambientKey, ready]);
 
   // a deep link with a named customer (Home, the Day Line, the outbox) opens that neighbour's desk straight away
@@ -184,7 +254,8 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
     openCustomer(t, false);
   }, [o.requestedId, targetByKey, openCustomer]);
   useEffect(() => {
-    if (ready && o.requestedId && targetByKey.has(`customer:${o.requestedId}`)) runtimeRef.current?.focusVillager(`customer:${o.requestedId}`);
+    if (ready && o.requestedId && targetByKey.has(`customer:${o.requestedId}`))
+      runtimeRef.current?.focusVillager(`customer:${o.requestedId}`);
   }, [ready, o.requestedId, targetByKey]);
 
   const closeTalk = useCallback(() => {
@@ -201,13 +272,18 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedTarget, ambientKey, closeTalk]);
 
-  const ambientView = ambientKey ? viewByKey.get(ambientKey) ?? null : null;
-  const nearView = nearKey ? viewByKey.get(nearKey) ?? null : null;
+  const ambientView = ambientKey ? (viewByKey.get(ambientKey) ?? null) : null;
+  const nearView = nearKey ? (viewByKey.get(nearKey) ?? null) : null;
   const reached = targets.filter(isDone).length;
   const talking = Boolean(selectedTarget) || Boolean(ambientView);
 
   return (
-    <div className={styles.root} data-testid="silver-lake-3d" data-preview-mode={o.isSyntheticPreview ? "synthetic" : "real"} data-territory={territoryId}>
+    <div
+      className={styles.root}
+      data-testid="silver-lake-3d"
+      data-preview-mode={o.isSyntheticPreview ? "synthetic" : "real"}
+      data-territory={territoryId}
+    >
       <div ref={hostRef} className={styles.stage} />
 
       {!ready && !failed ? (
@@ -223,46 +299,85 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       ) : null}
 
       {failed ? (
-        <div className={styles.failNote} role="status" data-testid="silver-lake-3d-unavailable">
-          The 3D courtyard could not start on this device. Your neighbours are still listed below.
+        <div
+          className={styles.failNote}
+          role="status"
+          data-testid="silver-lake-3d-unavailable"
+        >
+          The 3D courtyard could not start on this device. Your neighbours are
+          still listed below.
         </div>
       ) : null}
 
       <header className={styles.hud}>
-        <div className={styles.titlePill}>
-          <span className={styles.titleMark} aria-hidden>
-            ✦
-          </span>
-          <div>
-            <strong>Silver Lake</strong>
-            <span>
-              Lantern City · {reached} of {targets.length} neighbours reached
+        <div className={styles.hudLeft}>
+          <div className={styles.titlePill}>
+            <span className={styles.titleMark} aria-hidden>
+              ✦
             </span>
+            <div>
+              <strong>Silver Lake</strong>
+              <span>
+                Lantern City · {reached} of {targets.length} neighbours reached
+              </span>
+            </div>
           </div>
-        </div>
-        <div className={styles.hudRight}>
           {o.showDevControls ? (
-            <div className={styles.modeSelector} data-testid="experience-mode-selector">
-              <button type="button" data-testid="mode-playable-button" aria-pressed={o.experienceMode === "playable"} onClick={() => o.setExperienceMode("playable")}>
+            <div
+              className={styles.modeSelector}
+              data-testid="experience-mode-selector"
+            >
+              <button
+                type="button"
+                data-testid="mode-playable-button"
+                aria-pressed={o.experienceMode === "playable"}
+                onClick={() => o.setExperienceMode("playable")}
+              >
                 Letter Desk
               </button>
-              <button type="button" data-testid="mode-classic-button" aria-pressed={o.experienceMode === "classic"} onClick={() => o.setExperienceMode("classic")}>
+              <button
+                type="button"
+                data-testid="mode-classic-button"
+                aria-pressed={o.experienceMode === "classic"}
+                onClick={() => o.setExperienceMode("classic")}
+              >
                 Classic
               </button>
             </div>
           ) : null}
+        </div>
+        <div className={styles.hudRight}>
           <button type="button" className={styles.hudButton} onClick={onExit}>
             Return to City
           </button>
         </div>
       </header>
 
-      {o.isSyntheticPreview ? <div className={styles.previewBadge}>Preview neighbours: nothing here is sent</div> : null}
+      {o.isSyntheticPreview ? (
+        <div className={styles.previewBadge}>
+          Preview neighbours: nothing here is sent
+        </div>
+      ) : null}
 
-      <nav className={styles.roster} aria-label="Silver Lake neighbours" data-testid="silver-lake-roster">
+      <nav
+        className={styles.roster}
+        aria-label="Silver Lake neighbours"
+        data-testid="silver-lake-roster"
+      >
         <strong className={styles.rosterTitle}>Neighbours</strong>
-        {targets.length === 0 && !o.loading ? (
-          <p className={styles.rosterEmpty} data-testid="silver-lake-no-villagers">
+        {o.loadFailed ? (
+          <p
+            className={styles.rosterEmpty}
+            data-testid="silver-lake-villagers-unavailable"
+          >
+            Your neighbours could not load right now. Nothing has been sent.
+          </p>
+        ) : null}
+        {targets.length === 0 && !o.loading && !o.loadFailed ? (
+          <p
+            className={styles.rosterEmpty}
+            data-testid="silver-lake-no-villagers"
+          >
             No one to reconnect with here today. Explore freely.
           </p>
         ) : null}
@@ -278,6 +393,7 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
               data-slot-id={slot}
               data-house-title={COZY_SLOT_ANCHORS[slot]?.houseTitle ?? ""}
               data-communication-state={t.communicationState}
+              data-pose={t.pose}
               aria-label={`Visit ${t.displayName}`}
               onClick={() => openCustomer(t, true)}
             >
@@ -301,8 +417,16 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       ) : null}
 
       {nearView && !talking ? (
-        <button type="button" className={styles.talkPrompt} onClick={() => runtimeRef.current?.talkNearest()} data-testid="silver-lake-3d-talk">
-          <kbd>E</kbd> {nearView.ambient ? `Say hi to ${nearView.name}` : `Talk to ${nearView.name}`}
+        <button
+          type="button"
+          className={styles.talkPrompt}
+          onClick={() => runtimeRef.current?.talkNearest()}
+          data-testid="silver-lake-3d-talk"
+        >
+          <kbd>E</kbd>{" "}
+          {nearView.ambient
+            ? `Say hi to ${nearView.name}`
+            : `Talk to ${nearView.name}`}
         </button>
       ) : null}
 
@@ -312,17 +436,35 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
         </button>
       </div>
 
-      <div className={styles.courtyardWidget} data-testid="silver-lake-courtyard-widget">
-        <NeighborhoodCourtyardFeature chosenFeature={o.neighborhoodMemory.featureChoice} onChooseFeature={o.handleChooseCourtyardFeature} />
+      <div
+        className={styles.courtyardWidget}
+        data-testid="silver-lake-courtyard-widget"
+      >
+        <NeighborhoodCourtyardFeature
+          chosenFeature={o.neighborhoodMemory.featureChoice}
+          onChooseFeature={o.handleChooseCourtyardFeature}
+        />
       </div>
 
       {ambientView ? (
         <div className={styles.bubbleWrap} onClick={closeTalk}>
-          <div className={styles.bubble} role="dialog" aria-label={`${ambientView.name} says`}>
+          <div
+            className={styles.bubble}
+            role="dialog"
+            aria-label={`${ambientView.name} says`}
+          >
             <img src={ambientView.sprite} alt="" />
             <div>
               <strong>{ambientView.name}</strong>
-              <p>{AMBIENT_LINES[VILLAGER_VARIANTS[ambientView.slot % VILLAGER_VARIANTS.length]]}</p>
+              <p>
+                {
+                  AMBIENT_LINES[
+                    VILLAGER_VARIANTS[
+                      ambientView.slot % VILLAGER_VARIANTS.length
+                    ]
+                  ]
+                }
+              </p>
               <button type="button" onClick={closeTalk}>
                 Bye for now
               </button>
@@ -340,7 +482,11 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
             objectiveId={o.objectiveId}
             isSending={o.isSending}
             isSynthetic={o.isSyntheticPreview}
-            encounterCount={o.neighborhoodMemory.encounterCounts[selectedTarget.villagerVariant] ?? 1}
+            encounterCount={
+              o.neighborhoodMemory.encounterCounts[
+                selectedTarget.villagerVariant
+              ] ?? 1
+            }
             memoryNote={o.memoryNote}
             neighborhoodMemory={o.neighborhoodMemory}
             tenantId={o.tenantId}

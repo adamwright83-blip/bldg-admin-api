@@ -366,7 +366,8 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     await page.reload();
     await expect(encounter).toBeVisible({ timeout: 15_000 });
-    await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
+    // the neighbours list fills once the mission read returns, while the 3D courtyard loads alongside it
+    await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141", { timeout: 15_000 });
     await expect(villager).not.toHaveAttribute("data-communication-state", "send_observed");
 
     await page.goto("/driver");

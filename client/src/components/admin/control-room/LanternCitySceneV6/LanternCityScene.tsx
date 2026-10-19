@@ -395,10 +395,9 @@ export default function LanternCityScene({
     element: HTMLElement,
     target: SceneSelectTarget = "default"
   ) {
-    if (
-      object.isRecoveryOpportunity ||
-      (object.territoryId === "silver-lake" && isSilverLakeRecoveryEligible)
-    ) {
+    // Only the golden-messenger opportunity leads into the 3D courtyard; an ordinary customer light in
+    // Silver Lake still opens its inspector.
+    if (object.isRecoveryOpportunity && isSilverLakeRecoveryEligible) {
       // the golden messenger leads straight into the walkable 3D Silver Lake
       openSilverLake3D("silver-lake");
       return;

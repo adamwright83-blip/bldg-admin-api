@@ -148,6 +148,14 @@
   font-size: 16px;
 }
 
+.hudLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
 .hudRight {
   display: flex;
   gap: 10px;
@@ -334,6 +342,7 @@
   position: absolute;
   inset: 0;
   z-index: 100;
+  pointer-events: none;
   background: linear-gradient(90deg, rgba(59, 42, 30, 0) 0%, rgba(59, 42, 30, 0.28) 60%);
 }
 
@@ -601,6 +610,10 @@
 }
 
 .courtyardWidget > * {
+  pointer-events: auto;
+}
+
+.deskWrap > * {
   pointer-events: auto;
 }
 
