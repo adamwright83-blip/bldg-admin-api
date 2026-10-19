@@ -306,6 +306,15 @@ export default function LanternCityScene({
         recoveryOpportunityTerritoryId: isSilverLakeRecoveryEligible
           ? "silver-lake"
           : null,
+        recoveryInvitation: isSilverLakeRecoveryEligible
+          ? {
+              customerFirstName:
+                ((cozyMission.data?.targets?.[0] as CozyProjectedTarget | undefined)?.displayName?.split(" ")[0]) || "Elena",
+              neighborhood: "Silver Lake",
+              note: "Barnaby prepared fresh stationery for a warm reconnection.",
+              villagerName: "Barnaby",
+            }
+          : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -400,10 +409,7 @@ export default function LanternCityScene({
     element: HTMLElement,
     target: SceneSelectTarget = "default"
   ) {
-    if (
-      object.isRecoveryOpportunity ||
-      (object.territoryId === "silver-lake" && isSilverLakeRecoveryEligible)
-    ) {
+    if (object.isRecoveryOpportunity) {
       setCozyEncounterTerritory("silver-lake");
       if (typeof window !== "undefined") {
         const url = new URL(window.location.href);

@@ -280,8 +280,25 @@ export function LanternCitySceneRenderer({
                 className={styles.recoveryInvitationPill}
                 data-testid="recovery-invitation-pill"
               >
-                <span className={styles.invitationLanternIcon} aria-hidden="true">🏮</span>
-                <span className={styles.invitationText}>Silver Lake — A neighbor to reconnect with.</span>
+                <div className={styles.invitationHeader}>
+                  <span className={styles.invitationLanternIcon} aria-hidden="true">🏮</span>
+                  <span className={styles.invitationCustomerName}>
+                    {object.recoveryInvitation?.customerFirstName
+                      ? `${object.recoveryInvitation.customerFirstName} · Silver Lake`
+                      : "Silver Lake"}
+                  </span>
+                </div>
+                <div className={styles.invitationText}>
+                  Silver Lake — A neighbor to reconnect with.
+                </div>
+                <div className={styles.invitationNote}>
+                  {object.recoveryInvitation?.note ??
+                    "Barnaby prepared fresh stationery for a warm reconnection."}
+                </div>
+                <div className={styles.invitationActionHint}>
+                  <span>Tap to open Letter Desk</span>
+                  <span className={styles.invitationArrow} aria-hidden="true">→</span>
+                </div>
               </div>
             ) : null}
             {scene.controls.labels && !object.isRecoveryOpportunity ? (
