@@ -1,4 +1,4 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { cleancloudPaidOrders, clearentDailySummaries, type CleancloudPaidOrder } from "../drizzle/schema";
 import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd } from "./dashboardZoned";
@@ -165,6 +165,7 @@ async function loadCleanCloudOrdersForDate(targetDate: Date) {
     .from(cleancloudPaidOrders)
     .where(
       and(
+        inArray(cleancloudPaidOrders.tenantId, ["laundry_farm", "default"]),
         // Prefer Orders Sales for sheet sync, but keep Orders Revenue as a fallback
         // if a Sales row is missing for a CleanCloud order.
         sql`(

@@ -5629,5 +5629,14 @@ await assertRequiredColumns("personal_outreach_replies", [
     await runRequired(sql, label);
   }
 }
+
+// 0143: Reassign CleanCloud data, goal lineage, and recovery contacts to Laundry Farm
+{
+  const statements = await readSqlStatements("../drizzle/0143_reassign_cleancloud_and_goal_lineage_to_laundry_farm.sql");
+  const label = "0143 reassign cleancloud data, goal lineage, and recovery contacts to laundry_farm";
+  for (const sql of statements) {
+    await runRequired(sql, label);
+  }
+}
 console.log("\nMigration complete.");
 await conn.end();
