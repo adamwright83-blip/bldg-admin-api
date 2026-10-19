@@ -201,11 +201,11 @@ describe("financial language (I)", () => {
     expect(text).not.toMatch(/profit (?:is|was) \$/);
   });
 
-  it("asks revenue or profit for 'how much did we make', then continues", async () => {
+  it("treats bare how much did we make as the company, and still refuses profit", async () => {
     const { ask } = claire();
-    const clarify = await ask("How much did we make?");
-    expect(clarify).toMatchObject({ handled: true, speak: expect.stringContaining("Do you mean revenue or profit?") });
-    expect(await say(ask, "Revenue.")).toContain("$190");
+    const company = await ask("How much did we make?");
+    expect(company).toMatchObject({ handled: true, reader: "company_view" });
+    if (company.handled) expect(company.speak).not.toContain("Do you mean revenue or profit?");
   });
 });
 

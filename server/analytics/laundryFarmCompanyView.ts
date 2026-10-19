@@ -230,14 +230,8 @@ function companyQuestionBlocked(text: string): boolean {
     /\b(?:do you think|should i|should we|focus on|to grow|recommend)\b/.test(text) ||
     /\b(?:last|latest|recent|most recent|first|biggest|largest)\s+(?:\d+\s+|[a-z]+\s+)?(?:sales?|orders?)\b/.test(text) ||
     /\b(?:sales?|orders?)\s+last\s+(?:week|month|year)\b/.test(text) ||
-    ambiguousMake(text) ||
     namedCustomerAsk(text)
   );
-}
-
-/** "How much did we make?" is revenue-or-profit, not a revenue question. */
-function ambiguousMake(text: string): boolean {
-  return /^how much (?:did|do|does) we (?:make|made)\b/.test(text) && !/\b(?:revenue|sales|orders|business)\b/.test(text);
 }
 
 function namedCustomerAsk(text: string): boolean {
@@ -333,9 +327,10 @@ function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null)
  * Company-level revenue, orders, health, and building questions.
  * Unqualified revenue and order questions use this reader for any wording and
  * any date range. "Laundry Farm" is the whole company, both rails.
+ * "How much did we make?" and "How much have we made?" are company questions.
  * An explicit service, payment rail, building slice, or customer stays on the
- * tenant reader. Period comparisons, why, average order value, and bare
- * "how much did we make?" stay there too.
+ * tenant reader. Profit, why, average order value, and a latest-sales list stay
+ * there too.
  */
 export function matchLaundryFarmCompanyQuestion(
   utterance: string,

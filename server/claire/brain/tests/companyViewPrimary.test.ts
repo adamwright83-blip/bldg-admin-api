@@ -232,6 +232,25 @@ describe("Brain V2 primary company view", () => {
     expect(butler.speak).not.toContain("$425.00");
   });
 
+  it("treats bare how much did we make as the company on phone and Desk", async () => {
+    const phone = depsFor(["laundry_farm", "default"]);
+    const voice = await runClaireV2PrimaryTurn(turn("How much did we make?", "voice", "default"), phone.deps);
+    expect(phone.runQuery).not.toHaveBeenCalled();
+    expect(phone.readCompanyView).toHaveBeenCalled();
+    expect(voice.brainV2.composition).toBe("deterministic");
+    expect(voice.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
+    expect(voice.speak).toContain("Recorded sales this month so far are $425.00");
+    expect(voice.speak).not.toContain("Do you mean revenue or profit?");
+
+    const desk = depsFor(["laundry_farm", "default"]);
+    const text = await runClaireV2PrimaryTurn(turn("How much have we made?", "text", "laundry_farm"), desk.deps);
+    expect(desk.runQuery).not.toHaveBeenCalled();
+    expect(desk.readCompanyView).toHaveBeenCalled();
+    expect(text.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
+    expect(text.speak).toContain("Recorded sales this month so far are $425.00");
+    expect(text.speak).not.toContain("profit");
+  });
+
   it("routes unqualified revenue questions to the company reader on phone and Desk", async () => {
     const books: Record<string, PaidOrderEvent[]> = {
       default: [

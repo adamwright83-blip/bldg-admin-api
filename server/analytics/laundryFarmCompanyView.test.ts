@@ -382,7 +382,14 @@ describe("Claire company questions", () => {
       expect(august.period.start.endsWith("-08-01")).toBe(true);
       expect(august.period.end.endsWith("-08-31")).toBe(true);
     }
-    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toEqual({
+      aspect: "revenue",
+      period: { kind: "this_month" },
+    });
+    expect(matchLaundryFarmCompanyQuestion("How much have we made?")).toEqual({
+      aspect: "revenue",
+      period: { kind: "this_month" },
+    });
     expect(matchLaundryFarmCompanyQuestion("What was revenue from OPUS last month?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much revenue did we do in August through CleanCloud?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much profit did we make last month?")).toBeNull();
