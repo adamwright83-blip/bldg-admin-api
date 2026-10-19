@@ -165,7 +165,7 @@ async function loadCleanCloudOrdersForDate(targetDate: Date) {
     .from(cleancloudPaidOrders)
     .where(
       and(
-        inArray(cleancloudPaidOrders.tenantId, ["laundry_farm", "default"]),
+        eq(cleancloudPaidOrders.tenantId, "laundry_farm"),
         // Prefer Orders Sales for sheet sync, but keep Orders Revenue as a fallback
         // if a Sales row is missing for a CleanCloud order.
         sql`(

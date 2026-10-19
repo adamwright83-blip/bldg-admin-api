@@ -77,7 +77,7 @@ async function getCounts() {
   );
 
   const [commercialDefault] = await conn.execute(
-    "SELECT id, identityKey, name FROM commercial_accounts WHERE id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17) AND tenantId = ?",
+    "SELECT id, identityKey, name FROM commercial_accounts WHERE tenantId = ?",
     [BUTLER_TENANT]
   );
   const [commercialFarm] = await conn.execute(
@@ -86,20 +86,20 @@ async function getCounts() {
   );
 
   const [goalRunsDefault] = await conn.execute(
-    "SELECT id, tenantId, metricKey, status FROM macro_goal_runs WHERE (id LIKE '9e7dd9ae%' OR metricKey = 'active_customers_50') AND tenantId = ?",
+    "SELECT id, tenantId, metricKey, status FROM macro_goal_runs WHERE (id = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' OR metricKey = 'active_customers_50') AND tenantId = ?",
     [BUTLER_TENANT]
   );
   const [goalRunsFarm] = await conn.execute(
-    "SELECT id, tenantId, metricKey, status FROM macro_goal_runs WHERE (id LIKE '9e7dd9ae%' OR metricKey = 'active_customers_50') AND tenantId = ?",
+    "SELECT id, tenantId, metricKey, status FROM macro_goal_runs WHERE (id = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' OR metricKey = 'active_customers_50') AND tenantId = ?",
     [FARM_TENANT]
   );
 
   const [recoveryObligationsDefault] = await conn.execute(
-    "SELECT COUNT(*) AS count FROM claire_proactive_obligations WHERE tenantId = ? AND (kind = 'dormant_recovery' OR subjectKey LIKE 'cleancloud:%')",
+    "SELECT COUNT(*) AS count FROM claire_proactive_obligations WHERE tenantId = ? AND (goalRunId = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' OR subjectKey LIKE 'cleancloud:%')",
     [BUTLER_TENANT]
   );
   const [recoveryObligationsFarm] = await conn.execute(
-    "SELECT COUNT(*) AS count FROM claire_proactive_obligations WHERE tenantId = ? AND (kind = 'dormant_recovery' OR subjectKey LIKE 'cleancloud:%')",
+    "SELECT COUNT(*) AS count FROM claire_proactive_obligations WHERE tenantId = ? AND (goalRunId = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' OR subjectKey LIKE 'cleancloud:%')",
     [FARM_TENANT]
   );
 
@@ -203,10 +203,11 @@ if (mode === "execute") {
   );
   console.log(`- Reassigned ${cadenceRes.affectedRows} cadence orders to laundry_farm`);
 
-  // 4. 50-active-customer goal lineage
+  // 4. 50-active-customer goal lineage (authoritative ID)
+  const exactGoalRunId = "9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff";
   const [runs] = await conn.execute(
-    "SELECT id, macroGoalId FROM macro_goal_runs WHERE (id LIKE '9e7dd9ae%' OR metricKey = 'active_customers_50' OR goalSnapshotJson LIKE '%50%') AND tenantId IN (?, ?) ORDER BY createdAt DESC LIMIT 1",
-    [BUTLER_TENANT, FARM_TENANT]
+    "SELECT id, macroGoalId FROM macro_goal_runs WHERE (id = ? OR metricKey = 'active_customers_50') AND tenantId IN (?, ?) ORDER BY createdAt DESC LIMIT 1",
+    [exactGoalRunId, BUTLER_TENANT, FARM_TENANT]
   );
   if (runs.length > 0) {
     const goalRunId = runs[0].id;
@@ -214,7 +215,7 @@ if (mode === "execute") {
     console.log(`- Migrating lineage for goal run ${goalRunId} (macroGoal: ${macroGoalId})...`);
 
     await conn.execute("UPDATE macro_goal_runs SET tenantId = ? WHERE id = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
-    await conn.execute("UPDATE operator_macro_goals SET tenantId = ? WHERE id = ? AND tenantId = ?", [FARM_TENANT, macroGoalId, BUTLER_TENANT]);
+    await conn.execute("UPDATE operator_macro_goals SET tenantId = ? WHERE (id = ? OR metricKey = 'active_customers_50') AND tenantId = ?", [FARM_TENANT, macroGoalId, BUTLER_TENANT]);
     await conn.execute("UPDATE goal_cycle_requests SET tenantId = ? WHERE goalRunId = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
     await conn.execute("UPDATE goal_cycle_decisions SET tenantId = ? WHERE goalRunId = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
     await conn.execute("UPDATE goal_cycle_objectives SET tenantId = ? WHERE goalRunId = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
@@ -223,7 +224,7 @@ if (mode === "execute") {
     await conn.execute("UPDATE goal_cycle_history SET tenantId = ? WHERE goalRunId = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
     await conn.execute("UPDATE goal_cycle_dead_letters SET tenantId = ? WHERE goalRunId = ? AND tenantId = ?", [FARM_TENANT, goalRunId, BUTLER_TENANT]);
     await conn.execute(
-      "UPDATE work_threads SET tenantId = ? WHERE (firstSourceRef LIKE ? OR opportunityJson LIKE '%cleancloud%' OR title LIKE '%CleanCloud%') AND tenantId = ?",
+      "UPDATE work_threads SET tenantId = ? WHERE (firstSourceRef LIKE ? OR opportunityKey LIKE 'cleancloud:%') AND tenantId = ?",
       [FARM_TENANT, `%${goalRunId}%`, BUTLER_TENANT]
     );
   }
@@ -235,16 +236,16 @@ if (mode === "execute") {
         status = 'scheduled',
         payloadJson = JSON_SET(payloadJson, '$.draft', NULL)
     WHERE tenantId = ?
-      AND (kind = 'dormant_recovery' OR subjectKey LIKE 'cleancloud:%' OR payloadJson LIKE '%CleanCloud%')
-  `, [FARM_TENANT, BUTLER_TENANT]);
+      AND (goalRunId = ? OR subjectKey LIKE 'cleancloud:%')
+  `, [FARM_TENANT, BUTLER_TENANT, exactGoalRunId]);
   console.log(`- Reassigned and sanitized ${obRes.affectedRows} CleanCloud recovery obligations`);
 
-  // 6. Replicate commercial accounts (IDs 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+  // 6. Replicate all commercial accounts from default to laundry_farm
   await conn.execute(`
     INSERT INTO commercial_accounts (tenantId, identityKey, name, accountType, providerName, providerAccountId, website)
-    SELECT ?, CONCAT('farm:', COALESCE(identityKey, id)), name, accountType, providerName, providerAccountId, website
+    SELECT ?, CONCAT('farm:migration:0143:', COALESCE(identityKey, id)), name, accountType, providerName, providerAccountId, website
     FROM commercial_accounts
-    WHERE id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17) AND tenantId = ?
+    WHERE tenantId = ?
     ON DUPLICATE KEY UPDATE name = VALUES(name)
   `, [FARM_TENANT, BUTLER_TENANT]);
 
@@ -254,10 +255,10 @@ if (mode === "execute") {
     FROM commercial_account_locations cal
     JOIN commercial_accounts ca_default ON cal.accountId = ca_default.id AND cal.tenantId = ?
     JOIN commercial_accounts ca_farm ON ca_farm.tenantId = ?
-      AND ca_farm.identityKey = CONCAT('farm:', COALESCE(ca_default.identityKey, ca_default.id))
-    WHERE ca_default.id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+      AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+    WHERE ca_default.tenantId = ?
     ON DUPLICATE KEY UPDATE label = VALUES(label)
-  `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT]);
+  `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
 
   await conn.execute(`
     INSERT INTO commercial_account_contacts (tenantId, accountId, contactKey, name, title, email, phone, relationshipType)
@@ -265,10 +266,10 @@ if (mode === "execute") {
     FROM commercial_account_contacts cac
     JOIN commercial_accounts ca_default ON cac.accountId = ca_default.id AND cac.tenantId = ?
     JOIN commercial_accounts ca_farm ON ca_farm.tenantId = ?
-      AND ca_farm.identityKey = CONCAT('farm:', COALESCE(ca_default.identityKey, ca_default.id))
-    WHERE ca_default.id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+      AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+    WHERE ca_default.tenantId = ?
     ON DUPLICATE KEY UPDATE name = VALUES(name)
-  `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT]);
+  `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
   console.log("- Replicated commercial accounts and associations to laundry_farm");
 
   const after = await getCounts();
@@ -277,6 +278,19 @@ if (mode === "execute") {
 
 if (mode === "rollback") {
   console.log("\nRolling back Laundry Farm data reattribution...");
+  const exactGoalRunId = "9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff";
+
+  // Check for any subsequent pipeline/contract records on the migrated accounts
+  const [activePipelines] = await conn.execute(`
+    SELECT COUNT(*) AS count
+    FROM commercial_pipeline_records cpr
+    JOIN commercial_accounts ca ON cpr.accountId = ca.id AND cpr.tenantId = ca.tenantId
+    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
+  `, [FARM_TENANT]);
+  if (activePipelines[0].count > 0) {
+    throw new Error(`Rollback blocked: ${activePipelines[0].count} commercial pipeline records exist for migrated accounts.`);
+  }
+
   // Reassign CleanCloud paid orders back to default
   await conn.execute("UPDATE cleancloud_paid_orders SET tenantId = ? WHERE tenantId = ?", [BUTLER_TENANT, FARM_TENANT]);
   // Reassign cadence orders back to default
@@ -290,20 +304,33 @@ if (mode === "rollback") {
     ON DUPLICATE KEY UPDATE storeLabel = VALUES(storeLabel), lastSuccessAt = VALUES(lastSuccessAt)
   `, [BUTLER_TENANT, FARM_TENANT]);
   await conn.execute("DELETE FROM cleancloud_browser_sync_bindings WHERE storeId = '34145' AND tenantId = ?", [FARM_TENANT]);
-  // Delete replicated accounts
-  await conn.execute("DELETE FROM commercial_account_contacts WHERE tenantId = ?", [FARM_TENANT]);
-  await conn.execute("DELETE FROM commercial_account_locations WHERE tenantId = ?", [FARM_TENANT]);
-  await conn.execute("DELETE FROM commercial_accounts WHERE tenantId = ?", [FARM_TENANT]);
+
+  // Scoped deletion of migrated commercial properties only (preserves subsequent or legitimate records)
+  await conn.execute(`
+    DELETE cal FROM commercial_account_locations cal
+    JOIN commercial_accounts ca ON cal.accountId = ca.id AND cal.tenantId = ca.tenantId
+    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
+  `, [FARM_TENANT]);
+  await conn.execute(`
+    DELETE cac FROM commercial_account_contacts cac
+    JOIN commercial_accounts ca ON cac.accountId = ca.id AND cac.tenantId = ca.tenantId
+    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
+  `, [FARM_TENANT]);
+  await conn.execute(`
+    DELETE FROM commercial_accounts
+    WHERE tenantId = ? AND identityKey LIKE 'farm:migration:0143:%'
+  `, [FARM_TENANT]);
+
   // Move goal lineage back
   const [runs] = await conn.execute(
-    "SELECT id, macroGoalId FROM macro_goal_runs WHERE (id LIKE '9e7dd9ae%' OR metricKey = 'active_customers_50') AND tenantId IN (?, ?) ORDER BY createdAt DESC LIMIT 1",
-    [BUTLER_TENANT, FARM_TENANT]
+    "SELECT id, macroGoalId FROM macro_goal_runs WHERE (id = ? OR metricKey = 'active_customers_50') AND tenantId IN (?, ?) ORDER BY createdAt DESC LIMIT 1",
+    [exactGoalRunId, BUTLER_TENANT, FARM_TENANT]
   );
   if (runs.length > 0) {
     const goalRunId = runs[0].id;
     const macroGoalId = runs[0].macroGoalId;
     await conn.execute("UPDATE macro_goal_runs SET tenantId = ? WHERE id = ?", [BUTLER_TENANT, goalRunId]);
-    await conn.execute("UPDATE operator_macro_goals SET tenantId = ? WHERE id = ?", [BUTLER_TENANT, macroGoalId]);
+    await conn.execute("UPDATE operator_macro_goals SET tenantId = ? WHERE (id = ? OR metricKey = 'active_customers_50')", [BUTLER_TENANT, macroGoalId]);
     await conn.execute("UPDATE goal_cycle_requests SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
     await conn.execute("UPDATE goal_cycle_decisions SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
     await conn.execute("UPDATE goal_cycle_objectives SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
@@ -311,8 +338,8 @@ if (mode === "rollback") {
     await conn.execute("UPDATE goal_cycle_learned_deltas SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
     await conn.execute("UPDATE goal_cycle_history SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
     await conn.execute("UPDATE goal_cycle_dead_letters SET tenantId = ? WHERE goalRunId = ?", [BUTLER_TENANT, goalRunId]);
-    await conn.execute("UPDATE work_threads SET tenantId = ? WHERE tenantId = ?", [BUTLER_TENANT, FARM_TENANT]);
-    await conn.execute("UPDATE claire_proactive_obligations SET tenantId = ? WHERE tenantId = ?", [BUTLER_TENANT, FARM_TENANT]);
+    await conn.execute("UPDATE work_threads SET tenantId = ? WHERE firstSourceRef LIKE ? OR opportunityKey LIKE 'cleancloud:%'", [BUTLER_TENANT, `%${goalRunId}%`]);
+    await conn.execute("UPDATE claire_proactive_obligations SET tenantId = ? WHERE goalRunId = ? OR subjectKey LIKE 'cleancloud:%'", [BUTLER_TENANT, goalRunId]);
   }
   console.log("Rollback completed.");
 }

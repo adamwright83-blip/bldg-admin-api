@@ -72,13 +72,8 @@ WHERE `residentClientRequestId` LIKE 'goldline:cadence:%'
   AND `tenantId` = 'default';
 
 -- 4. Attribute 50-active-customer goal lineage to Laundry Farm
--- Resolve goal run ID
-SET @goal_run_id = (
-  SELECT `id` FROM `macro_goal_runs`
-  WHERE (`id` LIKE '9e7dd9ae%' OR `metricKey` = 'active_customers_50' OR `goalSnapshotJson` LIKE '%50%')
-    AND `tenantId` IN ('default', 'laundry_farm')
-  ORDER BY `createdAt` DESC LIMIT 1
-);
+-- Resolve goal run ID with exact authoritative ID
+SET @goal_run_id = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff';
 
 SET @macro_goal_id = (
   SELECT `macroGoalId` FROM `macro_goal_runs`
@@ -93,7 +88,7 @@ WHERE `id` = @goal_run_id AND `tenantId` = 'default';
 -- Update operator macro goals
 UPDATE `operator_macro_goals`
 SET `tenantId` = 'laundry_farm'
-WHERE `id` = @macro_goal_id AND `tenantId` = 'default';
+WHERE (`id` = @macro_goal_id OR `metricKey` = 'active_customers_50') AND `tenantId` = 'default';
 
 -- Update goal cycle requests
 UPDATE `goal_cycle_requests`
@@ -130,12 +125,11 @@ UPDATE `goal_cycle_dead_letters`
 SET `tenantId` = 'laundry_farm'
 WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
 
--- Update work threads associated with this goal
+-- Update work threads associated with this goal (authoritative: firstSourceRef or opportunityKey)
 UPDATE `work_threads`
 SET `tenantId` = 'laundry_farm'
-WHERE (`firstSourceRef` LIKE CONCAT('%', @goal_run_id, '%')
-       OR `opportunityJson` LIKE '%cleancloud%'
-       OR `title` LIKE '%CleanCloud%')
+WHERE (`firstSourceRef` LIKE '%9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff%'
+       OR `opportunityKey` LIKE 'cleancloud:%')
   AND `tenantId` = 'default';
 
 -- 5. Invalidate incorrectly branded drafts and reassign 16 CleanCloud recovery obligations
@@ -146,27 +140,24 @@ SET `tenantId` = 'laundry_farm',
     `payloadJson` = JSON_SET(`payloadJson`, '$.draft', NULL)
 WHERE `tenantId` = 'default'
   AND (`goalRunId` = @goal_run_id
-       OR `kind` = 'dormant_recovery'
-       OR `subjectKey` LIKE 'cleancloud:%'
-       OR `payloadJson` LIKE '%CleanCloud%');
+       OR `subjectKey` LIKE 'cleancloud:%');
 
--- 6. Commercial accounts replication: replicate accounts (IDs 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
--- into `laundry_farm` with identityKey prefix 'farm:', preserving existing records in `default`.
+-- 6. Commercial accounts replication: replicate all commercial properties from `default`
+-- into `laundry_farm` with identityKey prefix 'farm:migration:0143:', preserving existing records in `default`.
 -- Preserves accounts #15 and #17 as distinct records.
 INSERT INTO `commercial_accounts` (
   `tenantId`, `identityKey`, `name`, `accountType`, `providerName`, `providerAccountId`, `website`
 )
 SELECT
   'laundry_farm',
-  CONCAT('farm:', COALESCE(`identityKey`, `id`)),
+  CONCAT('farm:migration:0143:', COALESCE(`identityKey`, `id`)),
   `name`,
   `accountType`,
   `providerName`,
   `providerAccountId`,
   `website`
 FROM `commercial_accounts`
-WHERE `id` IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
-  AND `tenantId` = 'default'
+WHERE `tenantId` = 'default'
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 -- Replicate commercial account locations
@@ -185,8 +176,8 @@ SELECT
 FROM `commercial_account_locations` cal
 JOIN `commercial_accounts` ca_default ON cal.accountId = ca_default.id AND cal.tenantId = 'default'
 JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
-  AND ca_farm.identityKey = CONCAT('farm:', COALESCE(ca_default.identityKey, ca_default.id))
-WHERE ca_default.id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+  AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+WHERE ca_default.tenantId = 'default'
 ON DUPLICATE KEY UPDATE `label` = VALUES(`label`);
 
 -- Replicate commercial account contacts
@@ -205,6 +196,7 @@ SELECT
 FROM `commercial_account_contacts` cac
 JOIN `commercial_accounts` ca_default ON cac.accountId = ca_default.id AND cac.tenantId = 'default'
 JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
-  AND ca_farm.identityKey = CONCAT('farm:', COALESCE(ca_default.identityKey, ca_default.id))
-WHERE ca_default.id IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+  AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+WHERE ca_default.tenantId = 'default'
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+

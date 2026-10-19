@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { createContext, JOYSTICK_ACTIVE_TENANT_COOKIE } from "../../_core/context";
 import { systemRouter } from "../../_core/systemRouter";
 import { sdk } from "../../_core/sdk";
+import { createCommercialMission } from "../../commercialMissions/commercialMissionStore";
 
 vi.mock("../../_core/sdk", () => ({
   sdk: {
@@ -13,7 +14,8 @@ vi.mock("../../_core/sdk", () => ({
   },
 }));
 
-const dbUrl = process.env.DATABASE_URL || "mysql://root:root@127.0.0.1:3437/phase2";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "mysql://root:root@127.0.0.1:3437/phase2";
+const dbUrl = process.env.DATABASE_URL;
 
 describe("Tenant Separation and Isolation Integration (Real-MySQL)", () => {
   let conn: mysql.Connection;
@@ -204,5 +206,79 @@ describe("Tenant Separation and Isolation Integration (Real-MySQL)", () => {
     await expect(
       restrictedCaller.tenant.switchActiveTenant({ tenantId: "unauthorized_tenant_xyz" })
     ).rejects.toThrow(TRPCError);
+  });
+
+  it("6. Newly discovered commercial property automatically becomes available to sister business with independent pipeline", async () => {
+    const buildingName = `Century Park West Horizon ${testSuffix}`;
+    const buildingAddress = `2180 Century Park W, Los Angeles, CA 90067`;
+    const idempotencyKey = `horizon-mission-${testSuffix}`;
+
+    // Create a commercial mission in Laundry Butler
+    const mission = await createCommercialMission({
+      tenantId: "default",
+      account: {
+        name: buildingName,
+        accountType: "residential_highrise",
+        address: buildingAddress,
+        latitude: 34.0585,
+        longitude: -118.4190,
+      },
+      opportunity: {
+        score: 85,
+        estimateConfidence: "high",
+        estimatedAnnualValueCents: 4500000,
+      },
+      brief: {
+        objective: "Establish resident pickup partnership",
+        hook: "High-density residential corridor",
+      },
+      steps: [],
+      actor: { type: "operator", id: "adam-admin" },
+      idempotencyKey,
+    });
+
+    expect(mission.account.name).toBe(buildingName);
+
+    // Verify Laundry Butler commercial account & pipeline
+    const [butlerAccounts] = await conn.execute(
+      `SELECT id, identityKey, name FROM commercial_accounts WHERE tenantId = 'default' AND name = ?`,
+      [buildingName]
+    );
+    const bAcc = (butlerAccounts as any[])[0];
+    expect(bAcc).toBeDefined();
+
+    const [butlerPipelines] = await conn.execute(
+      `SELECT id, stage FROM commercial_pipeline_records WHERE tenantId = 'default' AND accountId = ?`,
+      [bAcc.id]
+    );
+    expect((butlerPipelines as any[]).length).toBe(1);
+
+    // Verify Laundry Farm has the commercial property provisioned with the same identityKey
+    const [farmAccounts] = await conn.execute(
+      `SELECT id, identityKey, name FROM commercial_accounts WHERE tenantId = 'laundry_farm' AND name = ?`,
+      [buildingName]
+    );
+    const fAcc = (farmAccounts as any[])[0];
+    expect(fAcc).toBeDefined();
+    expect(fAcc.identityKey).toBe(bAcc.identityKey);
+
+    // Verify Laundry Farm has ZERO pipeline records or missions for this building (strictly independent!)
+    const [farmPipelines] = await conn.execute(
+      `SELECT id FROM commercial_pipeline_records WHERE tenantId = 'laundry_farm' AND accountId = ?`,
+      [fAcc.id]
+    );
+    expect((farmPipelines as any[]).length).toBe(0);
+
+    const [farmMissions] = await conn.execute(
+      `SELECT id FROM commercial_missions WHERE tenantId = 'laundry_farm' AND opsTaskId = ?`,
+      [mission.opsTaskId]
+    );
+    expect((farmMissions as any[]).length).toBe(0);
+
+    // Clean up test commercial accounts
+    await conn.execute(`DELETE FROM commercial_pipeline_records WHERE accountId IN (?, ?)`, [bAcc.id, fAcc.id]);
+    await conn.execute(`DELETE FROM commercial_missions WHERE id = ?`, [mission.id]);
+    await conn.execute(`DELETE FROM commercial_account_locations WHERE accountId IN (?, ?)`, [bAcc.id, fAcc.id]);
+    await conn.execute(`DELETE FROM commercial_accounts WHERE id IN (?, ?)`, [bAcc.id, fAcc.id]);
   });
 });
