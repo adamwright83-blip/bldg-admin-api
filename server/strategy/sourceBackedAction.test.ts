@@ -343,7 +343,7 @@ describe("source-backed analysis becomes an approved Day Line item", () => {
         PRIMARY KEY (id)
       )`,
       // Strategy preparation resolves each opportunity to its durable Work Thread.
-      (await readFile(new URL("../../drizzle/0137_work_threads.sql", import.meta.url), "utf8"))
+      (await readFile(new URL("../../drizzle/0138_work_threads.sql", import.meta.url), "utf8"))
         .replace(/^\s*--.*$/gm, "")
         .trim()
         .replace(/;$/, ""),

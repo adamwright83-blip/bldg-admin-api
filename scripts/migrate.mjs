@@ -4677,7 +4677,7 @@ await ensureRequiredIndex(
 // Phase 2 · Slice A: durable Work Thread identity. One table plus a nullable
 // thread id on decisions and objectives. Additive; existing rows stay
 // unthreaded and keep the 1B same-day reuse rule.
-await applyIdempotentSqlFile("../drizzle/0137_work_threads.sql", "Work threads");
+await applyIdempotentSqlFile("../drizzle/0138_work_threads.sql", "Work threads");
 await assertRequiredColumns("work_threads", [
   "id", "tenantId", "opportunityKey", "opportunityKeyHash", "generation", "openSlot",
   "status", "kind", "opportunityJson", "title", "createdByOperatorId", "firstSourceRef",
@@ -4708,7 +4708,7 @@ await ensureRequiredIndex(
 // Phase 2 · Slices C and D: durable observation-bridge obligations. A failed
 // bridge from a completed commitment or a paid order is owned by a row with
 // its status, error and next attempt, never only a "deferred" log line.
-await applyIdempotentSqlFile("../drizzle/0138_observation_bridge_obligations.sql", "Observation bridge obligations");
+await applyIdempotentSqlFile("../drizzle/0139_observation_bridge_obligations.sql", "Observation bridge obligations");
 await assertRequiredColumns("observation_bridge_obligations", [
   "id", "tenantId", "sourceKind", "sourceKey", "status", "payloadJson", "resultJson",
   "attemptCount", "nextAttemptAt", "leaseOwner", "leaseExpiresAt", "lastError",
@@ -4716,7 +4716,7 @@ await assertRequiredColumns("observation_bridge_obligations", [
 ]);
 // Phase 2 · Slice B: operator decisions that settle the operating mandate
 // (which goal comes first, a confirmed or dismissed focus, a stated method).
-await applyIdempotentSqlFile("../drizzle/0139_operating_mandate_decisions.sql", "Operating mandate decisions");
+await applyIdempotentSqlFile("../drizzle/0140_operating_mandate_decisions.sql", "Operating mandate decisions");
 await assertRequiredColumns("operating_mandate_decisions", [
   "id", "tenantId", "canonicalOperatorId", "kind", "subjectKey", "payloadJson", "status",
   "activeSlot", "supersedesId", "supersededById", "decidedByOpenId", "source", "decidedAt",
