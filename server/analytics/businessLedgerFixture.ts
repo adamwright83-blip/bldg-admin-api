@@ -226,7 +226,8 @@ export function withFixturePaymentAuthority(loaders: LedgerLoaders): LedgerLoade
           evidenceClass: "authoritative_external" as const,
           verificationClass: "VERIFIED" as const,
           admissionPolicy: "cleancloud_paid_observation_v1",
-          occurredAt: null,
+          // As admission does: a paid observation carries the payment time it observed.
+          occurredAt: expected.paymentAt ?? null,
           admittedAt: FIXTURE_NOW.toISOString(),
           metadata: null,
           idempotencyKey: `fixture:cleancloud:${index}`,

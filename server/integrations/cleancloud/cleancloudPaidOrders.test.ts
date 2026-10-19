@@ -64,6 +64,12 @@ describe("CleanCloud paid order imports", () => {
     expect(parseCleanCloudPacificDate("12 May 2026 21:38")?.toISOString()).toBe("2026-05-13T04:38:00.000Z");
   });
 
+  it("parses a date-only slash date as Pacific midnight, never an invalid payment date", () => {
+    // Before: "09/02/2026" built T00:0:00, an Invalid Date that still marked the row paid.
+    expect(parseCleanCloudPacificDate("09/02/2026")?.toISOString()).toBe("2026-09-02T07:00:00.000Z");
+    expect(parseCleanCloudPacificDate("09/02/2026 9:05 AM")?.toISOString()).toBe("2026-09-02T16:05:00.000Z");
+  });
+
   it("imports Orders Sales fields including Payment Date and Total after Credit Used", () => {
     const result = normalizeCleanCloudPaidOrderRow(may12SalesRows[0], {
       sourceReportType: "orders_sales",

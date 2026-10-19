@@ -7,7 +7,7 @@ import {
   type PaymentAuthorityExpectation,
 } from "../platform/authority/authorityReceipt";
 import {
-  cleanCloudPaidObservationReceiptMatches,
+  currentCleanCloudPaidObservationReceipt,
   readCleanCloudPaidObservationReceipts,
   type CleanCloudPaidObservationExpectation,
 } from "../integrations/cleancloud/cleancloudPaidEvidence";
@@ -66,7 +66,7 @@ export type ServiceType = "wash_fold" | "dry_cleaning";
 
 export type PaidOrderEvent = {
   paymentEvidence?: Omit<PaymentAuthorityExpectation, "tenantId">;
-  cleancloudEvidence?: Omit<CleanCloudPaidObservationExpectation, "tenantId">;
+  cleancloudEvidence?: Omit<CleanCloudPaidObservationExpectation, "tenantId"> & { importBatchId?: number | null };
   authorityReceiptId?: string;
   company?: "laundry_farm" | null;
   serviceLine?: import("./businessLineage").ServiceLine;
@@ -302,7 +302,14 @@ export function partitionCleanCloudOrders(
     const serviceClass = classifyCleanCloudService({ summaryText: preferred.summaryText ?? null });
     events.push({
       source: "cleancloud",
-      cleancloudEvidence: { subjectType: "cleancloud_order", subjectId: cleancloudOrderId, sourceType: "cleancloud_paid_order", sourceRef: preferred.importBatchId == null ? null : `cleancloud-import:${preferred.importBatchId}:${cleancloudOrderId}` },
+      cleancloudEvidence: {
+        subjectType: "cleancloud_order",
+        subjectId: cleancloudOrderId,
+        sourceType: "cleancloud_paid_order",
+        sourceRef: preferred.importBatchId == null ? null : `cleancloud-import:${preferred.importBatchId}:${cleancloudOrderId}`,
+        importBatchId: preferred.importBatchId ?? null,
+        paymentAt: (preferred.paymentDateUtc ?? preferred.paidDateUtc)?.toISOString() ?? null,
+      },
       eventKey: keptEventKey,
       occurredAt,
       businessDate: businessDateOf(occurredAt, timeZone),
@@ -573,13 +580,13 @@ export async function loadPaidOrderLedger(
             tenantId: input.tenantId,
             ...event.cleancloudEvidence!,
           };
-          receipt = (
-            cleanCloudBySubject.get(
-              `${expected.subjectType}:${expected.subjectId}`
-            ) ?? []
-          ).find(item =>
-            cleanCloudPaidObservationReceiptMatches(item, expected)
-          );
+          // The receipt for the order's current economic revision; a re-sync
+          // into a new import batch that changed no money keeps it.
+          receipt =
+            currentCleanCloudPaidObservationReceipt(
+              cleanCloudBySubject.get(`${expected.subjectType}:${expected.subjectId}`) ?? [],
+              expected
+            ) ?? undefined;
         }
 
         if (receipt) {

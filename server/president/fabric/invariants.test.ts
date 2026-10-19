@@ -46,6 +46,8 @@ const ROOT = resolve(__dirname, "../../..");
  * server/routers.ts is forbidden unless the diff only adds the operator
  * paymentReconciliation.manualMatch and ignore procedures.
  * A *.test.ts path is not a domain implementation edit.
+ * server/geography/customerOrderTruth.ts is forbidden unless the diff is
+ * exactly the owner-approved CleanCloud receipt-matcher change below.
  */
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
@@ -111,10 +113,37 @@ function routersDiffIsManualMatchAndIgnoreOnly(diffText: string): boolean {
   return added.join("\n") === PAYMENT_RECONCILIATION_ROUTER_ADDITIONS;
 }
 
-function invariant28ForbiddenHits(files: readonly string[], routersDiff: string): string[] {
+/**
+ * Customer order truth admits a CleanCloud paid row on the receipt for its
+ * current payment, like the paid-order ledger, so a re-sync that changed no
+ * money does not turn a paying customer lapsed. Approved by the owner on
+ * 2026-10-18 (PR #643); any other edit to the file stays forbidden.
+ */
+const CUSTOMER_ORDER_TRUTH_RECEIPT_MATCHER_CHANGE = {
+  removed: [
+    'import { cleanCloudPaidObservationReceiptMatches, readCleanCloudPaidObservationReceipts } from "../integrations/cleancloud/cleancloudPaidEvidence";',
+    "      const admitted = isPaidFlag(row.paid) && (byOrder.get(row.cleancloudOrderId) ?? []).some(receipt =>",
+    "        cleanCloudPaidObservationReceiptMatches(receipt, expectations[index]!));",
+  ].join("\n"),
+  added: [
+    'import { currentCleanCloudPaidObservationReceipt, readCleanCloudPaidObservationReceipts } from "../integrations/cleancloud/cleancloudPaidEvidence";',
+    "      const admitted = isPaidFlag(row.paid) && currentCleanCloudPaidObservationReceipt(byOrder.get(row.cleancloudOrderId) ?? [], { ...expectations[index]!,",
+    "        importBatchId: row.importBatchId, paymentAt: (asDate(row.paymentDateUtc) ?? asDate(row.paidDateUtc))?.toISOString() ?? null }) !== null;",
+  ].join("\n"),
+};
+
+function customerOrderTruthDiffIsReceiptMatcherOnly(diffText: string): boolean {
+  return (
+    diffBodyLines(diffText, "-").join("\n") === CUSTOMER_ORDER_TRUTH_RECEIPT_MATCHER_CHANGE.removed &&
+    diffBodyLines(diffText, "+").join("\n") === CUSTOMER_ORDER_TRUTH_RECEIPT_MATCHER_CHANGE.added
+  );
+}
+
+function invariant28ForbiddenHits(files: readonly string[], routersDiff: string, customerOrderTruthDiff = ""): string[] {
   return files.filter(file => {
     if (file.endsWith(".test.ts")) return false;
     if (!DOMAIN_PROTECTED_RE.test(file)) return false;
+    if (file === "server/geography/customerOrderTruth.ts") return !customerOrderTruthDiffIsReceiptMatcherOnly(customerOrderTruthDiff);
     if (file !== "server/routers.ts") return true;
     return !routersDiffIsManualMatchAndIgnoreOnly(routersDiff);
   });
@@ -825,7 +854,26 @@ describe("static safety (10, 28)", () => {
     expect(
       invariant28ForbiddenHits(["server/geography/customerOrderTruth.ts"], routersDiff)
     ).toEqual(["server/geography/customerOrderTruth.ts"]);
-    expect(invariant28ForbiddenHits(diff, routersDiff)).toEqual([]);
+    const matcherChange = (extra = "") =>
+      [
+        ...CUSTOMER_ORDER_TRUTH_RECEIPT_MATCHER_CHANGE.removed.split("\n").map(line => `-${line}`),
+        ...CUSTOMER_ORDER_TRUTH_RECEIPT_MATCHER_CHANGE.added.split("\n").map(line => `+${line}`),
+      ].join("\n") + extra;
+    expect(invariant28ForbiddenHits(["server/geography/customerOrderTruth.ts"], routersDiff, matcherChange())).toEqual([]);
+    expect(
+      invariant28ForbiddenHits(["server/geography/customerOrderTruth.ts"], routersDiff, matcherChange("\n+export const extra = 1;"))
+    ).toEqual(["server/geography/customerOrderTruth.ts"]);
+    expect(
+      invariant28ForbiddenHits(["server/geography/customerOrderTruth.ts"], routersDiff, matcherChange("\n-  return groupCustomerOrderTruth(tenantId, records);"))
+    ).toEqual(["server/geography/customerOrderTruth.ts"]);
+    expect(
+      invariant28ForbiddenHits(["server/geography/gumballCustomerTruth.ts"], routersDiff, matcherChange())
+    ).toEqual(["server/geography/gumballCustomerTruth.ts"]);
+    const customerOrderTruthDiff = execSync(
+      "git diff origin/main...HEAD -- server/geography/customerOrderTruth.ts; git diff HEAD -- server/geography/customerOrderTruth.ts",
+      { cwd: ROOT }
+    ).toString();
+    expect(invariant28ForbiddenHits(diff, routersDiff, customerOrderTruthDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.
     const migrationSource = readFileSync(join(ROOT, "scripts/migrate.mjs"), "utf8");
