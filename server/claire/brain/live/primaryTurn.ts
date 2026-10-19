@@ -368,6 +368,7 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
       decision.conclusions.some(conclusion => conclusion.kind === "action_unsupported" || conclusion.kind === "external_capability_unowned" || conclusion.kind === "mission_write_unavailable")
         ? "Nothing was written this turn; do not imply a save, send, or schedule."
         : "",
+      "Call the operator's work list the Day Line; never call it 'the board'.",
     ].filter(Boolean).join("; "),
   };
 }

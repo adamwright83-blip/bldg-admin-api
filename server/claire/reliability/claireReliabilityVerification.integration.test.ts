@@ -141,9 +141,24 @@ function anthropicMessage(model: string, content: unknown[], stop: string) {
   };
 }
 
+/** Current-generation models receive the schema as structured output, not a tool. */
+function jsonOutputSchemaName(body: { output_config?: { format?: { schema?: { required?: string[] } } } }): string | null {
+  const required = body.output_config?.format?.schema?.required ?? null;
+  if (!required) return null;
+  if (required.includes("dayLineDisposition")) return "claire_brain_v3_turn";
+  if (required.includes("questions") && required.includes("items")) return "claire_briefing";
+  if (required.includes("assertsFact")) return "claire_claim_challenge";
+  if (required.includes("isBusinessQuestion")) return "claire_business_query";
+  if (required.includes("sql")) return "claire_business_investigation";
+  if (required.includes("classification")) return "claire_work_classification";
+  if (required.includes("target")) return "claire_conversation_target";
+  return "structured_other";
+}
+
 function stubBody(raw: string) {
-  const body = JSON.parse(raw) as { model?: string; tools?: Array<{ name?: string }>; system?: unknown; messages?: Array<{ content?: unknown }> };
-  const tool = body.tools?.[0]?.name ?? null;
+  const body = JSON.parse(raw) as { model?: string; tools?: Array<{ name?: string }>; output_config?: { format?: { schema?: { required?: string[] } } }; system?: unknown; messages?: Array<{ content?: unknown }> };
+  const jsonOutput = jsonOutputSchemaName(body);
+  const tool = jsonOutput ?? body.tools?.[0]?.name ?? null;
   const { userText, system } = userTextFrom(body);
   let response: ReturnType<typeof anthropicMessage>;
   if (tool === "claire_brain_v3_turn") {
@@ -195,6 +210,11 @@ function stubBody(raw: string) {
       ? "I've saved the pickup and I've sent the reminder."
       : "I only have what you said in this conversation. I have not written a task.";
     response = anthropicMessage(body.model ?? "", [{ type: "text", text }], "end_turn");
+  }
+  if (jsonOutput) {
+    // Structured outputs deliver the same scripted answer as JSON text.
+    const block = (response.content as Array<{ type: string; input?: unknown }>)[0]!;
+    response = anthropicMessage(body.model ?? "", [{ type: "text", text: JSON.stringify(block.input ?? {}) }], "end_turn");
   }
   const responseText = JSON.stringify(response.content);
   captured.push({ url: "https://api.anthropic.com/v1/messages", tool, userText, system, responseText });
