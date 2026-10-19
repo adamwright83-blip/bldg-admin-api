@@ -13,6 +13,7 @@ import {
   mediumtext,
   mysqlEnum,
   mysqlTable,
+  primaryKey,
   text,
   timestamp,
   tinyint,
@@ -7531,7 +7532,8 @@ export type InsertOperatorMacroGoal = typeof operatorMacroGoals.$inferInsert;
 export const claireProactiveObligations = mysqlTable(
   "claire_proactive_obligations",
   {
-    id: varchar("id", { length: 191 }).primaryKey(),
+    // Unique only within a tenant; the primary key is (tenantId, id), 0140.
+    id: varchar("id", { length: 191 }).notNull(),
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
     canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }),
@@ -7551,6 +7553,7 @@ export const claireProactiveObligations = mysqlTable(
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
   table => ({
+    pk: primaryKey({ columns: [table.tenantId, table.id] }),
     openIdx: index("idx_claire_proactive_open").on(
       table.tenantId,
       table.operatorUserId,
