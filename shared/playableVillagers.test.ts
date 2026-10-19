@@ -62,15 +62,18 @@ describe("playableVillagers", () => {
       expect(badgerDetailedReaction.dialogue).toContain("Don't go adding exclamation marks");
     });
 
-    it("reacts distinctly to scheduling commitments", () => {
+    it("reacts distinctly to scheduling commitments without implying automatic delivery", () => {
       const foxSchedule = fox.reactionToSchedule("Tomorrow Morning (10:00 AM PT)");
       const badgerSchedule = badger.reactionToSchedule("Tomorrow Morning (10:00 AM PT)");
 
       expect(foxSchedule.dialogue).toContain("dispatch shelf");
+      expect(foxSchedule.dialogue).toContain("open Google Messages");
+      expect(foxSchedule.dialogue).toContain("No automatic delivery");
       expect(foxSchedule.pose).toBe("wave");
 
-      expect(badgerSchedule.dialogue).toContain("Don't text folks during dinner");
-      expect(badgerSchedule.dialogue).toContain("proper work etiquette");
+      expect(badgerSchedule.dialogue).toContain("On the shelf it goes");
+      expect(badgerSchedule.dialogue).toContain("open Google Messages on your handset");
+      expect(badgerSchedule.dialogue).toContain("No magic automated texting");
     });
   });
 
@@ -84,7 +87,7 @@ describe("playableVillagers", () => {
       }
     });
 
-    it("generates honest, fact-grounded text for each approach", () => {
+    it("generates honest, fact-grounded text for each approach with Laundry Farm branding", () => {
       const briefText = LETTER_APPROACHES.warm_brief.generateText(sampleTarget);
       const detailedText = LETTER_APPROACHES.helpful_detailed.generateText(sampleTarget);
       const perkText = LETTER_APPROACHES.cozy_care_perk.generateText(sampleTarget);
@@ -98,6 +101,14 @@ describe("playableVillagers", () => {
       expect(briefText).toContain("42 days");
       expect(detailedText).toContain("42 days");
       expect(perkText).toContain("42 days");
+
+      // Brand must be Laundry Farm, never hardcoded Laundry Butler
+      expect(briefText).toContain("Laundry Farm");
+      expect(briefText).not.toContain("Laundry Butler");
+      expect(detailedText).toContain("Laundry Farm");
+      expect(detailedText).not.toContain("Laundry Butler");
+      expect(perkText).toContain("Laundry Farm");
+      expect(perkText).not.toContain("Laundry Butler");
 
       // Detailed approach cites the last care summary
       expect(detailedText).toContain("wash & fold");

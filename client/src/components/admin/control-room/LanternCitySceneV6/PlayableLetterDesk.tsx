@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { CozyCustomerTarget, VillagerVariant } from "@shared/cozyVillagerOutreach";
+import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
 import {
   LETTER_APPROACHES,
   getVillagerPersonality,
@@ -7,6 +8,7 @@ import {
 } from "@shared/playableVillagers";
 import { trpc } from "@/lib/trpc";
 import {
+  GOOGLE_MESSAGES_PACKAGE,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
   SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
   clientKindFromUserAgent,
@@ -15,7 +17,7 @@ import {
 import styles from "./playable-letter-desk.module.css";
 
 interface PlayableLetterDeskProps {
-  target: CozyCustomerTarget;
+  target: CozyProjectedTarget;
   targetIndex: number;
   totalTargets: number;
   objectiveId?: string | null;
@@ -23,9 +25,10 @@ interface PlayableLetterDeskProps {
   isSynthetic?: boolean;
   encounterCount?: number;
   memoryNote?: string | null;
-  onSendNow: (target: CozyCustomerTarget, editedText: string, idempotencyKey: string) => void;
+  tenantId?: string;
+  onSendNow: (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => void;
   onScheduleSend: (
-    target: CozyCustomerTarget,
+    target: CozyProjectedTarget,
     editedText: string,
     scheduledForIso: string,
     idempotencyKey?: string
@@ -49,6 +52,7 @@ export function PlayableLetterDesk({
   isSynthetic = false,
   encounterCount = 1,
   memoryNote = null,
+  tenantId = "laundry_farm",
   onSendNow,
   onScheduleSend,
   onClose,
@@ -112,7 +116,7 @@ export function PlayableLetterDesk({
     setMessage(
       target.preparedMessage ||
         target.suggestedMessage ||
-        LETTER_APPROACHES[defaultApproach].generateText(target)
+        LETTER_APPROACHES[defaultApproach].generateText(target, tenantId)
     );
     setApprovedBody(null);
     setApprovalRevision(1);
@@ -120,7 +124,7 @@ export function PlayableLetterDesk({
     setHandoffReveal(null);
     setSelectedScheduleSlot("morning");
     setScheduleDateTime(getPacificScheduleIso(10, 0));
-  }, [target.customerId, target.preparedMessage, target.suggestedMessage]);
+  }, [target.customerId, target.preparedMessage, target.suggestedMessage, tenantId]);
 
   // Dynamic dialogue & gesture calculation
   const reaction = interactedApproach
@@ -140,7 +144,7 @@ export function PlayableLetterDesk({
     setSelectedApproach(approachId);
     setInteractedApproach(approachId);
     if (approachId !== "custom") {
-      const generated = LETTER_APPROACHES[approachId].generateText(target);
+      const generated = LETTER_APPROACHES[approachId].generateText(target, tenantId);
       setMessage(generated);
     }
   };
@@ -233,12 +237,17 @@ export function PlayableLetterDesk({
     if (isSynthetic) {
       // Synthetic preview mode isolation: simulate handoff reveal without network mutation
       setHandoffReveal({
-        kind: "sms_direct",
+        kind: "prefilled",
         uri: `sms:${target.phone}?body=${encodeURIComponent(approvedBody)}`,
         fallbackUri: null,
         bodyPrefillClaimed: true,
-        prefillClaim: "direct_uri",
-        messagesPackage: null,
+        prefillClaim: "sms_uri_query",
+        copyBody: approvedBody,
+        copyLabel: null,
+        continuationHref: null,
+        continuationLabel: null,
+        actionSendto: false,
+        messagesPackage: GOOGLE_MESSAGES_PACKAGE,
         state: "compose_opened",
         verifiedSent: false,
         pose: "wave",
@@ -332,11 +341,12 @@ export function PlayableLetterDesk({
   };
 
   const state = target.status;
-  const isDispatched = state === "accepted";
-  const isScheduled = state === "scheduled";
-  const isAwaitingSender = state === "awaiting_sender_setup";
-  const isFailed = state === "failed";
-  const isConsentBlocked = state === "consent_blocked" || !target.hasConsent;
+  const commState: string = target.communicationState ?? target.silverLakeStatus?.message ?? state;
+  const isDispatched = state === "accepted" || commState === "send_observed";
+  const isScheduled = state === "scheduled" || commState === "scheduled";
+  const isAwaitingSender = state === "awaiting_sender_setup" || commState === "awaiting_sender";
+  const isFailed = state === "failed" || commState === "failed";
+  const isConsentBlocked = state === "consent_blocked" || commState === "consent_blocked" || !target.hasConsent;
   const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
   const canSend = !isConsentBlocked && message.trim().length > 0 && !isSending && !isActionCommitted;
 
@@ -348,7 +358,7 @@ export function PlayableLetterDesk({
       data-customer-id={target.customerId}
       data-villager-variant={target.villagerVariant}
       data-personality-style={personality.style}
-      data-communication-state={isScheduled ? "scheduled" : state}
+      data-communication-state={commState}
     >
       {/* Top Header Bar */}
       <header className={styles.deskHeader}>
@@ -405,11 +415,15 @@ export function PlayableLetterDesk({
         </div>
         <div className={styles.dossierItem}>
           <span>Cadence:</span>
-          <span className={styles.dossierBold}>{target.daysSinceLastOrder}d lapsed</span>
+          <span className={styles.dossierBold}>
+            {target.daysSinceLastOrder} days since last order
+          </span>
         </div>
         <div className={styles.dossierItem}>
           <span>History:</span>
-          <span>{target.paidOrders} orders</span>
+          <span>
+            {target.paidOrders} orders (${(target.lifetimeCents / 100).toFixed(0)} LTV)
+          </span>
         </div>
       </div>
 
@@ -575,6 +589,24 @@ export function PlayableLetterDesk({
       </section>
 
       {/* Realistic Outreach State Feedback Banners */}
+      {textApproved ? (
+        <div
+          className={styles.handoffNote}
+          data-sms-approval="current"
+          style={{ margin: "0 20px 8px 20px", fontSize: 12, color: "#15803d", fontWeight: 600 }}
+        >
+          Approved for this text, revision {approvalRevision}. Opening SMS does not send it.
+        </div>
+      ) : approvedBody ? (
+        <div
+          className={styles.handoffNote}
+          data-sms-approval="stale"
+          style={{ margin: "0 20px 8px 20px", fontSize: 12, color: "#b45309", fontWeight: 600 }}
+        >
+          This edit is not covered by the earlier approval. Approve the new text before opening SMS.
+        </div>
+      ) : null}
+
       {isScheduled && (
         <div className={`${styles.stateBanner} ${styles.stateBannerScheduled}`} data-testid="banner-scheduled">
           <span>⏰</span>
@@ -589,7 +621,7 @@ export function PlayableLetterDesk({
         <div className={`${styles.stateBanner} ${styles.stateBannerAwaiting}`} data-testid="banner-awaiting-sender">
           <span>📱</span>
           <div>
-            <strong>Saved for your phone handoff. Not sent.</strong>
+            <strong>Saved for your phone. Not sent.</strong>
             <div>Draft is waiting for you to send it from your own handset. Opening Messages is not a carrier delivery.</div>
           </div>
         </div>
@@ -637,6 +669,11 @@ export function PlayableLetterDesk({
             fontSize: 12,
             color: "#3b2c1d",
           }}
+          className={styles.handoffPanel}
+          data-sms-handoff-state={handoffReveal.state}
+          data-body-prefill-claimed={handoffReveal.bodyPrefillClaimed ? "true" : "false"}
+          data-villager-pose={handoffReveal.pose}
+          data-verified-sent="false"
           data-testid="handoff-panel"
         >
           <div style={{ fontWeight: 800, color: "#925816", marginBottom: 4 }}>
@@ -645,9 +682,38 @@ export function PlayableLetterDesk({
           <p style={{ margin: "0 0 8px 0" }}>
             The letter is prepared for your personal device. Tap below to launch your messaging app:
           </p>
+          {handoffReveal.kind === "desktop_continuation" && handoffReveal.continuationHref ? (
+            <>
+              <p>{handoffReveal.continuationLabel}</p>
+              <a href={handoffReveal.continuationHref}>{handoffReveal.continuationHref}</a>
+            </>
+          ) : null}
+          {handoffReveal.kind === "copy_fallback" && handoffReveal.copyBody ? (
+            <div style={{ marginBottom: 8 }}>
+              <p style={{ margin: "0 0 4px 0", fontSize: 11, opacity: 0.9 }}>{handoffReveal.copyLabel}</p>
+              <textarea
+                readOnly
+                value={handoffReveal.copyBody}
+                rows={3}
+                data-sms-copy-fallback=""
+                style={{
+                  width: "100%",
+                  padding: 8,
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  border: "1px solid #d29d4c",
+                  borderRadius: 6,
+                  background: "#fff",
+                }}
+              />
+            </div>
+          ) : null}
+          {handoffReveal.kind === "missing_body" ? <p>{handoffReveal.copyLabel}</p> : null}
           {handoffReveal.uri && (
             <a
               href={handoffReveal.uri}
+              data-sms-open={handoffReveal.messagesPackage ? "google-messages" : "sms"}
+              data-messages-package={handoffReveal.messagesPackage ?? ""}
               style={{
                 display: "inline-block",
                 background: "#2563eb",
@@ -660,7 +726,9 @@ export function PlayableLetterDesk({
               }}
               data-testid="open-sms-link"
             >
-              Open Messaging App
+              {handoffReveal.bodyPrefillClaimed
+                ? "Open SMS with this message"
+                : "Open Google Messages on this phone"}
             </a>
           )}
           {handoffReveal.state === "compose_opened" && (
@@ -706,7 +774,20 @@ export function PlayableLetterDesk({
           disabled={!message.trim() || isActionCommitted}
           data-testid="approve-text-button"
         >
-          {textApproved ? "✓ Approved" : "Approve Text"}
+          APPROVE
+        </button>
+
+        <button
+          type="button"
+          className={styles.scheduleCommitButton}
+          onClick={() => {
+            setSelectedScheduleSlot("morning");
+            setScheduleDateTime(getPacificScheduleIso(10, 0));
+          }}
+          disabled={isActionCommitted || isSending}
+          data-testid="schedule-button"
+        >
+          <span>⏰</span> SCHEDULE
         </button>
 
         <button
@@ -716,7 +797,7 @@ export function PlayableLetterDesk({
           disabled={!canSend}
           data-testid="commit-schedule-button"
         >
-          <span>⏰</span> COMMIT SCHEDULE
+          <span>✓</span> COMMIT
         </button>
 
         <button
@@ -726,7 +807,7 @@ export function PlayableLetterDesk({
           disabled={!textApproved || !target.phone || !target.hasConsent || isSending}
           data-testid="open-in-sms-button"
         >
-          <span>📱</span> Open in SMS
+          OPEN IN SMS
         </button>
 
         <button
@@ -742,7 +823,7 @@ export function PlayableLetterDesk({
             "✓ COMMITTED"
           ) : (
             <>
-              <span>✈</span> Send Letter Now
+              <span>✈</span> SEND NOW
             </>
           )}
         </button>
@@ -757,7 +838,7 @@ export function PlayableLetterDesk({
           onClick={() => onSelectIndex(targetIndex - 1)}
           data-testid="prev-customer-button"
         >
-          ◀ Prev Customer
+          ◀ Prev
         </button>
         <span data-testid="customer-index-indicator">
           Customer {targetIndex + 1} of {totalTargets} ({target.displayName})
@@ -769,7 +850,7 @@ export function PlayableLetterDesk({
           onClick={() => onSelectIndex(targetIndex + 1)}
           data-testid="next-customer-button"
         >
-          Next Customer ▶
+          Next ▶
         </button>
       </footer>
     </aside>

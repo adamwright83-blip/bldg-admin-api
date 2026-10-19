@@ -14,7 +14,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
 
-    await page.goto("/growth/lantern-city?cozy=1");
+    await page.goto("/growth/lantern-city?cozy=1&dev=1");
 
     // Encounter container is visible
     const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');

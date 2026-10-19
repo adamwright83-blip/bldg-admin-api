@@ -18,7 +18,16 @@ import {
   type VillagerVariant,
   COZY_SLOT_ANCHORS,
 } from "./cozyVillagerOutreach";
-import { type CozyCommunicationState } from "./cozyVillagerEvidence";
+import {
+  type CozyCommunicationState,
+  type CozyProjectedTarget,
+  type CozyReplyProjection,
+  type CozyPaidOrderProjection,
+} from "./cozyVillagerEvidence";
+import {
+  projectSilverLakeOutreachStatus,
+  type SilverLakeOutreachSnapshot,
+} from "./silverLakeOutreachStatus";
 
 export type LetterApproachId =
   | "warm_brief"
@@ -31,7 +40,18 @@ export interface LetterApproachOption {
   label: string;
   icon: string;
   summary: string;
-  generateText: (target: CozyCustomerTarget) => string;
+  generateText: (target: CozyCustomerTarget, tenantId?: string | null) => string;
+}
+
+/**
+ * Resolves the authorized business brand name for customer-facing communication.
+ * Silver Lake recovery is strictly a Laundry Farm mission. Never hardcodes Laundry Butler.
+ */
+export function businessNameForTenant(tenantId?: string | null): string {
+  if (tenantId === "default" || tenantId === "laundry_butler") {
+    return "Laundry Butler";
+  }
+  return "Laundry Farm";
 }
 
 /**
@@ -44,9 +64,10 @@ export const LETTER_APPROACHES: Record<LetterApproachId, LetterApproachOption> =
     label: "Warm & Brief",
     icon: "🌿",
     summary: "Concise, friendly check-in that gets straight to the point.",
-    generateText: (target) => {
+    generateText: (target, tenantId) => {
       const firstName = target.displayName.split(" ")[0];
-      return `Hi ${firstName}, hope you're having a wonderful week in ${target.territoryName}! We noticed it's been ${target.daysSinceLastOrder} days since your last order with Laundry Butler. We're here whenever you'd like a pickup!`;
+      const business = businessNameForTenant(tenantId);
+      return `Hi ${firstName}, hope you're having a wonderful week in ${target.territoryName}! We noticed it's been ${target.daysSinceLastOrder} days since your last order with ${business}. We're here whenever you'd like a pickup!`;
     },
   },
   helpful_detailed: {
@@ -54,12 +75,13 @@ export const LETTER_APPROACHES: Record<LetterApproachId, LetterApproachOption> =
     label: "Helpful & Detailed",
     icon: "📖",
     summary: "Personalized touch mentioning their past care and service cadence.",
-    generateText: (target) => {
+    generateText: (target, tenantId) => {
       const firstName = target.displayName.split(" ")[0];
+      const business = businessNameForTenant(tenantId);
       const serviceDetail = target.lastOrderSummary
         ? ` with your ${target.lastOrderSummary.toLowerCase()}`
         : "";
-      return `Hi ${firstName}, checking in from Laundry Butler! It's been ${target.daysSinceLastOrder} days since we last cared for your laundry${serviceDetail}. We'd love to help take care of your linens for the upcoming week whenever you're ready.`;
+      return `Hi ${firstName}, checking in from ${business}! It's been ${target.daysSinceLastOrder} days since we last cared for your laundry${serviceDetail}. We'd love to help take care of your linens for the upcoming week whenever you're ready.`;
     },
   },
   cozy_care_perk: {
@@ -67,9 +89,10 @@ export const LETTER_APPROACHES: Record<LetterApproachId, LetterApproachOption> =
     label: "Cozy Care Perk",
     icon: "🎁",
     summary: "Warm invitation focusing on free door-to-door convenience.",
-    generateText: (target) => {
+    generateText: (target, tenantId) => {
       const firstName = target.displayName.split(" ")[0];
-      return `Hi ${firstName}! Your friends at Laundry Butler in ${target.territoryName} are thinking of you. It's been ${target.daysSinceLastOrder} days since your last fresh fold — schedule your next pickup anytime and let us handle the rest!`;
+      const business = businessNameForTenant(tenantId);
+      return `Hi ${firstName}! Your friends at ${business} in ${target.territoryName} are thinking of you. It's been ${target.daysSinceLastOrder} days since your last fresh fold — schedule your next pickup anytime and let us handle the rest!`;
     },
   },
   custom: {
@@ -165,7 +188,7 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
     },
     reactionToSchedule: (timeLabel) => ({
       pose: "wave",
-      dialogue: `Wonderful! I'll place this letter on the dispatch shelf for ${timeLabel}. It'll be waiting ready for departure!`,
+      dialogue: `Wonderful! I'll place this letter on the dispatch shelf for ${timeLabel}. Remember: when that time comes, open Google Messages on your phone to send it from your personal number. No automatic delivery here!`,
       glyph: "⏰🏮",
     }),
     reactionToCommit: (actionType) => {
@@ -181,7 +204,7 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
           return {
             pose: "acknowledged",
             dialogue:
-              "Tucked safely on the dispatch shelf! The morning carrier will know exactly when to bring it out.",
+              "Tucked safely on the dispatch shelf! When the scheduled hour arrives, open Google Messages on your handset to send from your personal number.",
             glyph: "⏰✨",
           };
         case "sms_opened":
@@ -244,7 +267,7 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
     },
     reactionToSchedule: (timeLabel) => ({
       pose: "wave",
-      dialogue: `${timeLabel}. Good call. Don't text folks during dinner; morning dispatch is proper work etiquette.`,
+      dialogue: `${timeLabel}. On the shelf it goes. Remember: at that time, you open Google Messages on your handset to tap send yourself. No magic automated texting.`,
       glyph: "⏰",
     }),
     reactionToCommit: (actionType) => {
@@ -260,7 +283,7 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
           return {
             pose: "acknowledged",
             dialogue:
-              "Locked in the dispatch drawer. It won't bother anyone until its exact time.",
+              "Locked on the dispatch shelf. Remember: when the clock strikes, you still have to open Google Messages on your handset and send it yourself. No automatic texts.",
             glyph: "⏰",
           };
         case "sms_opened":
@@ -297,7 +320,7 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
     }),
     reactionToSchedule: (timeLabel) => ({
       pose: "wave",
-      dialogue: `Scheduled for ${timeLabel}! I'll set a little reminder right on my desk.`,
+      dialogue: `Placed on the dispatch shelf for ${timeLabel}! When it's time, remember to open Google Messages on your phone to send it from your personal number.`,
       glyph: "⏰🌸",
     }),
     reactionToCommit: () => ({
@@ -379,7 +402,11 @@ export interface NeighborhoodMemoryState {
 
 const STORAGE_KEY_PREFIX = "joystick_silver_lake_memory_";
 
-export function loadNeighborhoodMemory(tenantId: string = "default"): NeighborhoodMemoryState {
+/**
+ * Loads browser-local neighborhood memory strictly partitioned by tenant.
+ * Browser-local fictional memory for this playable slice; zero cross-tenant leakage.
+ */
+export function loadNeighborhoodMemory(tenantId: string = "laundry_farm"): NeighborhoodMemoryState {
   if (typeof window === "undefined") {
     return {
       featureChoice: "tea_table",
@@ -404,9 +431,12 @@ export function loadNeighborhoodMemory(tenantId: string = "default"): Neighborho
   };
 }
 
+/**
+ * Saves browser-local neighborhood memory strictly partitioned by tenant.
+ */
 export function saveNeighborhoodMemory(
   state: NeighborhoodMemoryState,
-  tenantId: string = "default"
+  tenantId: string = "laundry_farm"
 ): void {
   if (typeof window === "undefined") return;
   try {
@@ -416,212 +446,417 @@ export function saveNeighborhoodMemory(
   }
 }
 
+const DEFAULT_REPLY_UNAVAILABLE: CozyReplyProjection = {
+  status: "unavailable",
+  reason: "No reply received on synthetic preview",
+};
+
+const DEFAULT_PAID_ORDER_UNAVAILABLE: CozyPaidOrderProjection = {
+  status: "unavailable",
+  reason: "Synthetic preview never presents unverified revenue attribution",
+};
+
 /**
- * Isolated Synthetic Test Targets for Playable Demonstration & Verification.
- * Covers all 8 realistic outreach states cleanly without contacting any customer:
- * 1. Draft prepared (Mei Lin / Fox)
- * 2. Scheduled in Pacific window (David Chen / Bear)
- * 3. Awaiting phone sender setup (Sarah Jenkins / Otter)
- * 4. Send observed / simulated receipt (Elena Rostova / Squirrel)
- * 5. Draft prepared / dry concise encounter (Marcus Vance / Badger)
- * 6. Failed outbox execution / retryable (Chloe Bennett / Cat)
- * 7. Consent blocked / missing phone (Lucas Morales / Fox)
- * 8. Reorder observed / verified return customer (Grace Holloway / Hedgehog)
+ * Builds isolated synthetic test targets for playable demonstration & verification.
+ * Strictly uses Laundry Farm branding and attaches authoritative silverLakeStatus.
+ * Never presents fake or attributed revenue.
  */
-export const SYNTHETIC_SILVER_LAKE_TARGETS: CozyCustomerTarget[] = [
-  {
-    slotId: "slot_01",
-    customerId: "synthetic:customer:mei_lin",
-    displayName: "Mei Lin",
-    phone: "+13105550141",
-    address: "2418 Silver Lake Blvd, Los Angeles, CA 90039",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 42,
-    paidOrders: 5,
-    lifetimeCents: 21500,
-    lastOrderDate: "2026-09-07T14:30:00.000Z",
-    lastOrderSummary: "Wash & Fold · 2 bags",
-    hasConsent: true,
-    consentStatus: "verified_opt_in",
-    consentBasis: "explicit_consent_record",
-    villagerVariant: "fox",
-    suggestedMessage:
-      "Hi Mei, checking in from Laundry Butler! It's been 42 days since your last wash & fold with us. We'd love to take care of your laundry for the week ahead whenever you're ready!",
-    status: "draft_ready",
-  },
-  {
-    slotId: "slot_02",
-    customerId: "synthetic:customer:david_chen",
-    displayName: "David Chen",
-    phone: "+13105550142",
-    address: "2200 Silver Lake Blvd, Los Angeles, CA 90039",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 56,
-    paidOrders: 3,
-    lifetimeCents: 14200,
-    lastOrderDate: "2026-08-24T10:15:00.000Z",
-    lastOrderSummary: "Bedding & Linens",
-    hasConsent: true,
-    consentStatus: "existing_customer_relationship",
-    consentBasis: "transactional_dormant_recovery",
-    villagerVariant: "bear",
-    suggestedMessage:
-      "Hi David, hope you're having a good week! It's been 56 days since your last bedding pickup. Let us know if you'd like a fresh wash scheduled!",
-    status: "scheduled",
-    scheduledDraft: {
+export function buildSyntheticSilverLakeTargets(
+  tenantId: string = "laundry_farm"
+): CozyProjectedTarget[] {
+  const business = businessNameForTenant(tenantId);
+  const now = new Date();
+
+  return [
+    {
+      slotId: "slot_01",
+      customerId: "synthetic:customer:mei_lin",
+      displayName: "Mei Lin",
+      phone: "+13105550141",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 42,
+      paidOrders: 5,
+      lifetimeCents: 21500,
+      lastOrderDate: "2026-09-07T14:30:00.000Z",
+      lastOrderSummary: "Wash & Fold · 2 bags",
+      hasConsent: true,
+      consentStatus: "verified_opt_in",
+      consentBasis: "explicit_consent_record",
+      villagerVariant: "fox",
+      suggestedMessage: `Hi Mei, checking in from ${business}! It's been 42 days since your last wash & fold with us. We'd love to take care of your laundry for the week ahead whenever you're ready!`,
+      preparedMessage: `Hi Mei, checking in from ${business}! It's been 42 days since your last wash & fold with us. We'd love to take care of your laundry for the week ahead whenever you're ready!`,
+      status: "draft_ready",
+      communicationState: "draft_prepared",
+      communicationLabel: "Draft Prepared",
+      pose: "idle",
+      poseFrameAvailable: false,
+      messageId: null,
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      silverLakeStatus: projectSilverLakeOutreachStatus({
+        tenantId,
+        operatorId: "preview-operator",
+        customerId: "synthetic:customer:mei_lin",
+        suggestedBody: `Hi Mei, checking in from ${business}!`,
+        now,
+      }),
+    },
+    {
+      slotId: "slot_02",
+      customerId: "synthetic:customer:david_chen",
+      displayName: "David Chen",
+      phone: "+13105550142",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 56,
+      paidOrders: 3,
+      lifetimeCents: 14200,
+      lastOrderDate: "2026-08-24T10:15:00.000Z",
+      lastOrderSummary: "Bedding & Linens",
+      hasConsent: true,
+      consentStatus: "existing_customer_relationship",
+      consentBasis: "transactional_dormant_recovery",
+      villagerVariant: "bear",
+      suggestedMessage: `Hi David, hope you're having a good week! It's been 56 days since your last bedding pickup. Let us know if you'd like a fresh wash scheduled!`,
+      preparedMessage: `Hi David, checking in from ${business}! Scheduled for tomorrow morning dispatch.`,
+      status: "scheduled",
+      communicationState: "scheduled",
+      communicationLabel: "Scheduled",
+      pose: "wave",
+      poseFrameAvailable: false,
       messageId: "outbox_synth_david_02",
-      scheduledFor: new Date(Date.now() + 86400000).toISOString(),
-      timezone: "America/Los_Angeles",
-      currentMessageBody:
-        "Hi David, checking in from Laundry Butler! Scheduled for tomorrow morning dispatch.",
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      scheduledDraft: {
+        messageId: "outbox_synth_david_02",
+        scheduledFor: new Date(Date.now() + 86400000).toISOString(),
+        timezone: "America/Los_Angeles",
+        currentMessageBody: `Hi David, checking in from ${business}! Scheduled for tomorrow morning dispatch.`,
+      },
+      silverLakeStatus: {
+        message: "scheduled",
+        label: "Scheduled",
+        explicitlyApproved: true,
+        approvalCoversCurrentRevision: true,
+        scheduledFor: new Date(Date.now() + 86400000).toISOString(),
+        timezone: "America/Los_Angeles",
+        revisionCount: 1,
+        messageId: "outbox_synth_david_02",
+        automaticTransmission: false,
+        openingComposeIsSend: false,
+        operatorReportIsVerifiedSend: false,
+        revenueAttributedToOutreach: false,
+        reply: "none",
+        order: "none",
+        revenue: "unavailable",
+        detail: "Approved and scheduled. At send time the operator opens Google Messages. The row is not an automatic text.",
+      },
     },
-  },
-  {
-    slotId: "slot_03",
-    customerId: "synthetic:customer:sarah_jenkins",
-    displayName: "Sarah Jenkins",
-    phone: "+13105550143",
-    address: "2840 Rowena Ave, Los Angeles, CA 90039",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 38,
-    paidOrders: 8,
-    lifetimeCents: 38900,
-    lastOrderDate: "2026-09-11T16:00:00.000Z",
-    lastOrderSummary: "Delicates & Hang Dry",
-    hasConsent: true,
-    consentStatus: "verified_opt_in",
-    consentBasis: "explicit_consent_record",
-    villagerVariant: "otter",
-    suggestedMessage:
-      "Hi Sarah! Hope you're doing well. It's been 38 days since your last delicates service — we're ready whenever you'd like a pickup!",
-    status: "awaiting_sender_setup",
-    scheduledDraft: {
+    {
+      slotId: "slot_03",
+      customerId: "synthetic:customer:sarah_jenkins",
+      displayName: "Sarah Jenkins",
+      phone: "+13105550143",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 38,
+      paidOrders: 8,
+      lifetimeCents: 38900,
+      lastOrderDate: "2026-09-11T16:00:00.000Z",
+      lastOrderSummary: "Delicates & Hang Dry",
+      hasConsent: true,
+      consentStatus: "verified_opt_in",
+      consentBasis: "explicit_consent_record",
+      villagerVariant: "otter",
+      suggestedMessage: `Hi Sarah! Hope you're doing well. It's been 38 days since your last delicates service — we're ready whenever you'd like a pickup!`,
+      preparedMessage: `Hi Sarah! Saved for your Android phone handoff. Not sent automatically.`,
+      status: "awaiting_sender_setup",
+      communicationState: "awaiting_sender",
+      communicationLabel: "Awaiting Sender",
+      pose: "idle",
+      poseFrameAvailable: false,
       messageId: "outbox_synth_sarah_03",
-      scheduledFor: new Date().toISOString(),
-      timezone: "America/Los_Angeles",
-      currentMessageBody:
-        "Hi Sarah! Saved for your Android phone handoff. Not sent automatically.",
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      scheduledDraft: {
+        messageId: "outbox_synth_sarah_03",
+        scheduledFor: new Date().toISOString(),
+        timezone: "America/Los_Angeles",
+        currentMessageBody: "Hi Sarah! Saved for your Android phone handoff. Not sent automatically.",
+      },
+      silverLakeStatus: {
+        message: "awaiting_sender",
+        label: "Awaiting sender",
+        explicitlyApproved: true,
+        approvalCoversCurrentRevision: true,
+        scheduledFor: new Date().toISOString(),
+        timezone: "America/Los_Angeles",
+        revisionCount: 1,
+        messageId: "outbox_synth_sarah_03",
+        automaticTransmission: false,
+        openingComposeIsSend: false,
+        operatorReportIsVerifiedSend: false,
+        revenueAttributedToOutreach: false,
+        reply: "none",
+        order: "none",
+        revenue: "unavailable",
+        detail: "Approved for this recipient and this text. A sender still has to open Google Messages. Nothing has been sent.",
+      },
     },
-  },
-  {
-    slotId: "slot_04",
-    customerId: "synthetic:customer:elena_rostova",
-    displayName: "Elena Rostova",
-    phone: "+13105550144",
-    address: "3100 Glendale Blvd, Los Angeles, CA 90039",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 64,
-    paidOrders: 4,
-    lifetimeCents: 18500,
-    lastOrderDate: "2026-08-16T11:00:00.000Z",
-    lastOrderSummary: "Wash & Fold",
-    hasConsent: true,
-    consentStatus: "existing_customer_relationship",
-    consentBasis: "transactional_dormant_recovery",
-    villagerVariant: "squirrel",
-    suggestedMessage:
-      "Hi Elena, thinking of you in Silver Lake! It's been 64 days since your last wash. Let us know when you'd like a pickup!",
-    status: "accepted",
-    providerReceipt: {
-      messageSid: "simulated:msg_elena_04",
-      status: "dispatched",
-      sentAt: new Date(Date.now() - 3600000).toISOString(),
-      evidenceName: "simulated_carrier_receipt",
+    {
+      slotId: "slot_04",
+      customerId: "synthetic:customer:elena_rostova",
+      displayName: "Elena Rostova",
+      phone: "+13105550144",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 64,
+      paidOrders: 4,
+      lifetimeCents: 18500,
+      lastOrderDate: "2026-08-16T11:00:00.000Z",
+      lastOrderSummary: "Wash & Fold",
+      hasConsent: true,
+      consentStatus: "existing_customer_relationship",
+      consentBasis: "transactional_dormant_recovery",
+      villagerVariant: "squirrel",
+      suggestedMessage: `Hi Elena, thinking of you in Silver Lake! It's been 64 days since your last wash. Let us know when you'd like a pickup!`,
+      preparedMessage: `Hi Elena, thinking of you in Silver Lake! It's been 64 days since your last wash. Let us know when you'd like a pickup!`,
+      status: "accepted",
+      communicationState: "send_observed",
+      communicationLabel: "Send Observed",
+      pose: "wave",
+      poseFrameAvailable: false,
+      messageId: "simulated:msg_elena_04",
+      transport: "simulated",
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: true,
+      objectiveComplete: false,
+      providerReceipt: {
+        messageSid: "simulated:msg_elena_04",
+        status: "dispatched",
+        sentAt: new Date(Date.now() - 3600000).toISOString(),
+        evidenceName: "simulated_carrier_receipt",
+      },
+      silverLakeStatus: {
+        message: "operator_reported_sent",
+        label: "Operator reported sent",
+        explicitlyApproved: true,
+        approvalCoversCurrentRevision: true,
+        scheduledFor: null,
+        timezone: null,
+        revisionCount: 1,
+        messageId: "simulated:msg_elena_04",
+        automaticTransmission: false,
+        openingComposeIsSend: false,
+        operatorReportIsVerifiedSend: false,
+        revenueAttributedToOutreach: false,
+        reply: "none",
+        order: "none",
+        revenue: "unavailable",
+        detail: "The operator reported this exact revision as sent. That report is not an independent verification.",
+      },
     },
-  },
-  {
-    slotId: "slot_05",
-    customerId: "synthetic:customer:marcus_vance",
-    displayName: "Marcus Vance",
-    phone: "+13105550145",
-    address: "1890 Micheltorena St, Los Angeles, CA 90026",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 49,
-    paidOrders: 6,
-    lifetimeCents: 26000,
-    lastOrderDate: "2026-08-31T09:45:00.000Z",
-    lastOrderSummary: "Heavy Bedding & Comforter",
-    hasConsent: true,
-    consentStatus: "verified_opt_in",
-    consentBasis: "explicit_consent_record",
-    villagerVariant: "badger",
-    suggestedMessage:
-      "Hi Marcus, Laundry Butler here. It's been 49 days since your last order. We're available for Silver Lake pickups whenever you're ready.",
-    status: "draft_ready",
-  },
-  {
-    slotId: "slot_06",
-    customerId: "synthetic:customer:chloe_bennett",
-    displayName: "Chloe Bennett",
-    phone: "+13105550146",
-    address: "2115 Griffith Park Blvd, Los Angeles, CA 90039",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 72,
-    paidOrders: 2,
-    lifetimeCents: 9800,
-    lastOrderDate: "2026-08-08T15:20:00.000Z",
-    lastOrderSummary: "Standard Wash & Fold",
-    hasConsent: true,
-    consentStatus: "existing_customer_relationship",
-    consentBasis: "transactional_dormant_recovery",
-    villagerVariant: "cat",
-    suggestedMessage:
-      "Hi Chloe, checking in from Laundry Butler! It's been 72 days since your last order. We'd love to help with your laundry this week!",
-    status: "failed",
-  },
-  {
-    slotId: "slot_07",
-    customerId: "synthetic:customer:lucas_morales",
-    displayName: "Lucas Morales",
-    phone: null,
-    address: "2504 Hyperion Ave, Los Angeles, CA 90027",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 80,
-    paidOrders: 1,
-    lifetimeCents: 4500,
-    lastOrderDate: "2026-07-31T12:00:00.000Z",
-    lastOrderSummary: "First-time Wash & Fold",
-    hasConsent: false,
-    consentStatus: "missing_phone",
-    consentBasis: "missing_contact_info",
-    consentReason: "Missing verified phone number",
-    villagerVariant: "fox",
-    suggestedMessage:
-      "Hi Lucas, checking in from Laundry Butler in Silver Lake!",
-    status: "consent_blocked",
-  },
-  {
-    slotId: "slot_08",
-    customerId: "synthetic:customer:grace_holloway",
-    displayName: "Grace Holloway",
-    phone: "+13105550148",
-    address: "1620 Coronado St, Los Angeles, CA 90026",
-    territoryId: "silver-lake",
-    territoryName: "Silver Lake",
-    daysSinceLastOrder: 21,
-    paidOrders: 7,
-    lifetimeCents: 34500,
-    lastOrderDate: "2026-09-28T13:10:00.000Z",
-    lastOrderSummary: "Wash & Fold · Next-day return",
-    hasConsent: true,
-    consentStatus: "verified_opt_in",
-    consentBasis: "explicit_consent_record",
-    villagerVariant: "hedgehog",
-    suggestedMessage:
-      "Hi Grace! Thank you for reordering with us — your clean linens are on their way!",
-    status: "accepted",
-    providerReceipt: {
-      messageSid: "simulated:msg_grace_08",
-      status: "dispatched",
-      sentAt: new Date(Date.now() - 7200000).toISOString(),
-      evidenceName: "simulated_carrier_receipt",
+    {
+      slotId: "slot_05",
+      customerId: "synthetic:customer:marcus_vance",
+      displayName: "Marcus Vance",
+      phone: "+13105550145",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 49,
+      paidOrders: 6,
+      lifetimeCents: 26000,
+      lastOrderDate: "2026-08-31T09:45:00.000Z",
+      lastOrderSummary: "Heavy Bedding & Comforter",
+      hasConsent: true,
+      consentStatus: "verified_opt_in",
+      consentBasis: "explicit_consent_record",
+      villagerVariant: "badger",
+      suggestedMessage: `Hi Marcus, ${business} here. It's been 49 days since your last order. We're available for Silver Lake pickups whenever you're ready.`,
+      preparedMessage: `Hi Marcus, ${business} here. It's been 49 days since your last order. We're available for Silver Lake pickups whenever you're ready.`,
+      status: "draft_ready",
+      communicationState: "draft_prepared",
+      communicationLabel: "Draft Prepared",
+      pose: "idle",
+      poseFrameAvailable: false,
+      messageId: null,
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      silverLakeStatus: projectSilverLakeOutreachStatus({
+        tenantId,
+        operatorId: "preview-operator",
+        customerId: "synthetic:customer:marcus_vance",
+        suggestedBody: `Hi Marcus, ${business} here.`,
+        now,
+      }),
     },
-  },
-];
+    {
+      slotId: "slot_06",
+      customerId: "synthetic:customer:chloe_bennett",
+      displayName: "Chloe Bennett",
+      phone: "+13105550146",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 72,
+      paidOrders: 2,
+      lifetimeCents: 9800,
+      lastOrderDate: "2026-08-08T15:20:00.000Z",
+      lastOrderSummary: "Standard Wash & Fold",
+      hasConsent: true,
+      consentStatus: "existing_customer_relationship",
+      consentBasis: "transactional_dormant_recovery",
+      villagerVariant: "cat",
+      suggestedMessage: `Hi Chloe, checking in from ${business}! It's been 72 days since your last order. We'd love to help with your laundry this week!`,
+      preparedMessage: `Hi Chloe, checking in from ${business}! It's been 72 days since your last order. We'd love to help with your laundry this week!`,
+      status: "failed",
+      communicationState: "failed",
+      communicationLabel: "Failed — not sent",
+      pose: "idle",
+      poseFrameAvailable: false,
+      messageId: "outbox_synth_chloe_06",
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      silverLakeStatus: {
+        message: "failed",
+        label: "Failed",
+        explicitlyApproved: false,
+        approvalCoversCurrentRevision: false,
+        scheduledFor: null,
+        timezone: null,
+        revisionCount: 1,
+        messageId: "outbox_synth_chloe_06",
+        automaticTransmission: false,
+        openingComposeIsSend: false,
+        operatorReportIsVerifiedSend: false,
+        revenueAttributedToOutreach: false,
+        reply: "none",
+        order: "none",
+        revenue: "unavailable",
+        detail: "Transmission failed. This is not a send.",
+      },
+    },
+    {
+      slotId: "slot_07",
+      customerId: "synthetic:customer:lucas_morales",
+      displayName: "Lucas Morales",
+      phone: null,
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 80,
+      paidOrders: 1,
+      lifetimeCents: 4500,
+      lastOrderDate: "2026-07-31T12:00:00.000Z",
+      lastOrderSummary: "First-time Wash & Fold",
+      hasConsent: false,
+      consentStatus: "missing_phone",
+      consentBasis: "missing_contact_info",
+      consentReason: "Missing verified phone number",
+      villagerVariant: "fox",
+      suggestedMessage: `Hi Lucas, checking in from ${business} in Silver Lake!`,
+      preparedMessage: `Hi Lucas, checking in from ${business} in Silver Lake!`,
+      status: "consent_blocked",
+      communicationState: "consent_blocked",
+      communicationLabel: "Consent blocked",
+      pose: "idle",
+      poseFrameAvailable: false,
+      messageId: null,
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      silverLakeStatus: {
+        message: "cancelled",
+        label: "Cancelled",
+        explicitlyApproved: false,
+        approvalCoversCurrentRevision: false,
+        scheduledFor: null,
+        timezone: null,
+        revisionCount: null,
+        messageId: null,
+        automaticTransmission: false,
+        openingComposeIsSend: false,
+        operatorReportIsVerifiedSend: false,
+        revenueAttributedToOutreach: false,
+        reply: "none",
+        order: "none",
+        revenue: "unavailable",
+        detail: "Contact blocked: missing verified phone number.",
+      },
+    },
+    {
+      slotId: "slot_08",
+      customerId: "synthetic:customer:grace_holloway",
+      displayName: "Grace Holloway",
+      phone: "+13105550148",
+      address: "Silver Lake, Los Angeles",
+      verifiedAddress: null,
+      territoryId: "silver-lake",
+      territoryName: "Silver Lake",
+      daysSinceLastOrder: 21,
+      paidOrders: 7,
+      lifetimeCents: 34500,
+      lastOrderDate: "2026-09-28T13:10:00.000Z",
+      lastOrderSummary: "Wash & Fold · Next-day return",
+      hasConsent: true,
+      consentStatus: "verified_opt_in",
+      consentBasis: "explicit_consent_record",
+      villagerVariant: "hedgehog",
+      suggestedMessage: `Hi Grace! Checking in from ${business} — hope you're having a wonderful week in Silver Lake!`,
+      preparedMessage: `Hi Grace! Checking in from ${business} — hope you're having a wonderful week in Silver Lake!`,
+      status: "draft_ready",
+      communicationState: "draft_prepared",
+      communicationLabel: "Draft Prepared",
+      pose: "idle",
+      poseFrameAvailable: false,
+      messageId: null,
+      transport: null,
+      reply: DEFAULT_REPLY_UNAVAILABLE,
+      paidOrder: DEFAULT_PAID_ORDER_UNAVAILABLE,
+      outreachActionComplete: false,
+      objectiveComplete: false,
+      silverLakeStatus: projectSilverLakeOutreachStatus({
+        tenantId,
+        operatorId: "preview-operator",
+        customerId: "synthetic:customer:grace_holloway",
+        suggestedBody: `Hi Grace! Checking in from ${business}`,
+        now,
+      }),
+    },
+  ];
+}
+
+export const SYNTHETIC_SILVER_LAKE_TARGETS: CozyProjectedTarget[] =
+  buildSyntheticSilverLakeTargets("laundry_farm");
+
