@@ -231,4 +231,12 @@ describe("Brain V2 primary company view", () => {
     expect(butler.speak).not.toContain("$175.00");
     expect(butler.speak).not.toContain("$425.00");
   });
+
+  it("answers a company question for the exact period named, never refusing a matching company read", async () => {
+    const { deps, readCompanyView } = depsFor(["default", "laundry_farm"]);
+    const result = await runClaireV2PrimaryTurn(turn("What were my sales last week?", "voice", "default"), deps);
+    expect(readCompanyView).toHaveBeenCalledWith(expect.objectContaining({ period: expect.objectContaining({ kind: "last_week" }) }));
+    expect(result.speak).not.toMatch(/can't verify last week/);
+    expect(result.brainV2.origin).toBe("brain_v2");
+  });
 });
