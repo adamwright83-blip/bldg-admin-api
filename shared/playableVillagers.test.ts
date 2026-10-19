@@ -165,4 +165,66 @@ describe("playableVillagers", () => {
       }
     });
   });
+
+  describe("Phase 4 Evolving Villager Memory & Contextual Greetings", () => {
+    it("evolves greeting when player returns tomorrow or later", () => {
+      const foxGreeting = fox.contextualGreeting?.({
+        customerName: "Mei Lin",
+        isReturnVisitTomorrowOrLater: true,
+      });
+      const badgerGreeting = badger.contextualGreeting?.({
+        customerName: "Mei Lin",
+        isReturnVisitTomorrowOrLater: true,
+      });
+
+      expect(foxGreeting).toContain("Good morning!");
+      expect(foxGreeting).toContain("brand new day");
+      expect(badgerGreeting).toContain("Morning. Good to see you back.");
+    });
+
+    it("acknowledges unfinished letter draft left on the desk", () => {
+      const foxDraft = fox.contextualGreeting?.({
+        customerName: "Mei Lin",
+        unfinishedDraftCustomer: "Mei Lin",
+      });
+      const badgerDraft = badger.contextualGreeting?.({
+        customerName: "Mei Lin",
+        unfinishedDraftCustomer: "Mei Lin",
+      });
+
+      expect(foxDraft).toContain("left off drafting");
+      expect(foxDraft).toContain("Mei Lin");
+      expect(badgerDraft).toContain("unfinished note for Mei Lin is still on the desk");
+    });
+
+    it("responds with distinct personality to verified customer reply and paid reorder", () => {
+      // Customer reply
+      const foxReply = fox.contextualGreeting?.({
+        customerName: "Mei Lin",
+        customerReplied: true,
+      });
+      const badgerReply = badger.contextualGreeting?.({
+        customerName: "Mei Lin",
+        customerReplied: true,
+      });
+
+      expect(foxReply).toContain("reply arrived from Mei Lin");
+      expect(badgerReply).toContain("Inbound reply arrived from Mei Lin");
+
+      // Paid reorder verified
+      const foxPaid = fox.contextualGreeting?.({
+        customerName: "Mei Lin",
+        paidReorderVerified: true,
+      });
+      const badgerPaid = badger.contextualGreeting?.({
+        customerName: "Mei Lin",
+        paidReorderVerified: true,
+      });
+
+      expect(foxPaid).toContain("Celebration!");
+      expect(foxPaid).toContain("placed a new verified order with Laundry Farm");
+      expect(badgerPaid).toContain("Order confirmed paid in CleanCloud");
+      expect(badgerPaid).toContain("Real business");
+    });
+  });
 });

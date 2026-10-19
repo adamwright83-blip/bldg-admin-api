@@ -78,6 +78,125 @@ export const goldlineWorldRouter = router({
         limit: input?.limit,
       }).then(surfaces => surfaces.mission)
     ),
+  getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          territoryId: z.string().default("silver-lake"),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const { loadNeighborhoodWorldMemory } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await loadNeighborhoodWorldMemory({
+        tenantId: ctx.tenantId,
+        territoryId: input?.territoryId,
+      });
+    }),
+  saveNeighborhoodFeature: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        featureChoice: z.enum(["tea_table", "reading_bench", "lantern_post"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { saveNeighborhoodFeature } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await saveNeighborhoodFeature({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        featureChoice: input.featureChoice,
+      });
+    }),
+  recordVillagerInteraction: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        villagerVariant: z.enum([
+          "fox",
+          "badger",
+          "bunny",
+          "bear",
+          "otter",
+          "hedgehog",
+          "squirrel",
+          "cat",
+        ]),
+        customerId: z.string().optional(),
+        customerName: z.string().optional(),
+        approach: z
+          .enum(["warm_brief", "helpful_detailed", "cozy_care_perk", "custom"])
+          .optional(),
+        draftBody: z.string().optional(),
+        actionType: z
+          .enum([
+            "draft_prepared",
+            "scheduled",
+            "compose_handoff_opened",
+            "operator_reported_sent",
+            "independently_verified_sent",
+          ])
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordVillagerInteraction } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await recordVillagerInteraction({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        villagerVariant: input.villagerVariant as any,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        approach: input.approach as any,
+        draftBody: input.draftBody,
+        actionType: input.actionType,
+      });
+    }),
+  saveUnfinishedLetterDraft: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        customerId: z.string().min(1),
+        customerName: z.string().min(1),
+        villagerVariant: z.enum([
+          "fox",
+          "badger",
+          "bunny",
+          "bear",
+          "otter",
+          "hedgehog",
+          "squirrel",
+          "cat",
+        ]),
+        selectedApproach: z.enum([
+          "warm_brief",
+          "helpful_detailed",
+          "cozy_care_perk",
+          "custom",
+        ]),
+        draftBody: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { saveUnfinishedLetterDraft } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await saveUnfinishedLetterDraft({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        villagerVariant: input.villagerVariant as any,
+        selectedApproach: input.selectedApproach as any,
+        draftBody: input.draftBody,
+      });
+    }),
   cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
     loadCozyRecoverySurfaces({
       tenantId: ctx.tenantId,

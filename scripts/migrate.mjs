@@ -5620,5 +5620,26 @@ await assertRequiredColumns("personal_outreach_replies", [
   if (verified.join(",") !== "tenantId,id")
     throw new Error(`claire_proactive_obligations primary key is (${verified.join(", ")}); expected (tenantId, id)`);
 }
+// 0144: Phase 4 durable world memory for Lantern City neighborhoods.
+{
+  const [memoryTableDdl] = await readSqlStatements("../drizzle/0144_lantern_neighborhood_memories.sql");
+  await run(memoryTableDdl, "lantern_neighborhood_memories table");
+  await assertRequiredColumns("lantern_neighborhood_memories", [
+    "id",
+    "tenant_id",
+    "territory_id",
+    "courtyard_feature",
+    "courtyard_placed_at",
+    "last_visited_at",
+    "visit_count",
+    "encounter_history_json",
+    "villager_relationships_json",
+    "unfinished_activities_json",
+    "celebrated_events_json",
+    "created_at",
+    "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

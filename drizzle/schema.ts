@@ -10659,4 +10659,39 @@ export const personalOutreachReplies = mysqlTable(
 export type PersonalOutreachReplyRow = typeof personalOutreachReplies.$inferSelect;
 export type InsertPersonalOutreachReply = typeof personalOutreachReplies.$inferInsert;
 
+/**
+ * Phase 4: Durable world memory for Lantern City neighborhoods.
+ * Replaces browser localStorage with server-backed, tenant-scoped persistence.
+ * Tracks courtyard features, character relationships, visit history, and unfinished activities.
+ */
+export const lanternNeighborhoodMemories = mysqlTable(
+  "lantern_neighborhood_memories",
+  {
+    id: varchar("id", { length: 128 }).notNull(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    territoryId: varchar("territory_id", { length: 64 }).notNull(),
+    courtyardFeature: varchar("courtyard_feature", { length: 64 }),
+    courtyardPlacedAt: timestamp("courtyard_placed_at"),
+    lastVisitedAt: timestamp("last_visited_at").notNull().defaultNow(),
+    visitCount: int("visit_count").notNull().default(1),
+    encounterHistoryJson: json("encounter_history_json"),
+    villagerRelationshipsJson: json("villager_relationships_json"),
+    unfinishedActivitiesJson: json("unfinished_activities_json"),
+    celebratedEventsJson: json("celebrated_events_json"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.tenantId, table.territoryId] }),
+    scopeIdx: index("idx_lnm_scope").on(
+      table.tenantId,
+      table.territoryId,
+      table.lastVisitedAt
+    ),
+  })
+);
+
+export type LanternNeighborhoodMemoryRow = typeof lanternNeighborhoodMemories.$inferSelect;
+export type InsertLanternNeighborhoodMemory = typeof lanternNeighborhoodMemories.$inferInsert;
+
 
