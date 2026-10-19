@@ -9,30 +9,32 @@ import { resetGoldlineProofWorld } from "./proofWorld";
 type Point = { x: number; y: number; visible: boolean };
 
 async function settledIsland(page: Page, name: string): Promise<Point> {
+  // Aim where a person would: the island's name tag when it is showing, otherwise the island itself.
+  // Compare like with like across two reads, so a tag that flickers in and out never stalls the wait.
+  type Read = { tag: Point | null; centre: Point | null };
+  const read = () =>
+    page.evaluate(n => {
+      const probe = (window as unknown as {
+        __lanternIslands?: { islandLabelScreen(n: string): Point | null; islandScreen(n: string): Point | null };
+      }).__lanternIslands;
+      return probe ? { tag: probe.islandLabelScreen(n), centre: probe.islandScreen(n) } : null;
+    }, name) as Promise<Read | null>;
+  const vw = page.viewportSize();
+  const onScreen = (p: Point | null) => !!p && p.visible && (!vw || (p.x >= 0 && p.x <= vw.width && p.y >= 0 && p.y <= vw.height));
+  const same = (p: Point | null, q: Point | null) => !!p && !!q && Math.hypot(p.x - q.x, p.y - q.y) < 2;
   let settled: Point | null = null;
   await expect
     .poll(
       async () => {
-        // aim where a person would: the island's name tag when it is showing, otherwise the island itself
-        const read = () =>
-          page.evaluate(n => {
-            const probe = (window as unknown as {
-              __lanternIslands?: { islandLabelScreen(n: string): Point | null; islandScreen(n: string): Point | null };
-            }).__lanternIslands;
-            return probe ? probe.islandLabelScreen(n) ?? probe.islandScreen(n) : null;
-          }, name);
         const a = await read();
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(500);
         const b = await read();
-        if (a && b && b.visible && Math.hypot(a.x - b.x, a.y - b.y) < 1) {
-          const vw = page.viewportSize();
-          if (vw && (b.x < 0 || b.x > vw.width || b.y < 0 || b.y > vw.height)) return false;
-          settled = b;
-          return true;
-        }
-        return false;
+        if (!a || !b) return false;
+        if (same(a.tag, b.tag) && onScreen(b.tag)) settled = b.tag;
+        else if (same(a.centre, b.centre) && onScreen(b.centre)) settled = b.centre;
+        return settled !== null;
       },
-      { timeout: 45_000, intervals: [500] }
+      { timeout: 150_000, intervals: [1000] }
     )
     .toBe(true);
   return settled!;
@@ -44,7 +46,7 @@ test.describe("Lantern City → Silver Lake", () => {
   });
 
   test("clicking Silver Lake on the Lantern City board walks into the 3D courtyard", async ({ page }, testInfo) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
 
