@@ -37,8 +37,8 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
 
     // Verifies commercial accounts replication preserving separate accounts
     expect(sql).toContain("INSERT INTO `commercial_accounts`");
-    expect(sql).toContain("CONCAT('farm:migration:0143:', COALESCE(`identityKey`, `id`))");
-    expect(sql).toContain("WHERE `tenantId` = 'default'");
+    expect(sql).toContain("ca_farm.identityKey = ca_default.identityKey");
+    expect(sql).toContain("WHERE `tenantId` = 'default' AND `identityKey` IS NOT NULL");
     expect(sql).toContain("INSERT INTO `commercial_account_locations`");
     expect(sql).toContain("INSERT INTO `commercial_account_contacts`");
   });
@@ -49,7 +49,7 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
       "utf8"
     );
     expect(script).toContain("dayforge_saas_tenants");
-    expect(script).toContain("farm:migration:0143:");
+    expect(script).toContain("ca_farm.identityKey = ca_default.identityKey");
     expect(script).toContain("cleancloud_browser_sync_bindings");
   });
 

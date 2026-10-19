@@ -243,9 +243,9 @@ if (mode === "execute") {
   // 6. Replicate all commercial accounts from default to laundry_farm
   await conn.execute(`
     INSERT INTO commercial_accounts (tenantId, identityKey, name, accountType, providerName, providerAccountId, website)
-    SELECT ?, CONCAT('farm:migration:0143:', COALESCE(identityKey, id)), name, accountType, providerName, providerAccountId, website
+    SELECT ?, identityKey, name, accountType, providerName, providerAccountId, website
     FROM commercial_accounts
-    WHERE tenantId = ?
+    WHERE tenantId = ? AND identityKey IS NOT NULL
     ON DUPLICATE KEY UPDATE name = VALUES(name)
   `, [FARM_TENANT, BUTLER_TENANT]);
 
@@ -255,7 +255,7 @@ if (mode === "execute") {
     FROM commercial_account_locations cal
     JOIN commercial_accounts ca_default ON cal.accountId = ca_default.id AND cal.tenantId = ?
     JOIN commercial_accounts ca_farm ON ca_farm.tenantId = ?
-      AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+      AND ca_farm.identityKey = ca_default.identityKey
     WHERE ca_default.tenantId = ?
     ON DUPLICATE KEY UPDATE label = VALUES(label)
   `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
@@ -266,7 +266,7 @@ if (mode === "execute") {
     FROM commercial_account_contacts cac
     JOIN commercial_accounts ca_default ON cac.accountId = ca_default.id AND cac.tenantId = ?
     JOIN commercial_accounts ca_farm ON ca_farm.tenantId = ?
-      AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+      AND ca_farm.identityKey = ca_default.identityKey
     WHERE ca_default.tenantId = ?
     ON DUPLICATE KEY UPDATE name = VALUES(name)
   `, [FARM_TENANT, BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
@@ -284,9 +284,10 @@ if (mode === "rollback") {
   const [activePipelines] = await conn.execute(`
     SELECT COUNT(*) AS count
     FROM commercial_pipeline_records cpr
-    JOIN commercial_accounts ca ON cpr.accountId = ca.id AND cpr.tenantId = ca.tenantId
-    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
-  `, [FARM_TENANT]);
+    JOIN commercial_accounts ca_farm ON cpr.accountId = ca_farm.id AND cpr.tenantId = ca_farm.tenantId
+    JOIN commercial_accounts ca_default ON ca_farm.identityKey = ca_default.identityKey AND ca_default.tenantId = ?
+    WHERE ca_farm.tenantId = ?
+  `, [BUTLER_TENANT, FARM_TENANT]);
   if (activePipelines[0].count > 0) {
     throw new Error(`Rollback blocked: ${activePipelines[0].count} commercial pipeline records exist for migrated accounts.`);
   }
@@ -305,21 +306,24 @@ if (mode === "rollback") {
   `, [BUTLER_TENANT, FARM_TENANT]);
   await conn.execute("DELETE FROM cleancloud_browser_sync_bindings WHERE storeId = '34145' AND tenantId = ?", [FARM_TENANT]);
 
-  // Scoped deletion of migrated commercial properties only (preserves subsequent or legitimate records)
+  // Scoped deletion: only remove accounts in laundry_farm that match accounts replicated from default
   await conn.execute(`
     DELETE cal FROM commercial_account_locations cal
-    JOIN commercial_accounts ca ON cal.accountId = ca.id AND cal.tenantId = ca.tenantId
-    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
-  `, [FARM_TENANT]);
+    JOIN commercial_accounts ca_farm ON cal.accountId = ca_farm.id AND cal.tenantId = ca_farm.tenantId
+    JOIN commercial_accounts ca_default ON ca_farm.identityKey = ca_default.identityKey AND ca_default.tenantId = ?
+    WHERE ca_farm.tenantId = ?
+  `, [BUTLER_TENANT, FARM_TENANT]);
   await conn.execute(`
     DELETE cac FROM commercial_account_contacts cac
-    JOIN commercial_accounts ca ON cac.accountId = ca.id AND cac.tenantId = ca.tenantId
-    WHERE ca.tenantId = ? AND ca.identityKey LIKE 'farm:migration:0143:%'
-  `, [FARM_TENANT]);
+    JOIN commercial_accounts ca_farm ON cac.accountId = ca_farm.id AND cac.tenantId = ca_farm.tenantId
+    JOIN commercial_accounts ca_default ON ca_farm.identityKey = ca_default.identityKey AND ca_default.tenantId = ?
+    WHERE ca_farm.tenantId = ?
+  `, [BUTLER_TENANT, FARM_TENANT]);
   await conn.execute(`
-    DELETE FROM commercial_accounts
-    WHERE tenantId = ? AND identityKey LIKE 'farm:migration:0143:%'
-  `, [FARM_TENANT]);
+    DELETE ca_farm FROM commercial_accounts ca_farm
+    JOIN commercial_accounts ca_default ON ca_farm.identityKey = ca_default.identityKey AND ca_default.tenantId = ?
+    WHERE ca_farm.tenantId = ?
+  `, [BUTLER_TENANT, FARM_TENANT]);
 
   // Move goal lineage back
   const [runs] = await conn.execute(

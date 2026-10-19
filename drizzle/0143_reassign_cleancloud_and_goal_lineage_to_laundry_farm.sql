@@ -72,58 +72,52 @@ WHERE `residentClientRequestId` LIKE 'goldline:cadence:%'
   AND `tenantId` = 'default';
 
 -- 4. Attribute 50-active-customer goal lineage to Laundry Farm
--- Resolve goal run ID with exact authoritative ID
-SET @goal_run_id = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff';
-
-SET @macro_goal_id = (
-  SELECT `macroGoalId` FROM `macro_goal_runs`
-  WHERE `id` = @goal_run_id LIMIT 1
-);
-
 -- Update macro goal runs
 UPDATE `macro_goal_runs`
 SET `tenantId` = 'laundry_farm'
-WHERE `id` = @goal_run_id AND `tenantId` = 'default';
+WHERE `id` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update operator macro goals
 UPDATE `operator_macro_goals`
 SET `tenantId` = 'laundry_farm'
-WHERE (`id` = @macro_goal_id OR `metricKey` = 'active_customers_50') AND `tenantId` = 'default';
+WHERE (`metricKey` = 'active_customers_50' OR `id` IN (
+  SELECT `macroGoalId` FROM `macro_goal_runs` WHERE `id` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff'
+)) AND `tenantId` = 'default';
 
 -- Update goal cycle requests
 UPDATE `goal_cycle_requests`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle decisions
 UPDATE `goal_cycle_decisions`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle objectives
 UPDATE `goal_cycle_objectives`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle outcomes
 UPDATE `goal_cycle_outcomes`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle learned deltas
 UPDATE `goal_cycle_learned_deltas`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle history
 UPDATE `goal_cycle_history`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update goal cycle dead letters
 UPDATE `goal_cycle_dead_letters`
 SET `tenantId` = 'laundry_farm'
-WHERE `goalRunId` = @goal_run_id AND `tenantId` = 'default';
+WHERE `goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff' AND `tenantId` = 'default';
 
 -- Update work threads associated with this goal (authoritative: firstSourceRef or opportunityKey)
 UPDATE `work_threads`
@@ -139,25 +133,25 @@ SET `tenantId` = 'laundry_farm',
     `status` = 'scheduled',
     `payloadJson` = JSON_SET(`payloadJson`, '$.draft', NULL)
 WHERE `tenantId` = 'default'
-  AND (`goalRunId` = @goal_run_id
+  AND (`goalRunId` = '9e7dd9ae-ad31-4127-b5cc-44a69c0dcbff'
        OR `subjectKey` LIKE 'cleancloud:%');
 
 -- 6. Commercial accounts replication: replicate all commercial properties from `default`
--- into `laundry_farm` with identityKey prefix 'farm:migration:0143:', preserving existing records in `default`.
+-- into `laundry_farm` with identical identityKey, preserving existing records in `default`.
 -- Preserves accounts #15 and #17 as distinct records.
 INSERT INTO `commercial_accounts` (
   `tenantId`, `identityKey`, `name`, `accountType`, `providerName`, `providerAccountId`, `website`
 )
 SELECT
   'laundry_farm',
-  CONCAT('farm:migration:0143:', COALESCE(`identityKey`, `id`)),
+  `identityKey`,
   `name`,
   `accountType`,
   `providerName`,
   `providerAccountId`,
   `website`
 FROM `commercial_accounts`
-WHERE `tenantId` = 'default'
+WHERE `tenantId` = 'default' AND `identityKey` IS NOT NULL
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 -- Replicate commercial account locations
@@ -176,7 +170,7 @@ SELECT
 FROM `commercial_account_locations` cal
 JOIN `commercial_accounts` ca_default ON cal.accountId = ca_default.id AND cal.tenantId = 'default'
 JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
-  AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+  AND ca_farm.identityKey = ca_default.identityKey
 WHERE ca_default.tenantId = 'default'
 ON DUPLICATE KEY UPDATE `label` = VALUES(`label`);
 
@@ -196,7 +190,7 @@ SELECT
 FROM `commercial_account_contacts` cac
 JOIN `commercial_accounts` ca_default ON cac.accountId = ca_default.id AND cac.tenantId = 'default'
 JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
-  AND ca_farm.identityKey = CONCAT('farm:migration:0143:', COALESCE(ca_default.identityKey, ca_default.id))
+  AND ca_farm.identityKey = ca_default.identityKey
 WHERE ca_default.tenantId = 'default'
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
