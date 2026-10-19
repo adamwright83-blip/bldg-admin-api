@@ -75,6 +75,26 @@ export async function getActiveTenantMembership(input: {
   return membership ?? null;
 }
 
+export async function listActiveTenantMemberships(
+  userOpenId: string
+): Promise<ActiveTenantMembership[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({
+      tenantId: legacyDayforgeSaasMemberships.tenantId,
+      userOpenId: legacyDayforgeSaasMemberships.userOpenId,
+      role: legacyDayforgeSaasMemberships.role,
+    })
+    .from(legacyDayforgeSaasMemberships)
+    .where(
+      and(
+        eq(legacyDayforgeSaasMemberships.userOpenId, userOpenId),
+        eq(legacyDayforgeSaasMemberships.active, true)
+      )
+    );
+}
+
 export async function hasLegacyDayforgeEntitlement(input: {
   tenantId: string;
   entitlement: LegacyDayforgeEntitlement;

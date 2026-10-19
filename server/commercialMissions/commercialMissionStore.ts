@@ -512,6 +512,41 @@ export async function createCommercialMission(input: {
           longitude: input.account.longitude,
         });
       }
+
+      // Shared property, independent business data: automatically make commercial properties available
+      // to both independent sister businesses (Laundry Butler <-> Laundry Farm) with separate pipelines (Requirement 2).
+      if (input.tenantId === "default" || input.tenantId === "laundry_farm") {
+        const sisterTenantId = input.tenantId === "default" ? "laundry_farm" : "default";
+        await tx.insert(commercialAccounts).values({
+          tenantId: sisterTenantId,
+          identityKey,
+          name: input.account.name,
+          accountType: input.account.accountType,
+          providerName: input.account.providerName ?? null,
+          providerAccountId: input.account.providerAccountId ?? null,
+          website: input.account.website ?? null,
+        }).onDuplicateKeyUpdate({ set: {
+          identityKey,
+          name: input.account.name,
+          accountType: input.account.accountType,
+        }});
+        if (input.account.address?.trim()) {
+          const sisterRows = await tx.select({ id: commercialAccounts.id }).from(commercialAccounts).where(and(
+            eq(commercialAccounts.tenantId, sisterTenantId),
+            eq(commercialAccounts.identityKey, identityKey),
+          )).limit(1);
+          const sisterAccountId = sisterRows[0]?.id;
+          if (sisterAccountId) {
+            await upsertCommercialAccountLocationWith(tx, {
+              tenantId: sisterTenantId,
+              accountId: sisterAccountId,
+              address: input.account.address,
+              latitude: input.account.latitude,
+              longitude: input.account.longitude,
+            });
+          }
+        }
+      }
       if (input.account.decisionMaker && Object.values(input.account.decisionMaker).some(value => value !== null && value !== undefined && value !== "")) {
         await upsertCommercialAccountContactWith(tx, {
           tenantId: input.tenantId,

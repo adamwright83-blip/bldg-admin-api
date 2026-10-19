@@ -644,6 +644,56 @@ export async function provisionFranchise(
               },
             });
         }
+
+        if (tenantId === "default" || tenantId === "laundry_farm") {
+          const sisterTenantId = tenantId === "default" ? "laundry_farm" : "default";
+          await tx
+            .insert(commercialAccounts)
+            .values({
+              tenantId: sisterTenantId,
+              identityKey,
+              name: anchor.name,
+              accountType: "residential_highrise",
+            })
+            .onDuplicateKeyUpdate({
+              set: {
+                name: anchor.name,
+              },
+            });
+
+          const [sisterAcc] = await tx
+            .select({ id: commercialAccounts.id })
+            .from(commercialAccounts)
+            .where(
+              and(
+                eq(commercialAccounts.tenantId, sisterTenantId),
+                eq(commercialAccounts.identityKey, identityKey)
+              )
+            )
+            .limit(1);
+
+          if (sisterAcc) {
+            await tx
+              .insert(commercialAccountLocations)
+              .values({
+                tenantId: sisterTenantId,
+                accountId: sisterAcc.id,
+                locationKey: `loc_${identityKey}`,
+                label: anchor.name,
+                address: anchor.address,
+                latitude: String(anchor.lat),
+                longitude: String(anchor.lng),
+                isPrimary: true,
+              })
+              .onDuplicateKeyUpdate({
+                set: {
+                  address: anchor.address,
+                  latitude: String(anchor.lat),
+                  longitude: String(anchor.lng),
+                },
+              });
+          }
+        }
       }
 
       // (h) Idempotent Operator Macro Goal: update existing active goal or insert new

@@ -211,7 +211,7 @@ describe("Home canonical revenue integration", () => {
       tenantId: "tenant-a",
     } as Awaited<ReturnType<typeof sdk.authenticateRequest>>);
     const ctx = await createContext({
-      req: { headers: { host: "foreign.example", "x-tenant-id": "tenant-b" } },
+      req: { headers: { host: "foreign.example" } },
       res: {},
     } as CreateExpressContextOptions);
     expect(ctx.tenantId).toBe("tenant-a");
@@ -224,6 +224,16 @@ describe("Home canonical revenue integration", () => {
     expect(
       read.mock.calls.every(([input]) => input.tenantId === "tenant-a")
     ).toBe(true);
+
+    // Forged cross-tenant header yields denial and fails closed with FORBIDDEN
+    const spoofedCtx = await createContext({
+      req: { headers: { host: "foreign.example", "x-tenant-id": "tenant-b" } },
+      res: {},
+    } as CreateExpressContextOptions);
+    expect(spoofedCtx.tenantDenial).toBe("cross_tenant");
+    await expect(
+      appRouter.createCaller(spoofedCtx).admin.dashboardSummary()
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
     // An authenticated second tenant sees its own book, not tenant-a's book.
     vi.mocked(sdk.authenticateRequest).mockResolvedValue({
       id: 2,
