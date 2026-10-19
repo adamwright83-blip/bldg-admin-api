@@ -4,12 +4,21 @@ import {
   COZY_SLOT_IDS,
   COZY_SLOT_ANCHORS,
   type CozySlotId,
+  type CozyCustomerTarget,
 } from "@shared/cozyVillagerOutreach";
 import {
   villagerSprite,
   type CozyProjectedTarget,
 } from "@shared/cozyVillagerEvidence";
+import {
+  SYNTHETIC_SILVER_LAKE_TARGETS,
+  loadNeighborhoodMemory,
+  saveNeighborhoodMemory,
+  type NeighborhoodFeatureChoice,
+} from "@shared/playableVillagers";
 import { CozyMessageComposer } from "./CozyMessageComposer";
+import { PlayableLetterDesk } from "./PlayableLetterDesk";
+import { NeighborhoodCourtyardFeature } from "./NeighborhoodCourtyardFeature";
 import styles from "./cozy-neighborhood.module.css";
 
 /** Canonical identity id from the URL, for example `phone:3105550141`. */
@@ -17,6 +26,17 @@ function requestedCustomerId(): string | null {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("customer")?.trim() ?? "";
   return value.length > 0 ? value : null;
+}
+
+function requestedPreviewMode(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("preview") === "synthetic";
+}
+
+function requestedComposerMode(): "playable" | "classic" {
+  if (typeof window === "undefined") return "playable";
+  const val = new URLSearchParams(window.location.search).get("composer");
+  return val === "classic" ? "classic" : "playable";
 }
 
 interface CozyNeighborhoodEncounterProps {
@@ -31,9 +51,45 @@ export function CozyNeighborhoodEncounter({
 }: CozyNeighborhoodEncounterProps) {
   const requestedId = requestedCustomerId();
   const [selectedSlotId, setSelectedSlotId] = useState<CozySlotId | null>(() =>
-    requestedCustomerId() ? null : "slot_01"
+    requestedCustomerId() ? null : null
   );
   const [hoveredSlotId, setHoveredSlotId] = useState<CozySlotId | null>(null);
+
+  // Tenant ID for Silver Lake recovery is strictly Laundry Farm
+  const tenantId = "laundry_farm";
+
+  // Development mode vs Production player experience
+  const showDevControls = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return (
+      params.has("dev") ||
+      params.has("preview") ||
+      params.has("composer") ||
+      params.has("debug")
+    );
+  }, []);
+
+  // Experience Mode: Playable Letter Desk (New Phase 3) vs Classic Composer (Old Phase 1)
+  const [experienceMode, setExperienceMode] = useState<"playable" | "classic">(() =>
+    requestedComposerMode()
+  );
+
+  // Data Source: Real mission query vs Isolated synthetic preview
+  const [isSyntheticPreview, setIsSyntheticPreview] = useState<boolean>(() =>
+    requestedPreviewMode()
+  );
+
+  // Synthetic local targets state for safe simulation without mutations
+  const [syntheticTargets, setSyntheticTargets] = useState<CozyProjectedTarget[]>(() => [
+    ...SYNTHETIC_SILVER_LAKE_TARGETS,
+  ]);
+
+  // Persistent Neighborhood Memory & Consequences (tenant scoped to prevent leakage)
+  const [neighborhoodMemory, setNeighborhoodMemory] = useState(() =>
+    loadNeighborhoodMemory(tenantId)
+  );
+
   const utils = trpc.useUtils();
 
   const missionQuery = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
@@ -44,9 +100,13 @@ export function CozyNeighborhoodEncounter({
   const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachNow.useMutation();
   const scheduleMutation = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
+  // Determine active targets based on data source
   const targets = useMemo(() => {
+    if (isSyntheticPreview) {
+      return syntheticTargets;
+    }
     return (missionQuery.data?.targets ?? []) as CozyProjectedTarget[];
-  }, [missionQuery.data]);
+  }, [isSyntheticPreview, syntheticTargets, missionQuery.data]);
 
   useEffect(() => {
     if (!requestedId) return;
@@ -55,18 +115,21 @@ export function CozyNeighborhoodEncounter({
   }, [requestedId, targets]);
 
   const selectedTarget = useMemo(() => {
-    const bySlot = targets.find((t) => t.slotId === selectedSlotId);
-    if (bySlot) return bySlot;
-    if (requestedId) return null;
-    return targets[0] ?? null;
-  }, [targets, selectedSlotId, requestedId]);
+    if (!selectedSlotId) return null;
+    return targets.find((t) => t.slotId === selectedSlotId) ?? null;
+  }, [targets, selectedSlotId]);
 
   const selectedIndex = useMemo(() => {
     return targets.findIndex((t) => t.slotId === selectedSlotId);
   }, [targets, selectedSlotId]);
 
   const sentCount = useMemo(() => {
-    return targets.filter((t) => t.communicationState === "send_observed").length;
+    return targets.filter(
+      (t) =>
+        t.silverLakeStatus?.message === "independently_verified_sent" ||
+        t.communicationState === "send_observed" ||
+        t.status === "accepted"
+    ).length;
   }, [targets]);
 
   const refreshDurableEvidence = async () => {
@@ -87,11 +150,36 @@ export function CozyNeighborhoodEncounter({
     }
   };
 
+  // Immediate send action
   const handleSendNow = async (
     target: CozyProjectedTarget,
     editedText: string,
     idempotencyKey: string
   ) => {
+    if (isSyntheticPreview) {
+      // Safe synthetic state transition
+      setSyntheticTargets((prev) =>
+        prev.map((t) =>
+          t.customerId === target.customerId
+            ? {
+                ...t,
+                status: "accepted" as const,
+                communicationState: "send_observed",
+                transport: "simulated",
+                suggestedMessage: editedText,
+                providerReceipt: {
+                  messageSid: `simulated:msg_${Date.now()}`,
+                  status: "dispatched",
+                  sentAt: new Date().toISOString(),
+                  evidenceName: "simulated_carrier_receipt",
+                },
+              }
+            : t
+        )
+      );
+      return;
+    }
+
     try {
       await sendMutation.mutateAsync({
         customerId: target.customerId,
@@ -107,12 +195,36 @@ export function CozyNeighborhoodEncounter({
     }
   };
 
+  // Schedule send action
   const handleScheduleSend = async (
     target: CozyProjectedTarget,
     editedText: string,
     scheduledForIso: string,
     idempotencyKey?: string
   ) => {
+    if (isSyntheticPreview) {
+      // Safe synthetic state transition
+      setSyntheticTargets((prev) =>
+        prev.map((t) =>
+          t.customerId === target.customerId
+            ? {
+                ...t,
+                status: "scheduled" as const,
+                communicationState: "scheduled",
+                suggestedMessage: editedText,
+                scheduledDraft: {
+                  messageId: `synth_draft_${Date.now()}`,
+                  scheduledFor: scheduledForIso,
+                  timezone: "America/Los_Angeles",
+                  currentMessageBody: editedText,
+                },
+              }
+            : t
+        )
+      );
+      return;
+    }
+
     try {
       await scheduleMutation.mutateAsync({
         customerId: target.customerId,
@@ -130,8 +242,63 @@ export function CozyNeighborhoodEncounter({
     }
   };
 
+  // Neighborhood Consequence: Courtyard Feature Placement
+  const handleChooseCourtyardFeature = (choice: NeighborhoodFeatureChoice) => {
+    const updated = {
+      ...neighborhoodMemory,
+      featureChoice: choice,
+      lastVisitedAt: new Date().toISOString(),
+    };
+    setNeighborhoodMemory(updated);
+    saveNeighborhoodMemory(updated, tenantId);
+  };
+
+  // Memory update when an outreach draft is completed
+  const handleDraftCompleted = (
+    customerId: string,
+    customerName: string,
+    variant: any,
+    action: "send" | "schedule" | "sms_opened"
+  ) => {
+    const currentCount = neighborhoodMemory.encounterCounts[variant] ?? 0;
+    const updated = {
+      ...neighborhoodMemory,
+      encounterCounts: {
+        ...neighborhoodMemory.encounterCounts,
+        [variant]: currentCount + 1,
+      },
+      lastDraftedCustomer: {
+        customerId,
+        customerName,
+        variant,
+        completedAt: new Date().toISOString(),
+        actionType: action,
+      },
+    };
+    setNeighborhoodMemory(updated);
+    saveNeighborhoodMemory(updated, tenantId);
+  };
+
+  // Memory note generation for repeat interactions
+  const memoryNote = useMemo(() => {
+    if (!neighborhoodMemory.lastDraftedCustomer) return null;
+    const { customerName, actionType } = neighborhoodMemory.lastDraftedCustomer;
+    if (actionType === "schedule") {
+      return `${customerName}'s letter is resting safely on the morning dispatch shelf.`;
+    }
+    if (actionType === "send") {
+      return `We dispatched ${customerName}'s letter earlier!`;
+    }
+    return `We prepared ${customerName}'s note for your phone.`;
+  }, [neighborhoodMemory.lastDraftedCustomer]);
+
   return (
-    <div className={styles.encounterContainer} data-testid="cozy-neighborhood-encounter">
+    <div
+      className={styles.encounterContainer}
+      data-testid="cozy-neighborhood-encounter"
+      data-experience-mode={experienceMode}
+      data-preview-mode={isSyntheticPreview ? "synthetic" : "real"}
+    >
       <div className={styles.viewportFrame}>
         {/* Clean Environment Plate (ASSET 02) */}
         <img
@@ -167,32 +334,162 @@ export function CozyNeighborhoodEncounter({
           className={styles.cloudCorners}
         />
 
-        {/* Top Control Bar */}
+        {/* Top Control & Development Comparison Bar */}
         <header className={styles.topBar}>
-          <div className={styles.titlePill}>
-            <span className={styles.lanternIcon}>🏮</span>
-            <span>
-              {missionQuery.data?.territoryName ?? "Silver Lake"} • Cozy Outreach ({sentCount}/
-              {targets.length} Send Observed)
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div className={styles.titlePill}>
+              <span className={styles.lanternIcon}>🏮</span>
+              <span>
+                {missionQuery.data?.territoryName ?? "Silver Lake"} • Cozy Outreach ({sentCount}/
+                {targets.length} Send Observed)
+              </span>
+            </div>
+
+            {/* Dev-only controls: hidden in clean production player experience */}
+            {showDevControls && (
+              <>
+                {/* Comparison Mode Toggle: Version B (Playable Letter Desk) vs Version A (Classic Drawer) */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "rgba(30, 24, 20, 0.85)",
+                    border: "1px solid rgba(220, 185, 140, 0.35)",
+                    borderRadius: 9999,
+                    padding: "3px 4px",
+                    gap: 4,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                  }}
+                  data-testid="experience-mode-selector"
+                >
+                  <button
+                    type="button"
+                    style={{
+                      background:
+                        experienceMode === "playable"
+                          ? "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)"
+                          : "transparent",
+                      color: experienceMode === "playable" ? "#3b2203" : "#d1ba9f",
+                      border: "none",
+                      borderRadius: 9999,
+                      padding: "4px 10px",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
+                    onClick={() => setExperienceMode("playable")}
+                    data-testid="mode-playable-button"
+                  >
+                    ✍️ Playable Letter Desk (Phase 3)
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background:
+                        experienceMode === "classic"
+                          ? "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)"
+                          : "transparent",
+                      color: experienceMode === "classic" ? "#3b2203" : "#d1ba9f",
+                      border: "none",
+                      borderRadius: 9999,
+                      padding: "4px 10px",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
+                    onClick={() => setExperienceMode("classic")}
+                    data-testid="mode-classic-button"
+                  >
+                    📄 Classic Composer (Phase 1)
+                  </button>
+                </div>
+
+                {/* Synthetic Preview vs Real Data Toggle */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "rgba(30, 24, 20, 0.85)",
+                    border: "1px solid rgba(220, 185, 140, 0.35)",
+                    borderRadius: 9999,
+                    padding: "3px 4px",
+                    gap: 4,
+                  }}
+                  data-testid="data-mode-selector"
+                >
+                  <button
+                    type="button"
+                    style={{
+                      background: !isSyntheticPreview ? "#3e6b48" : "transparent",
+                      color: !isSyntheticPreview ? "#e8f7ec" : "#d1ba9f",
+                      border: "none",
+                      borderRadius: 9999,
+                      padding: "4px 9px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setIsSyntheticPreview(false)}
+                    data-testid="data-real-button"
+                  >
+                    Real Mission Data
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: isSyntheticPreview ? "#7a4282" : "transparent",
+                      color: isSyntheticPreview ? "#faedfc" : "#d1ba9f",
+                      border: "none",
+                      borderRadius: 9999,
+                      padding: "4px 9px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setIsSyntheticPreview(true)}
+                    data-testid="data-synthetic-button"
+                  >
+                    🧪 Synthetic Preview
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
-          {missionQuery.data?.withheldReason ? (
+          {/* Withheld or Empty State Feedback */}
+          {missionQuery.data?.withheldReason && !isSyntheticPreview ? (
             <p className={styles.handoffNote} data-outreach-withheld="true">
               {missionQuery.data.withheldReason}
             </p>
-          ) : missionQuery.data?.emptyMeansNoLapsedCustomers ? (
+          ) : missionQuery.data?.emptyMeansNoLapsedCustomers && !isSyntheticPreview ? (
             <p data-outreach-empty-verified="true">No inactive customers are in this area on the current book.</p>
           ) : null}
-          {requestedId && missionQuery.isSuccess && !targets.some((target) => target.customerId === requestedId) ? (
+          {requestedId &&
+          !isSyntheticPreview &&
+          missionQuery.isSuccess &&
+          !targets.some((target) => target.customerId === requestedId) ? (
             <p data-customer-not-in-village="true">
               {requestedId} is not a contactable customer in this village.
             </p>
           ) : null}
-          <button type="button" className={styles.exitButton} onClick={onExit} aria-label="Return to Wide City">
+
+          <button
+            type="button"
+            className={styles.exitButton}
+            onClick={onExit}
+            aria-label="Return to Wide City"
+          >
             <span>⤾</span> Return to Wide City
           </button>
         </header>
+
+        {/* Reason to Return: Persistent Neighborhood Feature in Courtyard */}
+        <NeighborhoodCourtyardFeature
+          chosenFeature={neighborhoodMemory.featureChoice}
+          onChooseFeature={handleChooseCourtyardFeature}
+        />
 
         {/* 8 Distinct House Slots */}
         {COZY_SLOT_IDS.map((slotId) => {
@@ -202,7 +499,7 @@ export function CozyNeighborhoodEncounter({
           const isHovered = hoveredSlotId === slotId;
 
           if (!target) {
-            // Unoccupied house slot (e.g. Slot 8 when exactly 7 customers are active)
+            // Unoccupied house slot
             return (
               <div
                 key={slotId}
@@ -218,10 +515,11 @@ export function CozyNeighborhoodEncounter({
             );
           }
 
-          const sendObserved = target.communicationState === "send_observed";
+          const sendObserved =
+            target.communicationState === "send_observed" || target.status === "accepted";
           const sprite = villagerSprite({
             variant: target.villagerVariant,
-            communicationState: target.communicationState ?? "draft_prepared",
+            communicationState: target.communicationState ?? (target.status === "accepted" ? "send_observed" : "draft_prepared"),
             selected: isSelected,
             hovered: isHovered,
           });
@@ -243,7 +541,7 @@ export function CozyNeighborhoodEncounter({
               aria-label={`Select ${target.displayName}`}
               data-customer-id={target.customerId}
               data-house-title={anchor.houseTitle}
-              data-communication-state={target.communicationState ?? "draft_prepared"}
+              data-communication-state={target.communicationState ?? (target.status === "accepted" ? "send_observed" : "draft_prepared")}
               data-pose={sprite.pose}
               data-transport={target.transport ?? ""}
             >
@@ -253,7 +551,7 @@ export function CozyNeighborhoodEncounter({
               {/* Decorative Expression Glyph Bubble */}
               {isSelected && (
                 <div className={styles.glyphBubble} aria-hidden="true">
-                  {sendObserved ? "✨🏮" : "❤️"}
+                  {sendObserved ? "✨🏮" : target.villagerVariant === "badger" ? "👓" : "❤️"}
                 </div>
               )}
 
@@ -267,9 +565,29 @@ export function CozyNeighborhoodEncounter({
               {/* Floating Name Tag */}
               <div className={styles.villagerTag}>
                 <span>{target.displayName.split(" ")[0]}</span>
-                {target.reply && target.reply.status !== "unavailable" ? (
-                  <span className={styles.statusIconSent} data-reply-badge={target.reply.classification}>
-                    💬 {target.reply.classificationLabel}
+                {target.silverLakeStatus?.message === "independently_verified_sent" ? (
+                  <span className={styles.statusIconSent}>
+                    ✓ Verified sent
+                  </span>
+                ) : target.silverLakeStatus?.message === "operator_reported_sent" ? (
+                  <span className={styles.statusIconSent}>
+                    📱 Operator reported
+                  </span>
+                ) : target.silverLakeStatus?.message === "compose_handoff_opened" ? (
+                  <span className={styles.statusIconScheduled}>
+                    📱 Messages opened
+                  </span>
+                ) : target.silverLakeStatus?.message === "due_operator_action" ? (
+                  <span className={styles.statusIconScheduled}>
+                    ⚠️ Action due
+                  </span>
+                ) : target.silverLakeStatus?.message === "scheduled" ? (
+                  <span className={styles.statusIconScheduled}>
+                    ⏰ Scheduled
+                  </span>
+                ) : target.silverLakeStatus?.message === "awaiting_sender" ? (
+                  <span className={styles.statusIconScheduled}>
+                    📱 Handset
                   </span>
                 ) : sendObserved ? (
                   <span className={styles.statusIconSent}>
@@ -285,8 +603,27 @@ export function CozyNeighborhoodEncounter({
           );
         })}
 
-        {/* Message Composer Drawer */}
-        {selectedTarget && (
+        {/* Selected Customer Experience: Version B (Playable Letter Desk) OR Version A (Classic Drawer) */}
+        {selectedTarget && experienceMode === "playable" && (
+          <PlayableLetterDesk
+            target={selectedTarget}
+            targetIndex={selectedIndex}
+            totalTargets={targets.length}
+            objectiveId={missionQuery.data?.objectiveId ?? null}
+            isSending={sendMutation.isPending || scheduleMutation.isPending || false}
+            isSynthetic={isSyntheticPreview}
+            encounterCount={neighborhoodMemory.encounterCounts[selectedTarget.villagerVariant] ?? 1}
+            memoryNote={memoryNote}
+            tenantId={tenantId}
+            onSendNow={handleSendNow}
+            onScheduleSend={handleScheduleSend}
+            onClose={() => setSelectedSlotId(null)}
+            onSelectIndex={handleSelectIndex}
+            onDraftCompleted={handleDraftCompleted}
+          />
+        )}
+
+        {selectedTarget && experienceMode === "classic" && (
           <CozyMessageComposer
             target={selectedTarget}
             targetIndex={selectedIndex}
