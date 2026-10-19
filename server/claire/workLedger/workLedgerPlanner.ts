@@ -21,6 +21,7 @@
 import { z } from "zod";
 import { invokeLLM } from "../../_core/llm";
 import { ENV } from "../../_core/env";
+import { DEFAULT_ANTHROPIC_MODEL, normalizeAnthropicModel } from "../../_core/modelCapabilities";
 import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../claireModel";
 import { addDaysYmd, isValidYmd } from "../../analytics/businessPeriods";
 import { weekdayOf } from "../briefing/briefingTiming";
@@ -373,16 +374,16 @@ export function buildWorkLedgerUserMessage(input: WorkLedgerPlanInput): string {
  */
 // The a2e19574 CI replay lost explicit multi-item instructions on Haiku.
 // Prefer the measured Sonnet fallback until the faster model passes these gates.
-export const DEFAULT_WORK_LEDGER_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_WORK_LEDGER_MODEL = DEFAULT_ANTHROPIC_MODEL;
 
 /** Used once, only when the primary planner times out or fails. Empty string disables it. */
 export function workLedgerFallbackModelId(): string {
   const configured = process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER_FALLBACK;
-  return configured === undefined ? "claude-haiku-5-5" : configured.trim();
+  return configured === undefined ? "claude-haiku-5-5" : normalizeAnthropicModel(configured.trim());
 }
 
 export function workLedgerModelId(): string {
-  return process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER?.trim() || DEFAULT_WORK_LEDGER_MODEL;
+  return normalizeAnthropicModel(process.env.ANTHROPIC_MODEL_CLAIRE_WORK_LEDGER?.trim() ?? "") || DEFAULT_WORK_LEDGER_MODEL;
 }
 
 function normalize(value: string): string {

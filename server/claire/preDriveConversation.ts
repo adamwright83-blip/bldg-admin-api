@@ -280,6 +280,17 @@ export async function answerClairePreDriveFollowUp(
      */
     retrievedEvidence?: Array<{ source: string; text: string }>;
     /**
+     * Which executive authored `semanticFrame`. Brain V2 primary turns pass
+     * "brain_v2"; legacy turns omit it and keep their exact prompt text.
+     */
+    semanticAuthority?: "brain_v2" | "brain_v3";
+    /**
+     * Brain V2 decided what kind of turn this is. When present, this organ does
+     * not re-detect it from the words: V2 owns interpretation. Safety guards
+     * (biography, ontology, character contract) still run on every answer.
+     */
+    conversationalModeOverride?: "operational" | "casual" | "personal" | "post_action_review";
+    /**
      * PR1 Claire Intelligence Repair -- corrective pass: this generation
      * path is shared between the Twilio voice call and the desktop/text
      * surface (see server/claire/turn/claireTurn.ts). Defaults to "voice"
@@ -351,9 +362,12 @@ export async function answerClairePreDriveFollowUp(
   const progressionOn = isClaireProgressionEnabled(input.tenantId);
   const referent = input.semanticFrame?.referent;
   const referentIsPersonal =
+    !input.conversationalModeOverride &&
     Boolean(referent) &&
     (isPersonalQuestionAboutClaire(referent!) || Boolean(detectRequestedClaireTopic(referent!, progressionOn)));
-  const baseMode = detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
+  const baseMode =
+    input.conversationalModeOverride ??
+    detectClaireConversationalMode(input.utterance, progressionOn, { recentTurns: input.recentTurns });
   const conversationalMode = referentIsPersonal ? "personal" : baseMode;
   const requestedTopic =
     detectRequestedClaireTopic(input.utterance, progressionOn) ??
@@ -443,7 +457,7 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "brain_v3_semantics",
         text: input.semanticFrame
-          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Use this interpretation to maintain continuity. If it conflicts with the operator words, acknowledge the ambiguity rather than defending the interpretation. Do not claim or initiate writes: execution and receipts are owned by the server.`
+          ? `${input.semanticAuthority === "brain_v2" ? "Brain V2 executive decision for this turn" : "Brain V3 authoritative turn meaning"}: ${JSON.stringify(input.semanticFrame)}. Use this interpretation to maintain continuity. If it conflicts with the operator words, acknowledge the ambiguity rather than defending the interpretation. Do not claim or initiate writes: execution and receipts are owned by the server.`
           : null,
       },
       {

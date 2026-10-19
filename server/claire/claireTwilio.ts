@@ -89,6 +89,12 @@ import {
   runClaireBrainV2LiveTurn,
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import {
+  isClaireBrainV2PrimaryEnabled,
+  productionClaireV2PrimaryDeps,
+  runClaireV2PrimaryTurn,
+} from "./brain/live/primaryTurn";
+import { resolveClaireOperatorAuthority } from "./brain/live/operatorAuthority";
 import { executePersistentOperatorAction } from "../agents/persistentOperator/actionExecution";
 import { isClaireWorkLedgerEnabled } from "./workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn } from "./workLedger/workLedgerTurn";
@@ -816,6 +822,16 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       let result: ClaireTurnResult;
       let brainV2LiveHandled = false;
       /**
+       * Brain V2 PRIMARY. For an authorized operator (identity + verified tenant
+       * membership) the newest Claire answers every conversational turn; legacy
+       * Claire only observes in the background. Rollback: CLAIRE_BRAIN_V2_PRIMARY=0.
+       */
+      const v2Authority = isClaireBrainV2PrimaryEnabled()
+        ? await resolveClaireOperatorAuthority({ tenantId: conversation.tenantId, operatorUserId: conversation.actorId })
+        : null;
+      const v2Primary = v2Authority?.authorized ? v2Authority : null;
+      let brainV2PrimaryHandled = false;
+      /**
        * Claire's work ledger owns Day Line work for the whole conversation: one
        * understanding of every item, revision and save, read back before it is
        * spoken. Turns it does not claim continue below with the legacy Day Line
@@ -824,6 +840,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       let ledgerResult: ClaireTurnResult | null = null;
       let brainV3Prefetch: ReturnType<typeof prefetchBrainV3> | null = null;
       const ledgerEligible =
+        !v2Primary &&
         isClaireWorkLedgerEnabled() &&
         !preparedControl &&
         !conversation.strategicProposalId &&
@@ -919,6 +936,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       if (ledgerResult) {
         result = ledgerResult;
       } else if (
+        !v2Primary &&
         (conversation.sessionKind === "morning_readiness" || conversation.sessionKind === "evening_debrief") &&
         conversation.showrunner &&
         input.utterance.trim()
@@ -1087,6 +1105,59 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           assembledUtterance: artifactCandidate,
           thoughtCompleteness: "complete",
         };
+      } else if (v2Primary) {
+        const rookContactResidues = await loadClaireRookContactResidues({
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+        });
+        const timeZone = conversation.appointmentTimeZone || getDashboardTimeZone();
+        const primary = await runWithLlmObservability(
+          {
+            tenantId: conversation.tenantId,
+            operatorOpenId: conversation.actorId,
+            conversationId: callStateKey(conversationId),
+            callId: conversationId,
+            surface: "voice",
+          },
+          () =>
+            runClaireV2PrimaryTurn(
+              {
+                authority: v2Primary,
+                tenantId: conversation.tenantId,
+                operatorUserId: conversation.actorId,
+                dayDirectorActorId: conversation.dayDirectorActorId,
+                surface: "voice",
+                utterance: turnUtterance,
+                state: conversation,
+                conversationKey: callStateKey(conversationId),
+                conversationId,
+                timeZone,
+                businessDate: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
+                brief: conversation.brief,
+                context: conversation.context,
+                sourceEventId: daphneSourceId,
+                sourceConfirmed: input.sourceConfirmed,
+                allowFragmentWait: input.allowFragmentWait,
+                rookContactResidues,
+              },
+              productionClaireV2PrimaryDeps({
+                tenantId: conversation.tenantId,
+                operatorUserId: conversation.actorId,
+                dayDirectorActorId: conversation.dayDirectorActorId,
+                conversationKey: callStateKey(conversationId),
+                timeZone,
+                surface: "voice",
+              })
+            )
+        );
+        brainV2PrimaryHandled = true;
+        console.info("[ClaireBrainV2Primary]", JSON.stringify({
+          event: "claire_brain_v2_primary",
+          surface: "voice",
+          conversationKey: callStateKey(conversationId),
+          ...primary.brainV2,
+        }));
+        result = primary;
       } else {
         const rookContactResidues = await loadClaireRookContactResidues({
           tenantId: conversation.tenantId,
@@ -1238,7 +1309,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        * raw provider webhook — and skipped entirely for holds and empty semantic turns.
        */
       const observation = observationUtteranceForBrain(result);
-      if(input.sourceConfirmed!==false && observation.observe && observation.completeness==="complete" && !looksUnfinished(observation.assembledText)){
+      // A V2 primary turn already ingested Daphne and captured explicit corrections itself.
+      if(!brainV2PrimaryHandled && input.sourceConfirmed!==false && observation.observe && observation.completeness==="complete" && !looksUnfinished(observation.assembledText)){
         await ingestDaphneConversation({tenantId:conversation.tenantId,operatorUserId:conversation.actorId,
           conversationId:callStateKey(conversationId),turnId:daphneSourceId,
           utterance:observation.assembledText,completed:true}).catch(()=>({status:"persistence_failed" as const}));
@@ -1256,6 +1328,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
       if (
         observation.observe &&
         !brainV2LiveHandled &&
+        !brainV2PrimaryHandled &&
         !isClaireBrainV2LiveEnabled({
           tenantId: conversation.tenantId,
           operatorUserId: conversation.actorId,

@@ -4,6 +4,7 @@
  */
 
 import { ENV } from "../../_core/env";
+import { claireModelId } from "../claireModel";
 import { invokeLLM } from "../../_core/llm";
 import { WEEKLY_QUESTION_HARD_STOP, WEEKLY_QUESTION_PROPOSE_AT } from "../../../shared/weeklyMissionReadiness";
 import { compileClaireCharacterContext } from "../character/compiler";
@@ -26,7 +27,7 @@ export async function classifyWeeklyTurnWithClaire(input: {
   try {
     const result = await invokeLLM({
       tenantId: input.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      model: claireModelId(),
       maxTokens: 120,
       temperature: 0,
       outputSchema: {
@@ -114,7 +115,7 @@ export async function completeWeeklyActWithClaire(input: {
   try {
     const result = await invokeLLM({
       tenantId: input.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      model: claireModelId(),
       maxTokens: 700,
       temperature: 0,
       outputSchema: {

@@ -1,4 +1,5 @@
 import { ENV } from "../_core/env";
+import { claireModelId } from "../claire/claireModel";
 import { invokeLLM } from "../_core/llm";
 import type { StrategicDiagnosis } from "../../shared/strategicIntelligence";
 import {
@@ -27,7 +28,7 @@ export async function reviewStrategicQuality(
   try {
     const result = await invokeLLM({
       tenantId: d.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      model: claireModelId(),
       maxTokens: 450,
       temperature: 0,
       outputSchema: {

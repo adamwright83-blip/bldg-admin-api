@@ -1,5 +1,6 @@
 import type { invokeTextLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
+import { normalizeAnthropicModel } from "../../_core/modelCapabilities";
 import { findUnauthorizedFirstPersonBiography } from "./personalEntailment";
 
 /**
@@ -52,7 +53,7 @@ export function buildBiographyVerifierMessages(input: { allowedFacts: readonly s
 /** Verifier backed by a model. Temperature 0, one word, tiny budget. Model override via env; default = Claire's. */
 export function makeBiographyVerifier(invokeText: typeof invokeTextLLM, tenantId: string): BiographyVerifier {
   return async input => {
-    const override = process.env.CLAIRE_BIOGRAPHY_VERIFIER_MODEL?.trim();
+    const override = normalizeAnthropicModel(process.env.CLAIRE_BIOGRAPHY_VERIFIER_MODEL?.trim() ?? "");
     const reply = await invokeText({
       tenantId,
       ...claireModelRequest(0),

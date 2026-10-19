@@ -60,7 +60,7 @@ import {
   previewWorkdayLoop,
 } from "./workdayPlanService";
 import { loadClaireRookContactResidues } from "./rookContactResidueContext";
-import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnResult, type ClaireTurnState } from "./turn/claireTurn";
 import { isClaireWorkLedgerEnabled } from "./workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn } from "./workLedger/workLedgerTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
@@ -73,6 +73,14 @@ import {
   runClaireBrainV2LiveTurn,
   shouldFallbackToClaireLegacy,
 } from "./brain/live/runClaireBrainV2LiveTurn";
+import {
+  isClaireBrainV2PrimaryEnabled,
+  productionClaireV2PrimaryDeps,
+  runClaireV2PrimaryTurn,
+  type ClaireV2Provenance,
+} from "./brain/live/primaryTurn";
+import { resolveClaireOperatorAuthority } from "./brain/live/operatorAuthority";
+import { resolveLegacyDayforgeMembership } from "../saas/tenantAccess";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { acquireDeskTurnLock, saveDeskConversationState } from "./deskTurnState";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
@@ -351,14 +359,67 @@ export const claireRouter = router({
             }
           );
 
-        const { brainV2LiveHandled, result } = await runWithLlmObservability(
+        /**
+         * Brain V2 PRIMARY: identity + verified membership in THIS tenant.
+         * Tenant data authorization is unchanged — every reader runs as scope.tenantId.
+         */
+        const v2Authority = isClaireBrainV2PrimaryEnabled()
+          ? await resolveClaireOperatorAuthority({
+              tenantId: scope.tenantId,
+              operatorUserId: scope.operatorUserId,
+              membership: await resolveLegacyDayforgeMembership({
+                tenantId: scope.tenantId,
+                userOpenId: scope.operatorUserId,
+                platformRole: ctx.user.role,
+              }).catch(() => null),
+            })
+          : null;
+        const v2Primary = v2Authority?.authorized ? v2Authority : null;
+        const deskTimeZone =
+          input.timeZone ?? (await resolveOperatorTimeZone(scope.tenantId).catch(() => null)) ?? "America/Los_Angeles";
+        const { brainV2LiveHandled, result, brainV2 } = await runWithLlmObservability(
           {
             tenantId: scope.tenantId,
             operatorOpenId: scope.operatorUserId,
             conversationId: key,
             surface: "desktop",
           },
-          async () => {
+          async (): Promise<{ brainV2LiveHandled: boolean; result: ClaireTurnResult; brainV2?: ClaireV2Provenance }> => {
+            if (v2Primary) {
+              const primary = await runClaireV2PrimaryTurn(
+                {
+                  authority: v2Primary,
+                  tenantId: scope.tenantId,
+                  operatorUserId: scope.operatorUserId,
+                  dayDirectorActorId: actorId,
+                  surface: "text",
+                  utterance: input.utterance,
+                  state,
+                  conversationKey: key,
+                  conversationId: input.conversationId ?? "desk",
+                  timeZone: deskTimeZone,
+                  businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
+                  brief: preview.brief,
+                  context,
+                  rookContactResidues,
+                },
+                productionClaireV2PrimaryDeps({
+                  tenantId: scope.tenantId,
+                  operatorUserId: scope.operatorUserId,
+                  dayDirectorActorId: actorId,
+                  conversationKey: key,
+                  timeZone: deskTimeZone,
+                  surface: "text",
+                })
+              );
+              console.info("[ClaireBrainV2Primary]", JSON.stringify({
+                event: "claire_brain_v2_primary",
+                surface: "desktop",
+                conversationKey: key,
+                ...primary.brainV2,
+              }));
+              return { brainV2LiveHandled: true, result: primary, brainV2: primary.brainV2 };
+            }
             // Same work owner as the phone: the ledger claims work turns, and the
             // legacy Day Line writers stand down for the rest of this conversation.
             if (isClaireWorkLedgerEnabled()) {
@@ -517,6 +578,8 @@ export const claireRouter = router({
           // it is never business truth or Action / Execution authority.
           operatorAdaptation: result.operatorAdaptation ?? null,
           brainV2LiveHandled,
+          /** Proof of which Claire answered: present only when Brain V2 primary produced the reply. */
+          brainV2: brainV2 ?? null,
           actionIds: result.actionIds ?? [],
           receiptBackedCommit: result.receiptBackedCommit,
         };

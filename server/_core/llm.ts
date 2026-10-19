@@ -4,6 +4,7 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { ENV } from "./env";
+import { modelAcceptsForcedToolChoice, modelRequestShape } from "./modelCapabilities";
 import {
   assertAiSpendAvailable,
   trackModelUsage,
@@ -507,16 +508,23 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     8192
   );
   const startedAt = Date.now();
-  const temperatureSent = params.omitTemperature ? undefined : (params.temperature ?? 0);
-  const system = systemParts.length ? systemParts.join("\n\n") : undefined;
+  const shape = modelRequestShape(model, params);
+  const temperatureSent = shape.temperature;
+  // Models that reject a forced tool_choice still produce structured output:
+  // the tool is offered with `auto`, strict schema validation, and an
+  // explicit instruction to answer only through it.
+  const forcedTool = modelAcceptsForcedToolChoice(model);
+  const structuredSystem = forcedTool
+    ? systemParts
+    : [...systemParts, `Answer only by calling the ${toolName} tool exactly once. Do not reply with plain text.`];
+  const system = structuredSystem.length ? structuredSystem.join("\n\n") : undefined;
 
   let response: Anthropic.Message;
   try {
     response = await client.messages.create({
       model,
       max_tokens: maxTokens,
-      ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
-      ...(params.disableThinking ? { thinking: { type: "disabled" } } : {}),
+      ...(shape as Record<string, unknown>),
       ...(system ? { system } : {}),
       messages: anthropicMessages,
       tools: [
@@ -525,14 +533,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
           description:
             "Emit structured data exactly matching the schema. Fill fields per the user instructions.",
           input_schema: inputSchema as Anthropic.Tool.InputSchema,
-        },
+          ...(forcedTool ? {} : { strict: true }),
+        } as Anthropic.Tool,
       ],
-      tool_choice: {
-        type: "tool",
-        name: toolName,
-        disable_parallel_tool_use: true,
-      },
-    },
+      tool_choice: forcedTool
+        ? { type: "tool", name: toolName, disable_parallel_tool_use: true }
+        : { type: "auto", disable_parallel_tool_use: true },
+    } as Anthropic.MessageCreateParamsNonStreaming,
       {
         ...(params.signal ? { signal: params.signal, maxRetries: 0 } : {}),
         ...(params.timeoutMs ? { timeout: params.timeoutMs } : {}),
@@ -621,7 +628,8 @@ type TextMessageRequest = {
   model: string;
   max_tokens: number;
   temperature?: number;
-  thinking?: { type: "disabled" };
+  thinking?: { type: "disabled" } | { type: "between_tools" };
+  output_config?: { effort: "low" };
   system?: string;
   messages: Anthropic.MessageParam[];
 };
@@ -637,7 +645,7 @@ async function completeTextMessageStream(
   onFirstToken: () => void
 ): Promise<Anthropic.Message> {
   let sawFirst = false;
-  const stream = client.messages.stream(request);
+  const stream = client.messages.stream(request as Anthropic.MessageStreamParams);
   stream.on("text", () => {
     if (sawFirst) return;
     sawFirst = true;
@@ -691,16 +699,16 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
     const requestedModel = params.model ?? ENV.anthropicModel;
     const maxTokens = Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192);
-    const temperatureSent = params.omitTemperature ? undefined : (params.temperature ?? 0);
+    const shape = modelRequestShape(requestedModel, params);
+    const temperatureSent = shape.temperature;
     const system = systemParts.length ? systemParts.join("\n\n") : undefined;
     const request = {
       model: requestedModel,
       max_tokens: maxTokens,
-      ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
-      ...(params.disableThinking ? { thinking: { type: "disabled" } as const } : {}),
+      ...shape,
       ...(system ? { system } : {}),
       messages: anthropicMessages,
-    };
+    } as TextMessageRequest;
     const streamed = Boolean(params.onFirstToken);
     const startedAt = Date.now();
     let firstTokenAt: number | undefined;
@@ -711,7 +719,7 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
             if (firstTokenAt === undefined) firstTokenAt = Date.now();
             params.onFirstToken?.();
           })
-        : await client.messages.create(request);
+        : await client.messages.create(request as Anthropic.MessageCreateParamsNonStreaming);
     } catch (error) {
       observeAnthropicCall({
         tenantId,

@@ -61,11 +61,15 @@ describe("Brain V2 production isolation", () => {
       const expected = source === twilio
         ? [
             'from "./brain/live/grantBoundLegacyAdapter"',
+            'from "./brain/live/operatorAuthority"',
+            'from "./brain/live/primaryTurn"',
             'from "./brain/live/runClaireBrainV2LiveTurn"',
             'from "./brain/shadow/observeShadowTurn"',
             'from "./brain/shadow/v1Snapshot"',
           ]
         : [
+            'from "./brain/live/operatorAuthority"',
+            'from "./brain/live/primaryTurn"',
             'from "./brain/live/runClaireBrainV2LiveTurn"',
             'from "./brain/shadow/observeShadowTurn"',
             'from "./brain/shadow/v1Snapshot"',
@@ -87,7 +91,9 @@ describe("Brain V2 production isolation", () => {
       .filter(line => line.length > 0)
       .filter(line => !line.endsWith(".test.ts"))
       .filter(line => !line.startsWith("server/claire/brain/"))
-      .filter(line => line !== "server/claire/claireTwilio.ts" && line !== "server/claire/claireRouter.ts");
+      .filter(line => line !== "server/claire/claireTwilio.ts" && line !== "server/claire/claireRouter.ts")
+      // Claire Desk OPEN COMMS is a transport surface for the V2 primary path.
+      .filter(line => line !== "server/claire/weeklyMission/weeklyMissionRouter.ts");
     expect(offenders).toEqual([]);
   });
 

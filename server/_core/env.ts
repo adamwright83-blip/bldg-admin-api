@@ -1,12 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
-const RETIRED_ANTHROPIC_MODEL_REPLACEMENTS: Record<string, string> = {
-  "claude-sonnet-4-20250514": DEFAULT_ANTHROPIC_MODEL,
-};
+import { DEFAULT_ANTHROPIC_MODEL, normalizeAnthropicModel } from "./modelCapabilities";
 
-export function normalizeAnthropicModel(raw: string): string {
-  return RETIRED_ANTHROPIC_MODEL_REPLACEMENTS[raw] ?? raw;
-}
+export { DEFAULT_ANTHROPIC_MODEL, normalizeAnthropicModel };
 
 export const DEFAULT_ADMIN_BASE_URL = "https://admin.bldg.chat";
 

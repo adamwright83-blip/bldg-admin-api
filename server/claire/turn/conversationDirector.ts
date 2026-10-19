@@ -1,4 +1,5 @@
 import { ENV } from "../../_core/env";
+import { claireModelId } from "../claireModel";
 import { invokeLLM } from "../../_core/llm";
 
 export type ClaireConversationTarget =
@@ -43,7 +44,7 @@ export async function directClaireConversation(
   try {
     const result = await invokeLLM({
       tenantId: input.tenantId,
-      model: ENV.anthropicModelClaire || ENV.anthropicModel,
+      model: claireModelId(),
       maxTokens: 180,
       temperature: 0,
       outputSchema: {

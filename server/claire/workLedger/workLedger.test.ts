@@ -541,7 +541,7 @@ describe("one turn through the ledger", () => {
       { ...target, utterance: "I need to deliver 2 of them tonight.", state: { history: [] } },
       { now, planner: { invoke }, readState: dayLine.deps.readState, apply: dayLine.deps.apply, recordSignal: async () => ({ status: "ineligible" }) }
     );
-    expect(models).toEqual(["claude-sonnet-4-6", "claude-haiku-5-5"]);
+    expect(models).toEqual(["claude-sonnet-5-5", "claude-haiku-5-5"]);
     expect(outcome.handled).toBe(true);
     expect(dayLine.open()).toHaveLength(1);
   });

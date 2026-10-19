@@ -18,6 +18,7 @@
  */
 
 import { ENV } from "../_core/env";
+import { modelAcceptsSampling, modelDefaultsToThinking } from "../_core/modelCapabilities";
 
 /**
  * The single model authority for Claire's answer pipeline.
@@ -57,20 +58,8 @@ export function claireModelId(): string {
  * that flag directly rather than the value that used to (silently) do
  * nothing.
  */
-const SAMPLING_REJECTING_MODEL_PREFIXES = [
-  "claude-fable-5",
-  "claude-mythos-5",
-  "claude-opus-5",
-  "claude-opus-4-8",
-  "claude-opus-4-7",
-  "claude-sonnet-5",
-  // Verified 2026-10-16 against the production key: "`temperature` is deprecated for this model."
-  "claude-haiku-5",
-] as const;
-
 export function claireModelAcceptsSampling(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  return !SAMPLING_REJECTING_MODEL_PREFIXES.some(prefix => normalized.startsWith(prefix));
+  return modelAcceptsSampling(model);
 }
 
 /**
@@ -93,11 +82,8 @@ export function claireModelAcceptsSampling(model: string): boolean {
  * of them, this returns `false` and Claire keeps its new (always-on)
  * thinking rather than sending a request that fails outright.
  */
-const THINKING_DEFAULT_ON_MODEL_PREFIXES = ["claude-opus-5", "claude-sonnet-5"] as const;
-
 export function claireModelDefaultsToThinking(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  return THINKING_DEFAULT_ON_MODEL_PREFIXES.some(prefix => normalized.startsWith(prefix));
+  return modelDefaultsToThinking(model);
 }
 
 /**
