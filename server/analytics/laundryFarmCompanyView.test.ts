@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BUILDINGS, type BuildingConfig } from "../../shared/buildings";
 import { zonedDayStartUtc } from "../dashboardZoned";
-import { answerClaireBusinessTurn, type ClaireAnalyticsState } from "../claire/businessConversation";
+import { answerClaireBusinessTurn, parseBusinessTurn, type ClaireAnalyticsState } from "../claire/businessConversation";
 import {
   attributeCompanyBuilding,
   companyBuildingTableRows,
@@ -390,6 +390,31 @@ describe("Claire company questions", () => {
       aspect: "revenue",
       period: { kind: "this_month" },
     });
+    expect(matchLaundryFarmCompanyQuestion("How many orders did we get?")).toEqual({
+      aspect: "orders",
+      period: { kind: "this_month" },
+    });
+    expect(matchLaundryFarmCompanyQuestion("How many unpaid orders do we have?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("What was revenue from Dana in August?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("What is our revenue growth?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Is revenue up or down?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("What's the revenue trend?")).toBeNull();
+    const unpaid = parseBusinessTurn("How many unpaid orders do we have?", null, NOW, "America/Los_Angeles");
+    expect(unpaid.kind).toBe("query");
+    if (unpaid.kind === "query") expect(unpaid.query.metric).toBe("open_orders");
+    const dana = parseBusinessTurn("What was revenue from Dana in August?", null, NOW, "America/Los_Angeles");
+    expect(dana.kind).toBe("query");
+    if (dana.kind === "query") {
+      expect(dana.query.metric).toBe("customer_history");
+      expect(dana.query.customerName).toBe("Dana");
+      expect(dana.query.period.kind).toBe("between");
+    }
+    const growth = parseBusinessTurn("What is our revenue growth?", null, NOW, "America/Los_Angeles");
+    expect(growth.kind).toBe("query");
+    if (growth.kind === "query") {
+      expect(growth.query.metric).toBe("revenue");
+      expect(growth.query.comparison).toBe("previous");
+    }
     expect(matchLaundryFarmCompanyQuestion("What was revenue from OPUS last month?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much revenue did we do in August through CleanCloud?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much profit did we make last month?")).toBeNull();

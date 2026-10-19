@@ -17,9 +17,12 @@
  */
 
 import { defaultBusinessQuery, type BusinessMetric, type BusinessQuery } from "../../../analytics/businessQuery";
+import { parsePeriodPhrase } from "../../../analytics/businessPeriods";
+import { extractCustomerNames } from "../../business/businessLanguage";
 import {
   companyQuestionFromParameters,
   companyViewRequest,
+  LAUNDRY_FARM_COMPANY_TIME_ZONE,
   matchLaundryFarmCompanyQuestion,
 } from "../../../analytics/laundryFarmCompanyView";
 import type { AttentionPlan } from "../contracts/attention";
@@ -54,14 +57,30 @@ export function inferBusinessMetric(text: string): BusinessMetric | null {
   return null;
 }
 
+const COMPARISON_READER = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?|up or down|trend|growth|grew|shrank|change from)\b/i;
+
 export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | null {
-  const metric = inferBusinessMetric(perceived.assembledText);
+  const text = perceived.assembledText;
+  const names = extractCustomerNames(text);
+  let metric = inferBusinessMetric(text);
+  if (names.length === 1 && (metric === "revenue" || metric === "orders")) metric = "customer_history";
   if (!metric) return null;
   const query = defaultBusinessQuery(metric);
   if (perceived.cardinality && perceived.cardinality > 0) query.limit = perceived.cardinality;
   if (perceived.ordering === "first") query.rank = "earliest";
+  if (metric === "customer_history" && names.length === 1) {
+    query.customerName = names[0]!;
+    const period = parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE);
+    if (period) query.period = period;
+  }
   const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
-  if (mentions.length === 1) query.customerName = mentions[0].raw;
+  if (mentions.length === 1 && !query.customerName) query.customerName = mentions[0].raw;
+  if (
+    COMPARISON_READER.test(text) &&
+    (query.metric === "revenue" || query.metric === "orders" || query.metric === "aov")
+  ) {
+    query.comparison = "previous";
+  }
   if (perceived.listRequest) query.listMembers = true;
   return query;
 }

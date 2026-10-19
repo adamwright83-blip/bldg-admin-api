@@ -391,4 +391,47 @@ describe("Brain V2 primary company view", () => {
     expect(narrower.readCompanyView).not.toHaveBeenCalled();
     expect(narrower.runQuery).toHaveBeenCalled();
   });
+
+  it("keeps unpaid, named-customer, and growth questions off the company total on phone and Desk", async () => {
+    const missed = [
+      "How many unpaid orders do we have?",
+      "What was revenue from Dana in August?",
+      "What is our revenue growth?",
+    ];
+    for (const utterance of missed) {
+      for (const surface of ["voice", "text"] as const) {
+        const routed = depsFor(["laundry_farm", "default"]);
+        routed.runQuery.mockImplementation(async (_tenant: string, query: { metric: string }) => ({
+          status: "unavailable",
+          query,
+          period: { end: "2026-10-19" },
+        }));
+        routed.deps.planBusinessQuery = async () => null;
+        const result = await runClaireV2PrimaryTurn(turn(utterance, surface, "default"), routed.deps);
+        expect(routed.readCompanyView).not.toHaveBeenCalled();
+        expect(routed.runQuery).toHaveBeenCalled();
+        expect(result.brainV2.evidenceReaders).not.toContain(LAUNDRY_FARM_COMPANY_READER);
+        expect(result.speak).not.toContain("Recorded sales");
+        expect(result.speak).not.toContain("paid order");
+        expect(result.speak).not.toContain("$425.00");
+        expect(result.speak).not.toContain("$222.00");
+        const query = routed.runQuery.mock.calls[0]?.[1] as {
+          metric?: string;
+          customerName?: string | null;
+          comparison?: string | null;
+          period?: { kind?: string; start?: string; end?: string };
+        };
+        if (utterance.startsWith("How many unpaid")) {
+          expect(query.metric).toBe("open_orders");
+        } else if (utterance.includes("Dana")) {
+          expect(query.metric).toBe("customer_history");
+          expect(query.customerName).toBe("Dana");
+          expect(query.period).toMatchObject({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
+        } else {
+          expect(query.metric).toBe("revenue");
+          expect(query.comparison).toBe("previous");
+        }
+      }
+    }
+  });
 });

@@ -1,4 +1,5 @@
 import { BUILDINGS, buildingFromSlug, matchBuilding, type BuildingConfig } from "../../shared/buildings";
+import { extractCustomerNames } from "../claire/business/businessLanguage";
 import { listActiveTenantMemberships } from "../saas/tenantAccess";
 import { listTenantUnpaidOrders } from "../domains/orders/unpaidOrderReadService";
 import { parsePeriodPhrase, resolvePeriod, type PeriodSpec } from "./businessPeriods";
@@ -194,13 +195,15 @@ export type CompanyViewEvidencePayload = {
 
 const PROFIT_QUESTION = /\b(?:profit|margin)\b/;
 const CUSTOMER_QUESTION = /\bcustomers?\b/;
-const OPEN_ORDER_QUESTION = /\bopen\s+orders?\b/;
+/** Same outstanding-order forms the tenant reader already sends to open orders. */
+const OPEN_ORDER_QUESTION = /\b(?:open orders?|orders? (?:in progress|outstanding|awaiting payment|still open)|unpaid orders?)\b/;
 const SERVICE_LINE_SPLIT = /\blaundry\s+butler\b|\bcore\s+laundry\s+farm\b|\bservice\s+line\b/;
 const EXPLICIT_SERVICE = /\b(?:wash(?:\s*&\s*|\s+and\s+)fold|dry[\s-]?clean(?:ing)?|fluff\s*(?:and|&)\s*fold)\b/;
 const PAYMENT_RAIL = /\b(?:clean\s?cloud|clearant|clearent|stripe|laundry\s+butler)\b/;
 const WHY_QUESTION = /\bwhy\b/;
 const AOV_QUESTION = /\b(?:average\s+order(?:\s+value)?|aov)\b/;
-const COMPARISON_QUESTION = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?)\b/;
+/** Same comparison forms the tenant reader already sends to the comparison reader. */
+const COMPARISON_QUESTION = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?|up or down|trend|growth|grew|shrank|change from)\b/;
 const BUILDING_NAME = /\bopus(?:\s+la)?\b|\bcentury\s+park(?:\s+east)?\b|\bcpe\b/;
 const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+east)?|cpe)\b|\b(?:century\s+park(?:\s+east)?|cpe)\b[\s\S]{0,80}\bopus(?:\s+la)?\b/;
 const NOT_A_CUSTOMER = new Set(["we", "you", "i", "they", "laundry", "the", "opus", "century", "it", "she", "he", "our"]);
@@ -328,9 +331,13 @@ function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null)
  * Unqualified revenue and order questions use this reader for any wording and
  * any date range. "Laundry Farm" is the whole company, both rails.
  * "How much did we make?" and "How much have we made?" are company questions.
+ * "How many orders did we get?" is a company paid-order count.
  * An explicit service, payment rail, building slice, or customer stays on the
- * tenant reader. Profit, why, average order value, and a latest-sales list stay
- * there too.
+ * tenant reader. Customer-name forms the tenant reader already recognizes,
+ * including "from Dana", are checked before company revenue. Unpaid and other
+ * outstanding-order questions stay on the open-orders path. Growth, trend, and
+ * up-or-down questions stay on the comparison reader. Profit, why, average
+ * order value, and a latest-sales list stay off the company total.
  */
 export function matchLaundryFarmCompanyQuestion(
   utterance: string,
@@ -338,6 +345,7 @@ export function matchLaundryFarmCompanyQuestion(
 ): LaundryFarmCompanyQuestion | null {
   const text = normalizeCompanyUtterance(utterance);
   if (!text) return null;
+  if (extractCustomerNames(utterance).length > 0) return null;
   return directCompanyQuestion(text) ?? companyFollowUp(text, prior);
 }
 
