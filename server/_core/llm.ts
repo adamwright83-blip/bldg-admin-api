@@ -336,6 +336,59 @@ const normalizeResponseFormat = ({
   };
 };
 
+const UNSUPPORTED_JSON_OUTPUT_KEYS = new Set([
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "strict",
+]);
+
+/**
+ * The structured-outputs schema subset: no numeric/string/array constraints,
+ * and every object closed with `additionalProperties: false`.
+ */
+export function jsonOutputSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const visit = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(visit);
+    if (!node || typeof node !== "object") return node;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (UNSUPPORTED_JSON_OUTPUT_KEYS.has(key)) continue;
+      out[key] = key === "enum" || key === "const" || key === "required" ? value : visit(value);
+    }
+    if (out.type === "object" || (out.properties && typeof out.properties === "object")) {
+      out.additionalProperties = false;
+    }
+    return out;
+  };
+  return visit(schema) as Record<string, unknown>;
+}
+
+/** Present a structured-outputs JSON reply in the tool-block shape callers already read. */
+function jsonOutputAsToolBlock(response: Anthropic.Message, toolName: string): Anthropic.ToolUseBlock | undefined {
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map(b => b.text)
+    .join("")
+    .trim();
+  if (!text) return undefined;
+  let input: unknown;
+  try {
+    input = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  return { type: "tool_use", id: response.id, name: toolName, input } as Anthropic.ToolUseBlock;
+}
+
 function inputSchemaForAnthropic(
   schema: Record<string, unknown>
 ): Record<string, unknown> {
@@ -510,36 +563,44 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const startedAt = Date.now();
   const shape = modelRequestShape(model, params);
   const temperatureSent = shape.temperature;
-  // Models that reject a forced tool_choice still produce structured output:
-  // the tool is offered with `auto`, strict schema validation, and an
-  // explicit instruction to answer only through it.
+  // Models that reject a forced tool_choice (Sonnet 5.5, Opus 5.5, Fable/Mythos
+  // 5.1) use structured outputs instead: constrained decoding guarantees the
+  // JSON matches the schema. An `auto` tool call does not — measured live,
+  // Sonnet 5.5 omitted 6 of 21 required fields from a strict tool call.
   const forcedTool = modelAcceptsForcedToolChoice(model);
-  const structuredSystem = forcedTool
-    ? systemParts
-    : [...systemParts, `Answer only by calling the ${toolName} tool exactly once. Do not reply with plain text.`];
-  const system = structuredSystem.length ? structuredSystem.join("\n\n") : undefined;
+  const system = systemParts.length ? systemParts.join("\n\n") : undefined;
 
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      ...(shape as Record<string, unknown>),
-      ...(system ? { system } : {}),
-      messages: anthropicMessages,
-      tools: [
-        {
-          name: toolName,
-          description:
-            "Emit structured data exactly matching the schema. Fill fields per the user instructions.",
-          input_schema: inputSchema as Anthropic.Tool.InputSchema,
-          ...(forcedTool ? {} : { strict: true }),
-        } as Anthropic.Tool,
-      ],
-      tool_choice: forcedTool
-        ? { type: "tool", name: toolName, disable_parallel_tool_use: true }
-        : { type: "auto", disable_parallel_tool_use: true },
-    } as Anthropic.MessageCreateParamsNonStreaming,
+    response = await client.messages.create(
+      (forcedTool
+        ? {
+            model,
+            max_tokens: maxTokens,
+            ...(shape as Record<string, unknown>),
+            ...(system ? { system } : {}),
+            messages: anthropicMessages,
+            tools: [
+              {
+                name: toolName,
+                description:
+                  "Emit structured data exactly matching the schema. Fill fields per the user instructions.",
+                input_schema: inputSchema as Anthropic.Tool.InputSchema,
+              },
+            ],
+            tool_choice: { type: "tool", name: toolName, disable_parallel_tool_use: true },
+          }
+        : {
+            model,
+            max_tokens: maxTokens,
+            ...(shape as Record<string, unknown>),
+            ...(system ? { system } : {}),
+            messages: anthropicMessages,
+            output_config: {
+              ...(shape.output_config ?? {}),
+              format: { type: "json_schema", schema: jsonOutputSchema(inputSchema) },
+            },
+          }) as Anthropic.MessageCreateParamsNonStreaming,
       {
         ...(params.signal ? { signal: params.signal, maxRetries: 0 } : {}),
         ...(params.timeoutMs ? { timeout: params.timeoutMs } : {}),
@@ -558,9 +619,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     throw toAnthropicCallerError(e);
   }
 
-  const toolBlock = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-  );
+  const toolBlock =
+    response.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use") ??
+    (forcedTool ? undefined : jsonOutputAsToolBlock(response, toolName));
   observeAnthropicCall({
     tenantId,
     requestedModel: model,

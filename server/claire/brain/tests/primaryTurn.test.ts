@@ -418,6 +418,40 @@ describe("Brain V2 primary — review regressions", () => {
   });
 });
 
+describe("Brain V2 primary — a named period is never substituted", () => {
+  const lastWeekPlanner = async () => ({
+    metric: "latest_sales", limit: 5, customerName: null, rank: null, filters: null, serviceType: null,
+    listMembers: true, period: { kind: "last_week" }, comparison: null, minOrders: 1, groupBy: null,
+  }) as never;
+
+  it("answers last week's sales from a last-week query", async () => {
+    const h = harness();
+    const runQuery = vi.mocked(business.runQuery);
+    runQuery.mockClear();
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "What were my sales last week?"), { ...h.deps, planBusinessQuery: lastWeekPlanner });
+    expect(runQuery.mock.calls.some(call => (call[1] as { period: { kind: string } }).period.kind === "last_week")).toBe(true);
+    expect(result.speak).not.toMatch(/can't verify last week/);
+    expect(result.brainV2.composition).toBe("deterministic");
+  });
+
+  it("says it cannot verify last week instead of answering a different window", async () => {
+    const h = harness();
+    const thirtyDays = async () => ({
+      metric: "latest_sales", limit: 5, customerName: null, rank: null, filters: null, serviceType: null,
+      listMembers: true, period: { kind: "trailing_days", days: 30 }, comparison: null, minOrders: 1, groupBy: null,
+    }) as never;
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "What were my sales last week?"), { ...h.deps, planBusinessQuery: thirtyDays });
+    expect(result.speak).toBe("I can't verify last week from what I have right now, so I won't give you a different period instead.");
+    expect(result.speak).not.toMatch(/Thomas|30 days/);
+  });
+
+  it("does not refuse a strategy question that mentions a period", async () => {
+    const h = harness();
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "What do you think I should focus on this week to grow revenue?"), h.deps);
+    expect(result.brainV2.composition).toBe("composed");
+  });
+});
+
 describe("unlicensedFigures", () => {
   it("allows figures present in evidence and flags invented ones", () => {
     expect(unlicensedFigures("Revenue was $1,240 and 12% up.", "Revenue: $1,240 total, up 12% on last week.")).toEqual([]);

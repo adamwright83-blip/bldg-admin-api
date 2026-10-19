@@ -69,6 +69,7 @@ import { liveExecutiveDeps, type ShadowRetrievalContext } from "../shadow/observ
 import { updateShadowMemory, type ShadowMemory } from "../shadow/shadowMemory";
 import type { BusinessQueryPlanner, LiveRetrievalDeps } from "../executive/decide";
 import { readOnlyWorkingMemorySource } from "../shadow/v1Snapshot";
+import { periodMatches, requestedPeriod } from "../executive/requestedPeriod";
 import {
   brainV2CallControlResult,
   executeGrantBoundLegacyAdapter,
@@ -368,6 +369,7 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
       decision.conclusions.some(conclusion => conclusion.kind === "action_unsupported" || conclusion.kind === "external_capability_unowned" || conclusion.kind === "mission_write_unavailable")
         ? "Nothing was written this turn; do not imply a save, send, or schedule."
         : "",
+      "Call the operator's work list the Day Line; never call it 'the board'.",
     ].filter(Boolean).join("; "),
   };
 }
@@ -804,6 +806,34 @@ export async function runClaireV2PrimaryTurn(
           ? businessReceipt({ decision, conversationKey: input.conversationKey, ordinal, nowMs, speech: deterministicText, composed: false })
           : null
       );
+    }
+
+    // ── A named period is answered for exactly that period, or not at all ──
+    const asked = FACT_INTENTS.has(intent) && attention.priorClaim === "none" && !attention.continueOrderedQuery
+      ? requestedPeriod(utterance)
+      : null;
+    if (asked) {
+      const queries = decision.evidence.filter(
+        item => item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
+      );
+      const executed = queries.map(item => (item.payload as BusinessQueryResult).query?.period);
+      if (queries.length && !executed.some(period => periodMatches(asked, period))) {
+        console.warn("[ClaireBrainV2Primary] requested period not verified", {
+          event: "claire_brain_v2_period_mismatch",
+          conversationKey: input.conversationKey,
+          requested: asked.kind,
+          executed: executed.map(period => period?.kind ?? null),
+        });
+        return finish(
+          {
+            speak: `I can't verify ${asked.label} from what I have right now, so I won't give you a different period instead.`,
+            kind: "answered",
+          },
+          "deterministic",
+          decision,
+          actionClasses
+        );
+      }
     }
 
     // ── Decisive V2 speech: facts, clarifications, refusals, prior-claim verdicts ──

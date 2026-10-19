@@ -185,8 +185,25 @@ function anthropicMessage(model: string, content: unknown[], stop: string) {
   };
 }
 
+/** Current-generation models receive the schema as structured output, not a tool. */
+function jsonOutputSchemaName(body: { output_config?: { format?: { schema?: { required?: string[] } } } }): string | null {
+  const required = body.output_config?.format?.schema?.required ?? null;
+  if (!required) return null;
+  if (required.includes("dayLineDisposition")) return "claire_brain_v3_turn";
+  if (required.includes("questions") && required.includes("items")) return "claire_briefing";
+  if (required.includes("assertsFact")) return "claire_claim_challenge";
+  return "structured_other";
+}
+
 function stubBody(raw: string) {
-  const body = JSON.parse(raw) as { model?: string; tools?: Array<{ name?: string }>; system?: unknown; messages?: Array<{ content?: unknown }> };
+  const body = JSON.parse(raw) as { model?: string; tools?: Array<{ name?: string }>; output_config?: { format?: { schema?: { required?: string[] } } }; system?: unknown; messages?: Array<{ content?: unknown }> };
+  const jsonOutput = jsonOutputSchemaName(body);
+  if (jsonOutput) {
+    // Same scripted answers, delivered the way structured outputs deliver them: JSON text.
+    const asTool = stubBody(JSON.stringify({ ...body, output_config: undefined, tools: [{ name: jsonOutput === "structured_other" ? "other" : jsonOutput }] }));
+    const block = (asTool.content as Array<{ type: string; input?: unknown }>)[0]!;
+    return anthropicMessage(body.model ?? "", [{ type: "text", text: JSON.stringify(block.input) }], "end_turn");
+  }
   const tool = body.tools?.[0]?.name ?? null;
   const { userText, system } = userTextFrom(body);
   if (tool === "claire_brain_v3_turn") {
