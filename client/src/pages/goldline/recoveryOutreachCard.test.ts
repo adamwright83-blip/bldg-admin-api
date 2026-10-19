@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CozyRecoveryDayLineCard } from "@shared/cozyVillagerEvidence";
+import { projectSilverLakeOutreachStatus } from "@shared/silverLakeOutreachStatus";
 import {
   RECOVERY_SCHEDULED_LABEL,
   RecoveryOutreachCard,
@@ -44,6 +45,12 @@ function proofCard(overrides: Partial<CozyRecoveryDayLineCard> = {}): CozyRecove
       worldEventAppended: false,
       note: "No recovery world event.",
     },
+    silverLakeStatus: projectSilverLakeOutreachStatus({
+      tenantId: "laundry_farm",
+      operatorId: "adam-admin",
+      customerId: PROOF_CUSTOMER,
+      suggestedBody: STORED_DRAFT,
+    }),
     ...overrides,
   };
 }

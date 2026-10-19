@@ -580,12 +580,13 @@ export async function rescheduleOutreachDraft(
       throw new Error("New scheduled send time must be in the future");
     }
 
+    const nextRevision = existing.revisionCount + 1;
     const result = await db
       .update(scheduledOutreachMessages)
       .set({
         scheduledFor: newScheduledFor,
         timezone: targetTz,
-        status: "pending",
+        revisionCount: nextRevision,
         deliveryIntent: "scheduled",
         updatedAt: now,
       })
@@ -594,6 +595,7 @@ export async function rescheduleOutreachDraft(
           eq(scheduledOutreachMessages.id, input.messageId),
           eq(scheduledOutreachMessages.tenantId, input.tenantId),
           eq(scheduledOutreachMessages.operatorId, input.operatorId),
+          eq(scheduledOutreachMessages.revisionCount, existing.revisionCount),
           or(
             eq(scheduledOutreachMessages.status, "pending"),
             eq(scheduledOutreachMessages.status, "awaiting_sender_setup")
@@ -608,12 +610,22 @@ export async function rescheduleOutreachDraft(
     if (affectedRows(result) === 0) {
       throw new Error("Failed to reschedule draft: message is currently leased or was already dispatched");
     }
+    await db.insert(scheduledOutreachRevisions).values({
+      id: `sor_${randomUUID()}`,
+      outreachMessageId: input.messageId,
+      tenantId: input.tenantId,
+      revisionNumber: nextRevision,
+      messageBody: existing.currentMessageBody,
+      editedBy: input.operatorId,
+      reason: input.reason ?? "Rescheduled; earlier approval does not cover this send time",
+      createdAt: now,
+    });
 
     return {
       ...existing,
       scheduledFor: newScheduledFor,
       timezone: targetTz,
-      status: "pending",
+      revisionCount: nextRevision,
       deliveryIntent: "scheduled",
       updatedAt: now,
     };
@@ -641,15 +653,28 @@ export async function rescheduleOutreachDraft(
     throw new Error("New scheduled send time must be in the future");
   }
 
+  const nextRevision = mem.revisionCount + 1;
   const updated: ScheduledOutreachMessageRow = {
     ...mem,
     scheduledFor: newScheduledFor,
     timezone: targetTz,
-    status: "pending",
+    revisionCount: nextRevision,
     deliveryIntent: "scheduled",
     updatedAt: now,
   };
   testMemoryMessages.set(input.messageId, updated);
+  const revs = testMemoryRevisions.get(input.messageId) ?? [];
+  revs.push({
+    id: `sor_${randomUUID()}`,
+    outreachMessageId: input.messageId,
+    tenantId: input.tenantId,
+    revisionNumber: nextRevision,
+    messageBody: mem.currentMessageBody,
+    editedBy: input.operatorId,
+    reason: input.reason ?? "Rescheduled; earlier approval does not cover this send time",
+    createdAt: now,
+  });
+  testMemoryRevisions.set(input.messageId, revs);
   return updated;
 }
 
@@ -1472,6 +1497,31 @@ async function markSimulatedObservation(args: {
 /**
  * Lists scheduled outreach messages for a tenant, optionally filtered by status or operator.
  */
+export async function getScheduledOutreachMessage(input: {
+  tenantId: string;
+  operatorId: string;
+  messageId: string;
+}): Promise<ScheduledOutreachMessageRow | null> {
+  const db = await requireDb();
+  if (db) {
+    const [row] = await db
+      .select()
+      .from(scheduledOutreachMessages)
+      .where(
+        and(
+          eq(scheduledOutreachMessages.id, input.messageId),
+          eq(scheduledOutreachMessages.tenantId, input.tenantId),
+          eq(scheduledOutreachMessages.operatorId, input.operatorId)
+        )
+      )
+      .limit(1);
+    return row ?? null;
+  }
+  const row = testMemoryMessages.get(input.messageId);
+  if (!row || row.tenantId !== input.tenantId || row.operatorId !== input.operatorId) return null;
+  return row;
+}
+
 export async function listScheduledOutreachMessages(input: {
   tenantId: string;
   operatorId?: string;

@@ -65,6 +65,8 @@ describe("personal outreach versus the marketing SMS gate", () => {
     expect(personal({ optedOut: true }).explanation).toMatch(/never bypassed/);
     expect(personal({ contactRestricted: true }).blocks).toContain("contact_restricted");
     expect(personal({ lastOutreachOn: "2026-10-10" }).blocks).toContain("outreach_frequency");
+    expect(personal({ contradictingRecentOrder: true }).blocks).toContain("recent_order");
+    expect(personal({ contradictingRecentOrder: true }).eligible).toBe(false);
     expect(personal({ permissionReadable: false }).blocks).toContain("permission_unreadable");
   });
 
