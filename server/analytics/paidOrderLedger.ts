@@ -87,6 +87,8 @@ export type PaidOrderEvent = {
   businessLine?: BusinessLine | null;
   processor?: PaymentProcessor;
   building?: BuildingKey | null;
+  /** Persisted property slug. Building attribution uses this and the address, never the tenant id. */
+  buildingSlug?: string | null;
   address?: string | null;
   serviceClass?: LaundryFarmServiceClass | "native";
   /** Short human description of what was ordered, when the source records one. */
@@ -264,6 +266,7 @@ export function mapNativeOrders(
       businessLine: "laundry_butler",
       processor: "stripe",
       building: buildingFor({ buildingSlug: row.buildingSlug, address: row.address }),
+      buildingSlug: row.buildingSlug ?? null,
       address: [row.address, row.unit ? `Unit ${row.unit}` : null].filter(Boolean).join(", ") || null,
       serviceClass: "native",
       summary: serviceLabel(serviceType),
@@ -328,6 +331,7 @@ export function partitionCleanCloudOrders(
       businessLine: cleanCloudBusinessLine(preferred.storeLabel),
       processor: cleanCloudProcessor(preferred.paymentType, preferred.cardPaymentType),
       building: buildingFor({ buildingSlug: preferred.buildingSlug, address: preferred.address }),
+      buildingSlug: preferred.buildingSlug ?? null,
       address: preferred.address?.trim() || null,
       serviceClass,
       summary: cleanCloudSummaryText(preferred.summaryText),

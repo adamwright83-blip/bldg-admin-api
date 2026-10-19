@@ -53,7 +53,12 @@ import {
   type BusinessQuery,
   type BusinessQueryResult,
 } from "../analytics/businessQuery";
+import {
+  matchLaundryFarmCompanyQuestion,
+  readLaundryFarmCompanyView,
+} from "../analytics/laundryFarmCompanyView";
 import type { ServiceType } from "../analytics/paidOrderLedger";
+import { speakLaundryFarmCompanyView } from "./business/companyViewSpeech";
 import {
   addressScope,
   buildingScope,
@@ -159,6 +164,7 @@ export type ClaireBusinessReader =
   | "compare_customers"
   | "planned_query"
   | "query"
+  | "company_view"
   | "analysis"
   | "business_goal";
 
@@ -1078,6 +1084,8 @@ export type ClaireBusinessTurnDeps = {
   loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
   /** Injectable so tests can plan a business goal without a database. */
   runBusinessGoal?: (input: BusinessGoalEngineInput) => Promise<BusinessGoalPlan>;
+  /** Laundry Farm company view. Defaults to the canonical cross-tenant reader. */
+  readCompanyView?: typeof readLaundryFarmCompanyView;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -1146,6 +1154,35 @@ export async function answerClaireBusinessTurn(
   const timeZone = (deps.timeZone ?? getDashboardTimeZone)();
   const goalTurn = await settleBusinessGoal(input, deps, now, timeZone);
   if (goalTurn) return goalTurn;
+  let reader: ClaireBusinessReader = "query";
+  const companyQuestion = matchLaundryFarmCompanyQuestion(input.utterance);
+  if (companyQuestion) {
+    reader = "company_view";
+    const companyToday = businessToday(now, "America/Los_Angeles");
+    try {
+      const view = await (deps.readCompanyView ?? readLaundryFarmCompanyView)({
+        operatorUserId: input.operatorUserId ?? "",
+        now,
+        period: companyQuestion.period,
+      });
+      const speech = new Speech(input.surface, "America/Los_Angeles", companyToday);
+      speakLaundryFarmCompanyView(view, companyQuestion.aspect, speech);
+      return guardedTurn({
+        handled: true,
+        speak: speech.text(),
+        facts: speech.facts,
+        reader: "company_view",
+      });
+    } catch (error) {
+      console.warn("[Claire] company view failed", error instanceof Error ? error.message : error);
+      return guardedTurn({
+        handled: true,
+        speak: "I couldn't read the Laundry Farm company view just now, so I won't guess.",
+        facts: [],
+        reader: "company_view",
+      });
+    }
+  }
   const nowMs = now.getTime();
   const today = businessToday(now, timeZone);
   const session = liveSession(input.state, nowMs);
@@ -1172,7 +1209,6 @@ export async function answerClaireBusinessTurn(
   if (parsed.kind === "business_goal") {
     return (await settleBusinessGoal(input, deps, now, timeZone)) ?? { handled: false };
   }
-  let reader: ClaireBusinessReader = "query";
   // The model assesses whole-question adequacy before a greedy fixed metric can erase novel criteria.
   // Legacy dependency-injected fixtures retain their established reader behavior; new tests inject analyze explicitly.
   const mayInvestigate =
