@@ -141,9 +141,9 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
       line[7] = "62.75";
       return line;
     });
-    // (b) For Alma's order the export only fills in the customer id. The paid-order ledger then
-    //     stops counting the order (its receipt names the earlier import; pre-existing, see the PR),
-    //     and the goal side follows the ledger instead of attributing revenue it does not count.
+    // (b) For Alma's order the export only fills in the customer id. With PR #643's
+    //     fix, the paid-order ledger keeps the paid order counted (preserving its
+    //     valid receipt by payment time rather than dropping it), and the goal side bridges it.
     t.amendLedger(line => line[0] === anonymousAlma, line => {
       line[3] = ALMA.customerId;
       return line;
@@ -152,18 +152,18 @@ describeMysql("paid-order observation reconciliation on MySQL", () => {
     advance(31 * 60_000);
     await sweepObservationBridges({ leaseOwner: "live-worker", tenantId: t.tenantId });
     expect(await loop.obligationOf(t.tenantId, anonymousBea)).toMatchObject({ status: "bridged" });
-    const almaUncounted = await loop.obligationOf(t.tenantId, anonymousAlma);
-    expect(almaUncounted).toMatchObject({ status: "rejected" });
-    expect(json(almaUncounted!.resultJson).reason).toBe("payment_unverified_in_canonical_ledger");
+    const almaCounted = await loop.obligationOf(t.tenantId, anonymousAlma);
+    expect(almaCounted).toMatchObject({ status: "bridged" });
 
     // Every attributed order is one the ledger counts, once; retries never duplicated an order or an outcome.
     paid = await paidOutcomes(t.tenantId);
-    expect(paid.map(o => o.evidenceReference).sort()).toEqual([anonymousBea, almaOrder, beaOrder].map(id => `orders:cleancloud:${id}`).sort());
+    expect(paid.map(o => o.evidenceReference).sort()).toEqual([anonymousAlma, anonymousBea, almaOrder, beaOrder].map(id => `orders:cleancloud:${id}`).sort());
     expect(paid.find(o => o.evidenceReference === `orders:cleancloud:${anonymousBea}`)).toMatchObject({ monetaryValueCents: 6275 });
+    expect(paid.find(o => o.evidenceReference === `orders:cleancloud:${anonymousAlma}`)).toMatchObject({ monetaryValueCents: 5000 });
     const [duplicates] = await loop.rows("SELECT COUNT(*) AS n FROM (SELECT cleancloudOrderId FROM cleancloud_paid_orders WHERE tenantId = ? GROUP BY cleancloudOrderId, sourceReportType HAVING COUNT(*) > 1) d", [t.tenantId]);
     expect(Number(duplicates!.n)).toBe(0);
     const after = await readCanonicalRevenue({ tenantId: t.tenantId, from: addDaysYmd(today(), -1), to: today(), timeZone: ZONE, now: new Date() });
-    expect(after.status === "ok" && after.recordedCents).toBe(6100 + 4800 + 3300 + 6275);
+    expect(after.status === "ok" && after.recordedCents).toBe(6100 + 4800 + 3300 + 6275 + 5000);
     expect(await readObservationBridgeBacklog({ tenantId: t.tenantId })).toMatchObject({ retrying: 0, needsReview: 0 });
   }, 300_000);
 

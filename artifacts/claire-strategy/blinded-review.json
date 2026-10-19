@@ -13,6 +13,24 @@
       {
         "label": "A",
         "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
+        }
+      },
+      {
+        "label": "B",
+        "content": {
           "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
           "diagnosis": "Observed repeat purchasing is strong while qualified demand is below the recorded requirement. Acquisition is a plausible constraint.",
           "recommendation": "Test a qualified customer segment within the operating market",
@@ -45,26 +63,12 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
-        }
-      },
-      {
-        "label": "B",
-        "content": {
-          "condition": null,
-          "diagnosis": null,
-          "recommendation": "Visit qualified sales prospects",
-          "alternatives": [],
-          "action": [
-            {
-              "title": "Visit qualified sales prospects",
-              "completionCondition": "Visit three qualified prospects in person and record the response",
-              "leadingIndicator": null,
-              "reviewCondition": null
-            }
-          ],
-          "uncertainty": []
         }
       }
     ],
@@ -121,6 +125,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -164,24 +172,6 @@
       {
         "label": "A",
         "content": {
-          "condition": null,
-          "diagnosis": null,
-          "recommendation": "Visit qualified sales prospects",
-          "alternatives": [],
-          "action": [
-            {
-              "title": "Visit qualified sales prospects",
-              "completionCondition": "Visit three qualified prospects in person and record the response",
-              "leadingIndicator": null,
-              "reviewCondition": null
-            }
-          ],
-          "uncertainty": []
-        }
-      },
-      {
-        "label": "B",
-        "content": {
           "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
           "diagnosis": "Few customers in the observed mature cohort purchased again. Retention is a plausible constraint; investigate service and repeat-purchase barriers before increasing acquisition.",
           "recommendation": "Investigate activation and subscription renewal barriers",
@@ -213,8 +203,30 @@
             "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
             "No provider market research in this controlled case",
             "Software authoritative metric readers are not connected; specialized performance claims are withheld.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
         }
       }
     ],
@@ -287,6 +299,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -344,6 +360,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -416,7 +436,11 @@
             "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
-            "Configured capacity is operator input, not a current utilization measurement."
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured."
           ]
         }
       },
@@ -507,6 +531,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -582,6 +610,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -657,6 +689,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -714,6 +750,10 @@
             "A valuable prospect is 25 miles away; outside the five-mile service radius, withheld.",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
         }
@@ -788,6 +828,10 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured.",
             "Existing obligations remain protected; strategic work must fit around them."
           ]
@@ -831,24 +875,6 @@
       {
         "label": "A",
         "content": {
-          "condition": null,
-          "diagnosis": null,
-          "recommendation": "Visit qualified sales prospects",
-          "alternatives": [],
-          "action": [
-            {
-              "title": "Visit qualified sales prospects",
-              "completionCondition": "Visit three qualified prospects in person and record the response",
-              "leadingIndicator": null,
-              "reviewCondition": null
-            }
-          ],
-          "uncertainty": []
-        }
-      },
-      {
-        "label": "B",
-        "content": {
           "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
           "diagnosis": "Verified outcomes contradicted the earlier approach. Reassess the mechanism and customer evidence before repeating that experiment.",
           "recommendation": "Review the contradicted strategic hypothesis and compare a different mechanism",
@@ -881,8 +907,30 @@
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
             "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
         }
       }
     ],
@@ -905,24 +953,6 @@
     "alternatives": [
       {
         "label": "A",
-        "content": {
-          "condition": null,
-          "diagnosis": null,
-          "recommendation": "Visit qualified sales prospects",
-          "alternatives": [],
-          "action": [
-            {
-              "title": "Visit qualified sales prospects",
-              "completionCondition": "Visit three qualified prospects in person and record the response",
-              "leadingIndicator": null,
-              "reviewCondition": null
-            }
-          ],
-          "uncertainty": []
-        }
-      },
-      {
-        "label": "B",
         "content": {
           "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
           "diagnosis": "The available evidence does not isolate the limiting business driver. A bounded investigation is the defensible next step.",
@@ -955,8 +985,30 @@
             "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
             "No provider market research in this controlled case",
             "Industry metric readers unsupported.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured.",
             "Variable costs, gross profit, contribution, and cash flow are unmeasured."
           ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
         }
       }
     ],
@@ -977,24 +1029,6 @@
     "alternatives": [
       {
         "label": "A",
-        "content": {
-          "condition": null,
-          "diagnosis": null,
-          "recommendation": "Visit qualified sales prospects",
-          "alternatives": [],
-          "action": [
-            {
-              "title": "Visit qualified sales prospects",
-              "completionCondition": "Visit three qualified prospects in person and record the response",
-              "leadingIndicator": null,
-              "reviewCondition": null
-            }
-          ],
-          "uncertainty": []
-        }
-      },
-      {
-        "label": "B",
         "content": {
           "condition": "Observed net_sales_per_period: 10000; operator target: 20000.",
           "diagnosis": "Recorded variable costs exceed revenue per order. Additional volume could increase contribution losses; inspect price and fulfillment costs before scaling.",
@@ -1027,8 +1061,30 @@
             "Diagnostic thresholds (20 observations, 30%/70% repeat, four-week cash runway) are versioned triage heuristics, not causal proof.",
             "No provider market research in this controlled case",
             "Pounds processed, route costs, and contribution margin have no verified metric reader in this module.",
-            "Configured capacity is operator input, not a current utilization measurement."
+            "Configured capacity is operator input, not a current utilization measurement.",
+            "Prior-period sales comparison is unmeasured.",
+            "Month-to-date comparison is unmeasured.",
+            "New versus returning customer mix is unmeasured.",
+            "Dormant customer count is unmeasured."
           ]
+        }
+      },
+      {
+        "label": "B",
+        "content": {
+          "condition": null,
+          "diagnosis": null,
+          "recommendation": "Visit qualified sales prospects",
+          "alternatives": [],
+          "action": [
+            {
+              "title": "Visit qualified sales prospects",
+              "completionCondition": "Visit three qualified prospects in person and record the response",
+              "leadingIndicator": null,
+              "reviewCondition": null
+            }
+          ],
+          "uncertainty": []
         }
       }
     ],

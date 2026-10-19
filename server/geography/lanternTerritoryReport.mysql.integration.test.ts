@@ -43,16 +43,27 @@ describeMysql("lantern territory report reads disposable MySQL without writing",
       CREATE TABLE IF NOT EXISTS dayforge_saas_tenant_locations (
         id int NOT NULL AUTO_INCREMENT,
         tenantId varchar(64) NOT NULL,
+        locationKey varchar(64) NOT NULL,
+        label varchar(128) NOT NULL,
+        address varchar(512) NOT NULL,
         latitude decimal(10,7) DEFAULT NULL,
         longitude decimal(10,7) DEFAULT NULL,
         serviceRadiusMiles decimal(6,2) NOT NULL,
+        maxPoundsPerDay int NOT NULL,
+        maxPoundsByWeekdayJson json NOT NULL,
+        openCapacityPoundsPerWeek int NOT NULL,
+        pickupDaysJson json NOT NULL,
+        routeWindowsJson json NOT NULL,
+        turnaroundHours int NOT NULL,
+        deliveryEnabled boolean NOT NULL DEFAULT true,
+        isPrimary boolean NOT NULL DEFAULT false,
         PRIMARY KEY (id)
       )
     `);
     await db.query("DELETE FROM dayforge_saas_tenant_locations WHERE tenantId IN (?, ?)", [losAngeles, desMoines]);
     await db.query(
-      "INSERT INTO dayforge_saas_tenant_locations (tenantId, latitude, longitude, serviceRadiusMiles) VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
-      [losAngeles, 34.0989, -118.33919, 8, desMoines, 41.59, -93.62, 5]
+      "INSERT INTO dayforge_saas_tenant_locations (tenantId, locationKey, label, address, latitude, longitude, serviceRadiusMiles, maxPoundsPerDay, maxPoundsByWeekdayJson, openCapacityPoundsPerWeek, pickupDaysJson, routeWindowsJson, turnaroundHours, deliveryEnabled, isPrimary) VALUES (?, ?, ?, ?, ?, ?, ?, 100, '{}', 300, '[1,2,3,4,5]', '[]', 48, true, true), (?, ?, ?, ?, ?, ?, ?, 100, '{}', 300, '[1,2,3,4,5]', '[]', 48, true, true)",
+      [losAngeles, "main", "Los Angeles", "Los Angeles, CA", 34.0989, -118.33919, 8, desMoines, "main", "Des Moines", "Des Moines, IA", 41.59, -93.62, 5]
     );
   });
 

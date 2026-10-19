@@ -1,7 +1,7 @@
 [
   {
     "case": 1,
-    "enhanced": "A"
+    "enhanced": "B"
   },
   {
     "case": 2,
@@ -9,7 +9,7 @@
   },
   {
     "case": 3,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 4,
@@ -45,14 +45,14 @@
   },
   {
     "case": 12,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 13,
-    "enhanced": "B"
+    "enhanced": "A"
   },
   {
     "case": 14,
-    "enhanced": "B"
+    "enhanced": "A"
   }
 ]
