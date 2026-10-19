@@ -196,11 +196,11 @@ if (mode === "verify") {
     SELECT COUNT(*) AS count
     FROM authority_receipts ar
     JOIN cleancloud_paid_orders o
-      ON ar.subjectType = 'cleancloud_order'
-     AND ar.claimType = 'cleancloud_paid_observed'
-     AND ar.subjectId = o.cleancloudOrderId
-     AND ar.tenantId <> o.tenantId
-    WHERE o.tenantId = ?
+      ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+     AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+     AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+     AND ar.tenantId COLLATE utf8mb4_unicode_ci <> o.tenantId COLLATE utf8mb4_unicode_ci
+    WHERE o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
   `, [FARM_TENANT]);
   const orphanReceiptCount = Number(orphanReceipts[0]?.count ?? 0);
   console.log(`- CleanCloud observation receipts left on another tenant: ${orphanReceiptCount}`);
@@ -308,11 +308,11 @@ if (mode === "execute") {
     const [receiptRes] = await conn.execute(`
       UPDATE authority_receipts ar
       JOIN cleancloud_paid_orders o
-        ON ar.subjectType = 'cleancloud_order'
-       AND ar.claimType = 'cleancloud_paid_observed'
-       AND ar.subjectId = o.cleancloudOrderId
-       AND ar.tenantId = ?
-       AND o.tenantId = ?
+        ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+       AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+       AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+       AND ar.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+       AND o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
       SET ar.tenantId = ?
     `, [BUTLER_TENANT, FARM_TENANT, FARM_TENANT]);
     console.log(`- Reassigned ${receiptRes.affectedRows} CleanCloud paid-observation receipts to laundry_farm`);
@@ -437,11 +437,11 @@ if (mode === "rollback") {
     await conn.execute(`
       UPDATE authority_receipts ar
       JOIN cleancloud_paid_orders o
-        ON ar.subjectType = 'cleancloud_order'
-       AND ar.claimType = 'cleancloud_paid_observed'
-       AND ar.subjectId = o.cleancloudOrderId
-       AND o.tenantId = ?
-       AND ar.tenantId = ?
+        ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+       AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+       AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+       AND o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+       AND ar.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
       SET ar.tenantId = ?
     `, [BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
     // Reassign cadence orders back to default

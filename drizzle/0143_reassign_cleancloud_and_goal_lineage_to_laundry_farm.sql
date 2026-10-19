@@ -71,11 +71,11 @@ WHERE `tenantId` = 'default';
 -- that were left on `default`.
 UPDATE `authority_receipts` ar
 JOIN `cleancloud_paid_orders` o
-  ON ar.`subjectType` = 'cleancloud_order'
- AND ar.`claimType` = 'cleancloud_paid_observed'
- AND ar.`subjectId` = o.`cleancloudOrderId`
- AND ar.`tenantId` = 'default'
- AND o.`tenantId` = 'laundry_farm'
+  ON ar.`subjectType` COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+ AND ar.`claimType` COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+ AND ar.`subjectId` COLLATE utf8mb4_unicode_ci = o.`cleancloudOrderId` COLLATE utf8mb4_unicode_ci
+ AND ar.`tenantId` COLLATE utf8mb4_unicode_ci = 'default' COLLATE utf8mb4_unicode_ci
+ AND o.`tenantId` COLLATE utf8mb4_unicode_ci = 'laundry_farm' COLLATE utf8mb4_unicode_ci
 SET ar.`tenantId` = 'laundry_farm';
 
 -- 3. Historical CleanCloud cadence orders in `orders`
