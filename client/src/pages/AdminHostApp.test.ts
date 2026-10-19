@@ -95,13 +95,15 @@ describe("Admin six-domain shell", () => {
     expect(lanternSceneFor("/", "?scene=map")).toBe("map");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v7")).toBe("map");
     expect(lanternSceneFor("/", "?scene=v6")).toBe("v6");
-    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1")).toBe("silverLake3d");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&walk=0")).toBe("v6");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=atlas")).toBe("atlas");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v5")).toBe("atlas");
     // other pages mount no world at all (no hidden 3D board running behind them)
     for (const path of ["/customers", "/operations", "/growth/tower-wars"]) expect(lanternSceneFor(path, "")).toBeNull();
     // and the host renders from that one decision
-    expect(source).toContain("const lanternScene = lanternSceneFor(path, window.location.search)");
+    expect(source).toContain("const lanternScene = lanternSceneFor(path, window.location.search, { legacySilverLake: silverLakeLegacyRequested() })");
+    expect(source).toContain('lanternScene === "silverLake3d" ? (');
     expect(source).toContain('lanternScene === "islands" ? (');
   });
 

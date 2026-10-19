@@ -98,7 +98,10 @@ describe("Lantern City report mode", () => {
     const source = readFileSync(new URL("./LanternCityIslands.tsx", import.meta.url), "utf8");
     expect(source).toContain("SmallComforts");
     expect(source).toContain("Tin Can House");
-    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake")).toBe("silverLake3d");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake&walk=0")).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake", { legacySilverLake: true })).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=v6")).toBe("v6");
     expect(lanternSceneFor("/", "")).toBe("islands");
   });
 });

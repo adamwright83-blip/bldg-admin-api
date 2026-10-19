@@ -11,7 +11,7 @@ import { trpc } from "@/lib/trpc";
 import {
   adminPathToTab,
   isAdminCommandCenterPath,
-  lanternSceneFor,
+  lanternSceneFor, silverLakeLegacyRequested,
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
@@ -40,6 +40,7 @@ import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6
 // three.js stays out of the main bundle: Lantern City loads when it is opened
 const LanternCityV7 = lazy(() => import("@/components/admin/control-room/LanternCityV7/LanternCityV7"));
 const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
+const SilverLake3D = lazy(() => import("./goldline/silverLake3d/SilverLake3D"));
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import { OpusLaInspection } from "@/components/admin/control-room/OpusLaInspection";
@@ -200,7 +201,7 @@ export default function AdminHostApp() {
   const isLanternCity = path === "/growth/lantern-city";
   const isWorldHome = isHome || isLanternCity;
   // one Lantern City (the island board) at Home and /growth/lantern-city; the rest only behind ?scene=
-  const lanternScene = lanternSceneFor(path, window.location.search);
+  const lanternScene = lanternSceneFor(path, window.location.search, { legacySilverLake: silverLakeLegacyRequested() });
   const worldDebugChrome =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("worldTruth") === "1";
@@ -428,6 +429,13 @@ export default function AdminHostApp() {
           ) : lanternScene === "map" ? (
             <Suspense fallback={<div className="cr-route-loading">Lifting the fog…</div>}>
               <LanternCityV7 onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+            </Suspense>
+          ) : lanternScene === "silverLake3d" ? (
+            <Suspense fallback={<div className="cr-route-loading">Walking into Silver Lake…</div>}>
+              <SilverLake3D
+                territoryId={new URLSearchParams(window.location.search).get("territory") ?? "silver-lake"}
+                onExit={() => navigate("/growth/lantern-city")}
+              />
             </Suspense>
           ) : lanternScene === "v6" ? (
             <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />

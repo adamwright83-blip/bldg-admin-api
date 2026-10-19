@@ -1,0 +1,481 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: linear-gradient(180deg, #8ec5f2 0%, #cfe7fa 45%, #ffe2c2 72%, #ffc59a 100%);
+  font-family: "Nunito", "Baloo 2", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  color: #3b2a1e;
+  user-select: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.stage :global(.sl3d-canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.stage :global(.sl3d-labels) {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage :global(.sl3d-label) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 12px 7px;
+  border-radius: 14px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 3px 0 #5a3a24;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+  will-change: transform;
+}
+
+.stage :global(.sl3d-label b) {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.stage :global(.sl3d-label span) {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6448;
+}
+
+.stage :global(.sl3d-label.is-ambient) {
+  background: #f3fbe9;
+  border-color: #4f7a3a;
+  box-shadow: 0 3px 0 #4f7a3a;
+}
+
+.stage :global(.sl3d-label.is-done) {
+  background: #fff4cf;
+}
+
+.stage :global(.sl3d-label.is-near) {
+  background: #ffe39a;
+}
+
+.stage :global(.sl3d-stick) {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 3px solid rgba(90, 58, 36, 0.5);
+  background: rgba(255, 250, 240, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.stage :global(.sl3d-stick.is-on) {
+  opacity: 1;
+}
+
+.stage :global(.sl3d-stick-knob) {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+}
+
+.hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.titlePill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 12px;
+  border-radius: 999px;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+  box-shadow: 0 4px 0 #5a3a24;
+  pointer-events: auto;
+}
+
+.titlePill strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.titlePill span {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a6448;
+}
+
+.titleMark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #ffc74d;
+  border: 2.5px solid #5a3a24;
+  font-size: 16px;
+}
+
+.hudRight {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.hudButton {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #fffaf0;
+  box-shadow: 0 4px 0 #5a3a24;
+  font: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.hudButton:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #5a3a24;
+}
+
+.previewBadge {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #eaf4ff;
+  border: 2px solid #4f79b8;
+  font-size: 12px;
+  font-weight: 800;
+  color: #2c4f80;
+}
+
+.controlsHint {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.controlsHint span {
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.85);
+  border: 2px solid rgba(90, 58, 36, 0.6);
+  font-size: 12px;
+  font-weight: 800;
+  color: #5a3a24;
+}
+
+.talkPrompt {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #ffc74d;
+  box-shadow: 0 5px 0 #5a3a24;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 900;
+  color: #3b2a1e;
+  cursor: pointer;
+  animation: sl3dBob 1.2s ease-in-out infinite;
+}
+
+.talkPrompt kbd {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fffaf0;
+  border: 2px solid #5a3a24;
+  font: inherit;
+  font-size: 14px;
+}
+
+@keyframes sl3dBob {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.touchButtons {
+  position: absolute;
+  right: 20px;
+  bottom: 22px;
+  display: none;
+}
+
+.touchButtons button {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 3px solid #5a3a24;
+  background: #fffaf0;
+  box-shadow: 0 5px 0 #5a3a24;
+  font: inherit;
+  font-weight: 900;
+  font-size: 16px;
+  color: #3b2a1e;
+}
+
+@media (pointer: coarse) {
+  .touchButtons {
+    display: block;
+  }
+  .controlsHint {
+    display: none;
+  }
+}
+
+.bubbleWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px 120px;
+}
+
+.bubble {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  max-width: 520px;
+  padding: 16px 20px;
+  border-radius: 22px;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+  box-shadow: 0 6px 0 #5a3a24;
+}
+
+.bubble img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+}
+
+.bubble strong {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.bubble p {
+  margin: 4px 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.bubble button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 2.5px solid #5a3a24;
+  background: #ffc74d;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.deskWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  background: linear-gradient(90deg, rgba(59, 42, 30, 0) 0%, rgba(59, 42, 30, 0.28) 60%);
+}
+
+.deskWrap > * {
+  position: relative !important;
+}
+
+.featureWrap {
+  position: absolute;
+  right: 16px;
+  top: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #8ec5f2 0%, #cfe7fa 45%, #ffe2c2 72%, #ffc59a 100%);
+}
+
+.loadingCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 32px;
+  border-radius: 24px;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+  box-shadow: 0 6px 0 #5a3a24;
+  font-size: 18px;
+  font-weight: 900;
+  text-align: center;
+  max-width: calc(100vw - 32px);
+}
+
+.loadingCard p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.loadingCard a {
+  font-size: 14px;
+  font-weight: 800;
+  color: #4f79b8;
+}
+
+.loadingLantern {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #ffc74d;
+  border: 3px solid #5a3a24;
+  font-size: 24px;
+  animation: sl3dPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sl3dPulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.loadingBar {
+  width: 220px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2.5px solid #5a3a24;
+  background: #fff;
+  overflow: hidden;
+}
+
+.loadingBar i {
+  display: block;
+  height: 100%;
+  background: #ffc74d;
+  transition: width 0.2s;
+}
+
+@media (max-width: 640px) {
+  .hud {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .titlePill {
+    padding: 7px 14px 7px 8px;
+  }
+  .titlePill strong {
+    font-size: 16px;
+  }
+  .titlePill span {
+    font-size: 11px;
+  }
+  .titleMark {
+    width: 28px;
+    height: 28px;
+  }
+  .hudRight {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .hudButton {
+    padding: 6px 12px;
+    font-size: 12px;
+    box-shadow: 0 3px 0 #5a3a24;
+  }
+  .previewBadge {
+    top: auto;
+    bottom: 132px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .talkPrompt {
+    bottom: 34px;
+    left: 16px;
+    transform: none;
+    font-size: 15px;
+    padding: 11px 18px;
+    max-width: calc(100vw - 130px);
+    animation: none;
+  }
+  .stage :global(.sl3d-label) {
+    padding: 4px 9px 5px;
+  }
+  .stage :global(.sl3d-label b) {
+    font-size: 12px;
+  }
+  .stage :global(.sl3d-label span) {
+    font-size: 10px;
+  }
+}

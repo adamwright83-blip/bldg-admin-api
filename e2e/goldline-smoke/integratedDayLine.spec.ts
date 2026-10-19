@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
+// Silver Lake now opens as the walkable 3D courtyard. These specs cover the painted encounter, which
+// stays in the code dormant; they opt into it explicitly.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("goldline.silverLake.legacy", "1"));
+});
+
 test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({ browser }) => {
   test.setTimeout(180_000);
   const context = await browser.newContext({

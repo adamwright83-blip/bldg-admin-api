@@ -52,7 +52,7 @@ for (const check of CHECKS) {
  * three.js isolation. The file-size checks above cannot see the import graph,
  * so this walks it: three.js builds carry the `__THREE__` marker, and every
  * built chunk that contains it must belong to a lazy 3D page's graph (the
- * Coastal Market proof, or Lantern City, which only loads when opened).
+ * Coastal Market proof, or Lantern City and its walkable Silver Lake, which only load when opened).
  * Neither the app entry nor GoldlineGameHome may reach it through static
  * imports, and index.html may not preload it.
  */
@@ -61,6 +61,7 @@ const PROOF_PREFIX = "CoastalMarketProofPage";
 const LAZY_3D_PREFIXES = [
   "LanternCityV7",
   "LanternCityIslands",
+  "SilverLake3D",
   "SmallComforts",
   "LaundryOperationsFloor",
   "hero",
