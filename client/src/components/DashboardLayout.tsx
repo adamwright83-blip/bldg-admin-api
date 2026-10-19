@@ -35,6 +35,7 @@ import {
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { BusinessSwitcher } from "./admin/BusinessSwitcher";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Overview", path: "/" },
@@ -161,13 +162,8 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-[var(--ink-muted)]" />
               </button>
               {!isCollapsed ? (
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-sans text-sm font-semibold tracking-tight text-[var(--foreground)] truncate">
-                    Laundry Butler
-                  </span>
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-wide text-[var(--gold-deep)]">
-                    Admin
-                  </span>
+                <div className="flex items-center min-w-0 flex-1">
+                  <BusinessSwitcher />
                 </div>
               ) : null}
             </div>
@@ -246,20 +242,17 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b border-[var(--hairline)] h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground font-sans text-sm">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
-              </div>
+        <div className="flex border-b border-[var(--hairline)] h-14 items-center justify-between bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
+            <div className="flex items-center gap-3">
+              <span className="tracking-tight text-foreground font-sans text-sm font-semibold">
+                {activeMenuItem?.label ?? "Menu"}
+              </span>
             </div>
           </div>
-        )}
+          <BusinessSwitcher />
+        </div>
         <main className="flex-1 min-h-0">{children}</main>
       </SidebarInset>
     </>
