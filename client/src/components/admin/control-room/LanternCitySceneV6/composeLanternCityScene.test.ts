@@ -653,7 +653,7 @@ describe("V6 truthful scene composition", () => {
       expect(object?.isRecoveryOpportunity).toBe(true);
       expect(object?.kind).toBe("lantern");
       expect(object?.status).toBe("Silver Lake — A neighbor to reconnect with.");
-      expect(object?.priority).toBe(3);
+      expect(object?.priority).toBe(-3);
       expect(object?.recoveryInvitation?.customerFirstName).toBe("Elena");
       expect(object?.recoveryInvitation?.note).toContain("Barnaby");
     });

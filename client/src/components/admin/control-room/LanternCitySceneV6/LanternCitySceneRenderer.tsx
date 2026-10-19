@@ -210,7 +210,11 @@ export function LanternCitySceneRenderer({
             type="button"
             className={`${styles.object} ${object.isRecoveryOpportunity ? styles.recoveryOpportunityObject : ""}`}
             style={rectStyle(object.bounds)}
-            data-scene-object={object.kind}
+            data-scene-object={
+              object.isRecoveryOpportunity
+                ? "recovery_opportunity"
+                : object.kind
+            }
             data-scene-id={object.id}
             data-territory-id={object.territoryId}
             data-recovery-opportunity={object.isRecoveryOpportunity ? "true" : undefined}

@@ -317,11 +317,13 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       environment: truth.environment,
       state: truth.state,
       occupancy: truth.occupancy,
-      priority: frontierKind
-        ? -2
-        : input.selectedTerritory === territory.id
-          ? 1
-          : presentation.priority,
+      priority: isRecoveryOpportunity
+        ? -3
+        : frontierKind
+          ? -2
+          : input.selectedTerritory === territory.id
+            ? 1
+            : presentation.priority,
       status: stateText,
       frontierKind,
       frontierLostGround: isRecoveryOpportunity ? false : isLostGround,
