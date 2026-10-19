@@ -196,10 +196,14 @@ const PROFIT_QUESTION = /\b(?:profit|margin)\b/;
 const CUSTOMER_QUESTION = /\bcustomers?\b/;
 const OPEN_ORDER_QUESTION = /\bopen\s+orders?\b/;
 const SERVICE_LINE_SPLIT = /\blaundry\s+butler\b|\bcore\s+laundry\s+farm\b|\bservice\s+line\b/;
-const SINGLE_RAIL_FILTER = /\b(?:through|via|using|on)\s+(?:the\s+)?(?:clean\s?cloud|clearant|stripe|laundry\s+butler)\b/;
-const LAUNDRY_FARM_SERVICE_LINE = /\blaundry\s+farm\b[\s\S]{0,48}\b(?:make|made|generate|generated)\b|\b(?:make|made|generate|generated)\b[\s\S]{0,48}\blaundry\s+farm\b/;
+const EXPLICIT_SERVICE = /\b(?:wash(?:\s*&\s*|\s+and\s+)fold|dry[\s-]?clean(?:ing)?|fluff\s*(?:and|&)\s*fold)\b/;
+const PAYMENT_RAIL = /\b(?:clean\s?cloud|clearant|clearent|stripe|laundry\s+butler)\b/;
+const WHY_QUESTION = /\bwhy\b/;
+const AOV_QUESTION = /\b(?:average\s+order(?:\s+value)?|aov)\b/;
+const COMPARISON_QUESTION = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?)\b/;
 const BUILDING_NAME = /\bopus(?:\s+la)?\b|\bcentury\s+park(?:\s+east)?\b|\bcpe\b/;
 const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+east)?|cpe)\b|\b(?:century\s+park(?:\s+east)?|cpe)\b[\s\S]{0,80}\bopus(?:\s+la)?\b/;
+const NOT_A_CUSTOMER = new Set(["we", "you", "i", "they", "laundry", "the", "opus", "century", "it", "she", "he", "our"]);
 
 function normalizeCompanyUtterance(utterance: string): string {
   return utterance
@@ -218,13 +222,62 @@ function companyQuestionBlocked(text: string): boolean {
     CUSTOMER_QUESTION.test(text) ||
     OPEN_ORDER_QUESTION.test(text) ||
     SERVICE_LINE_SPLIT.test(text) ||
-    SINGLE_RAIL_FILTER.test(text) ||
-    LAUNDRY_FARM_SERVICE_LINE.test(text)
+    EXPLICIT_SERVICE.test(text) ||
+    PAYMENT_RAIL.test(text) ||
+    WHY_QUESTION.test(text) ||
+    AOV_QUESTION.test(text) ||
+    /\bgross\b/.test(text) ||
+    /\b(?:do you think|should i|should we|focus on|to grow|recommend)\b/.test(text) ||
+    /\b(?:last|latest|recent|most recent|first|biggest|largest)\s+(?:\d+\s+|[a-z]+\s+)?(?:sales?|orders?)\b/.test(text) ||
+    /\b(?:sales?|orders?)\s+last\s+(?:week|month|year)\b/.test(text) ||
+    ambiguousMake(text) ||
+    namedCustomerAsk(text)
   );
+}
+
+/** "How much did we make?" is revenue-or-profit, not a revenue question. */
+function ambiguousMake(text: string): boolean {
+  return /^how much (?:did|do|does) we (?:make|made)\b/.test(text) && !/\b(?:revenue|sales|orders|business)\b/.test(text);
+}
+
+function namedCustomerAsk(text: string): boolean {
+  const match = /\b(?:did|has|have)\s+([a-z]+)\s+(?:generate[ds]?|spend|spent|make|made|order(?:ed)?)\b/.exec(text);
+  return Boolean(match && !NOT_A_CUSTOMER.has(match[1]!));
 }
 
 function companyPeriod(text: string): PeriodSpec {
   return parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) ?? { kind: "this_month" };
+}
+
+/** A building slice of the tenant book. "How did OPUS do" and both-buildings stay on the company view. */
+function explicitBuildingSlice(text: string): boolean {
+  if (!BUILDING_NAME.test(text) || BOTH_BUILDINGS.test(text)) return false;
+  if (/^how (?:did|does|is|has|was)\s+(?:opus(?: la)?|century park(?: east)?|cpe)\b/.test(text)) return false;
+  if (/^how much business are we getting\b/.test(text)) return false;
+  return true;
+}
+
+function unqualifiedRevenue(text: string): boolean {
+  const asks = /\b(?:what|how)\b/.test(text);
+  if (asks && /\b(?:revenue|sales)\b/.test(text)) return true;
+  if (/\blaundry\s+farm\b/.test(text) && /\b(?:make|made|do|did|generate[ds]?|bring|brought)\b/.test(text)) return true;
+  if (
+    /\bhow much (?:have|did|does|do) (?:we|the company|the business)\b/.test(text) &&
+    /\b(?:made|make|brought\s+in|do|doing|done)\b/.test(text)
+  ) {
+    return true;
+  }
+  return /^how much business (?:are we getting|did we (?:do|get)|have we (?:done|gotten))\b/.test(text);
+}
+
+function unqualifiedOrders(text: string): boolean {
+  if (!/\borders?\b/.test(text) || /\b(?:revenue|sales)\b/.test(text)) return false;
+  if (/\b(?:we|our)\b/.test(text) || /\blaundry\s+farm\b/.test(text) || /\b(?:the company|the business)\b/.test(text)) return true;
+  return (
+    /\bhow many\b/.test(text) &&
+    (parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) != null ||
+      /\b(?:were there|came in|are there|have there been)\b/.test(text))
+  );
 }
 
 function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null {
@@ -244,16 +297,9 @@ function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null 
   ) {
     return { aspect: "buildings", period: companyPeriod(text) };
   }
-  if (/^how many (?:paid )?orders\b/.test(text) && /\bwe\b/.test(text)) {
-    return { aspect: "orders", period: companyPeriod(text) };
-  }
-  if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
-    return { aspect: "revenue", period: companyPeriod(text) };
-  }
-  if (/^how much have we (?:made|brought in)\b/.test(text)) {
-    return { aspect: "revenue", period: companyPeriod(text) };
-  }
-  if (/^how much business are we getting\b/.test(text)) {
+  if (explicitBuildingSlice(text) || COMPARISON_QUESTION.test(text)) return null;
+  if (unqualifiedOrders(text)) return { aspect: "orders", period: companyPeriod(text) };
+  if (unqualifiedRevenue(text)) {
     return { aspect: BUILDING_NAME.test(text) ? "buildings" : "revenue", period: companyPeriod(text) };
   }
   return null;
@@ -265,10 +311,14 @@ function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null)
   const period = parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE);
   const building = BUILDING_NAME.test(text);
   const wordCount = text.split(/\s+/).filter(Boolean).length;
-  const shortShift =
-    wordCount <= 6 &&
-    Boolean(period || building) &&
-    !/\b(?:revenue|sales|profit|customers?|orders|made)\b/.test(text);
+  const shiftResidue = text
+    .replace(/\b(?:and|also|okay|ok|so|then|what|how|about|just|only|please|the|a|an|in|for|of|on)\b/g, " ")
+    .replace(/\b(?:last|this|next|past|previous|prior)\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years)\b/g, " ")
+    .replace(/\b(?:today|yesterday|august|september|october|november|december|january|february|march|april|may|june|july)\b/g, " ")
+    .replace(/\b(?:opus(?:\s+la)?|century\s+park(?:\s+east)?|cpe)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const shortShift = wordCount <= 6 && shiftResidue.length === 0 && Boolean(period || building);
   if (!(continuation || shortShift) || (!period && !building)) return null;
   const aspect =
     building && !/\b(?:revenue|sales|orders|made)\b/.test(text)
@@ -281,8 +331,11 @@ function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null)
 
 /**
  * Company-level revenue, orders, health, and building questions.
- * A named customer, a profit question, a service-line split, or a single-rail
- * filter stays on the existing tenant reader.
+ * Unqualified revenue and order questions use this reader for any wording and
+ * any date range. "Laundry Farm" is the whole company, both rails.
+ * An explicit service, payment rail, building slice, or customer stays on the
+ * tenant reader. Period comparisons, why, average order value, and bare
+ * "how much did we make?" stay there too.
  */
 export function matchLaundryFarmCompanyQuestion(
   utterance: string,

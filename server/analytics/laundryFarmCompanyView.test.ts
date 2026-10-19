@@ -371,11 +371,22 @@ describe("Claire company questions", () => {
       aspect: "buildings",
       period: { kind: "last_month" },
     });
-    expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?")).toEqual({
+      aspect: "revenue",
+      period: { kind: "trailing_days", days: 30 },
+    });
+    const august = matchLaundryFarmCompanyQuestion("How much did Laundry Farm make in August?");
+    expect(august?.aspect).toBe("revenue");
+    expect(august?.period.kind).toBe("between");
+    if (august?.period.kind === "between") {
+      expect(august.period.start.endsWith("-08-01")).toBe(true);
+      expect(august.period.end.endsWith("-08-31")).toBe(true);
+    }
     expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("What was revenue from OPUS last month?")).toBeNull();
-    expect(matchLaundryFarmCompanyQuestion("How much did Laundry Farm make in August?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("How much revenue did we do in August through CleanCloud?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much profit did we make last month?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("How much was the Laundry Farm service line in August?")).toBeNull();
 
     const week = await ask("What's my revenue this week?", ["laundry_farm", "default"]);
     expect(week.runQuery).not.toHaveBeenCalled();

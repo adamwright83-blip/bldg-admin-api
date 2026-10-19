@@ -829,7 +829,11 @@ export async function runClaireV2PrimaryTurn(
       const queries = decision.evidence.filter(
         item => item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
       );
-      const executed = queries.map(item => (item.payload as BusinessQueryResult).query?.period);
+      const executed = queries.map(item =>
+        isCompanyViewEvidencePayload(item.payload)
+          ? item.payload.questionPeriod
+          : (item.payload as BusinessQueryResult).query?.period
+      );
       if (queries.length && !executed.some(period => periodMatches(asked, period))) {
         console.warn("[ClaireBrainV2Primary] requested period not verified", {
           event: "claire_brain_v2_period_mismatch",
