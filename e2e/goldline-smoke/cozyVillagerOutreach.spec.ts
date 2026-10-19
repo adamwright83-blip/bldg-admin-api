@@ -1,12 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
-// Silver Lake now opens as the walkable 3D courtyard. These specs cover the painted encounter, which
-// stays in the code dormant; they opt into it explicitly.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("goldline.silverLake.legacy", "1"));
-});
-
 const ADMIN_PASSWORD =
   process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
 
@@ -17,54 +11,38 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await resetGoldlineProofWorld(page.request);
   });
 
-  test("mounts 8-house cozy encounter with 4-sided clouds and truthful village layout", async ({
-    page,
-  }) => {
+  test("Silver Lake opens as the walkable 3D courtyard with its real neighbours", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
 
     await page.goto("/growth/lantern-city?cozy=1");
 
-    // Encounter container is visible
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
-    await expect(encounter).toBeVisible({ timeout: 10000 });
+    const world = page.locator('[data-testid="silver-lake-3d"]');
+    await expect(world).toBeVisible({ timeout: 10000 });
+    // The courtyard renders, or says plainly that this device cannot run 3D; either way the neighbours stay reachable.
+    await expect(
+      page.locator('[data-testid="silver-lake-3d-canvas"], [data-testid="silver-lake-3d-unavailable"]').first()
+    ).toBeVisible({ timeout: 30000 });
+    // The painted 2D encounter is archived and never mounts.
+    await expect(page.locator('[data-testid="cozy-neighborhood-encounter"]')).toHaveCount(0);
 
-    // Environment plate and 4-sided cloud overlays are rendered
-    await expect(page.locator('img[alt="Lantern City Cozy Neighborhood"]')).toBeVisible();
-
-    // The mission read arrives after the cottages paint. Wait for the bound customer.
-    await expect(page.locator("[data-customer-id]").first()).toBeVisible({
-      timeout: 15000,
-    });
-
-    // Check that all 8 slots are accounted for (either active villager button or resting cottage)
-    const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
-    const restingSlots = page.getByText(/· Resting/);
-    await expect(villagerButtons.first()).toBeVisible({ timeout: 15000 });
-    const activeCount = await villagerButtons.count();
-    const restingCount = await restingSlots.count();
-    expect(activeCount + restingCount).toBe(8);
-    expect(activeCount).toBeGreaterThanOrEqual(1);
+    // The mission read arrives after the courtyard starts. Every real neighbour has a doorstep (at most 8).
+    const villagers = page.getByTestId("silver-lake-villager");
+    await expect(villagers.first()).toBeVisible({ timeout: 15000 });
+    const count = await villagers.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+    expect(count).toBeLessThanOrEqual(8);
 
     expect(errors).toEqual([]);
   });
 
-  test("proves empty-village resting state for territory without dormant customers", async ({
-    page,
-  }) => {
-    // Navigate to a territory without dormant customers
+  test("proves an empty courtyard for a territory without dormant customers", async ({ page }) => {
     await page.goto("/growth/lantern-city?cozy=1&territory=century-city");
 
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
-    await expect(encounter).toBeVisible({ timeout: 10000 });
-
-    // All 8 houses show resting state
-    const restingLabels = page.getByText(/· Resting/);
-    await expect(restingLabels).toHaveCount(8);
-
-    // Zero active selectable villager buttons
-    const activeVillagers = page.locator('div[role="button"][aria-label^="Select "]');
-    await expect(activeVillagers).toHaveCount(0);
+    const world = page.locator('[data-testid="silver-lake-3d"]');
+    await expect(world).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("silver-lake-no-villagers")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("silver-lake-villager")).toHaveCount(0);
   });
 
   test("full customer outreach lifecycle: Lantern City -> schedule -> Admin outbox -> edit -> reschedule -> cancel -> refresh", async ({
@@ -72,16 +50,16 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
 
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 10000 });
 
-    const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
+    const villagerButtons = page.getByTestId("silver-lake-villager");
     await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
     // 1. Select genuine order-backed villager (Mei Lin / Fox Mei)
     const firstVillager = villagerButtons.first();
     const label = await firstVillager.getAttribute("aria-label");
-    const customerName = label?.replace(/^Select\s+/, "") ?? "";
+    const customerName = label?.replace(/^Visit\s+/, "") ?? "";
     expect(customerName.length).toBeGreaterThan(0);
     await firstVillager.click();
 
@@ -180,10 +158,10 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
 
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 10000 });
 
-    const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
+    const villagerButtons = page.getByTestId("silver-lake-villager");
     await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
     const villager = villagerButtons.first();
@@ -218,9 +196,9 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     });
 
     await page.goto("/growth/lantern-city?cozy=1");
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 15_000 });
-    const villager = page.locator('div[role="button"][aria-label^="Select "]').first();
+    const villager = page.getByTestId("silver-lake-villager").first();
     await expect(villager).toBeVisible({ timeout: 10_000 });
     const customerId = await villager.getAttribute("data-customer-id");
     expect(customerId).toBeTruthy();
@@ -283,10 +261,10 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/growth/lantern-city?cozy=1");
 
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible();
 
-    const villagerButtons = page.locator('div[role="button"][aria-label^="Select "]');
+    const villagerButtons = page.getByTestId("silver-lake-villager");
     await expect(villagerButtons.first()).toBeVisible({ timeout: 10000 });
 
     const first = villagerButtons.first();
@@ -306,7 +284,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     page,
   }) => {
     await page.goto("/growth/lantern-city?cozy=1");
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 10000 });
 
     const returnBtn = page.getByRole("button", { name: /Return to (Wide )?City/i });
@@ -314,7 +292,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await returnBtn.click();
 
     await expect(encounter).toHaveCount(0);
-    await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-lantern-city="islands"]')).toBeVisible({ timeout: 15000 });
   });
 
   test("opens the named Silver Lake customer and hands the exact text to Google Messages", async ({
@@ -339,16 +317,16 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await page.goto(
       "/growth/lantern-city?cozy=1&territory=silver-lake&customer=phone%3A3105550141"
     );
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 15_000 });
-    const villagers = page.locator('div[role="button"][aria-label^="Select "]');
+    const villagers = page.getByTestId("silver-lake-villager");
     await expect(villagers).toHaveCount(1, { timeout: 15_000 });
     const villager = villagers.first();
     await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
     await expect(villager).toHaveAttribute("data-house-title", /Cottage/);
     await expect(villager).not.toHaveAttribute("data-pose", "acknowledged");
     await expect(page.locator('[data-customer-id="phone:3105550199"]')).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Select Rex Out" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Visit Rex Out" })).toHaveCount(0);
 
     const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
     await expect(drawer).toBeVisible({ timeout: 10_000 });

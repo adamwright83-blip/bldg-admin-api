@@ -66,17 +66,14 @@ test.describe("Silver Lake Bird's-Eye Discovery Experience", () => {
       });
     }
 
-    // 5. One tap directly opens Cozy Neighborhood encounter without administrative routing
+    // 5. One tap goes straight into the walkable 3D Silver Lake, without administrative routing
     await opportunity.click();
 
-    // Directly transitions into CozyNeighborhoodEncounter
-    await expect(
-      page.locator(
-        '[data-testid="cozy-neighborhood-encounter"], [data-cozy-encounter="true"], [data-testid="playable-letter-desk"]'
-      )
-    ).toBeVisible({ timeout: 10_000 });
-    expect(page.url()).toContain("cozy=1");
-    expect(page.url()).toContain("territory=silver-lake");
+    await expect(page.locator('[data-testid="silver-lake-3d"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/cozy=1/);
+    await expect(page).toHaveURL(/territory=silver-lake/);
+    // the archived 2D encounter never appears
+    await expect(page.locator('[data-testid="cozy-neighborhood-encounter"]')).toHaveCount(0);
 
     // Allow encounter transition to fully settle
     await page.waitForTimeout(600);

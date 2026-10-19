@@ -458,7 +458,15 @@ export async function createSilverLake(
     if (!choice) return;
     const wood = new THREE.MeshStandardMaterial({ name: "bench", color: 0xa46a3e, roughness: 0.8 });
     const grp = new THREE.Group();
-    if (choice === "tea_table") {
+    if (choice === "lantern_post") {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.4, 10), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      post.position.y = 1.2;
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.5, 12), new THREE.MeshStandardMaterial({ name: "lamp_glow", color: 0xffcf73, emissive: 0xffcf73, emissiveIntensity: 2.5 }));
+      lamp.position.y = 2.6;
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.35, 12), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      hat.position.y = 3.0;
+      grp.add(post, lamp, hat);
+    } else if (choice === "tea_table") {
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.12, 24), wood);
       top.position.y = 0.9;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 0.9, 10), wood);

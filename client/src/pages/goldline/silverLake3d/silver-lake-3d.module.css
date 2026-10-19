@@ -283,6 +283,7 @@
 .bubbleWrap {
   position: absolute;
   inset: 0;
+  z-index: 100;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -332,14 +333,8 @@
 .deskWrap {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
+  z-index: 100;
   background: linear-gradient(90deg, rgba(59, 42, 30, 0) 0%, rgba(59, 42, 30, 0.28) 60%);
-}
-
-.deskWrap > * {
-  position: relative !important;
 }
 
 .featureWrap {
@@ -477,5 +472,173 @@
   }
   .stage :global(.sl3d-label span) {
     font-size: 10px;
+  }
+}
+
+.failNote {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.modeSelector {
+  display: flex;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  overflow: hidden;
+  box-shadow: 0 4px 0 #5a3a24;
+}
+
+.modeSelector button {
+  padding: 8px 12px;
+  border: 0;
+  background: #fffaf0;
+  font: inherit;
+  font-weight: 800;
+  font-size: 12px;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.modeSelector button[aria-pressed="true"] {
+  background: #ffc74d;
+}
+
+.roster {
+  position: absolute;
+  left: 16px;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  max-height: calc(100% - 180px);
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.9);
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 4px 0 #5a3a24;
+}
+
+.rosterTitle {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a6448;
+}
+
+.rosterEmpty {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rosterItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 2px solid rgba(90, 58, 36, 0.35);
+  background: #fffaf0;
+  font: inherit;
+  text-align: left;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.rosterItem:hover,
+.rosterItemActive {
+  background: #ffe39a;
+  border-color: #5a3a24;
+}
+
+.rosterItem img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex: none;
+}
+
+.rosterItem span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rosterItem b {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rosterItem small {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6448;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.courtyardWidget {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.courtyardWidget > * {
+  pointer-events: auto;
+}
+
+/* the shared courtyard component positions its spot for the painted plate; pin it to a corner here */
+.courtyardWidget [data-testid="neighborhood-courtyard-spot"] {
+  left: auto !important;
+  top: auto !important;
+  right: 20px;
+  bottom: 120px;
+  transform: none !important;
+}
+
+@media (max-width: 640px) {
+  .roster {
+    top: auto;
+    left: 10px;
+    right: 10px;
+    bottom: 104px;
+    width: auto;
+    max-height: none;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+  }
+  .rosterTitle {
+    display: none;
+  }
+  .rosterItem {
+    flex: none;
+    max-width: 170px;
+  }
+  .courtyardWidget [data-testid="neighborhood-courtyard-spot"] {
+    right: 8px;
+    bottom: 176px;
+  }
+  .previewBadge {
+    bottom: 168px;
   }
 }

@@ -29,7 +29,7 @@ import {
   type TerritoryTruth,
 } from "./sceneTypes";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
-import { CozyNeighborhoodEncounter } from "./CozyNeighborhoodEncounter";
+import { openSilverLake3D } from "@/pages/goldline/silverLake3d/silverLakeEntry";
 import styles from "./lantern-city-v6.module.css";
 
 function Room({
@@ -176,11 +176,6 @@ export default function LanternCityScene({
   );
   const [rekindle, setRekindle] = useState(false);
   const [search, setSearch] = useState("");
-  const [cozyEncounterTerritory, setCozyEncounterTerritory] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const p = new URLSearchParams(window.location.search);
-    return p.get("cozy") || p.get("encounter") ? (p.get("territory") ?? "silver-lake") : null;
-  });
   const transition = useWorldTransition();
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
     staleTime: 30000,
@@ -404,13 +399,8 @@ export default function LanternCityScene({
       object.isRecoveryOpportunity ||
       (object.territoryId === "silver-lake" && isSilverLakeRecoveryEligible)
     ) {
-      setCozyEncounterTerritory("silver-lake");
-      if (typeof window !== "undefined") {
-        const url = new URL(window.location.href);
-        url.searchParams.set("cozy", "1");
-        url.searchParams.set("territory", "silver-lake");
-        window.history.pushState({}, "", url.toString());
-      }
+      // the golden messenger leads straight into the walkable 3D Silver Lake
+      openSilverLake3D("silver-lake");
       return;
     }
     setSelectedId(object.id);
@@ -573,7 +563,7 @@ export default function LanternCityScene({
                 type="button"
                 onClick={() => {
                   setCommand("map");
-                  setCozyEncounterTerritory("silver-lake");
+                  openSilverLake3D("silver-lake");
                 }}
                 style={{
                   background: "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)",
@@ -693,26 +683,12 @@ export default function LanternCityScene({
           }}
         />
       ) : null}
-      {selectedTerritory && !cozyEncounterTerritory && !inspect && !rekindle ? (
+      {selectedTerritory && !inspect && !rekindle ? (
         <TerritoryRoom
           truth={selectedTerritory}
           onClose={() => setTerritoryId(null)}
           onCustomers={() => setCommand("customers")}
-          onOpenCozyEncounter={(tId) => setCozyEncounterTerritory(tId)}
-        />
-      ) : null}
-      {cozyEncounterTerritory ? (
-        <CozyNeighborhoodEncounter
-          territoryId={cozyEncounterTerritory}
-          onExit={() => {
-            setCozyEncounterTerritory(null);
-            if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cozy")) {
-              // Dropping ?cozy=1 closes the encounter. Keeping ?scene=v6 stops
-              // the next host render from switching this route to the island board.
-              window.history.replaceState({}, "", "/growth/lantern-city?scene=v6");
-            }
-          }}
-          onOpenCustomer={onOpenCustomer}
+          onOpenCozyEncounter={(tId) => openSilverLake3D(tId)}
         />
       ) : null}
     </main>

@@ -1,41 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { COZY_SLOT_IDS, VILLAGER_VARIANTS, type CozySlotId, type VillagerVariant } from "@shared/cozyVillagerOutreach";
+import { COZY_SLOT_ANCHORS, COZY_SLOT_IDS, VILLAGER_VARIANTS, type CozySlotId, type VillagerVariant } from "@shared/cozyVillagerOutreach";
 import { villagerSprite, type CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
-import {
-  SYNTHETIC_SILVER_LAKE_TARGETS,
-  getVillagerPersonality,
-  loadNeighborhoodMemory,
-  saveNeighborhoodMemory,
-  type NeighborhoodFeatureChoice,
-} from "@shared/playableVillagers";
+import { getVillagerPersonality } from "@shared/playableVillagers";
 import { PlayableLetterDesk } from "@/components/admin/control-room/LanternCitySceneV6/PlayableLetterDesk";
+import { CozyMessageComposer } from "@/components/admin/control-room/LanternCitySceneV6/CozyMessageComposer";
 import { NeighborhoodCourtyardFeature } from "@/components/admin/control-room/LanternCitySceneV6/NeighborhoodCourtyardFeature";
 import { createSilverLake, type SilverLakeHandle, type VillagerView } from "./silverLakeRuntime";
+import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
 import styles from "./silver-lake-3d.module.css";
 
 /**
- * Silver Lake, walkable. The 3D courtyard replaces the painted plate as the place you visit; the
- * business behaviour is the existing one, untouched: the same mission query, the same send and
- * schedule mutations, the same Letter Desk with its consent and truthful delivery states, the same
- * neighbourhood memory. Ambient neighbours on empty doorsteps are fiction and never customers.
+ * Silver Lake, walkable. Every Silver Lake entry lands here (see silverLakeEntry.ts); the painted 2D encounter is
+ * archived. The business behaviour is the existing one, through useSilverLakeOutreach: the same mission query, send
+ * and schedule mutations, Letter Desk with its consent and truthful delivery states, and Phase 4 world memory.
+ * Ambient neighbours on empty doorsteps are fiction and never customers.
  *
- * The painted encounter (CozyNeighborhoodEncounter) is kept dormant at `?walk=0`.
+ * The neighbours roster is a plain list of buttons, so the courtyard is usable without WebGL, by keyboard and by
+ * screen reader, and so tests can reach a villager without steering the hero.
  */
 
 const ASSET_BASE = "/assets/goldline/silver-lake-3d/";
-const TENANT_ID = "laundry_farm";
-
-const AMBIENT_LINES: Record<VillagerVariant, string> = {
-  fox: "Lovely morning for a stroll, isn't it?",
-  bear: "Mind the pumpkins. They're nearly ready.",
-  otter: "The fountain's extra sparkly today.",
-  bunny: "Have you seen the washing line? So bright!",
-  squirrel: "I'm counting acorns. I've lost count.",
-  badger: "Quiet day. I like quiet days.",
-  hedgehog: "The lamps come on soon. My favourite part.",
-  cat: "I was napping. Carry on, adventurer.",
-};
 
 /** Clean full-body art for the 3D cards. Some 2D sprites carry a painted name along the bottom, cropped here. */
 const CARD_ART: Record<VillagerVariant, { src: string; crop: number }> = {
@@ -49,10 +33,16 @@ const CARD_ART: Record<VillagerVariant, { src: string; crop: number }> = {
   cat: { src: "/assets/lantern-villager-outreach/villagers/villager-08.png", crop: 0 },
 };
 
-function param(name: string): string | null {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get(name);
-}
+const AMBIENT_LINES: Record<VillagerVariant, string> = {
+  fox: "Lovely morning for a stroll, isn't it?",
+  bear: "Mind the pumpkins. They're nearly ready.",
+  otter: "The fountain's extra sparkly today.",
+  bunny: "Have you seen the washing line? So bright!",
+  squirrel: "I'm counting acorns. I've lost count.",
+  badger: "Quiet day. I like quiet days.",
+  hedgehog: "The lamps come on soon. My favourite part.",
+  cat: "I was napping. Carry on, adventurer.",
+};
 
 function isDone(t: CozyProjectedTarget) {
   return (
@@ -62,6 +52,8 @@ function isDone(t: CozyProjectedTarget) {
     t.status === "scheduled"
   );
 }
+
+const customerKey = (t: CozyProjectedTarget) => `customer:${t.customerId}`;
 
 export interface SilverLake3DProps {
   territoryId?: string;
@@ -75,128 +67,11 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [nearKey, setNearKey] = useState<string | null>(null);
-  const [talkKey, setTalkKey] = useState<string | null>(null);
-  const [featureOpen, setFeatureOpen] = useState(false);
-  const requestedId = param("customer");
-  const isSyntheticPreview = param("preview") === "synthetic";
-  const autoOpened = useRef(false);
+  const [ambientKey, setAmbientKey] = useState<string | null>(null);
+  const deepLinked = useRef(false);
 
-  // ---------------------------------------------------------------- business wiring (same rails as the painted encounter)
-  const [syntheticTargets, setSyntheticTargets] = useState<CozyProjectedTarget[]>(() => [...SYNTHETIC_SILVER_LAKE_TARGETS]);
-  const [neighborhoodMemory, setNeighborhoodMemory] = useState(() => loadNeighborhoodMemory(TENANT_ID));
-  const utils = trpc.useUtils();
-  const missionQuery = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
-    { territoryId, requestedCustomerId: requestedId ?? undefined, limit: 8 },
-    { staleTime: 0, refetchOnWindowFocus: true, enabled: !isSyntheticPreview }
-  );
-  const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachNow.useMutation();
-  const scheduleMutation = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
-
-  const targets = useMemo(
-    () => (isSyntheticPreview ? syntheticTargets : ((missionQuery.data?.targets ?? []) as CozyProjectedTarget[])),
-    [isSyntheticPreview, syntheticTargets, missionQuery.data]
-  );
-
-  const refreshDurableEvidence = async () => {
-    await Promise.all([
-      utils.system.goldlineWorld.cozyVillagerMission.invalidate(),
-      utils.system.goldlineWorld.cozyRecoveryDayLineCard.invalidate(),
-      utils.system.goldlineWorld.listScheduledOutreach.invalidate(),
-    ]);
-  };
-
-  const handleSendNow = async (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => {
-    if (isSyntheticPreview) {
-      setSyntheticTargets(prev =>
-        prev.map(t =>
-          t.customerId === target.customerId
-            ? {
-                ...t,
-                status: "accepted" as const,
-                communicationState: "send_observed",
-                transport: "simulated",
-                suggestedMessage: editedText,
-                providerReceipt: { messageSid: `simulated:msg_${Date.now()}`, status: "dispatched", sentAt: new Date().toISOString(), evidenceName: "simulated_carrier_receipt" },
-              }
-            : t
-        )
-      );
-      return;
-    }
-    try {
-      await sendMutation.mutateAsync({
-        customerId: target.customerId,
-        messageBody: editedText,
-        expectedPhone: target.phone ?? undefined,
-        slotId: target.slotId,
-        territoryId,
-        idempotencyKey,
-      });
-      await refreshDurableEvidence();
-    } catch (err) {
-      alert(`Send could not be authorized: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const handleScheduleSend = async (target: CozyProjectedTarget, editedText: string, scheduledForIso: string, idempotencyKey?: string) => {
-    if (isSyntheticPreview) {
-      setSyntheticTargets(prev =>
-        prev.map(t =>
-          t.customerId === target.customerId
-            ? {
-                ...t,
-                status: "scheduled" as const,
-                communicationState: "scheduled",
-                suggestedMessage: editedText,
-                scheduledDraft: { messageId: `synth_draft_${Date.now()}`, scheduledFor: scheduledForIso, timezone: "America/Los_Angeles", currentMessageBody: editedText },
-              }
-            : t
-        )
-      );
-      return;
-    }
-    try {
-      await scheduleMutation.mutateAsync({
-        customerId: target.customerId,
-        messageBody: editedText,
-        scheduledFor: scheduledForIso,
-        timezone: "America/Los_Angeles",
-        expectedPhone: target.phone ?? undefined,
-        slotId: target.slotId,
-        territoryId,
-        idempotencyKey,
-      });
-      await refreshDurableEvidence();
-    } catch (err) {
-      alert(`Schedule could not be committed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const handleChooseCourtyardFeature = (choice: NeighborhoodFeatureChoice) => {
-    const updated = { ...neighborhoodMemory, featureChoice: choice, lastVisitedAt: new Date().toISOString() };
-    setNeighborhoodMemory(updated);
-    saveNeighborhoodMemory(updated, TENANT_ID);
-    setFeatureOpen(false);
-  };
-
-  const handleDraftCompleted = (customerId: string, customerName: string, variant: any, action: "send" | "schedule" | "sms_opened") => {
-    const currentCount = neighborhoodMemory.encounterCounts[variant] ?? 0;
-    const updated = {
-      ...neighborhoodMemory,
-      encounterCounts: { ...neighborhoodMemory.encounterCounts, [variant]: currentCount + 1 },
-      lastDraftedCustomer: { customerId, customerName, variant, completedAt: new Date().toISOString(), actionType: action },
-    };
-    setNeighborhoodMemory(updated);
-    saveNeighborhoodMemory(updated, TENANT_ID);
-  };
-
-  const memoryNote = useMemo(() => {
-    if (!neighborhoodMemory.lastDraftedCustomer) return null;
-    const { customerName, actionType } = neighborhoodMemory.lastDraftedCustomer;
-    if (actionType === "schedule") return `${customerName}'s letter is resting safely on the morning dispatch shelf.`;
-    if (actionType === "send") return `We dispatched ${customerName}'s letter earlier!`;
-    return `We prepared ${customerName}'s note for your phone.`;
-  }, [neighborhoodMemory.lastDraftedCustomer]);
+  const o = useSilverLakeOutreach(territoryId);
+  const { targets, selectedTarget, setSelectedSlotId } = o;
 
   // ---------------------------------------------------------------- villagers in the world
   const views = useMemo<VillagerView[]>(() => {
@@ -208,7 +83,7 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       used.add(slot);
       const art = CARD_ART[t.villagerVariant] ?? { src: villagerSprite({ variant: t.villagerVariant, communicationState: t.communicationState }).src, crop: 0 };
       out.push({
-        key: `customer:${t.customerId}`,
+        key: customerKey(t),
         slot,
         name: t.displayName,
         status: t.communicationLabel || (isDone(t) ? "Letter on its way" : "Could use a hello"),
@@ -218,7 +93,6 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
         done: isDone(t),
       });
     }
-    // empty doorsteps get a fictional neighbour so the courtyard feels lived in
     COZY_SLOT_IDS.forEach((_, slot) => {
       if (used.has(slot)) return;
       const variant = VILLAGER_VARIANTS[slot % VILLAGER_VARIANTS.length];
@@ -238,7 +112,16 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
   }, [targets]);
 
   const viewByKey = useMemo(() => new Map(views.map(v => [v.key, v])), [views]);
-  const targetByKey = useMemo(() => new Map(targets.map(t => [`customer:${t.customerId}`, t])), [targets]);
+  const targetByKey = useMemo(() => new Map(targets.map(t => [customerKey(t), t])), [targets]);
+
+  const openCustomer = useCallback(
+    (t: CozyProjectedTarget, walk: boolean) => {
+      if (walk) runtimeRef.current?.focusVillager(customerKey(t));
+      setAmbientKey(null);
+      setSelectedSlotId(t.slotId as CozySlotId);
+    },
+    [setSelectedSlotId]
+  );
 
   // ---------------------------------------------------------------- runtime lifecycle
   useEffect(() => {
@@ -248,9 +131,15 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
     let handle: SilverLakeHandle | null = null;
     createSilverLake(host, ASSET_BASE, {
       onProgress: f => !cancelled && setLoading(f),
-      onReady: () => !cancelled && setReady(true),
       onNear: key => !cancelled && setNearKey(key),
-      onTalk: key => !cancelled && setTalkKey(key),
+      onTalk: key => {
+        if (cancelled) return;
+        const t = targetByKeyRef.current.get(key);
+        if (t) {
+          setAmbientKey(null);
+          setSelectedSlotIdRef.current(t.slotId as CozySlotId);
+        } else setAmbientKey(key);
+      },
       onError: msg => !cancelled && setFailed(msg),
     })
       .then(h => {
@@ -269,57 +158,62 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       runtimeRef.current = null;
     };
   }, []);
+  const targetByKeyRef = useRef(targetByKey);
+  targetByKeyRef.current = targetByKey;
+  const setSelectedSlotIdRef = useRef(setSelectedSlotId);
+  setSelectedSlotIdRef.current = setSelectedSlotId;
 
   useEffect(() => {
     if (ready) runtimeRef.current?.setVillagers(views);
   }, [ready, views]);
 
   useEffect(() => {
-    if (ready) runtimeRef.current?.setFeature(neighborhoodMemory.featureChoice ?? null);
-  }, [ready, neighborhoodMemory.featureChoice]);
+    if (ready) runtimeRef.current?.setFeature(o.neighborhoodMemory.featureChoice ?? null);
+  }, [ready, o.neighborhoodMemory.featureChoice]);
 
   useEffect(() => {
-    runtimeRef.current?.setPaused(Boolean(talkKey) || featureOpen);
-  }, [talkKey, featureOpen]);
+    runtimeRef.current?.setPaused(Boolean(selectedTarget) || Boolean(ambientKey));
+  }, [selectedTarget, ambientKey, ready]);
 
-  // arriving from Home with a named customer: walk them straight to that doorstep and open the desk
+  // a deep link with a named customer (Home, the Day Line, the outbox) opens that neighbour's desk straight away
   useEffect(() => {
-    if (!ready || autoOpened.current || !requestedId) return;
-    const key = `customer:${requestedId}`;
-    if (!targetByKey.has(key)) return;
-    autoOpened.current = true;
-    runtimeRef.current?.focusVillager(key);
-    const timer = window.setTimeout(() => setTalkKey(key), 2900);
-    return () => window.clearTimeout(timer);
-  }, [ready, requestedId, targetByKey]);
+    if (deepLinked.current || !o.requestedId) return;
+    const t = targetByKey.get(`customer:${o.requestedId}`);
+    if (!t) return;
+    deepLinked.current = true;
+    openCustomer(t, false);
+  }, [o.requestedId, targetByKey, openCustomer]);
+  useEffect(() => {
+    if (ready && o.requestedId && targetByKey.has(`customer:${o.requestedId}`)) runtimeRef.current?.focusVillager(`customer:${o.requestedId}`);
+  }, [ready, o.requestedId, targetByKey]);
 
-  const closeTalk = useCallback(() => setTalkKey(null), []);
-
-  const talkTarget = talkKey ? targetByKey.get(talkKey) ?? null : null;
-  const talkView = talkKey ? viewByKey.get(talkKey) ?? null : null;
-  const nearView = nearKey ? viewByKey.get(nearKey) ?? null : null;
-  const selectedIndex = talkTarget ? targets.findIndex(t => t.customerId === talkTarget.customerId) : -1;
-  const reached = targets.filter(isDone).length;
+  const closeTalk = useCallback(() => {
+    setSelectedSlotId(null);
+    setAmbientKey(null);
+  }, [setSelectedSlotId]);
 
   useEffect(() => {
-    if (!talkKey) return;
+    if (!selectedTarget && !ambientKey) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeTalk();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [talkKey, closeTalk]);
+  }, [selectedTarget, ambientKey, closeTalk]);
+
+  const ambientView = ambientKey ? viewByKey.get(ambientKey) ?? null : null;
+  const nearView = nearKey ? viewByKey.get(nearKey) ?? null : null;
+  const reached = targets.filter(isDone).length;
+  const talking = Boolean(selectedTarget) || Boolean(ambientView);
 
   return (
-    <div className={styles.root} data-testid="silver-lake-3d" data-preview-mode={isSyntheticPreview ? "synthetic" : "real"}>
+    <div className={styles.root} data-testid="silver-lake-3d" data-preview-mode={o.isSyntheticPreview ? "synthetic" : "real"} data-territory={territoryId}>
       <div ref={hostRef} className={styles.stage} />
 
       {!ready && !failed ? (
-        <div className={styles.loading}>
+        <div className={styles.loading} aria-hidden>
           <div className={styles.loadingCard}>
-            <span className={styles.loadingLantern} aria-hidden>
-              ✦
-            </span>
+            <span className={styles.loadingLantern}>✦</span>
             <strong>Walking into Silver Lake…</strong>
             <div className={styles.loadingBar}>
               <i style={{ width: `${Math.round(loading * 100)}%` }} />
@@ -329,12 +223,8 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
       ) : null}
 
       {failed ? (
-        <div className={styles.loading}>
-          <div className={styles.loadingCard}>
-            <strong>Silver Lake could not load here.</strong>
-            <p>{failed}</p>
-            <a href="/growth/lantern-city?cozy=1&territory=silver-lake&walk=0">Open the painted Silver Lake instead</a>
-          </div>
+        <div className={styles.failNote} role="status" data-testid="silver-lake-3d-unavailable">
+          The 3D courtyard could not start on this device. Your neighbours are still listed below.
         </div>
       ) : null}
 
@@ -345,22 +235,63 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
           </span>
           <div>
             <strong>Silver Lake</strong>
-            <span>Lantern City · {reached} of {targets.length} neighbours reached</span>
+            <span>
+              Lantern City · {reached} of {targets.length} neighbours reached
+            </span>
           </div>
         </div>
         <div className={styles.hudRight}>
-          <button type="button" className={styles.hudButton} onClick={() => setFeatureOpen(o => !o)}>
-            {neighborhoodMemory.featureChoice ? "Courtyard" : "Place something cozy"}
-          </button>
-          <button type="button" className={styles.hudButton} onClick={onExit} aria-label="Back to Lantern City">
-            Back to the city
+          {o.showDevControls ? (
+            <div className={styles.modeSelector} data-testid="experience-mode-selector">
+              <button type="button" data-testid="mode-playable-button" aria-pressed={o.experienceMode === "playable"} onClick={() => o.setExperienceMode("playable")}>
+                Letter Desk
+              </button>
+              <button type="button" data-testid="mode-classic-button" aria-pressed={o.experienceMode === "classic"} onClick={() => o.setExperienceMode("classic")}>
+                Classic
+              </button>
+            </div>
+          ) : null}
+          <button type="button" className={styles.hudButton} onClick={onExit}>
+            Return to City
           </button>
         </div>
       </header>
 
-      {isSyntheticPreview ? <div className={styles.previewBadge}>Preview neighbours: nothing here is sent</div> : null}
+      {o.isSyntheticPreview ? <div className={styles.previewBadge}>Preview neighbours: nothing here is sent</div> : null}
 
-      {ready && !talkKey ? (
+      <nav className={styles.roster} aria-label="Silver Lake neighbours" data-testid="silver-lake-roster">
+        <strong className={styles.rosterTitle}>Neighbours</strong>
+        {targets.length === 0 && !o.loading ? (
+          <p className={styles.rosterEmpty} data-testid="silver-lake-no-villagers">
+            No one to reconnect with here today. Explore freely.
+          </p>
+        ) : null}
+        {targets.map(t => {
+          const slot = t.slotId as CozySlotId;
+          return (
+            <button
+              key={t.customerId}
+              type="button"
+              className={`${styles.rosterItem} ${selectedTarget?.customerId === t.customerId ? styles.rosterItemActive : ""}`}
+              data-testid="silver-lake-villager"
+              data-customer-id={t.customerId}
+              data-slot-id={slot}
+              data-house-title={COZY_SLOT_ANCHORS[slot]?.houseTitle ?? ""}
+              data-communication-state={t.communicationState}
+              aria-label={`Visit ${t.displayName}`}
+              onClick={() => openCustomer(t, true)}
+            >
+              <img src={CARD_ART[t.villagerVariant]?.src} alt="" />
+              <span>
+                <b>{t.displayName}</b>
+                <small>{t.communicationLabel}</small>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {ready && !talking ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD / arrows to walk</span>
           <span>Shift to run</span>
@@ -369,25 +300,29 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
         </div>
       ) : null}
 
-      {nearView && !talkKey ? (
+      {nearView && !talking ? (
         <button type="button" className={styles.talkPrompt} onClick={() => runtimeRef.current?.talkNearest()} data-testid="silver-lake-3d-talk">
-          <kbd>E</kbd> {nearView.ambient ? `Say hi to ${nearView.name}` : `Visit ${nearView.name}`}
+          <kbd>E</kbd> {nearView.ambient ? `Say hi to ${nearView.name}` : `Talk to ${nearView.name}`}
         </button>
       ) : null}
 
       <div className={styles.touchButtons}>
-        <button type="button" onClick={() => runtimeRef.current?.jump()} aria-label="Hop">
+        <button type="button" onClick={() => runtimeRef.current?.jump()}>
           Hop
         </button>
       </div>
 
-      {talkView && talkView.ambient ? (
+      <div className={styles.courtyardWidget} data-testid="silver-lake-courtyard-widget">
+        <NeighborhoodCourtyardFeature chosenFeature={o.neighborhoodMemory.featureChoice} onChooseFeature={o.handleChooseCourtyardFeature} />
+      </div>
+
+      {ambientView ? (
         <div className={styles.bubbleWrap} onClick={closeTalk}>
-          <div className={styles.bubble} role="dialog" aria-label={`${talkView.name} says`}>
-            <img src={talkView.sprite} alt="" />
+          <div className={styles.bubble} role="dialog" aria-label={`${ambientView.name} says`}>
+            <img src={ambientView.sprite} alt="" />
             <div>
-              <strong>{talkView.name}</strong>
-              <p>{AMBIENT_LINES[VILLAGER_VARIANTS[talkView.slot % VILLAGER_VARIANTS.length]]}</p>
+              <strong>{ambientView.name}</strong>
+              <p>{AMBIENT_LINES[VILLAGER_VARIANTS[ambientView.slot % VILLAGER_VARIANTS.length]]}</p>
               <button type="button" onClick={closeTalk}>
                 Bye for now
               </button>
@@ -396,36 +331,42 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
         </div>
       ) : null}
 
-      {talkTarget ? (
+      {selectedTarget && o.experienceMode === "playable" ? (
         <div className={styles.deskWrap}>
           <PlayableLetterDesk
-            target={talkTarget}
-            targetIndex={selectedIndex}
+            target={selectedTarget}
+            targetIndex={o.selectedIndex}
             totalTargets={targets.length}
-            objectiveId={missionQuery.data?.objectiveId ?? null}
-            isSending={sendMutation.isPending || scheduleMutation.isPending || false}
-            isSynthetic={isSyntheticPreview}
-            encounterCount={neighborhoodMemory.encounterCounts[talkTarget.villagerVariant] ?? 1}
-            memoryNote={memoryNote}
-            tenantId={TENANT_ID}
-            onSendNow={handleSendNow}
-            onScheduleSend={handleScheduleSend}
+            objectiveId={o.objectiveId}
+            isSending={o.isSending}
+            isSynthetic={o.isSyntheticPreview}
+            encounterCount={o.neighborhoodMemory.encounterCounts[selectedTarget.villagerVariant] ?? 1}
+            memoryNote={o.memoryNote}
+            neighborhoodMemory={o.neighborhoodMemory}
+            tenantId={o.tenantId}
+            onSendNow={o.handleSendNow}
+            onScheduleSend={o.handleScheduleSend}
             onClose={closeTalk}
-            onSelectIndex={index => {
-              const t = targets[index];
-              if (t) setTalkKey(`customer:${t.customerId}`);
-            }}
-            onDraftCompleted={handleDraftCompleted}
+            onSelectIndex={o.handleSelectIndex}
+            onDraftCompleted={o.handleDraftCompleted}
+            onSaveUnfinishedDraft={o.handleSaveUnfinishedDraft}
           />
         </div>
       ) : null}
 
-      {featureOpen ? (
-        <div className={styles.featureWrap}>
-          <NeighborhoodCourtyardFeature chosenFeature={neighborhoodMemory.featureChoice} onChooseFeature={handleChooseCourtyardFeature} />
-          <button type="button" className={styles.hudButton} onClick={() => setFeatureOpen(false)}>
-            Close
-          </button>
+      {selectedTarget && o.experienceMode === "classic" ? (
+        <div className={styles.deskWrap}>
+          <CozyMessageComposer
+            target={selectedTarget}
+            targetIndex={o.selectedIndex}
+            totalTargets={targets.length}
+            objectiveId={o.objectiveId}
+            isSending={o.isSending}
+            onSendNow={o.handleSendNow}
+            onScheduleSend={o.handleScheduleSend}
+            onClose={closeTalk}
+            onSelectIndex={o.handleSelectIndex}
+          />
         </div>
       ) : null}
     </div>
