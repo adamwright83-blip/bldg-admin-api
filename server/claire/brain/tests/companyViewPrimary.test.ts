@@ -1,8 +1,9 @@
 /**
  * Brain V2 primary phone and Claire Desk company questions.
  *
- * These turns must call readLaundryFarmCompanyView. The tenant-only business
- * reader stays in place for questions that are not the company view.
+ * Bare questions read the active business. The combined reader runs only for an
+ * intentional cross-business request. Named customers, unpaid orders, and growth
+ * stay on the tenant reader.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -39,7 +40,7 @@ function event(input: {
     cents: input.cents,
     serviceType: "wash_fold",
     customerName: "Resident",
-    identity: { phone: input.key },
+    identity: { phone: `310555${String([...input.key].reduce((sum, char) => (sum * 33 + char.charCodeAt(0)) % 10000, 0)).padStart(4, "0")}` },
     orderNumber: input.key,
     address: input.address,
     buildingSlug: null,
@@ -79,11 +80,11 @@ function depsFor(authorized: string[]): {
   readCompanyView: ReturnType<typeof vi.fn>;
 } {
   const runQuery = vi.fn();
-  const readCompanyView = vi.fn((input: { period?: { kind?: string }; operatorUserId?: string }) =>
+  const readCompanyView = vi.fn((input: { period?: { kind?: string }; operatorUserId?: string; requestedTenantIds?: readonly string[]; requireAllRequested?: boolean }) =>
     readLaundryFarmCompanyView({
+      ...input,
       operatorUserId: input.operatorUserId ?? "operator-1",
       now: NOW,
-      period: input.period,
       authorizedTenantIds: authorized,
       loadUnpaid: async () => [],
       loadLedger: async window => ledger(window, authorized.includes(window.tenantId) ? BOOKS[window.tenantId] ?? [] : []),
@@ -166,7 +167,7 @@ describe("Brain V2 primary company view", () => {
       {
         compartment: "businessMemory",
         kind: "business_query",
-        query: companyViewRequest({ aspect: "revenue", period: { kind: "this_month" } }),
+        query: companyViewRequest({ aspect: "revenue", period: { kind: "this_month" }, scope: "default", building: null }),
       },
       { tenantId: "default", operatorUserId: "operator-1", nowIso: NOW.toISOString() },
       { ...defaultBusinessMemoryDeps, runQuery: runQuery as never, readCompanyView: readCompanyView as never }
@@ -187,11 +188,10 @@ describe("Brain V2 primary company view", () => {
     expect(both.readCompanyView).toHaveBeenCalled();
     expect(phone.brainV2.composition).toBe("deterministic");
     expect(phone.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
-    expect(phone.speak).toContain("Recorded sales this month so far are $425.00");
-    expect(phone.speak).toContain("OPUS LA recorded $425.00");
-    expect(phone.speak).toContain("Stripe");
-    expect(phone.speak).toContain("CleanCloud / Clearant");
-    expect(phone.speak).not.toContain("deduplicated");
+    expect(phone.speak).toContain("Laundry Butler recorded sales this month so far are $250.00");
+    expect(phone.speak).not.toContain("$175.00");
+    expect(phone.speak).not.toContain("$425.00");
+    expect(phone.speak).not.toContain("cross-business");
 
     const deskState: ClaireV2PrimaryState = {};
     const deskDeps = depsFor(["laundry_farm", "default"]);
@@ -207,7 +207,8 @@ describe("Brain V2 primary company view", () => {
       deskDeps.deps
     );
     expect(deskDeps.runQuery).not.toHaveBeenCalled();
-    expect(follow.speak).toContain("OPUS LA recorded $500.00");
+    expect(follow.speak).toContain("Laundry Farm");
+    expect(follow.speak).not.toContain("$500.00");
     expect(follow.speak).not.toContain("$425.00");
 
     const farmOnly = depsFor(["laundry_farm"]);
@@ -215,8 +216,7 @@ describe("Brain V2 primary company view", () => {
       turn("How did OPUS LA do last month?", "voice", "default"),
       farmOnly.deps
     );
-    expect(farm.speak).toContain("This is not a combined Laundry Farm total.");
-    expect(farm.speak).toContain("Laundry Butler Stripe book is not included");
+    expect(farm.speak).toContain("I can't read Laundry Butler.");
     expect(farm.speak).not.toContain("$500.00");
     expect(farm.speak).not.toContain("$250.00");
 
@@ -225,9 +225,8 @@ describe("Brain V2 primary company view", () => {
       turn("How much have we made this month?", "text", "laundry_farm"),
       butlerOnly.deps
     );
-    expect(butler.speak).toContain("This is not a combined Laundry Farm total.");
-    expect(butler.speak).toContain("CleanCloud / Clearant book is not included");
-    expect(butler.speak).toContain("$250.00");
+    expect(butler.speak).toContain("I can't read Laundry Farm.");
+    expect(butler.speak).not.toContain("$250.00");
     expect(butler.speak).not.toContain("$175.00");
     expect(butler.speak).not.toContain("$425.00");
   });
@@ -239,7 +238,8 @@ describe("Brain V2 primary company view", () => {
     expect(phone.readCompanyView).toHaveBeenCalled();
     expect(voice.brainV2.composition).toBe("deterministic");
     expect(voice.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
-    expect(voice.speak).toContain("Recorded sales this month so far are $425.00");
+    expect(voice.speak).toContain("Laundry Butler recorded sales this month so far are $250.00");
+    expect(voice.speak).not.toContain("$175.00");
     expect(voice.speak).not.toContain("Do you mean revenue or profit?");
 
     const desk = depsFor(["laundry_farm", "default"]);
@@ -247,7 +247,8 @@ describe("Brain V2 primary company view", () => {
     expect(desk.runQuery).not.toHaveBeenCalled();
     expect(desk.readCompanyView).toHaveBeenCalled();
     expect(text.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
-    expect(text.speak).toContain("Recorded sales this month so far are $425.00");
+    expect(text.speak).toContain("Laundry Farm recorded sales this month so far are $175.00");
+    expect(text.speak).not.toContain("$250.00");
     expect(text.speak).not.toContain("profit");
   });
 
@@ -276,9 +277,9 @@ describe("Brain V2 primary company view", () => {
       const readCompanyView = vi.fn((input: { period?: { kind?: string; days?: number; start?: string; end?: string } }) => {
         if (input.period) periods.push(input.period);
         return readLaundryFarmCompanyView({
+          ...input,
           operatorUserId: "operator-1",
           now: NOW,
-          period: input.period,
           authorizedTenantIds: authorized,
           loadUnpaid: async () => [],
           loadLedger: async window => ledger(window, authorized.includes(window.tenantId) ? books[window.tenantId] ?? [] : []),
@@ -311,9 +312,10 @@ describe("Brain V2 primary company view", () => {
     expect(phone.periods[0]).toMatchObject({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
     expect(augustVoice.brainV2.composition).toBe("deterministic");
     expect(augustVoice.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
+    expect(augustVoice.speak).toContain("Laundry Farm");
     expect(augustVoice.speak).toContain("August");
-    expect(augustVoice.speak).toContain("$222.00");
-    expect(augustVoice.speak).toContain("no deduplicated company total");
+    expect(augustVoice.speak).toContain("$111.00");
+    expect(augustVoice.speak).not.toContain("$222.00");
     expect(augustVoice.speak).not.toContain("$425.00");
     expect(augustVoice.speak).not.toContain("$505.00");
 
@@ -326,8 +328,10 @@ describe("Brain V2 primary company view", () => {
     expect(desk.runQuery).not.toHaveBeenCalled();
     expect(desk.periods[0]).toEqual({ kind: "trailing_days", days: 30 });
     expect(trailing.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
+    expect(trailing.speak).toContain("Laundry Farm");
     expect(trailing.speak).toContain("the last 30 days");
-    expect(trailing.speak).toContain("$505.00");
+    expect(trailing.speak).toContain("$175.00");
+    expect(trailing.speak).not.toContain("$505.00");
     expect(trailing.speak).not.toContain("$222.00");
     const augustFollow = await runClaireV2PrimaryTurn(
       turn("What about August?", "text", "laundry_farm", deskState),
@@ -335,9 +339,10 @@ describe("Brain V2 primary company view", () => {
     );
     expect(desk.runQuery).not.toHaveBeenCalled();
     expect(desk.periods[1]).toMatchObject({ kind: "between", start: "2026-08-01", end: "2026-08-31" });
+    expect(augustFollow.speak).toContain("Laundry Farm");
     expect(augustFollow.speak).toContain("August");
-    expect(augustFollow.speak).toContain("$222.00");
-    expect(augustFollow.speak).toContain("no deduplicated company total");
+    expect(augustFollow.speak).toContain("$111.00");
+    expect(augustFollow.speak).not.toContain("$222.00");
     expect(augustFollow.speak).not.toContain("$505.00");
 
     const deskAugust = routed(["laundry_farm", "default"]);
@@ -346,7 +351,9 @@ describe("Brain V2 primary company view", () => {
       deskAugust.deps
     );
     expect(deskAugust.runQuery).not.toHaveBeenCalled();
-    expect(augustText.speak).toContain("$222.00");
+    expect(augustText.speak).toContain("Laundry Farm");
+    expect(augustText.speak).toContain("$111.00");
+    expect(augustText.speak).not.toContain("$222.00");
     expect(augustText.brainV2.evidenceReaders).toContain(LAUNDRY_FARM_COMPANY_READER);
 
     const voiceTrailing = routed(["laundry_farm", "default"]);
@@ -355,8 +362,10 @@ describe("Brain V2 primary company view", () => {
       turn("What was revenue in the last 30 days?", "voice", "default", voiceState),
       voiceTrailing.deps
     );
+    expect(trailingVoice.speak).toContain("Laundry Butler");
     expect(trailingVoice.speak).toContain("the last 30 days");
-    expect(trailingVoice.speak).toContain("$505.00");
+    expect(trailingVoice.speak).toContain("$330.00");
+    expect(trailingVoice.speak).not.toContain("$175.00");
     const weekFollow = await runClaireV2PrimaryTurn(
       turn("What about this week?", "voice", "default", voiceState),
       voiceTrailing.deps
@@ -370,16 +379,16 @@ describe("Brain V2 primary company view", () => {
     );
     expect(voiceTrailing.runQuery).not.toHaveBeenCalled();
     expect(voiceTrailing.periods.at(-1)).toEqual({ kind: "last_month" });
-    expect(orders.speak).toContain("paid order last month");
+    expect(orders.speak).toContain("Laundry Farm has 0 paid orders last month.");
 
     const farmOnly = routed(["laundry_farm"]);
     const farmAugust = await runClaireV2PrimaryTurn(
       turn("How much did Laundry Farm make in August?", "voice", "default"),
       farmOnly.deps
     );
-    expect(farmAugust.speak).toContain("This is not a combined Laundry Farm total.");
-    expect(farmAugust.speak).toContain("Laundry Butler Stripe book is not included");
+    expect(farmAugust.speak).toContain("Laundry Farm");
     expect(farmAugust.speak).toContain("$111.00");
+    expect(farmAugust.speak).not.toContain("Laundry Butler");
     expect(farmAugust.speak).not.toContain("$222.00");
 
     const narrower = routed(["laundry_farm", "default"]);
@@ -390,6 +399,67 @@ describe("Brain V2 primary company view", () => {
     );
     expect(narrower.readCompanyView).not.toHaveBeenCalled();
     expect(narrower.runQuery).toHaveBeenCalled();
+  });
+
+  it("reads both businesses only when asked, on phone and Desk", async () => {
+    for (const surface of ["voice", "text"] as const) {
+      const both = depsFor(["laundry_farm", "default"]);
+      const combined = await runClaireV2PrimaryTurn(
+        turn("How much did both businesses make combined?", surface, "default"),
+        both.deps
+      );
+      expect(both.runQuery).not.toHaveBeenCalled();
+      expect(combined.speak).toContain("This is a cross-business total.");
+      expect(combined.speak).toContain("Laundry Farm recorded $175.00");
+      expect(combined.speak).toContain("Laundry Butler recorded $250.00");
+      expect(combined.speak).toContain("Across both businesses, recorded sales this month so far are $425.00.");
+      expect(combined.speak).toContain("not a deduplicated total");
+
+      const denied = depsFor(["laundry_farm"]);
+      const blocked = await runClaireV2PrimaryTurn(
+        turn("How much did Laundry Butler make?", surface, "laundry_farm"),
+        denied.deps
+      );
+      expect(blocked.speak).toContain("I can't read Laundry Butler.");
+      expect(blocked.speak).not.toContain("$250.00");
+      expect(blocked.speak).not.toContain("$175.00");
+
+      const farmOpus = depsFor(["laundry_farm", "default"]);
+      const farmAtOpus = await runClaireV2PrimaryTurn(
+        turn("How much did Laundry Farm make from OPUS LA?", surface, "default"),
+        farmOpus.deps
+      );
+      expect(farmAtOpus.speak).toContain("Laundry Farm at OPUS LA recorded $175.00");
+      expect(farmAtOpus.speak).not.toContain("$250.00");
+
+      const butlerOpus = depsFor(["laundry_farm", "default"]);
+      const butlerAtOpus = await runClaireV2PrimaryTurn(
+        turn("How much did Laundry Butler make from OPUS LA?", surface, "laundry_farm"),
+        butlerOpus.deps
+      );
+      expect(butlerAtOpus.speak).toContain("Laundry Butler at OPUS LA recorded $250.00");
+      expect(butlerAtOpus.speak).not.toContain("$175.00");
+
+      const century = depsFor(["laundry_farm", "default"]);
+      const compared = await runClaireV2PrimaryTurn(
+        turn("Compare both businesses at Century Park East.", surface, "default"),
+        century.deps
+      );
+      expect(compared.speak).toContain("Laundry Farm has no recorded sales at Century Park East");
+      expect(compared.speak).toContain("Laundry Butler has no recorded sales at Century Park East");
+      expect(compared.speak).toContain("Across both businesses, recorded sales at Century Park East are $0.00.");
+      expect(compared.speak).not.toContain("$425.00");
+
+      const customers = depsFor(["laundry_farm", "default"]);
+      const who = await runClaireV2PrimaryTurn(
+        turn("Which business is getting more customers from these buildings?", surface, "laundry_farm"),
+        customers.deps
+      );
+      expect(who.speak).toContain("Laundry Farm has 1 customer");
+      expect(who.speak).toContain("Laundry Butler has 1 customer");
+      expect(who.speak).toContain("Neither business has more customers from these buildings.");
+      expect(who.speak).not.toMatch(/\$\d/);
+    }
   });
 
   it("keeps unpaid, named-customer, and growth questions off the company total on phone and Desk", async () => {

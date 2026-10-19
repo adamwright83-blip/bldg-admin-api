@@ -191,7 +191,8 @@ export function planRetrievalPassA(
       // A company question replaces that query: the company reader is the authority.
       const company = matchLaundryFarmCompanyQuestion(
         perceived.assembledText,
-        companyQuestionFromParameters(memory.orderedQuery?.parameters)
+        companyQuestionFromParameters(memory.orderedQuery?.parameters),
+        memory.currentCallContext.tenantId
       );
       const query = company
         ? companyViewRequest(company)

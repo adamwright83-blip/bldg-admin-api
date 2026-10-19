@@ -854,7 +854,11 @@ export async function runClaireV2PrimaryTurn(
     }
 
     // ── Decisive V2 speech: facts, clarifications, refusals, prior-claim verdicts ──
+    const companyAnswer =
+      facts.length > 0 &&
+      decision.evidence.some(item => isCompanyViewEvidencePayload(item.payload));
     const decisive =
+      companyAnswer ||
       decision.control.mode === "clarify" ||
       attention.pendingDisposition === "reject" ||
       attention.priorClaim !== "none" ||

@@ -298,11 +298,11 @@ describe("Laundry Farm company view", () => {
 });
 
 describe("Claire company questions", () => {
-  async function ask(utterance: string, authorized: string[]) {
+  async function ask(utterance: string, authorized: string[], tenantId = "default") {
     const state: ClaireAnalyticsState = {};
     const runQuery = vi.fn();
     const turn = await answerClaireBusinessTurn(
-      { tenantId: "default", operatorUserId: "operator-1", utterance, state, surface: "text" },
+      { tenantId, operatorUserId: "operator-1", utterance, state, surface: "text" },
       {
         now: () => NOW,
         timeZone: () => "America/Los_Angeles",
@@ -317,63 +317,97 @@ describe("Claire company questions", () => {
     return { turn, runQuery };
   }
 
-  it("answers company questions from the company view, including both rails", async () => {
-    const revenue = await ask("How much have we made this month?", ["laundry_farm", "default"]);
-    expect(revenue.runQuery).not.toHaveBeenCalled();
-    expect(revenue.turn.reader).toBe("company_view");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Recorded sales this month so far are $657.00 across 7 orders.");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("OPUS LA recorded $425.00");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Century Park East recorded $140.00");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Stripe");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("CleanCloud / Clearant");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Refunds are -$5.00.");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Net revenue on the admitted records is $652.00.");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Verified captured payments are $392.00.");
-    expect(revenue.turn.handled && revenue.turn.speak).toContain("Unpaid balances recorded on open orders are $15.00.");
-
-    const orders = await ask("How many orders did we get?", ["laundry_farm", "default"]);
-    expect(orders.turn.handled && orders.turn.speak).toContain("There are 7 paid orders this month so far.");
-
-    const health = await ask("How’s Laundry Farm doing?", ["laundry_farm", "default"]);
-    expect(health.turn.reader).toBe("company_view");
-    expect(health.turn.handled && health.turn.speak).toContain("$657.00");
-
-    const buildings = await ask("How much business are we getting from OPUS LA versus Century Park East?", ["laundry_farm", "default"]);
-    expect(buildings.turn.handled && buildings.turn.speak).toContain("OPUS LA recorded $425.00 across 2 orders.");
-    expect(buildings.turn.handled && buildings.turn.speak).toContain("Century Park East recorded $140.00 across 2 orders.");
-    expect(buildings.turn.handled && buildings.turn.speak).toContain("Those buildings roll into recorded sales of $657.00.");
-  });
-
-  it("does not let a single-tenant operator hear the other tenant's money", async () => {
-    const farm = await ask("How much have we made this month?", ["laundry_farm"]);
-    expect(farm.turn.handled && farm.turn.speak).toContain("This is not a combined Laundry Farm total.");
-    expect(farm.turn.handled && farm.turn.speak).toContain("Recorded sales this month so far are $265.00 across 3 orders.");
-    expect(farm.turn.handled && farm.turn.speak).not.toContain("$657.00");
-    expect(farm.turn.handled && farm.turn.speak).not.toContain("$250.00");
-    expect(farm.turn.handled && farm.turn.speak).not.toContain("$425.00");
-
-    const butler = await ask("What's my revenue this week?", ["default"]);
+  it("reads the active business only, and names the other business only when asked", async () => {
+    const butler = await ask("How much have we made this month?", ["laundry_farm", "default"], "default");
     expect(butler.runQuery).not.toHaveBeenCalled();
     expect(butler.turn.reader).toBe("company_view");
-    expect(butler.turn.handled && butler.turn.speak).toContain("This is not a combined Laundry Farm total.");
-    expect(butler.turn.handled && butler.turn.speak).toContain("CleanCloud / Clearant book is not included");
-    expect(butler.turn.handled && butler.turn.speak).not.toContain("$175.00");
+    expect(butler.turn.handled && butler.turn.speak).toContain("Laundry Butler recorded sales this month so far are $392.00 across 4 orders.");
+    expect(butler.turn.handled && butler.turn.speak).not.toContain("Laundry Farm");
     expect(butler.turn.handled && butler.turn.speak).not.toContain("$657.00");
     expect(butler.turn.handled && butler.turn.speak).not.toContain("$265.00");
+    expect(butler.turn.handled && butler.turn.speak).not.toContain("$175.00");
+
+    const farm = await ask("How much did we make?", ["laundry_farm", "default"], "laundry_farm");
+    expect(farm.turn.handled && farm.turn.speak).toContain("Laundry Farm recorded sales this month so far are $265.00 across 3 orders.");
+    expect(farm.turn.handled && farm.turn.speak).toContain("Refunds are -$5.00.");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("Laundry Butler");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("$392.00");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("$657.00");
+
+    const orders = await ask("How many orders did we get?", ["laundry_farm", "default"], "default");
+    expect(orders.turn.handled && orders.turn.speak).toContain("Laundry Butler has 4 paid orders this month so far.");
+    expect(orders.turn.handled && orders.turn.speak).not.toContain("7 paid");
+
+    const named = await ask("How’s Laundry Farm doing?", ["laundry_farm", "default"], "default");
+    expect(named.turn.handled && named.turn.speak).toContain("Laundry Farm recorded sales");
+    expect(named.turn.handled && named.turn.speak).toContain("$265.00");
+    expect(named.turn.handled && named.turn.speak).not.toContain("$657.00");
+    expect(named.turn.handled && named.turn.speak).not.toContain("$392.00");
+
+    const opusFarm = await ask("How much did Laundry Farm make from OPUS LA?", ["laundry_farm", "default"], "default");
+    expect(opusFarm.turn.handled && opusFarm.turn.speak).toContain("Laundry Farm at OPUS LA recorded $175.00");
+    expect(opusFarm.turn.handled && opusFarm.turn.speak).not.toContain("$250.00");
+    expect(opusFarm.turn.handled && opusFarm.turn.speak).not.toContain("$425.00");
+
+    const opusButler = await ask("How much did Laundry Butler make from OPUS LA?", ["laundry_farm", "default"], "laundry_farm");
+    expect(opusButler.turn.handled && opusButler.turn.speak).toContain("Laundry Butler at OPUS LA recorded $250.00");
+    expect(opusButler.turn.handled && opusButler.turn.speak).not.toContain("$175.00");
+
+    const both = await ask("How much did both businesses make combined?", ["laundry_farm", "default"], "default");
+    expect(both.turn.handled && both.turn.speak).toContain("This is a cross-business total.");
+    expect(both.turn.handled && both.turn.speak).toContain("Laundry Farm recorded $265.00");
+    expect(both.turn.handled && both.turn.speak).toContain("Laundry Butler recorded $392.00");
+    expect(both.turn.handled && both.turn.speak).toContain("Across both businesses, recorded sales this month so far are $657.00.");
+    expect(both.turn.handled && both.turn.speak).toContain("not a deduplicated total");
+
+    const compare = await ask("Compare both businesses at Century Park East.", ["laundry_farm", "default"], "laundry_farm");
+    expect(compare.turn.handled && compare.turn.speak).toContain("Laundry Farm at Century Park East recorded $60.00");
+    expect(compare.turn.handled && compare.turn.speak).toContain("Laundry Butler at Century Park East recorded $80.00");
+    expect(compare.turn.handled && compare.turn.speak).toContain("Across both businesses, recorded sales at Century Park East are $140.00.");
+    expect(compare.turn.handled && compare.turn.speak).not.toContain("$657.00");
+
+    const unclear = await ask("How much did the businesses make?", ["laundry_farm", "default"], "default");
+    expect(unclear.runQuery).not.toHaveBeenCalled();
+    expect(unclear.turn.handled && unclear.turn.speak).toContain("Do you mean Laundry Farm, Laundry Butler, or both businesses combined?");
+    expect(unclear.turn.handled && unclear.turn.speak).not.toContain("$");
+  });
+
+  it("does not let a single-tenant operator hear the other business", async () => {
+    const farm = await ask("How much have we made this month?", ["laundry_farm"], "laundry_farm");
+    expect(farm.turn.handled && farm.turn.speak).toContain("Laundry Farm recorded sales this month so far are $265.00 across 3 orders.");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("Laundry Butler");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("$657.00");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("$392.00");
+    expect(farm.turn.handled && farm.turn.speak).not.toContain("$250.00");
+
+    const denied = await ask("How much did Laundry Butler make?", ["laundry_farm"], "laundry_farm");
+    expect(denied.turn.handled && denied.turn.speak).toContain("I can't read Laundry Butler.");
+    expect(denied.turn.handled && denied.turn.speak).not.toContain("$392.00");
+    expect(denied.turn.handled && denied.turn.speak).not.toContain("$265.00");
+
+    const deniedBoth = await ask("How much did both businesses make combined?", ["default"], "default");
+    expect(deniedBoth.turn.handled && deniedBoth.turn.speak).toContain("authorized for both Laundry Farm and Laundry Butler");
+    expect(deniedBoth.turn.handled && deniedBoth.turn.speak).not.toContain("$392.00");
   });
 
   it("answers natural company questions and follow-ups from the company view", async () => {
-    expect(matchLaundryFarmCompanyQuestion("What's my revenue this week?")).toEqual({
+    expect(matchLaundryFarmCompanyQuestion("What's my revenue this week?", null, "default")).toEqual({
       aspect: "revenue",
       period: { kind: "this_week" },
+      scope: "default",
+      building: null,
     });
-    expect(matchLaundryFarmCompanyQuestion("How did OPUS LA do last month?")).toEqual({
+    expect(matchLaundryFarmCompanyQuestion("How did OPUS LA do last month?", null, "laundry_farm")).toEqual({
       aspect: "buildings",
       period: { kind: "last_month" },
+      scope: "laundry_farm",
+      building: "opus_la",
     });
-    expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?")).toEqual({
+    expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?", null, "default")).toEqual({
       aspect: "revenue",
       period: { kind: "trailing_days", days: 30 },
+      scope: "default",
+      building: null,
     });
     const august = matchLaundryFarmCompanyQuestion("How much did Laundry Farm make in August?");
     expect(august?.aspect).toBe("revenue");
@@ -382,18 +416,29 @@ describe("Claire company questions", () => {
       expect(august.period.start.endsWith("-08-01")).toBe(true);
       expect(august.period.end.endsWith("-08-31")).toBe(true);
     }
-    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toEqual({
+    expect(august?.scope).toBe("laundry_farm");
+    expect(matchLaundryFarmCompanyQuestion("How much did we make?", null, "laundry_farm")).toEqual({
       aspect: "revenue",
       period: { kind: "this_month" },
+      scope: "laundry_farm",
+      building: null,
     });
-    expect(matchLaundryFarmCompanyQuestion("How much have we made?")).toEqual({
+    expect(matchLaundryFarmCompanyQuestion("How much have we made?", null, "default")).toEqual({
       aspect: "revenue",
       period: { kind: "this_month" },
+      scope: "default",
+      building: null,
     });
-    expect(matchLaundryFarmCompanyQuestion("How many orders did we get?")).toEqual({
+    expect(matchLaundryFarmCompanyQuestion("How many orders did we get?", null, "default")).toEqual({
       aspect: "orders",
       period: { kind: "this_month" },
+      scope: "default",
+      building: null,
     });
+    expect(matchLaundryFarmCompanyQuestion("How are we doing this month?", null, "laundry_farm")?.scope).toBe("laundry_farm");
+    expect(matchLaundryFarmCompanyQuestion("How much did both businesses make combined?")?.scope).toBe("both");
+    expect(matchLaundryFarmCompanyQuestion("How much did the businesses make?")?.scope).toBe("clarify");
+    expect(matchLaundryFarmCompanyQuestion("Which business is getting more customers from these buildings?")?.aspect).toBe("customers");
     expect(matchLaundryFarmCompanyQuestion("How many unpaid orders do we have?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("What was revenue from Dana in August?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("What is our revenue growth?")).toBeNull();
@@ -423,7 +468,7 @@ describe("Claire company questions", () => {
     const week = await ask("What's my revenue this week?", ["laundry_farm", "default"]);
     expect(week.runQuery).not.toHaveBeenCalled();
     expect(week.turn.reader).toBe("company_view");
-    expect(week.turn.handled && week.turn.speak).toContain("Recorded sales this week so far are $0.00 across 0 orders.");
+    expect(week.turn.handled && week.turn.speak).toContain("Laundry Butler recorded sales this week so far are $0.00 across 0 orders.");
     expect(week.turn.handled && week.turn.speak).not.toContain("$657.00");
 
     const opus = await ask("How did OPUS LA do last month?", ["laundry_farm", "default"]);
@@ -435,12 +480,12 @@ describe("Claire company questions", () => {
     const state: ClaireAnalyticsState = {};
     const runQuery = vi.fn();
     const periods: string[] = [];
-    const readCompanyView = vi.fn(async (input: { period?: { kind?: string } }) => {
+    const readCompanyView = vi.fn(async (input: { period?: { kind?: string }; requestedTenantIds?: string[] }) => {
       periods.push(input.period?.kind ?? "unset");
       return readLaundryFarmCompanyView({
+        ...input,
         operatorUserId: "operator-1",
         now: NOW,
-        period: input.period,
         authorizedTenantIds: ["laundry_farm", "default"],
         loadUnpaid: async () => [],
         loadLedger: async window => ledger(window, BOOKS[window.tenantId] ?? []),
@@ -457,6 +502,8 @@ describe("Claire company questions", () => {
     expect(runQuery).not.toHaveBeenCalled();
     expect(periods).toEqual(["this_week", "last_month"]);
     expect(first.handled && first.reader).toBe("company_view");
-    expect(follow.handled && follow.speak).toContain("OPUS LA recorded $500.00");
+    expect(follow.handled && follow.speak).toContain("Laundry Farm");
+    expect(follow.handled && follow.speak).not.toContain("$500.00");
+    expect(follow.handled && follow.speak).not.toContain("Laundry Butler");
   });
 });
