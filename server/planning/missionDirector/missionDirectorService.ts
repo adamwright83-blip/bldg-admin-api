@@ -21,6 +21,8 @@ import { loadDailyCommand } from "../../claire/dailyCommandContract";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import { addCalendarDays, GOAL_CONTRIBUTION_POLICY_VERSION } from "../../../shared/weeklyGrowthCandidates";
 import { interpretStoredOutcome } from "../../agents/persistentOperator/outcomeInterpretation";
+import { salesHeldOn } from "../../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../../agents/persistentOperator/operatorDoctrineStore";
 import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
 import {
   applyWeeklyIntentToCommand,
@@ -136,7 +138,6 @@ async function loadOutcomeLessons(
   }
   return [...byOutcome.values()];
 }
-
 export async function loadRankingContext(input: {
   tenantId: string;
   operatorUserIds: readonly string[];
@@ -215,12 +216,17 @@ export async function loadRankingContext(input: {
     }
   }
   const outcomeLessons = db ? await loadOutcomeLessons(db, input) : [];
+  // The operator's "no sales today": held sales work is not ranked for that
+  // date, whichever planner asks.
+  const hold = await loadOperatorSalesHold({ tenantId: input.tenantId, operatorUserIds: input.operatorUserIds });
+  const salesHold = hold && salesHeldOn({ skipSalesUntil: hold.until }, input.businessDate) ? hold : null;
   return {
     businessDate: input.businessDate,
     macroGoal,
     ...(outcomes ? { outcomes, mandateRevision } : {}),
     openTasks,
     outcomeLessons,
+    ...(salesHold ? { salesHold } : {}),
   };
 }
 
@@ -312,6 +318,9 @@ export function computePlanningFingerprint(input: {
             ),
           }
         : {}),
+      // Only a hold changes ranking, so a stored pre-hold plan is never reused;
+      // without one the fingerprint is exactly as before.
+      ...(input.rankingContext.salesHold ? { salesHold: input.rankingContext.salesHold } : {}),
     },
     travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
     unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,

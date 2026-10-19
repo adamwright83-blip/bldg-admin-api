@@ -24,6 +24,8 @@ import {
   persistStrategicProposal,
 } from "./strategicStore";
 import { planForDate } from "../planning/missionDirector/missionDirectorService";
+import { describeSalesHoldScope, salesHoldCovers, salesScopeOfMotion, type SalesHold } from "../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../agents/persistentOperator/operatorDoctrineStore";
 import { readWeeklyDossierFacts } from "../claire/weeklyMission/productionReaders";
 import type { VerticalRegistry } from "./verticalTemplates/registry";
 import type { StrategicDiagnosis } from "../../shared/strategicIntelligence";
@@ -247,6 +249,19 @@ export function proposalDecisionUnchanged(
   );
 }
 
+/**
+ * The day Claire's selected strategy action is proposed for: the first plan
+ * date, unless the operator held that kind of sales work on that day, then the
+ * first open day (none when every plan date is held).
+ */
+export function strategyActionDate(
+  planDates: readonly string[],
+  motion: string | null | undefined,
+  hold: SalesHold | null
+): string | undefined {
+  return planDates.find(date => !salesHoldCovers(hold, date, motion));
+}
+
 /** Existing autonomous evaluator and appointment executor share this preparation.
  * The proposal is immutable. Neither preparing nor presenting it approves work. */
 export async function prepareStrategicProposal(input: {
@@ -293,7 +308,15 @@ export async function prepareStrategicProposal(input: {
   // provenance to the diagnosis. Mission Director's ranked work fills later days,
   // so stale unrelated follow-ups cannot displace the current strategic priority.
   const selectedAction = diagnosis.actions[0];
-  const strategyDate = planDates[0];
+  // A sales action never lands on a day the operator held that kind of sales
+  // work; it takes the first open day (Mission Director already skips held work).
+  const salesHold = selectedAction && salesScopeOfMotion(selectedAction.motion)
+    ? await loadOperatorSalesHold({ tenantId: identity.tenantId, operatorUserIds: operatorIds })
+    : null;
+  const strategyDate = strategyActionDate(planDates, selectedAction?.motion, salesHold);
+  if (salesHold && strategyDate !== planDates[0])
+    limitations.push(`${planDates[0]}: ${describeSalesHoldScope(salesHold.scope)} is held through ${salesHold.until} at your request, so "${selectedAction!.title}" ${strategyDate ? `is proposed for ${strategyDate}` : "is not proposed this week"}.`);
+
   // The strategy item names its Work Thread, and its candidate id is the one
   // the goal cycle selects, so approval binds to the thread's open objective.
   // An opportunity whose approved execution is still open is not proposed again.

@@ -5,6 +5,7 @@
 import { NON_PRIMARY_OUTCOME_WEIGHT } from "../../../shared/operatingMandate";
 import type { GrowthCampaign, MissionCategory } from "../../campaignLibrary/campaignLibraryTypes";
 import type { MissionRankEvidence, RankFactor, TimePocket } from "./missionDirectorTypes";
+import type { SalesHoldScope } from "../../../shared/claireProactive";
 
 export type RankingOpenTask = {
   id?: string;
@@ -68,6 +69,8 @@ export type RankingContext = {
   campaignPriorityById?: Record<string, number>;
   /** Learned outcome lessons for this operator, oldest first. */
   outcomeLessons?: readonly RankingOutcomeLesson[];
+  /** Set only when the operator held sales work through `businessDate`. */
+  salesHold?: { until: string; reason: string | null; scope: readonly SalesHoldScope[] } | null;
 };
 
 const PRIORITY_EFFECT: Record<RankingOpenTask["priority"], number> = {

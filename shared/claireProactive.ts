@@ -27,6 +27,10 @@ export type DoctrineRules = {
   softwareMorningPromptCap: number;
   skipSalesUntil: string | null;
   skipSalesReason: string | null;
+  /** What the hold covers. Absent or empty while held means all sales work. */
+  skipSalesScope?: SalesHoldScope[] | null;
+  /** When the operator last lifted a hold ("resume sales"), for the record. */
+  salesHoldLiftedAt?: string | null;
 };
 
 export const DEFAULT_DOCTRINE: DoctrineRules = {
@@ -147,24 +151,20 @@ export function classifyDoctrineUtterance(utterance: string): "temporary" | "dur
 export function applyDoctrineUtterance(
   rules: DoctrineRules,
   utterance: string,
-  today: string
+  today: string,
+  now: Date = new Date()
 ): { rules: DoctrineRules; permanence: "temporary" | "durable"; speak: string } | { permanence: "ambiguous"; speak: string } | null {
+  const sales = parseSalesHoldInstruction(utterance);
+  if (sales) {
+    const applied = applySalesHoldInstruction(rules, sales, { businessDate: today, utterance, now });
+    return { rules: applied.rules, permanence: "temporary", speak: applied.speak };
+  }
   const kind = classifyDoctrineUtterance(utterance);
   if (kind === "not_doctrine") return null;
   if (kind === "ambiguous") {
     return { permanence: "ambiguous", speak: "Is that just for today, or a standing rule from now on?" };
   }
-  const lower = utterance.toLowerCase();
   let next = { ...rules };
-  if (/\bdon't give me sales|no sales|skip sales\b/.test(lower) && kind === "temporary") {
-    next.skipSalesUntil = today;
-    next.skipSalesReason = utterance.trim();
-    return {
-      rules: next,
-      permanence: "temporary",
-      speak: "Just today I'll hold sales work until payroll is finished. That doesn't change the standing rule.",
-    };
-  }
   const confront = /\b(?:if i )?move the same .{0,40}(\d+|three|3) times\b/i.exec(utterance);
   if (kind === "durable" && (confront || /\bthree times\b/i.test(utterance))) {
     next.avoidanceConfrontAfter = 3;
@@ -440,13 +440,17 @@ export function morningChiefOfStaffBrief(input: {
   warnings: readonly string[];
   overload: ReturnType<typeof overloadJudgment>;
   skipSales: boolean;
+  /** The operator held win-backs today: recovery is not pushed. */
+  skipRecovery?: boolean;
 }): string {
   const lines: string[] = [];
   if (input.warnings[0]) lines.push(input.warnings[0]);
   if (input.overload.kind === "impossible") lines.push(input.overload.speak);
   else if (input.overload.kind === "warn") lines.push(input.overload.speak);
   const todaySales = input.skipSales ? [] : input.sales;
-  const todayRecovery = input.recoveries.filter(item => item.status === "scheduled" || item.status === "draft_prepared");
+  const todayRecovery = input.skipRecovery
+    ? []
+    : input.recoveries.filter(item => item.status === "scheduled" || item.status === "draft_prepared");
   if (todayRecovery[0]) {
     const names = todayRecovery
       .map(item => item.subjectName.trim())
@@ -472,7 +476,144 @@ export function morningChiefOfStaffBrief(input: {
   return lines.slice(0, 5).join(" ");
 }
 
+/** The sales activities an operator can hold for a day. */
+export const SALES_HOLD_SCOPES = ["acquisition", "upsell", "promotion", "winback"] as const;
+export type SalesHoldScope = (typeof SALES_HOLD_SCOPES)[number];
+
+/**
+ * The sales activity each growth motion is. "No sales today" holds every one;
+ * a narrower instruction ("no new-customer outreach today") holds only what it
+ * names. A motion not listed is never held: operations and customer service,
+ * existing orders, desk investigation, and continuing work whose kind was never
+ * recorded. No motion is typed as upselling yet; an upsell hold applies once
+ * one is.
+ */
+const MOTION_SALES_SCOPE: Readonly<Record<string, SalesHoldScope>> = {
+  account_acquisition: "acquisition",
+  territory_expansion: "acquisition",
+  commercial_follow_up: "acquisition",
+  alliance: "acquisition",
+  customer_recovery: "winback",
+  retention: "winback",
+  relationship_capital: "promotion",
+  reputation: "promotion",
+  digital_presence: "promotion",
+};
+
+export function salesScopeOfMotion(motion: string | null | undefined): SalesHoldScope | null {
+  return (motion != null && MOTION_SALES_SCOPE[motion]) || null;
+}
+
+export type SalesHold = { until: string; scope: readonly SalesHoldScope[] };
+
+/** The hold the operator set, or null. */
+export function salesHoldOf(rules: Pick<DoctrineRules, "skipSalesUntil" | "skipSalesScope">): SalesHold | null {
+  if (!rules.skipSalesUntil) return null;
+  const named = (rules.skipSalesScope ?? []).filter(s => (SALES_HOLD_SCOPES as readonly string[]).includes(s));
+  return { until: rules.skipSalesUntil, scope: named.length ? named : [...SALES_HOLD_SCOPES] };
+}
+
+/** True when the operator held sales through `businessDate` (inclusive). */
+export function salesHeldOn(rules: Pick<DoctrineRules, "skipSalesUntil">, businessDate: string): boolean {
+  return rules.skipSalesUntil != null && businessDate <= rules.skipSalesUntil;
+}
+
+/** True when the hold covers this kind of work on this business date. */
+export function salesHoldCovers(hold: SalesHold | null | undefined, businessDate: string, motion: string | null | undefined): boolean {
+  if (!hold || businessDate > hold.until) return false;
+  const scope = salesScopeOfMotion(motion);
+  return scope != null && hold.scope.includes(scope);
+}
+
+const SCOPE_LABEL: Record<SalesHoldScope, string> = {
+  acquisition: "new-customer outreach",
+  upsell: "upselling",
+  promotion: "promotional outreach",
+  winback: "win-backs",
+};
+
+export function describeSalesHoldScope(scope: readonly SalesHoldScope[]): string {
+  if (SALES_HOLD_SCOPES.every(s => scope.includes(s))) return "all sales work";
+  const labels = SALES_HOLD_SCOPES.filter(s => scope.includes(s)).map(s => SCOPE_LABEL[s]);
+  return labels.length <= 2 ? labels.join(" and ") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
+export type SalesHoldInstruction = { kind: "hold"; scope: SalesHoldScope[] } | { kind: "resume" };
+
+const HOLD_VERB = String.raw`(?:no|skip|skipping|hold|holding|pause|pausing|stop|without|don't give me|do not give me|don't do|do not do|don't want|do not want)`;
+const SCOPE_WORDS: ReadonlyArray<readonly [SalesHoldScope, string]> = [
+  ["acquisition", String.raw`(?:new[- ]customers?|new[- ]customer outreach|prospect(?:s|ing)?|cold[- ]?call(?:s|ing)?|new business|acquisition|pitch(?:es|ing)?)`],
+  ["upsell", String.raw`(?:up[- ]?sell(?:s|ing)?|cross[- ]?sell(?:s|ing)?)`],
+  ["promotion", String.raw`(?:promos?|promotions?|promotional(?: outreach)?|marketing|campaigns?|door[- ]?hangers?|flyers?|review requests?|referral asks?)`],
+  ["winback", String.raw`(?:win[- ]?backs?|winning (?:customers |them )?back|lapsed customers?|dormant customers?|reactivat(?:e|ion|ing)|recovery (?:calls?|texts?|outreach))`],
+];
+const near = (noun: string) => new RegExp(String.raw`\b${HOLD_VERB}\b[^.!?,;]{0,25}?\b${noun}\b`, "i");
+
+/**
+ * The operator's spoken sales hold or its release, or null. A hold lasts the
+ * business day it is said ("no sales today"); "sales" holds every activity, a
+ * named activity holds only that one. "Resume sales" lifts it. Questions,
+ * reports ("we had no sales today") and standing rules are not a hold.
+ */
+export function parseSalesHoldInstruction(utterance: string): SalesHoldInstruction | null {
+  const text = utterance.replace(/[‘’]/g, "'").trim();
+  if (!text || /\?\s*$/.test(text)) return null;
+  if (/^(?:did|do|does|is|are|was|were|why|how|what|which|any|have|has|had|can|could|should|would)\b/i.test(text)) return null;
+  const holdsAllSales = near(String.raw`(?:sales|selling)`).test(text);
+  const resume =
+    /\b(?:resume|restart|unpause)\b[^.!?;,]{0,20}\b(?:sales|selling)\b/i.test(text) ||
+    /\b(?:lift|cancel|drop|remove)\b[^.!?;,]{0,15}\b(?:sales hold|hold on sales|the hold)\b/i.test(text) ||
+    /\b(?:sales|selling)\b[^.!?;,]{0,15}\b(?:back on|again|can resume|can restart)\b/i.test(text) ||
+    /\byou can (?:resume|restart|do|give me|push|start)\s+(?:the\s+)?sales\b/i.test(text);
+  if (resume && !holdsAllSales)
+    return /\b(?:don't|do not|not yet|never|no need to)\b[^.!?;,]{0,15}\b(?:resume|restart|unpause|lift|cancel|drop|remove|sales)\b/i.test(text)
+      ? null
+      : { kind: "resume" };
+  if (/\b(?:from now on|going forward|always|never|every day|remember this as a rule)\b/i.test(text)) return null;
+  if (!/\b(?:today|tonight|this (?:morning|afternoon|evening)|right now|until (?:payroll|this) is (?:finished|done))\b/i.test(text)) return null;
+  if (/\b(?:don't|do not)\s+(?:skip|hold|pause|stop)\b/i.test(text)) return null;
+  if (/\b(?:had|have had|made|got|there (?:were|was|are|is))\s+no\b/i.test(text)) return null;
+  if (holdsAllSales) return { kind: "hold", scope: [...SALES_HOLD_SCOPES] };
+  const named = SCOPE_WORDS.filter(([, noun]) => near(noun).test(text)).map(([scope]) => scope);
+  return named.length ? { kind: "hold", scope: named } : null;
+}
+
+/**
+ * The doctrine after the instruction, and what Claire says. A hold is dated on
+ * the business day it was said, in the business's own time zone. Lifting it
+ * starts nothing: held work comes back only as a proposal for the operator.
+ */
+export function applySalesHoldInstruction(
+  rules: DoctrineRules,
+  instruction: SalesHoldInstruction,
+  input: { businessDate: string; utterance: string; now: Date }
+): { rules: DoctrineRules; speak: string; changed: boolean } {
+  if (instruction.kind === "resume") {
+    if (!salesHeldOn(rules, input.businessDate))
+      return { rules, speak: "Sales work isn't on hold, so nothing changed.", changed: false };
+    return {
+      rules: { ...rules, skipSalesUntil: null, skipSalesReason: null, skipSalesScope: null, salesHoldLiftedAt: input.now.toISOString() },
+      speak: "Sales work is back on. Nothing that was held starts by itself; I'll bring it back as a proposal for your OK.",
+      changed: true,
+    };
+  }
+  const all = SALES_HOLD_SCOPES.every(s => instruction.scope.includes(s));
+  const payroll = /\bpayroll\b/i.test(input.utterance) ? " until payroll is finished" : "";
+  return {
+    rules: {
+      ...rules,
+      skipSalesUntil: input.businessDate,
+      skipSalesReason: input.utterance.trim(),
+      skipSalesScope: all ? null : [...instruction.scope],
+    },
+    speak: all
+      ? `Just today I'll hold all sales work${payroll}: new-customer outreach, upselling, promotions and win-backs. Customer service and existing orders go ahead. Say "resume sales" when you're ready.`
+      : `Just today I'll hold ${describeSalesHoldScope(instruction.scope)}${payroll}. Everything else goes ahead. Say "resume sales" when you're ready.`,
+    changed: true,
+  };
+}
+
 export function whyPushingSales(skipSales: boolean): string {
-  if (skipSales) return "You asked me to hold sales until payroll is finished today. That's temporary.";
+  if (skipSales) return "You asked me to hold sales work today. That's temporary; say \"resume sales\" to lift it.";
   return "Operations will eat the day if I wait for an empty afternoon. Standing order: sales has to survive the operations day.";
 }

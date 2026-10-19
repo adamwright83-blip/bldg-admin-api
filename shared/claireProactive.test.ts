@@ -12,6 +12,12 @@ import {
   interruptForSalesFollowUp,
   isDormantEligible,
   isRelationshipCooling,
+  SALES_HOLD_SCOPES,
+  applySalesHoldInstruction,
+  parseSalesHoldInstruction,
+  salesHeldOn,
+  salesHoldCovers,
+  salesHoldOf,
   morningChiefOfStaffBrief,
   overloadJudgment,
   prioritizeRecoveries,
@@ -213,6 +219,69 @@ describe("Adam doctrine — avoidance, software, gumball, prepare, permanence, m
       expect(applied.rules.skipSalesUntil).toBe("2026-09-16");
       expect(applied.rules.avoidanceConfrontAfter).toBe(DEFAULT_DOCTRINE.avoidanceConfrontAfter);
     }
+  });
+
+  describe("18b. the operator's one-day sales hold", () => {
+    const all = { until: "2026-09-16", scope: [...SALES_HOLD_SCOPES] };
+
+    it("'no sales' holds acquisition, upselling, promotion and win-backs; operations and investigation are never held", () => {
+      for (const motion of ["account_acquisition", "territory_expansion", "commercial_follow_up", "alliance", "customer_recovery", "retention", "reputation", "relationship_capital", "digital_presence"])
+        expect(salesHoldCovers(all, "2026-09-16", motion), motion).toBe(true);
+      for (const motion of ["investigation", "continue_existing", null])
+        expect(salesHoldCovers(all, "2026-09-16", motion), String(motion)).toBe(false);
+      expect(salesHoldCovers(all, "2026-09-17", "account_acquisition")).toBe(false);
+      expect(salesHoldCovers({ until: "2026-09-16", scope: ["acquisition"] }, "2026-09-16", "customer_recovery")).toBe(false);
+      // A hold saved before scopes existed holds everything.
+      expect(salesHoldOf({ skipSalesUntil: "2026-09-16" })?.scope).toEqual([...SALES_HOLD_SCOPES]);
+      expect([salesHeldOn({ skipSalesUntil: "2026-09-16" }, "2026-09-16"), salesHeldOn({ skipSalesUntil: null }, "2026-09-16")]).toEqual([true, false]);
+    });
+
+    it.each([
+      ["No sales today.", { kind: "hold", scope: [...SALES_HOLD_SCOPES] }],
+      ["Just today, don't give me sales work until payroll is finished.", { kind: "hold", scope: [...SALES_HOLD_SCOPES] }],
+      ["Hold sales until payroll is done.", { kind: "hold", scope: [...SALES_HOLD_SCOPES] }],
+      ["No sales again today.", { kind: "hold", scope: [...SALES_HOLD_SCOPES] }],
+      ["No new-customer outreach today.", { kind: "hold", scope: ["acquisition"] }],
+      ["Skip win-backs today.", { kind: "hold", scope: ["winback"] }],
+      ["No promotions or upselling today.", { kind: "hold", scope: ["upsell", "promotion"] }],
+      ["Resume sales now.", { kind: "resume" }],
+      ["You can resume sales.", { kind: "resume" }],
+      ["Payroll's done, sales are back on.", { kind: "resume" }],
+      ["Lift the sales hold.", { kind: "resume" }],
+    ])("%s", (utterance, expected) => expect(parseSalesHoldInstruction(utterance)).toEqual(expected));
+
+    it.each([
+      "Did we have no sales today?",
+      "We had no sales today.",
+      "There were no sales today.",
+      "Skip the OPUS pickup today.",
+      "Skip the pickup today, sales are fine.",
+      "No sales from now on.",
+      "No sales.",
+      "Don't resume sales yet.",
+      "End the call, sales later.",
+      "Don't skip sales today.",
+    ])("not a hold or a release: %s", utterance => expect(parseSalesHoldInstruction(utterance)).toBeNull());
+
+    it("is dated on the day it was said, says only the reason given, and lifting it starts nothing", () => {
+      const now = new Date("2026-09-16T18:00:00.000Z");
+      const full = applySalesHoldInstruction(DEFAULT_DOCTRINE, { kind: "hold", scope: [...SALES_HOLD_SCOPES] }, { businessDate: "2026-09-16", utterance: "No sales today, payroll.", now });
+      expect(full.rules).toMatchObject({ skipSalesUntil: "2026-09-16", skipSalesReason: "No sales today, payroll.", skipSalesScope: null });
+      expect(full.speak).toBe('Just today I\'ll hold all sales work until payroll is finished: new-customer outreach, upselling, promotions and win-backs. Customer service and existing orders go ahead. Say "resume sales" when you\'re ready.');
+      const narrow = applySalesHoldInstruction(DEFAULT_DOCTRINE, { kind: "hold", scope: ["acquisition"] }, { businessDate: "2026-09-16", utterance: "No new-customer outreach today.", now });
+      expect(narrow.rules.skipSalesScope).toEqual(["acquisition"]);
+      expect(narrow.speak).toBe('Just today I\'ll hold new-customer outreach. Everything else goes ahead. Say "resume sales" when you\'re ready.');
+
+      const lifted = applySalesHoldInstruction(full.rules, { kind: "resume" }, { businessDate: "2026-09-16", utterance: "Resume sales now.", now });
+      expect(lifted).toMatchObject({ changed: true, rules: { skipSalesUntil: null, skipSalesReason: null, skipSalesScope: null, salesHoldLiftedAt: now.toISOString() } });
+      expect(lifted.speak).toBe("Sales work is back on. Nothing that was held starts by itself; I'll bring it back as a proposal for your OK.");
+      expect(applySalesHoldInstruction(DEFAULT_DOCTRINE, { kind: "resume" }, { businessDate: "2026-09-16", utterance: "Resume sales now.", now }))
+        .toMatchObject({ changed: false, speak: "Sales work isn't on hold, so nothing changed." });
+
+      // The doctrine turn takes the same grammar.
+      const viaDoctrine = applyDoctrineUtterance(DEFAULT_DOCTRINE, "Just today, no sales.", "2026-09-16", now);
+      expect(viaDoctrine && "rules" in viaDoctrine && viaDoctrine.rules.skipSalesUntil).toBe("2026-09-16");
+    });
   });
 
   it("19. permanence language updates standing doctrine", () => {

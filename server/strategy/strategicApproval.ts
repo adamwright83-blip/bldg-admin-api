@@ -15,6 +15,8 @@ import {
 import { strategicApprovalAdmission } from "../planning/dayDirector/dayLineAdmission";
 import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { proposalItemExecutionWindow } from "../../shared/weeklyMissionReadiness";
+import { describeSalesHoldScope, salesHoldCovers, salesScopeOfMotion } from "../../shared/claireProactive";
+import { loadOperatorSalesHold } from "../agents/persistentOperator/operatorDoctrineStore";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../agents/persistentOperator/identity";
 import { REUSABLE_OBJECTIVE_STATUSES } from "../agents/persistentOperator/objectiveStore";
@@ -132,6 +134,20 @@ export async function respondToStrategicProposal(
     if (expired.length)
       throw new Error(
         `The time for ${expired.map(i => `"${i.title}"`).join(", ")} has passed. Reschedule it to a new day before approving; nothing was approved.`
+      );
+    // A proposal prepared before the operator held sales can still carry sales
+    // work on a held day; approving it must not put that work on the Day Line.
+    const selected = p.items.filter(i => itemIds.includes(i.id));
+    const hold = selected.some(i => salesScopeOfMotion(i.missionType))
+      ? await loadOperatorSalesHold({
+          tenantId: input.identity.tenantId,
+          operatorUserIds: [input.identity.canonicalOpenId, ...input.identity.aliases.map(a => a.openId)],
+        })
+      : null;
+    const held = selected.filter(i => salesHoldCovers(hold, i.businessDate, i.missionType));
+    if (held.length)
+      throw new Error(
+        `You asked to hold ${describeSalesHoldScope(hold!.scope)} through ${hold!.until}, and ${held.map(i => `"${i.title}"`).join(", ")} ${held.length === 1 ? "is held work on that day. Move it" : "are held work on those days. Move them"} to another day, or say "resume sales", before approving; nothing was approved.`
       );
   }
   const response = {
