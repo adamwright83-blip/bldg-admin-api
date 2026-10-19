@@ -118,6 +118,7 @@ export type ComposeInput = {
   secondLightTerritoryId?: string | null;
   featuredOperationTerritoryId?: string | null;
   activeCampaignTerritoryId?: string | null;
+  recoveryOpportunityTerritoryId?: string | null;
 };
 export function composeLanternCityScene(input: ComposeInput): CityScene {
   const { width, height } = input.viewport;
@@ -243,10 +244,13 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       c => c.territoryId === territory.id && c.kind === "stronghold"
     );
     if (alreadyHasTower && !cluster) continue;
+    const isRecoveryOpportunity =
+      input.recoveryOpportunityTerritoryId === territory.id;
     if (
       !TERRITORY_PRESENTATION[territory.id] &&
       !truth.customers.length &&
-      input.selectedTerritory !== territory.id
+      input.selectedTerritory !== territory.id &&
+      !isRecoveryOpportunity
     )
       continue;
     if (
@@ -255,7 +259,7 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     )
       continue;
     const kind =
-      cluster && controls.lanterns
+      (cluster || isRecoveryOpportunity) && controls.lanterns
         ? "lantern"
         : truth.environment === "locked"
           ? "lock"
@@ -271,21 +275,23 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
           ? centroidOfClusters(groups)
           : territoryWorldAnchor;
     const objectCustomerCount = cluster?.total ?? truth.customers.length;
-    const stateText = territoryStateText({
-      totalCustomers: truth.customers.length,
-      guarded: truth.occupancy.guarded,
-      state: truth.state,
-      objectCustomerCount,
-    });
+    const stateText = isRecoveryOpportunity
+      ? "Silver Lake — A neighbor to reconnect with."
+      : territoryStateText({
+          totalCustomers: truth.customers.length,
+          guarded: truth.occupancy.guarded,
+          state: truth.state,
+          objectCustomerCount,
+        });
     // "What could be…" world storytelling: a guarded (unreached) frontier
     // gets its authored dormant object; a territory whose prior clear lost
     // pressure gets the LOST variant instead. Never both, never fabricated
     // from anything but real occupancy/state truth already computed above.
     const isLostGround = truth.state === "lost_ground";
     const frontierKind =
-      !cluster && isLostGround
+      !cluster && !isRecoveryOpportunity && isLostGround
         ? lostGroundKindForTerritory(territory.id)
-        : !cluster && truth.occupancy.guarded
+        : !cluster && !isRecoveryOpportunity && truth.occupancy.guarded
           ? frontierKindForTerritory(territory.id)
           : undefined;
     candidates.push({
@@ -305,14 +311,17 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       environment: truth.environment,
       state: truth.state,
       occupancy: truth.occupancy,
-      priority: frontierKind
-        ? -2
-        : input.selectedTerritory === territory.id
-          ? 1
-          : presentation.priority,
+      priority: isRecoveryOpportunity
+        ? -3
+        : frontierKind
+          ? -2
+          : input.selectedTerritory === territory.id
+            ? 1
+            : presentation.priority,
       status: stateText,
       frontierKind,
-      frontierLostGround: isLostGround,
+      frontierLostGround: isRecoveryOpportunity ? false : isLostGround,
+      isRecoveryOpportunity,
     });
   }
   // Territory environment art is foundational world art, not an

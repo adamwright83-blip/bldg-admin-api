@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
-import { territoryByName, territoryCenter } from "@shared/lanternTerritories";
+import {
+  classifyTerritory,
+  territoryByName,
+  territoryCenter,
+} from "@shared/lanternTerritories";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 import type { GeographicCustomer } from "../customerGeography";
 import { WorldEntityInspector } from "../WorldEntityInspector";
@@ -24,6 +28,7 @@ import {
   type SceneObject,
   type TerritoryTruth,
 } from "./sceneTypes";
+import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
 import { CozyNeighborhoodEncounter } from "./CozyNeighborhoodEncounter";
 import styles from "./lantern-city-v6.module.css";
 
@@ -205,6 +210,48 @@ export default function LanternCityScene({
     refetchInterval: 30000,
     retry: false,
   });
+  const cozyMission = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
+    { territoryId: "silver-lake", limit: 8 },
+    { staleTime: 30000, refetchInterval: 30000 }
+  );
+  const isSyntheticPreview =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "synthetic";
+  const isSilverLakeRecoveryEligible = useMemo(() => {
+    if (isSyntheticPreview) return true;
+    if (
+      overview.data?.featuredOperation.binding === "recovery" &&
+      overview.data?.featuredOperation.territoryId === "silver-lake"
+    ) {
+      return true;
+    }
+    const targets = (cozyMission.data?.targets ?? []) as CozyProjectedTarget[];
+    if (targets.length > 0) {
+      return targets.some(
+        t =>
+          t.silverLakeStatus?.message !== "independently_verified_sent" &&
+          t.silverLakeStatus?.message !== "cancelled" &&
+          t.silverLakeStatus?.message !== "failed"
+      );
+    }
+    const slCustomers = (atlas.data?.customers ?? []).filter(c => {
+      const terr = classifyTerritory(
+        c.location?.latitude ?? 0,
+        c.location?.longitude ?? 0
+      );
+      return terr?.id === "silver-lake";
+    });
+    return slCustomers.some(
+      c =>
+        c.cadence.state === "dimming" ||
+        (c.cadence.daysSinceLastOrder ?? 0) >= 30
+    );
+  }, [
+    isSyntheticPreview,
+    overview.data?.featuredOperation,
+    cozyMission.data?.targets,
+    atlas.data?.customers,
+  ]);
   useEffect(() => {
     if (!root.current) return;
     const observer = new ResizeObserver(([entry]) => {
@@ -256,6 +303,9 @@ export default function LanternCityScene({
           overview.data?.featuredOperation.binding !== "recovery"
             ? overview.data?.featuredOperation.territoryId
             : null,
+        recoveryOpportunityTerritoryId: isSilverLakeRecoveryEligible
+          ? "silver-lake"
+          : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -280,6 +330,7 @@ export default function LanternCityScene({
       conquest,
       territoryId,
       overview.data,
+      isSilverLakeRecoveryEligible,
     ]
   );
   const selected = scene.objects.find(object => object.id === selectedId);
@@ -349,6 +400,19 @@ export default function LanternCityScene({
     element: HTMLElement,
     target: SceneSelectTarget = "default"
   ) {
+    if (
+      object.isRecoveryOpportunity ||
+      (object.territoryId === "silver-lake" && isSilverLakeRecoveryEligible)
+    ) {
+      setCozyEncounterTerritory("silver-lake");
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("cozy", "1");
+        url.searchParams.set("territory", "silver-lake");
+        window.history.pushState({}, "", url.toString());
+      }
+      return;
+    }
     setSelectedId(object.id);
     setSelectedClusterKey(null);
     setTerritoryId(object.territoryId);
