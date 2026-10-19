@@ -16,6 +16,8 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
 
     // Verifies cleancloud_paid_orders reassigned to laundry_farm
     expect(sql).toContain("UPDATE `cleancloud_paid_orders`\nSET `tenantId` = 'laundry_farm'");
+    expect(sql).toContain("UPDATE `authority_receipts`");
+    expect(sql).toContain("cleancloud_paid_observed");
 
     // Verifies cadence orders reassigned to laundry_farm
     expect(sql).toContain("UPDATE `orders`\nSET `tenantId` = 'laundry_farm'");
@@ -51,6 +53,7 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
     expect(script).toContain("dayforge_saas_tenants");
     expect(script).toContain("ca_farm.identityKey = ca_default.identityKey");
     expect(script).toContain("cleancloud_browser_sync_bindings");
+    expect(script).toContain("cleancloud_paid_observed");
   });
 
   it("laundryFarmSheetSync strictly queries laundry_farm tenant orders", () => {

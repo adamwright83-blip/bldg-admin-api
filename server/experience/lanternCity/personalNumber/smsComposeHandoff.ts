@@ -12,6 +12,8 @@ export const GOOGLE_MESSAGES_PACKAGE = "com.google.android.apps.messaging";
 /** True when Android uses a browser intent URL. Not a native activity bridge. */
 export const SMS_COMPOSE_USES_ANDROID_INTENT = true;
 
+export { approvedBodyDigest, PERSONAL_OUTREACH_SCHEDULE_APPROVAL } from "../../../../shared/silverLakeOutreachStatus";
+
 export const SMS_COMPOSE_APPROVAL_CONFIRMATION =
   "I approve this exact message for this recipient and want to open my SMS app" as const;
 
@@ -228,22 +230,6 @@ export function buildSmsComposeUri(input: {
     actionSendto: false,
     messagesPackage: null,
   };
-}
-
-/** Staleness fingerprint of the exact approved body. Not a credential and not stored as the body. */
-export function approvedBodyDigest(body: string): string {
-  const parts = [0x811c9dc5, 0x811c9dc5 ^ body.length, 0x01000193, 0xa1b2c3d4];
-  return parts
-    .map((seed, index) => {
-      let hash = seed >>> 0;
-      const text = `${index}:${body}`;
-      for (let i = 0; i < text.length; i++) {
-        hash ^= text.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193);
-      }
-      return (hash >>> 0).toString(16).padStart(8, "0");
-    })
-    .join("");
 }
 
 export type SmsComposeHandoffEvent = {

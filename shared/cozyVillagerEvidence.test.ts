@@ -313,8 +313,8 @@ describe("cozy villager evidence contract", () => {
     expect(again.dayLineCard?.customerId).toBe("cust_stable_2");
   });
 
-  it("accepts a paid order only from supplied admission and does not change the send pose", () => {
-    const surfaces = projectCozyRecoverySurfaces({
+  it("accepts a paid order only from an admitted receipt and does not change the send pose", () => {
+    const missingReceipt = projectCozyRecoverySurfaces({
       tenantId: TENANT,
       operatorId: OPERATOR,
       mission: mission([target()]),
@@ -323,14 +323,37 @@ describe("cozy villager evidence contract", () => {
       paidOrderEvidence: [{ customerId: "cust_stable_1", orderId: "order_99", paidAt: "2026-10-15T19:00:00.000Z" }],
       now: NOW,
     });
+    expect(missingReceipt.mission.targets[0]!.paidOrder.status).toBe("unavailable");
+    expect(missingReceipt.mission.targets[0]!.silverLakeStatus.revenue).toBe("unavailable");
+    expect(missingReceipt.mission.targets[0]!.silverLakeStatus.order).toBe("new_completed_order");
+    expect(missingReceipt.mission.targets[0]!.silverLakeStatus.revenueAttributedToOutreach).toBe(false);
+
+    const surfaces = projectCozyRecoverySurfaces({
+      tenantId: TENANT,
+      operatorId: OPERATOR,
+      mission: mission([target()]),
+      messages: [],
+      objective,
+      paidOrderEvidence: [{
+        customerId: "cust_stable_1",
+        orderId: "order_99",
+        paidAt: "2026-10-15T19:00:00.000Z",
+        cents: 4500,
+        authorityReceiptId: "auth-order-99",
+      }],
+      now: NOW,
+    });
     expect(surfaces.mission.targets[0]!.paidOrder).toEqual({
       status: "verified",
       orderId: "order_99",
       paidAt: "2026-10-15T19:00:00.000Z",
     });
+    expect(surfaces.mission.targets[0]!.silverLakeStatus.revenue).toBe("verified_paid_revenue");
+    expect(surfaces.mission.targets[0]!.silverLakeStatus.revenueAttributedToOutreach).toBe(false);
     expect(surfaces.mission.targets[0]!.communicationState).toBe("draft_prepared");
     expect(surfaces.mission.targets[0]!.pose).toBe("idle");
     expect(surfaces.dayLineCard?.objectiveComplete).toBe(false);
+    expect(surfaces.dayLineCard?.silverLakeStatus.message).toBe(surfaces.mission.targets[0]!.silverLakeStatus.message);
   });
 
   it("leaves an empty house slot when fewer customers are eligible", () => {

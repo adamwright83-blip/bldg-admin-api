@@ -7,6 +7,7 @@
  * 0. Register Laundry Farm SaaS tenant and operator memberships (0142)
  * 1. Store #34145 CleanCloud browser sync binding -> laundry_farm
  * 2. All CleanCloud paid orders -> laundry_farm
+ * 2b. cleancloud_paid_observed authority receipts follow those orders
  * 3. All CleanCloud cadence orders in `orders` (goldline:cadence:%) -> laundry_farm
  * 4. 50-active-customer goal lineage (goalRunId: 9e7dd9ae...) -> laundry_farm
  * 5. 16 CleanCloud recovery obligations -> laundry_farm (clearing draft, status = scheduled)
@@ -191,6 +192,23 @@ if (mode === "verify") {
   if (before.commercial.default.length > 0 && before.commercial.laundry_farm.length === 0) {
     errors.push("Commercial accounts exist in default but none were provisioned in laundry_farm");
   }
+  const [orphanReceipts] = await conn.execute(`
+    SELECT COUNT(*) AS count
+    FROM authority_receipts ar
+    JOIN cleancloud_paid_orders o
+      ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+     AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+     AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+     AND ar.tenantId COLLATE utf8mb4_unicode_ci <> o.tenantId COLLATE utf8mb4_unicode_ci
+    WHERE o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+  `, [FARM_TENANT]);
+  const orphanReceiptCount = Number(orphanReceipts[0]?.count ?? 0);
+  console.log(`- CleanCloud observation receipts left on another tenant: ${orphanReceiptCount}`);
+  if (orphanReceiptCount > 0) {
+    errors.push(
+      `CleanCloud observation receipts for ${orphanReceiptCount} Laundry Farm orders are still on another tenant`
+    );
+  }
 
   if (errors.length > 0) {
     console.error(`\n❌ VERIFICATION FAILED (${errors.length} invariant violations):`);
@@ -283,6 +301,21 @@ if (mode === "execute") {
     // 2. CleanCloud paid orders
     const [ccRes] = await conn.execute("UPDATE cleancloud_paid_orders SET tenantId = ? WHERE tenantId = ?", [FARM_TENANT, BUTLER_TENANT]);
     console.log(`- Reassigned ${ccRes.affectedRows} CleanCloud paid orders to laundry_farm`);
+
+    // 2b. Paid-observation receipts follow the order. The ledger matches tenant
+    // and payment time. Boot backfill idempotency omits tenantId, so the
+    // existing receipt must move. Safe to re-run after an order-only move.
+    const [receiptRes] = await conn.execute(`
+      UPDATE authority_receipts ar
+      JOIN cleancloud_paid_orders o
+        ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+       AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+       AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+       AND ar.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+       AND o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+      SET ar.tenantId = ?
+    `, [BUTLER_TENANT, FARM_TENANT, FARM_TENANT]);
+    console.log(`- Reassigned ${receiptRes.affectedRows} CleanCloud paid-observation receipts to laundry_farm`);
 
     // 3. Cadence orders in orders table (preserving Stripe orders)
     const [cadenceRes] = await conn.execute(
@@ -401,6 +434,16 @@ if (mode === "rollback") {
   try {
     // Reassign CleanCloud paid orders back to default
     await conn.execute("UPDATE cleancloud_paid_orders SET tenantId = ? WHERE tenantId = ?", [BUTLER_TENANT, FARM_TENANT]);
+    await conn.execute(`
+      UPDATE authority_receipts ar
+      JOIN cleancloud_paid_orders o
+        ON ar.subjectType COLLATE utf8mb4_unicode_ci = 'cleancloud_order' COLLATE utf8mb4_unicode_ci
+       AND ar.claimType COLLATE utf8mb4_unicode_ci = 'cleancloud_paid_observed' COLLATE utf8mb4_unicode_ci
+       AND ar.subjectId COLLATE utf8mb4_unicode_ci = o.cleancloudOrderId COLLATE utf8mb4_unicode_ci
+       AND o.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+       AND ar.tenantId COLLATE utf8mb4_unicode_ci = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+      SET ar.tenantId = ?
+    `, [BUTLER_TENANT, FARM_TENANT, BUTLER_TENANT]);
     // Reassign cadence orders back to default
     await conn.execute("UPDATE orders SET tenantId = ? WHERE residentClientRequestId LIKE 'goldline:cadence:%' AND tenantId = ?", [BUTLER_TENANT, FARM_TENANT]);
     // Move binding back

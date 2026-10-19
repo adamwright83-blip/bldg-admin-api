@@ -47,6 +47,7 @@ import { loadPresentationExperimentReport } from "../behavioralExperiment/presen
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
 import {
+  PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
   SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
 } from "../experience/lanternCity/personalNumber/smsComposeHandoff";
@@ -230,6 +231,28 @@ export const goldlineWorldRouter = router({
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         reason: input.reason,
+      });
+    }),
+  approvePersonalOutreach: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1),
+        expectedRevisionCount: z.number().int().positive(),
+        confirmation: z.literal(PERSONAL_OUTREACH_SCHEDULE_APPROVAL),
+        territoryId: z.string().min(1).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { approveDurablePersonalOutreach } = await import(
+        "../experience/lanternCity/cozyVillagerOutreachService"
+      );
+      return await approveDurablePersonalOutreach({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        messageId: input.messageId,
+        expectedRevisionCount: input.expectedRevisionCount,
+        confirmation: input.confirmation,
+        territoryId: input.territoryId,
       });
     }),
   sendEarlyOutreach: legacyDayforgeTenantOperatorProcedure

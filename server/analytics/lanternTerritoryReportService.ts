@@ -216,7 +216,7 @@ export async function readLanternTerritoryReport(input: {
   if (resyncGap.length) {
     return withhold(
       supported,
-      "CleanCloud paid orders in this read do not match a canonical observation receipt for their current import batch. A resync updates that batch without issuing a new receipt when the economic fields are unchanged, so the admitted total would omit those orders. Revenue, the prior-period comparison, and dormant-customer counts are withheld."
+      "CleanCloud paid orders in this tenant have no admitted observation receipt for their payment time. A receipt is admitted only when the economic fingerprint changes, and it stays on the tenant that owned the order at admission. Moving the order without the receipt, or a resync that changes no money, leaves this read unmatched. Revenue, the prior-period comparison, and dormant-customer counts are withheld."
     );
   }
   const business = await runBusinessQuery(input.tenantId, query, {

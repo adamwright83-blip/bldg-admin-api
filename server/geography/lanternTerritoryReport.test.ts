@@ -441,7 +441,8 @@ describe("lantern territory report service", () => {
     expect(result.comparison.steepestDecline).toBeNull();
     expect(result.comparison.dormantOpportunities).toEqual([]);
     expect(result.territories.every(territory => territory.revenueCents == null)).toBe(true);
-    expect(result.reason).toMatch(/current import batch/);
+    expect(result.reason).toMatch(/payment time/);
+    expect(result.reason).toMatch(/withheld/);
     expect(JSON.stringify(result.territories)).not.toContain("10000");
     expect(JSON.stringify(result.territories)).not.toContain("4500");
   });

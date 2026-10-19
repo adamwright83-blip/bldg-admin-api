@@ -20,9 +20,12 @@ import { normalizeSmsPhone } from "../../_core/sms";
 import {
   createScheduledOutreachDraft,
   editScheduledOutreachDraft,
+  getScheduledOutreachMessage,
   listScheduledOutreachMessages,
   type OutboundTestSenderAdapter,
 } from "./scheduledOutreachService";
+import { recordExplicitOutreachApproval } from "./personalNumber/smsComposeHandoffAudit";
+import { PERSONAL_OUTREACH_SCHEDULE_APPROVAL } from "./personalNumber/smsComposeHandoff";
 import { evaluateGoogleMessagesBrowserTransport } from "./personalNumber/googleMessagesBrowserTransport";
 
 // Known opt-outs for safety enforcement
@@ -439,6 +442,77 @@ export async function commitPersonalOutreachDraft(input: {
     });
   }
   return draft;
+}
+
+/**
+ * Records explicit approval of the saved recipient, text, and send time.
+ * Does not open Messages and does not transmit. A later edit or reschedule
+ * bumps the revision, so this approval does not cover the new content or time.
+ */
+export async function approveDurablePersonalOutreach(input: {
+  tenantId: string;
+  operatorId: string;
+  messageId: string;
+  confirmation: string;
+  expectedRevisionCount: number;
+  territoryId?: string;
+  now?: Date;
+}) {
+  if (input.confirmation !== PERSONAL_OUTREACH_SCHEDULE_APPROVAL) {
+    throw new Error("The exact message, recipient, and send time must be explicitly approved.");
+  }
+  const now = input.now ?? new Date();
+  const message = await getScheduledOutreachMessage({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    messageId: input.messageId,
+  });
+  if (!message) {
+    throw new Error(`Scheduled message not found or unauthorized for operator: ${input.messageId}`);
+  }
+  if (message.revisionCount !== input.expectedRevisionCount) {
+    throw new Error(
+      `Revision conflict: approval expected revision ${input.expectedRevisionCount}, current is ${message.revisionCount}`
+    );
+  }
+  if (message.status === "cancelled" || message.status === "failed" || message.status === "dispatched") {
+    throw new Error(`Cannot approve a message with status "${message.status}".`);
+  }
+  const permission = await checkCommunicationPermission({
+    tenantId: input.tenantId,
+    subjectType: "customer",
+    subjectId: message.customerId,
+    channel: "sms",
+    now,
+  });
+  if (
+    !permission.allowed ||
+    permission.permissionStatus === "opted_out" ||
+    permission.permissionStatus === "refused"
+  ) {
+    throw new Error(
+      `Recipient has opted out or lacks communication permission: ${permission.reason ?? "Opted out under G14"}`
+    );
+  }
+  await assertPersonalOutreachHandoff({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.operatorId,
+    customerId: message.customerId,
+    messageBody: message.currentMessageBody,
+    territoryId: input.territoryId ?? message.territoryId ?? undefined,
+    now,
+    timeZone: message.timezone || "America/Los_Angeles",
+  });
+  const approval = await recordExplicitOutreachApproval({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    messageId: message.id,
+    revisionCount: message.revisionCount,
+    approvedBody: message.currentMessageBody,
+    confirmation: input.confirmation,
+    surface: "scheduled_outreach",
+  });
+  return { message, approval, verifiedSent: false as const, automaticTransmission: false as const };
 }
 
 /**

@@ -14,6 +14,7 @@ import { loadMissionPresentations } from "../../agents/daphne/missionFollowUp";
 import { readObjectiveArea } from "../../strategy/strategicEvidenceReaders";
 import { getCozyEncounterMission } from "./cozyVillagerOutreachService";
 import { listPersonalOutreachReplies } from "./personalNumber/personalOutreachReplyService";
+import { smsComposeHandoffEventsForOperator } from "./personalNumber/smsComposeHandoffAudit";
 import { listScheduledOutreachMessages } from "./scheduledOutreachService";
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -38,6 +39,9 @@ export function outreachEvidenceFromRow(row: ScheduledOutreachMessageRow): CozyO
     dispatchedAt: iso(row.dispatchedAt),
     externalMessageId: row.externalMessageId,
     failureReason: row.failureReason,
+    revisionCount: row.revisionCount,
+    dispatchAttemptedAt: iso(row.dispatchAttemptedAt),
+    cancelledAt: iso(row.cancelledAt),
   };
 }
 
@@ -52,7 +56,7 @@ export async function loadCozyRecoverySurfaces(input: {
 }): Promise<CozyRecoverySurfaces> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
-  const [mission, messages, replies, area, presentations] = await Promise.all([
+  const [mission, messages, replies, handoffEvents, area, presentations] = await Promise.all([
     getCozyEncounterMission({
       tenantId: input.tenantId,
       canonicalOperatorId: input.canonicalOperatorId,
@@ -68,6 +72,10 @@ export async function loadCozyRecoverySurfaces(input: {
       limit: 100,
     }).catch(() => []),
     listPersonalOutreachReplies({
+      tenantId: input.tenantId,
+      operatorId: input.canonicalOperatorId,
+    }).catch(() => []),
+    smsComposeHandoffEventsForOperator({
       tenantId: input.tenantId,
       operatorId: input.canonicalOperatorId,
     }).catch(() => []),
@@ -94,6 +102,7 @@ export async function loadCozyRecoverySurfaces(input: {
     mission,
     messages: messages.map(outreachEvidenceFromRow),
     replies,
+    handoffEvents,
     objective: area
       ? { id: area.goal.g.id, statement: area.goal.g.statement, areaLabel: area.label }
       : null,
