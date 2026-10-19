@@ -36,27 +36,28 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
 
     // Verifies commercial accounts replication preserving separate accounts
     expect(sql).toContain("INSERT INTO `commercial_accounts`");
-    expect(sql).toContain("CONCAT('farm:', COALESCE(`identityKey`, `id`))");
-    expect(sql).toContain("WHERE `id` IN (3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)");
+    expect(sql).toContain("CONCAT('farm:migration:0143:', COALESCE(`identityKey`, `id`))");
+    expect(sql).toContain("WHERE `tenantId` = 'default'");
     expect(sql).toContain("INSERT INTO `commercial_account_locations`");
     expect(sql).toContain("INSERT INTO `commercial_account_contacts`");
   });
 
-  it("documents migration 0143 as gated path in scripts/migrate.mjs", () => {
-    const migrateMjs = readFileSync(
-      new URL("../../../scripts/migrate.mjs", import.meta.url),
+  it("governs operational migrations via scripts/migrate-laundry-farm-attribution.mjs", () => {
+    const script = readFileSync(
+      new URL("../../../scripts/migrate-laundry-farm-attribution.mjs", import.meta.url),
       "utf8"
     );
-    expect(migrateMjs).toContain("0143_reassign_cleancloud_and_goal_lineage_to_laundry_farm.sql");
-    expect(migrateMjs).toContain("scripts/migrate-laundry-farm-attribution.mjs");
+    expect(script).toContain("dayforge_saas_tenants");
+    expect(script).toContain("farm:migration:0143:");
+    expect(script).toContain("cleancloud_browser_sync_bindings");
   });
 
-  it("laundryFarmSheetSync queries laundry_farm tenant orders", () => {
+  it("laundryFarmSheetSync strictly queries laundry_farm tenant orders", () => {
     const sheetSync = readFileSync(
       new URL("../../laundryFarmSheetSync.ts", import.meta.url),
       "utf8"
     );
-    expect(sheetSync).toContain('inArray(cleancloudPaidOrders.tenantId, ["laundry_farm", "default"])');
+    expect(sheetSync).toContain('eq(cleancloudPaidOrders.tenantId, "laundry_farm")');
   });
 
   it("migration audit script supports dry-run, execute, verify, and rollback", () => {
