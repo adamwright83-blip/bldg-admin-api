@@ -53,14 +53,20 @@ describe("Slice B — the model authority", () => {
   });
 
   it("falls back to the generic variable when the Claire override is absent", async () => {
-    await withModelEnv({ generic: "claude-sonnet-4-6" }, mod => {
-      expect(mod.claireModelId()).toBe("claude-sonnet-4-6");
+    await withModelEnv({ generic: "claude-opus-5-5" }, mod => {
+      expect(mod.claireModelId()).toBe("claude-opus-5-5");
     });
   });
 
-  it("falls back to the built-in default when neither is set — production's situation before this slice", async () => {
+  it("falls back to the built-in default when neither is set — the current-generation Sonnet", async () => {
     await withModelEnv({}, mod => {
-      expect(mod.claireModelId()).toBe("claude-sonnet-4-6");
+      expect(mod.claireModelId()).toBe("claude-sonnet-5-5");
+    });
+  });
+
+  it("a stale previous-generation variable still resolves to the current generation", async () => {
+    await withModelEnv({ generic: "claude-sonnet-4-6" }, mod => {
+      expect(mod.claireModelId()).toBe("claude-sonnet-5-5");
     });
   });
 
@@ -81,9 +87,9 @@ describe("Slice B — the model authority", () => {
     }
   });
 
-  it("keeps today's request shape byte-for-byte on the model production actually runs", async () => {
+  it("shapes the request for the model production runs (Sonnet 5.5: no temperature, no reasoning latency)", async () => {
     await withModelEnv({}, mod => {
-      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-sonnet-4-6", temperature: 0.6 });
+      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-sonnet-5-5", omitTemperature: true, disableThinking: true });
     });
   });
 
@@ -104,22 +110,20 @@ describe("Slice B — the model authority", () => {
   });
 
   it("does not disable thinking for a model that keeps today's no-thinking-by-default behavior", async () => {
-    await withModelEnv({ claire: "claude-sonnet-4-6" }, mod => {
-      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-sonnet-4-6", temperature: 0.6 });
+    await withModelEnv({ claire: "claude-opus-4-6" }, mod => {
+      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-opus-4-6", temperature: 0.6 });
     });
   });
 
-  it("identifies exactly the models that default thinking on and can be told to disable it", () => {
-    for (const model of ["claude-opus-5", "claude-sonnet-5"]) {
+  it("identifies exactly the models that think by default", () => {
+    // The provider boundary (server/_core/modelCapabilities.ts) chooses each family's own
+    // no-reasoning form: `disabled`, `between_tools` (Sonnet 5.5), or low effort (Opus 5.5,
+    // Fable/Mythos 5.x, which cannot disable thinking).
+    for (const model of ["claude-opus-5", "claude-sonnet-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5", "claude-fable-5-1", "claude-mythos-5-1"]) {
       expect(claireModelDefaultsToThinking(model)).toBe(true);
     }
     // These already run with no thinking by default -- no flag needed.
     for (const model of ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"]) {
-      expect(claireModelDefaultsToThinking(model)).toBe(false);
-    }
-    // These run thinking unconditionally and reject { type: "disabled" }
-    // with a 400 -- must never be told to disable it.
-    for (const model of ["claude-fable-5", "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1"]) {
       expect(claireModelDefaultsToThinking(model)).toBe(false);
     }
   });

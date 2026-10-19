@@ -1,6 +1,14 @@
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
+import {
+  isClaireBrainV2PrimaryEnabled,
+  productionClaireV2PrimaryDeps,
+  runClaireV2PrimaryTurn,
+  type ClaireV2PrimaryState,
+} from "../brain/live/primaryTurn";
+import { resolveClaireOperatorAuthority } from "../brain/live/operatorAuthority";
+import { assembleClaireDriveContext } from "../contextAssembler";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -226,7 +234,13 @@ export const weeklyMissionRouter = router({
       if (!zone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure the business timezone before planning" });
       const key = `claire-desk-comms:${identity.tenantId}:${identity.canonicalOperatorId}:${input.sessionId}`;
       const owner = { tenantId: identity.tenantId, operatorUserId: identity.canonicalOpenId, surface: "voice" as const };
-      type Session = { ledgerState?: ClaireTurnState; showrunner: ShowrunnerCallState; history: Array<{ speaker: string; text: string }> };
+      type Session = {
+        ledgerState?: ClaireTurnState;
+        showrunner: ShowrunnerCallState;
+        history: Array<{ speaker: string; text: string }>;
+        /** Brain V2 primary conversation state (history, receipts, V2 working memory, pending work). */
+        v2State?: ClaireV2PrimaryState;
+      };
       const store = claireConversationStateStore();
       const stored = await store.load<Session>(key);
       const now = new Date();
@@ -284,6 +298,91 @@ export const weeklyMissionRouter = router({
         if (!session.history.length) session.history.push({ speaker: "claire", text: speak });
         await store.save(key, owner, session, 2 * 3600_000);
         return voiced({ speak, heard: null, saved: [] as string[], awaitingApproval: null, end: false, transcriptionFailed: false });
+      }
+      /**
+       * Brain V2 PRIMARY on OPEN COMMS. The newest Claire decides every turn; the
+       * desk-planning conductor runs only for turns V2 routes to the planning
+       * agenda. Identity + verified membership in this tenant; rollback is
+       * CLAIRE_BRAIN_V2_PRIMARY=0.
+       */
+      const v2Authority = isClaireBrainV2PrimaryEnabled()
+        ? await resolveClaireOperatorAuthority({
+            tenantId: ctx.tenantId,
+            operatorUserId: ctx.user.openId,
+            membership: ctx.legacyDayforgeMembership,
+          })
+        : null;
+      if (v2Authority?.authorized) {
+        const v2State: ClaireV2PrimaryState = session.v2State ?? {
+          history: session.history.map((turn, index) => ({
+            speaker: turn.speaker === "operator" ? ("operator" as const) : ("claire" as const),
+            text: turn.text,
+            at: now.getTime() - session!.history.length + index,
+            delivery: "confirmed_heard" as const,
+          })),
+        };
+        v2State.showrunner = session.showrunner;
+        const context = await assembleClaireDriveContext({
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+          phase: "pre_drive",
+          timeZone: zone,
+        }).catch(() => null);
+        const primary = await runClaireV2PrimaryTurn(
+          {
+            authority: v2Authority,
+            tenantId: ctx.tenantId,
+            operatorUserId: ctx.user.openId,
+            dayDirectorActorId: identity.dayDirectorActorId,
+            surface: "voice",
+            utterance,
+            state: v2State,
+            conversationKey: key,
+            conversationId: input.sessionId,
+            timeZone: zone,
+            businessDate: session.showrunner.businessDate,
+            brief: null,
+            context,
+            sourceEventId: `desk_comms:${input.sessionId}:${(v2State.claireTurnCount ?? 0) + 1}`,
+            // A recorded or typed Desk turn is already a complete thought.
+            allowFragmentWait: false,
+          },
+          productionClaireV2PrimaryDeps({
+            tenantId: ctx.tenantId,
+            operatorUserId: ctx.user.openId,
+            dayDirectorActorId: identity.dayDirectorActorId,
+            conversationKey: key,
+            timeZone: zone,
+            surface: "voice",
+          })
+        );
+        console.info("[ClaireBrainV2Primary]", JSON.stringify({
+          event: "claire_brain_v2_primary",
+          surface: "desk_comms",
+          conversationKey: key,
+          ...primary.brainV2,
+        }));
+        const updatedShowrunner = v2State.showrunner ?? session.showrunner;
+        delete v2State.showrunner;
+        session = {
+          ledgerState: session.ledgerState,
+          showrunner: updatedShowrunner,
+          history: (v2State.history ?? []).map(({ speaker, text }) => ({ speaker, text })).slice(-30),
+          v2State,
+        };
+        await store.save(key, owner, session, 2 * 3600_000);
+        const replan = updatedShowrunner.replan;
+        return {
+          ...voiced({
+            speak: primary.speak || "Go on.",
+            heard: utterance,
+            saved: primary.actionIds?.length ? [primary.speak] : ([] as string[]),
+            awaitingApproval: replan && !replan.approved ? { summary: replan.summary } : null,
+            end: Boolean(primary.endCall),
+            transcriptionFailed: false,
+          }),
+          brainV2: primary.brainV2,
+        };
       }
       const ledgerEnabled = isClaireWorkLedgerEnabled();
       if (ledgerEnabled) {

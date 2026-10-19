@@ -7,9 +7,7 @@ EVERYTHING MAY INFORM.
 ONLY EXECUTIVE FUNCTION MAY DECIDE.
 ```
 
-Brain V2 is now in **Stage C guarded cutover**. The live path is explicit, operator-scoped, and flag-gated by `CLAIRE_BRAIN_V2_LIVE`.
-
-Current live authority is intentionally narrow: Day Line work lifecycle and call control. Existing V1 services remain underneath as action / character adapters and as fallback for unsupported lanes until retirement. Shadow mode remains a separate one-way observer path and is still non-authoritative.
+Brain V2 is **primary** for the authorized operator (`CLAIRE_BRAIN_V2_PRIMARY`, see `STATUS.md`): it interprets, decides and answers every conversational turn on the phone and the Claire Desk. Legacy Claire only observes, read-only, in the background. Rollback is the flag; there is no silent per-turn fallback.
 
 | Doc | Role |
 |---|---|
@@ -29,7 +27,7 @@ Layout:
 - `executive/` — the only V2 grant-minting / decision authority
 - `actions/` — executes branded grants; does not interpret
 - `response/` — renderer consumes ResponsePlan
-- `live/` — guarded production cutover orchestrator
+- `live/` — primary turn (`primaryTurn.ts`), operator authority, legacy read-only observer, grant-bound adapters
 - `shadow/` — one-way observer / comparison runner
 - `telemetry/` — safe comparison records
 - `tests/` — brain-level and cutover regressions

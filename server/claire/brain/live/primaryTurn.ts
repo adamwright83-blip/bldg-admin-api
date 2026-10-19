@@ -49,6 +49,7 @@ import {
   assembleGuardedClaireSpeak,
   buildClaireVerifiedFactInventory,
 } from "../../verifiedFactInventoryFromContext";
+import { inventoryPlusReceipts } from "../../assertionGuard";
 import {
   appendClaimReceipt,
   receiptFromBusinessResult,
@@ -361,6 +362,19 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
   };
 }
 
+/** V2's decision about the kind of conversation, for the speaking organ. */
+export function conversationalMode(
+  decision: ExecutiveDecision,
+  reading: SemanticReading | null
+): "operational" | "casual" | "personal" | "post_action_review" | null {
+  if (decision.attention.lanes.includes("personal") || decision.attention.lanes.includes("narrative")) return "personal";
+  if (!reading) return null;
+  if (reading.turnKind === "personal_question_to_claire") return "personal";
+  if (reading.turnKind === "small_talk") return "casual";
+  if (reading.turnKind === "report_or_narration") return "post_action_review";
+  return "operational";
+}
+
 function moneyAndPercents(text: string): string[] {
   return [
     ...(text.match(/\$\s?\d[\d,]*(?:\.\d+)?/g) ?? []).map(token => token.replace(/[\s$,]/g, "")),
@@ -518,9 +532,15 @@ export async function runClaireV2PrimaryTurn(
     actionClasses: string[] = [],
     receipt: FactualClaimReceipt | null = null
   ): ClaireV2PrimaryResult => {
-    const inventory = buildClaireVerifiedFactInventory(input.context ?? null);
+    // A receipt-backed confirmation is linted against its own write receipts, and
+    // is never also linted as conversation (that produced "I won't claim that
+    // happened… Done." when the adapter returned the confirmation as its speech).
+    const commit = result.receiptBackedCommit?.trim();
+    let conversational = result.speak.trim();
+    if (commit && conversational.endsWith(commit)) conversational = conversational.slice(0, -commit.length).trim();
+    const inventory = inventoryPlusReceipts(buildClaireVerifiedFactInventory(input.context ?? null), result.mutationReceipts);
     const speak = assembleGuardedClaireSpeak({
-      conversational: result.speak,
+      conversational,
       inventory,
       localTime: input.context?.clock?.localTime ?? null,
       receiptBackedCommit: result.receiptBackedCommit,
@@ -767,7 +787,11 @@ export async function runClaireV2PrimaryTurn(
     }
 
     // ── Scheduled call: V2 decided this is not work; the agenda conductor speaks ──
-    if (state.showrunner && deps.showrunner) {
+    // Strategy and personal questions are answered by V2's composer even inside a
+    // planning session; the conductor keeps the agenda, reports and approvals.
+    const composerKinds = new Set<SemanticReading["turnKind"]>(["business_judgment_or_strategy", "personal_question_to_claire"]);
+    const readingKind = (semanticReading as SemanticReading | null)?.turnKind ?? null;
+    if (state.showrunner && deps.showrunner && !(readingKind && composerKinds.has(readingKind))) {
       let conducted: { state: ShowrunnerCallState; end: boolean; speak: string };
       try {
         conducted = await deps.showrunner({
@@ -820,6 +844,7 @@ export async function runClaireV2PrimaryTurn(
       recentTurns: recentForModel,
       semanticFrame: v2SemanticFrame(decision, state),
       semanticAuthority: "brain_v2",
+      ...(conversationalMode(decision, semanticReading) ? { conversationalModeOverride: conversationalMode(decision, semanticReading)! } : {}),
       retrievedEvidence: [
         ...evidence,
         ...v2Notes.map(text => ({ source: "brain_v2_decision (convey this; nothing was saved)", text })),

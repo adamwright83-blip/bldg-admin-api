@@ -1,3 +1,4 @@
+import { claireModelAcceptsSampling } from "./claireModel";
 import { describe, expect, it, vi } from "vitest";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
@@ -133,7 +134,9 @@ describe("PR1 test matrix (spec section 16)", () => {
     expect(system).not.toContain("no more than 3 concise sentences");
     expect(system).not.toContain("Do not search, select, cite, or introduce sales doctrine");
     expect(call.maxTokens).toBeGreaterThanOrEqual(400);
-    expect(call.temperature).toBeGreaterThan(0.15);
+    // Current-generation models reject temperature; the request omits it instead of pinning 0.
+    if (call.omitTemperature) expect(claireModelAcceptsSampling(call.model)).toBe(false);
+    else expect(call.temperature).toBeGreaterThan(0.15);
   });
 
   it("9 — follow-up no longer carries the 55-word / 520-char gag", async () => {
@@ -149,7 +152,9 @@ describe("PR1 test matrix (spec section 16)", () => {
       "The opening brief is advice derived before this turn; explain, simplify, restate, or apply only that advice."
     );
     expect(call.maxTokens).toBeGreaterThanOrEqual(400);
-    expect(call.temperature).toBeGreaterThan(0.15);
+    // Current-generation models reject temperature; the request omits it instead of pinning 0.
+    if (call.omitTemperature) expect(claireModelAcceptsSampling(call.model)).toBe(false);
+    else expect(call.temperature).toBeGreaterThan(0.15);
   });
 
   it("10 — a long, model-written multi-sentence answer is not hard-truncated mid-sentence", async () => {

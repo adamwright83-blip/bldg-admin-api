@@ -373,6 +373,23 @@ describe("Brain V2 primary — a complete multi-turn call", () => {
   });
 });
 
+describe("Brain V2 primary — scheduled and Desk planning sessions", () => {
+  it("routes agenda turns to the conductor and strategy questions to V2's composer", async () => {
+    const h = harness();
+    const showrunner = vi.fn(async ({ state }: { state: never }) => ({ state, end: false, speak: "Noted. Anything else from today?" }));
+    const deps = { ...h.deps, showrunner: showrunner as never };
+    const state: ClaireV2PrimaryState = { showrunner: { purpose: "evening_debrief", turns: 0 } as never };
+    const report = await runClaireV2PrimaryTurn(turnInput(state, "Pickups went fine today, the Opus run was late."), deps);
+    expect(report.brainV2.composition).toBe("showrunner");
+    expect(report.brainV2.origin).toBe("brain_v2");
+    expect(showrunner).toHaveBeenCalledTimes(1);
+    const advice = await runClaireV2PrimaryTurn(turnInput(state, "What do you think I should focus on this week to grow revenue?"), deps);
+    expect(advice.brainV2.composition).toBe("composed");
+    expect(showrunner).toHaveBeenCalledTimes(1);
+    expect(runClaireTurn).not.toHaveBeenCalled();
+  });
+});
+
 describe("unlicensedFigures", () => {
   it("allows figures present in evidence and flags invented ones", () => {
     expect(unlicensedFigures("Revenue was $1,240 and 12% up.", "Revenue: $1,240 total, up 12% on last week.")).toEqual([]);
