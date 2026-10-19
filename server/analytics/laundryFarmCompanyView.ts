@@ -1,7 +1,7 @@
 import { BUILDINGS, buildingFromSlug, matchBuilding, type BuildingConfig } from "../../shared/buildings";
 import { listActiveTenantMemberships } from "../saas/tenantAccess";
 import { listTenantUnpaidOrders } from "../domains/orders/unpaidOrderReadService";
-import { resolvePeriod, type PeriodSpec } from "./businessPeriods";
+import { parsePeriodPhrase, resolvePeriod, type PeriodSpec } from "./businessPeriods";
 import { reconcileLedgerSpan } from "./canonicalRevenue";
 import { findSuspectedCrossSourcePairs, loadPaidOrderLedger, type PaidOrderEvent, type PaidOrderLedger } from "./paidOrderLedger";
 
@@ -177,26 +177,154 @@ export function attributeCompanyBuilding(
   return { bucket: "regular_apartments", label: "Regular apartments / other", kind: "regular_apartments" };
 }
 
-export function matchLaundryFarmCompanyQuestion(utterance: string): LaundryFarmCompanyQuestion | null {
-  const lower = utterance
+export type LaundryFarmCompanyViewRequest = {
+  companyView: true;
+  aspect: CompanyQuestionAspect;
+  period: PeriodSpec;
+  /** Names the family. The company reader, not this metric, is the authority. */
+  metric: "revenue" | "orders";
+};
+
+export type CompanyViewEvidencePayload = {
+  companyView: true;
+  aspect: CompanyQuestionAspect;
+  questionPeriod: PeriodSpec;
+  view: LaundryFarmCompanyView;
+};
+
+const PROFIT_QUESTION = /\b(?:profit|margin)\b/;
+const CUSTOMER_QUESTION = /\bcustomers?\b/;
+const OPEN_ORDER_QUESTION = /\bopen\s+orders?\b/;
+const SERVICE_LINE_SPLIT = /\blaundry\s+butler\b|\bcore\s+laundry\s+farm\b|\bservice\s+line\b/;
+const SINGLE_RAIL_FILTER = /\b(?:through|via|using|on)\s+(?:the\s+)?(?:clean\s?cloud|clearant|stripe|laundry\s+butler)\b/;
+const LAUNDRY_FARM_SERVICE_LINE = /\blaundry\s+farm\b[\s\S]{0,48}\b(?:make|made|generate|generated)\b|\b(?:make|made|generate|generated)\b[\s\S]{0,48}\blaundry\s+farm\b/;
+const BUILDING_NAME = /\bopus(?:\s+la)?\b|\bcentury\s+park(?:\s+east)?\b|\bcpe\b/;
+const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+east)?|cpe)\b|\b(?:century\s+park(?:\s+east)?|cpe)\b[\s\S]{0,80}\bopus(?:\s+la)?\b/;
+
+function normalizeCompanyUtterance(utterance: string): string {
+  return utterance
     .trim()
     .toLowerCase()
     .replace(/[’']/g, "'")
     .replace(/\s+/g, " ")
     .replace(/[?.!]+$/g, "")
+    .replace(/^(?:(?:hey|hi|ok|okay|so|well|um|uh|and|also|claire)[, ]+)+/, "")
     .trim();
-  if (lower === "how much have we made this month") return { aspect: "revenue", period: { kind: "this_month" } };
-  if (lower === "how many orders did we get") return { aspect: "orders", period: { kind: "this_month" } };
-  if (lower === "how's laundry farm doing" || lower === "how is laundry farm doing") {
-    return { aspect: "health", period: { kind: "this_month" } };
+}
+
+function companyQuestionBlocked(text: string): boolean {
+  return (
+    PROFIT_QUESTION.test(text) ||
+    CUSTOMER_QUESTION.test(text) ||
+    OPEN_ORDER_QUESTION.test(text) ||
+    SERVICE_LINE_SPLIT.test(text) ||
+    SINGLE_RAIL_FILTER.test(text) ||
+    LAUNDRY_FARM_SERVICE_LINE.test(text)
+  );
+}
+
+function companyPeriod(text: string): PeriodSpec {
+  return parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) ?? { kind: "this_month" };
+}
+
+function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null {
+  if (companyQuestionBlocked(text)) return null;
+  if (
+    /^how(?:'s| is| are) (?:laundry farm|the company|the business)\b/.test(text) &&
+    !/\b(?:make|made|generate|generated|revenue|sales)\b/.test(text)
+  ) {
+    return { aspect: "health", period: companyPeriod(text) };
+  }
+  if (BOTH_BUILDINGS.test(text) && /\b(?:business|revenue|sales|made|orders|getting|compared|versus|vs)\b/.test(text)) {
+    return { aspect: "buildings", period: companyPeriod(text) };
   }
   if (
-    lower === "how much business are we getting from opus la versus century park east" ||
-    lower === "how much business are we getting from opus la vs century park east"
+    /^how (?:did|does|is|has|was)\s+(?:opus(?: la)?|century park(?: east)?|cpe)\b/.test(text) &&
+    /\b(?:do|doing|done|perform(?:ed|ing)?)\b/.test(text)
   ) {
-    return { aspect: "buildings", period: { kind: "this_month" } };
+    return { aspect: "buildings", period: companyPeriod(text) };
+  }
+  if (/^how many (?:paid )?orders\b/.test(text) && /\bwe\b/.test(text)) {
+    return { aspect: "orders", period: companyPeriod(text) };
+  }
+  if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^how much have we (?:made|brought in)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^how much business are we getting\b/.test(text)) {
+    return { aspect: BUILDING_NAME.test(text) ? "buildings" : "revenue", period: companyPeriod(text) };
   }
   return null;
+}
+
+function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null): LaundryFarmCompanyQuestion | null {
+  if (!prior || companyQuestionBlocked(text) || directCompanyQuestion(text)) return null;
+  const continuation = /^(?:(?:and|also|okay|ok|so|then)\b[\s,.-]*)?(?:what|how)\s+about\b|^(?:and|also)\b/.test(text);
+  const period = parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE);
+  const building = BUILDING_NAME.test(text);
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const shortShift =
+    wordCount <= 6 &&
+    Boolean(period || building) &&
+    !/\b(?:revenue|sales|profit|customers?|orders|made)\b/.test(text);
+  if (!(continuation || shortShift) || (!period && !building)) return null;
+  const aspect =
+    building && !/\b(?:revenue|sales|orders|made)\b/.test(text)
+      ? "buildings"
+      : /\borders\b/.test(text) && !/\b(?:revenue|sales|made)\b/.test(text)
+        ? "orders"
+        : prior.aspect;
+  return { aspect, period: period ?? prior.period };
+}
+
+/**
+ * Company-level revenue, orders, health, and building questions.
+ * A named customer, a profit question, a service-line split, or a single-rail
+ * filter stays on the existing tenant reader.
+ */
+export function matchLaundryFarmCompanyQuestion(
+  utterance: string,
+  prior: LaundryFarmCompanyQuestion | null = null
+): LaundryFarmCompanyQuestion | null {
+  const text = normalizeCompanyUtterance(utterance);
+  if (!text) return null;
+  return directCompanyQuestion(text) ?? companyFollowUp(text, prior);
+}
+
+export function companyViewRequest(question: LaundryFarmCompanyQuestion): LaundryFarmCompanyViewRequest {
+  return {
+    companyView: true,
+    aspect: question.aspect,
+    period: question.period,
+    metric: question.aspect === "orders" ? "orders" : "revenue",
+  };
+}
+
+export function isLaundryFarmCompanyViewRequest(query: unknown): query is LaundryFarmCompanyViewRequest {
+  if (!query || typeof query !== "object") return false;
+  const value = query as { companyView?: unknown; aspect?: unknown; period?: unknown };
+  return value.companyView === true && typeof value.aspect === "string" && value.period != null && typeof value.period === "object";
+}
+
+export function companyQuestionFromParameters(parameters: unknown): LaundryFarmCompanyQuestion | null {
+  if (!isLaundryFarmCompanyViewRequest(parameters)) return null;
+  if (
+    parameters.aspect !== "revenue" &&
+    parameters.aspect !== "orders" &&
+    parameters.aspect !== "health" &&
+    parameters.aspect !== "buildings"
+  ) {
+    return null;
+  }
+  return { aspect: parameters.aspect, period: parameters.period };
+}
+
+export function isCompanyViewEvidencePayload(payload: unknown): payload is CompanyViewEvidencePayload {
+  if (!payload || typeof payload !== "object") return false;
+  const value = payload as { companyView?: unknown; view?: { reader?: unknown }; aspect?: unknown };
+  return value.companyView === true && value.view?.reader === LAUNDRY_FARM_COMPANY_READER && typeof value.aspect === "string";
 }
 
 function proofBlob(parts: Array<string | null | undefined>): string {

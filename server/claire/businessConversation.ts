@@ -56,6 +56,7 @@ import {
 import {
   matchLaundryFarmCompanyQuestion,
   readLaundryFarmCompanyView,
+  type LaundryFarmCompanyQuestion,
 } from "../analytics/laundryFarmCompanyView";
 import type { ServiceType } from "../analytics/paidOrderLedger";
 import { speakLaundryFarmCompanyView } from "./business/companyViewSpeech";
@@ -146,7 +147,11 @@ export type ClaireAnalyticsSession = {
   focus?: ClaireAnalyticsFocus;
 };
 
-export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null; businessAnalysis?: AnalysisSession | null;
+export type ClaireAnalyticsState = {
+  analytics?: ClaireAnalyticsSession | null;
+  businessAnalysis?: AnalysisSession | null;
+  /** Prior company question, so a short follow-up stays on the company view. */
+  companyQuestion?: LaundryFarmCompanyQuestion | null;
 };
 
 export const CLAIRE_ANALYTICS_SESSION_TTL_MS = 20 * 60 * 1000;
@@ -1155,7 +1160,8 @@ export async function answerClaireBusinessTurn(
   const goalTurn = await settleBusinessGoal(input, deps, now, timeZone);
   if (goalTurn) return goalTurn;
   let reader: ClaireBusinessReader = "query";
-  const companyQuestion = matchLaundryFarmCompanyQuestion(input.utterance);
+  const companyQuestion = matchLaundryFarmCompanyQuestion(input.utterance, input.state.companyQuestion ?? null);
+  input.state.companyQuestion = companyQuestion;
   if (companyQuestion) {
     reader = "company_view";
     const companyToday = businessToday(now, "America/Los_Angeles");

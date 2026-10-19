@@ -19,6 +19,12 @@ import {
   type BusinessQueryResult,
 } from "../../../analytics/businessQuery";
 import {
+  isLaundryFarmCompanyViewRequest,
+  LAUNDRY_FARM_COMPANY_READER,
+  readLaundryFarmCompanyView,
+  type CompanyViewEvidencePayload,
+} from "../../../analytics/laundryFarmCompanyView";
+import {
   listAccountContacts,
   listAccountRefs,
   loadAccountHistory,
@@ -56,6 +62,8 @@ export type BusinessMemoryContext = {
 
 export type BusinessMemoryDeps = {
   runQuery: (tenantId: string, query: BusinessQuery) => Promise<BusinessQueryResult>;
+  /** Company questions. Production uses readLaundryFarmCompanyView. */
+  readCompanyView?: typeof readLaundryFarmCompanyView;
   listAccounts: (tenantId: string) => Promise<AccountRef[]>;
   listContacts: (tenantId: string) => Promise<AccountContactRef[]>;
   loadHistory: (input: { tenantId: string; operatorUserId: string; account: AccountRef }) => Promise<AccountHistory>;
@@ -82,6 +90,7 @@ export type BusinessMemoryDeps = {
 
 export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
   runQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
+  readCompanyView: input => readLaundryFarmCompanyView(input),
   listAccounts: tenantId => listAccountRefs(tenantId),
   listContacts: tenantId => listAccountContacts(tenantId),
   loadHistory: input => loadAccountHistory(input),
@@ -420,9 +429,39 @@ export async function retrieveBusinessEvidence(
     }
 
     case "business_query": {
-      const query = request.query as BusinessQuery | undefined;
+      const query = request.query;
       if (!query) return [];
-      const result = await deps.runQuery(ctx.tenantId, query);
+      if (isLaundryFarmCompanyViewRequest(query)) {
+        const view = await (deps.readCompanyView ?? readLaundryFarmCompanyView)({
+          operatorUserId: ctx.operatorUserId,
+          now: new Date(ctx.nowIso),
+          period: query.period,
+        });
+        const payload: CompanyViewEvidencePayload = {
+          companyView: true,
+          aspect: query.aspect,
+          questionPeriod: query.period,
+          view,
+        };
+        const item: EvidenceItem = {
+          id: `business_query:company_view:${query.aspect}:${view.period.start}`,
+          type: "business_query",
+          source: LAUNDRY_FARM_COMPANY_READER,
+          provenance: { reader: LAUNDRY_FARM_COMPANY_READER },
+          observedAt: ctx.nowIso,
+          asOf: view.period.end,
+          freshness: null,
+          coverage: {
+            complete: view.mayStateCompanyTotal,
+            gaps: view.mayStateCompanyTotal ? [] : ["company_total_not_authorized_or_incomplete"],
+          },
+          authoritativeFor: ["current_business_truth"],
+          payload,
+          operatorVisible: true,
+        };
+        return admitBusinessEvidence([item]);
+      }
+      const result = await deps.runQuery(ctx.tenantId, query as BusinessQuery);
       return admitBusinessEvidence([
         evidenceFromBusinessResult({ result, reader: "runBusinessQuery", observedAtIso: ctx.nowIso }),
       ]);

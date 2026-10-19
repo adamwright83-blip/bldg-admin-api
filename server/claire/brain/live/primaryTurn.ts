@@ -29,6 +29,7 @@
  * `CLAIRE_BRAIN_V2_PRIMARY=0` returns both surfaces to the previous routing.
  */
 
+import { isCompanyViewEvidencePayload } from "../../../analytics/laundryFarmCompanyView";
 import { isClaireRoleFeedback } from "../../../../shared/claireRoleFeedback";
 import { parseStrategicProposalControl } from "../../../../shared/strategicProposalControl";
 import { weekStartMonday } from "../../../../shared/weeklyMissionReadiness";
@@ -432,6 +433,18 @@ function businessReceipt(input: {
     (item): item is EvidenceItem & { payload: BusinessQueryResult } =>
       item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
   );
+  if (business && isCompanyViewEvidencePayload(business.payload) && !input.composed) {
+    return receiptFromReader({
+      conversationKey: input.conversationKey,
+      claireTurnOrdinal: input.ordinal,
+      nowMs: input.nowMs,
+      answerText: input.speech,
+      answerPath: "brain_v2_reader",
+      claimType: "company_view",
+      grounding: "deterministic",
+      sources: [business.provenance.reader],
+    });
+  }
   if (business && !input.composed) {
     return receiptFromBusinessResult({
       conversationKey: input.conversationKey,
