@@ -634,4 +634,28 @@ describe("V6 truthful scene composition", () => {
       expect(object?.frontierKind).toBeUndefined();
     });
   });
+  describe("Silver Lake recovery opportunity discovery", () => {
+    it("creates an opportunity lantern with neighbor reconnection status, natural priority, and invitation details", () => {
+      const scene = composeLanternCityScene({
+        customers: [],
+        atlasReady: true,
+        viewport: { width: 1440, height: 900 },
+        recoveryOpportunityTerritoryId: "silver-lake",
+        recoveryInvitation: {
+          customerFirstName: "Elena",
+          neighborhood: "Silver Lake",
+          note: "Barnaby prepared fresh stationery for a warm reconnection.",
+          villagerName: "Barnaby",
+        },
+      });
+      const object = scene.objects.find(o => o.territoryId === "silver-lake");
+      expect(object).toBeDefined();
+      expect(object?.isRecoveryOpportunity).toBe(true);
+      expect(object?.kind).toBe("lantern");
+      expect(object?.status).toBe("Silver Lake — A neighbor to reconnect with.");
+      expect(object?.priority).toBe(-3);
+      expect(object?.recoveryInvitation?.customerFirstName).toBe("Elena");
+      expect(object?.recoveryInvitation?.note).toContain("Barnaby");
+    });
+  });
 });

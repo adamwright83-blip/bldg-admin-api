@@ -72,6 +72,13 @@ export type SceneObject = {
    */
   frontierKind?: FrontierObjectKind;
   frontierLostGround?: boolean;
+  isRecoveryOpportunity?: boolean;
+  recoveryInvitation?: {
+    customerFirstName?: string;
+    neighborhood?: string;
+    note?: string;
+    villagerName?: string;
+  };
 };
 export type ScenePlate = {
   territoryId: string;

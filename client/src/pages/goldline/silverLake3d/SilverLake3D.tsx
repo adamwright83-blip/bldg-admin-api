@@ -179,7 +179,17 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
     setFeatureOpen(false);
   };
 
-  const handleDraftCompleted = (customerId: string, customerName: string, variant: any, action: "send" | "schedule" | "sms_opened") => {
+  const handleDraftCompleted = (
+    customerId: string,
+    customerName: string,
+    variant: VillagerVariant,
+    action:
+      | "scheduled"
+      | "draft_prepared"
+      | "compose_handoff_opened"
+      | "operator_reported_sent"
+      | "independently_verified_sent"
+  ) => {
     const currentCount = neighborhoodMemory.encounterCounts[variant] ?? 0;
     const updated = {
       ...neighborhoodMemory,
@@ -193,8 +203,8 @@ export default function SilverLake3D({ territoryId = "silver-lake", onExit }: Si
   const memoryNote = useMemo(() => {
     if (!neighborhoodMemory.lastDraftedCustomer) return null;
     const { customerName, actionType } = neighborhoodMemory.lastDraftedCustomer;
-    if (actionType === "schedule") return `${customerName}'s letter is resting safely on the morning dispatch shelf.`;
-    if (actionType === "send") return `We dispatched ${customerName}'s letter earlier!`;
+    if (actionType === "scheduled") return `${customerName}'s letter is resting safely on the morning dispatch shelf.`;
+    if (actionType === "operator_reported_sent" || actionType === "independently_verified_sent") return `We dispatched ${customerName}'s letter earlier!`;
     return `We prepared ${customerName}'s note for your phone.`;
   }, [neighborhoodMemory.lastDraftedCustomer]);
 
