@@ -58,7 +58,9 @@ const requireUser = t.middleware(async opts => {
   if (
     typeof ctx.user.openId !== "string" ||
     ctx.user.openId.trim().length === 0 ||
-    isGoldlineDemoOpenId(ctx.user.openId)
+    isGoldlineDemoOpenId(ctx.user.openId) ||
+    ctx.tenantId === "__unauthorized_tenant__" ||
+    ctx.tenantId === "__invalid_saas_session__"
   ) {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -80,7 +82,9 @@ export const legacyAdminRoleProcedure = baseProcedure.use(
       ctx.user.role !== "admin" ||
       typeof ctx.user.openId !== "string" ||
       ctx.user.openId.trim().length === 0 ||
-      isGoldlineDemoOpenId(ctx.user.openId)
+      isGoldlineDemoOpenId(ctx.user.openId) ||
+      ctx.tenantId === "__unauthorized_tenant__" ||
+      ctx.tenantId === "__invalid_saas_session__"
     ) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
@@ -91,7 +95,11 @@ export const legacyAdminRoleProcedure = baseProcedure.use(
 export const adminProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    if (!isPlatformAdministrator(ctx.user)) {
+    if (
+      !isPlatformAdministrator(ctx.user) ||
+      ctx.tenantId === "__unauthorized_tenant__" ||
+      ctx.tenantId === "__invalid_saas_session__"
+    ) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({ ctx: { ...ctx, user: ctx.user! } });

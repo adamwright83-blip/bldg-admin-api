@@ -102,6 +102,7 @@ export function tenantForAuthenticatedUser(input: {
   user: JoystickUser | null;
   hostTenantId: string;
   requestedTenantId?: string | null;
+  authorizedTenantIds?: ReadonlySet<string> | readonly string[];
 }): TenantBind {
   if (!input.user) {
     return {
@@ -112,23 +113,38 @@ export function tenantForAuthenticatedUser(input: {
   }
 
   const requested = input.requestedTenantId?.trim() || null;
+  const authorizedSet = input.authorizedTenantIds
+    ? input.authorizedTenantIds instanceof Set
+      ? input.authorizedTenantIds
+      : new Set(input.authorizedTenantIds)
+    : null;
+
+  const isExplicitlyAuthorized = (tid: string): boolean => {
+    return Boolean(authorizedSet && authorizedSet.has(tid));
+  };
 
   if (
     isLegacySharedPasswordOpenId(input.user.openId) &&
     (input.user.role === "admin" || input.user.role === "driver")
   ) {
-    const tenantId = input.hostTenantId;
     const persisted = input.user.tenantId?.trim() || null;
     if (
-      (requested && !isLegacyDayforgeTenant(requested)) ||
-      (persisted && !isLegacyDayforgeTenant(persisted))
+      (requested && !isLegacyDayforgeTenant(requested) && !isExplicitlyAuthorized(requested)) ||
+      (persisted && !isLegacyDayforgeTenant(persisted) && !isExplicitlyAuthorized(persisted))
     ) {
       return {
-        tenantId,
+        tenantId: input.hostTenantId,
         authority: "legacy_platform",
         denial: "legacy_password_not_saas",
       };
     }
+    if (input.user.role === "driver") {
+      return { tenantId: input.hostTenantId, authority: "legacy_platform", denial: null };
+    }
+    const tenantId =
+      requested && (isLegacyDayforgeTenant(requested) || isExplicitlyAuthorized(requested))
+        ? requested
+        : input.hostTenantId;
     return { tenantId, authority: "legacy_platform", denial: null };
   }
 
@@ -142,6 +158,9 @@ export function tenantForAuthenticatedUser(input: {
       };
     }
     if (requested && requested !== persisted) {
+      if (isExplicitlyAuthorized(requested)) {
+        return { tenantId: requested, authority: "membership", denial: null };
+      }
       return {
         tenantId: persisted,
         authority: "membership",
@@ -154,6 +173,13 @@ export function tenantForAuthenticatedUser(input: {
   const persisted = input.user.tenantId?.trim() || "";
   if (persisted) {
     if (requested && requested !== persisted) {
+      if (
+        isExplicitlyAuthorized(requested) ||
+        (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested)) ||
+        (input.user.role === "admin" && isLegacyDayforgeTenant(requested))
+      ) {
+        return { tenantId: requested, authority: "persisted_user", denial: null };
+      }
       return {
         tenantId: persisted,
         authority: "persisted_user",
@@ -161,6 +187,25 @@ export function tenantForAuthenticatedUser(input: {
       };
     }
     return { tenantId: persisted, authority: "persisted_user", denial: null };
+  }
+
+  if (requested) {
+    if (
+      isExplicitlyAuthorized(requested) ||
+      (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested)) ||
+      (input.user.role === "admin" && isLegacyDayforgeTenant(requested))
+    ) {
+      return {
+        tenantId: requested,
+        authority: "legacy_platform",
+        denial: null,
+      };
+    }
+    return {
+      tenantId: input.hostTenantId,
+      authority: "anonymous_host",
+      denial: "cross_tenant",
+    };
   }
 
   return {

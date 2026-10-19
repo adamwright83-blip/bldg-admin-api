@@ -5620,5 +5620,14 @@ await assertRequiredColumns("personal_outreach_replies", [
   if (verified.join(",") !== "tenantId,id")
     throw new Error(`claire_proactive_obligations primary key is (${verified.join(", ")}); expected (tenantId, id)`);
 }
+
+// 0142: Laundry Farm SaaS tenant registration & operator memberships
+{
+  const statements = await readSqlStatements("../drizzle/0142_add_laundry_farm_saas_tenant.sql");
+  const label = "0142 register laundry_farm saas tenant and operator memberships";
+  for (const sql of statements) {
+    await runRequired(sql, label);
+  }
+}
 console.log("\nMigration complete.");
 await conn.end();

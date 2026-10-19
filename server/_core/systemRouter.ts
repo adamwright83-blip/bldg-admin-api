@@ -65,8 +65,11 @@ import { customerTruthFreshnessRouter } from "../analytics/customerTruthFreshnes
 import { persistentOperatorRouter } from "../agents/persistentOperator/persistentOperatorRouter";
 import { operatorRepresentativeRouter } from "../agents/operatorRepresentative/router";
 import { franchiseRouter } from "../franchise/franchiseRouter";
+import { tenantRouter } from "../platform/tenancy/tenantRouter";
 
 export const systemRouter = router({
+  tenant: tenantRouter,
+  tenancy: tenantRouter,
   franchise: franchiseRouter,
   strategy: strategyRouter,
   customerTruthFreshness: customerTruthFreshnessRouter,
