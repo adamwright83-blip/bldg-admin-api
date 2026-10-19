@@ -18,6 +18,7 @@ export type TrpcContext = {
   user: User | null;
   vendorSession: VendorSession | null;
   tenantId: string;
+  tenantDenial?: "cross_tenant" | "legacy_password_not_saas" | "invalid_saas_session" | null;
 };
 
 const warnedHosts = new Set<string>();
@@ -111,5 +112,6 @@ export async function createContext(
     // A membership session uses its persisted tenant, never the Host header.
     // A shared-password session stays on the host-mapped legacy tenant.
     tenantId,
+    tenantDenial: boundTenant.denial,
   };
 }

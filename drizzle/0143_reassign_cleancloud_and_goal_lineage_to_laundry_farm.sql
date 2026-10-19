@@ -174,23 +174,3 @@ JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
 WHERE ca_default.tenantId = 'default'
 ON DUPLICATE KEY UPDATE `label` = VALUES(`label`);
 
--- Replicate commercial account contacts
-INSERT INTO `commercial_account_contacts` (
-  `tenantId`, `accountId`, `contactKey`, `name`, `title`, `email`, `phone`, `relationshipType`
-)
-SELECT
-  'laundry_farm',
-  ca_farm.id,
-  cac.contactKey,
-  cac.name,
-  cac.title,
-  cac.email,
-  cac.phone,
-  cac.relationshipType
-FROM `commercial_account_contacts` cac
-JOIN `commercial_accounts` ca_default ON cac.accountId = ca_default.id AND cac.tenantId = 'default'
-JOIN `commercial_accounts` ca_farm ON ca_farm.tenantId = 'laundry_farm'
-  AND ca_farm.identityKey = ca_default.identityKey
-WHERE ca_default.tenantId = 'default'
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
-

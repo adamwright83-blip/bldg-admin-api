@@ -71,6 +71,26 @@ describe("tenantRouter", () => {
       expect(accessible.has("tenant-beta")).toBe(true);
       expect(accessible.has("laundry_farm")).toBe(false);
     });
+
+    it("restricts an ordinary admin of another tenant from accessing default or laundry_farm", async () => {
+      const accessible = await resolveAccessibleTenantIdsForUser({
+        openId: "external-admin",
+        role: "admin",
+        tenantId: "tenant-acme",
+      });
+      expect(accessible.has("tenant-acme")).toBe(true);
+      expect(accessible.has("default")).toBe(false);
+      expect(accessible.has("laundry_farm")).toBe(false);
+    });
+
+    it("authorizes platform administrator across platform tenants", async () => {
+      const accessible = await resolveAccessibleTenantIdsForUser({
+        openId: "oauth-platform-admin",
+        role: "admin",
+      });
+      expect(accessible.has("default")).toBe(true);
+      expect(accessible.has("laundry_farm")).toBe(true);
+    });
   });
 
   describe("getActiveTenant", () => {
@@ -269,6 +289,58 @@ describe("tenantRouter", () => {
       await expect(caller.tenant.getActiveTenant()).rejects.toMatchObject({
         code: "FORBIDDEN",
       });
+    });
+
+    it("rejects protected procedure execution when tenantDenial is cross_tenant", async () => {
+      const caller = systemRouter.createCaller({
+        req: {} as any,
+        res: {} as any,
+        user: { id: 2, openId: "regular-member", role: "user" } as any,
+        vendorSession: null,
+        tenantId: "default",
+        tenantDenial: "cross_tenant",
+      });
+
+      await expect(caller.tenant.getActiveTenant()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("rejects protected procedure execution when tenantDenial is invalid_saas_session", async () => {
+      const caller = systemRouter.createCaller({
+        req: {} as any,
+        res: {} as any,
+        user: { id: 2, openId: "regular-member", role: "user" } as any,
+        vendorSession: null,
+        tenantId: "default",
+        tenantDenial: "invalid_saas_session",
+      });
+
+      await expect(caller.tenant.getActiveTenant()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("creates context with cross_tenant denial when unauthorized tenant is requested", async () => {
+      vi.mocked(sdk.authenticateRequest).mockResolvedValue({
+        id: 2,
+        openId: "regular-member",
+        role: "user",
+        tenantId: "default",
+      } as any);
+
+      const ctx = await createContext({
+        req: {
+          headers: {
+            host: "admin.bldg.chat",
+            "x-tenant-id": "laundry_farm",
+          },
+          protocol: "https",
+        } as any,
+        res: {} as any,
+      });
+
+      expect(ctx.tenantDenial).toBe("cross_tenant");
     });
   });
 });

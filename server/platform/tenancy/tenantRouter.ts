@@ -47,8 +47,8 @@ export async function resolveAccessibleTenantIdsForUser(user: {
 }): Promise<Map<string, string>> {
   const accessible = new Map<string, string>(); // tenantId -> role
 
-  // Platform admin or admin role has implicit access to legacy Dayforge tenants
-  if (user.role === "admin" || isPlatformAdministrator(user)) {
+  // Legitimate platform administrator authority through verified privilege boundary
+  if (isPlatformAdministrator(user)) {
     accessible.set("default", "owner");
     accessible.set("laundry_farm", "owner");
   }

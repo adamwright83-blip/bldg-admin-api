@@ -262,12 +262,18 @@ describe("Tenant Separation and Isolation Integration (Real-MySQL)", () => {
     expect(fAcc).toBeDefined();
     expect(fAcc.identityKey).toBe(bAcc.identityKey);
 
-    // Verify Laundry Farm has ZERO pipeline records or missions for this building (strictly independent!)
+    // Verify Laundry Farm has ZERO pipeline records, missions, or contacts for this building (strictly independent!)
     const [farmPipelines] = await conn.execute(
       `SELECT id FROM commercial_pipeline_records WHERE tenantId = 'laundry_farm' AND accountId = ?`,
       [fAcc.id]
     );
     expect((farmPipelines as any[]).length).toBe(0);
+
+    const [farmContacts] = await conn.execute(
+      `SELECT id FROM commercial_account_contacts WHERE tenantId = 'laundry_farm' AND accountId = ?`,
+      [fAcc.id]
+    );
+    expect((farmContacts as any[]).length).toBe(0);
 
     const [farmMissions] = await conn.execute(
       `SELECT id FROM commercial_missions WHERE tenantId = 'laundry_farm' AND opsTaskId = ?`,

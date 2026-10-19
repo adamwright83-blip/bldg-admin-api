@@ -60,7 +60,8 @@ const requireUser = t.middleware(async opts => {
     ctx.user.openId.trim().length === 0 ||
     isGoldlineDemoOpenId(ctx.user.openId) ||
     ctx.tenantId === "__unauthorized_tenant__" ||
-    ctx.tenantId === "__invalid_saas_session__"
+    ctx.tenantId === "__invalid_saas_session__" ||
+    Boolean(ctx.tenantDenial)
   ) {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -83,6 +84,7 @@ export const legacyAdminRoleProcedure = baseProcedure.use(
       typeof ctx.user.openId !== "string" ||
       ctx.user.openId.trim().length === 0 ||
       isGoldlineDemoOpenId(ctx.user.openId) ||
+      Boolean(ctx.tenantDenial) ||
       ctx.tenantId === "__unauthorized_tenant__" ||
       ctx.tenantId === "__invalid_saas_session__"
     ) {
@@ -97,6 +99,7 @@ export const adminProcedure = baseProcedure.use(
     const { ctx, next } = opts;
     if (
       !isPlatformAdministrator(ctx.user) ||
+      Boolean(ctx.tenantDenial) ||
       ctx.tenantId === "__unauthorized_tenant__" ||
       ctx.tenantId === "__invalid_saas_session__"
     ) {
@@ -120,6 +123,13 @@ function legacyDayforgeProcedure(input: {
           code: "UNAUTHORIZED",
           message: UNAUTHED_ERR_MSG,
         });
+      }
+      if (
+        Boolean(ctx.tenantDenial) ||
+        ctx.tenantId === "__unauthorized_tenant__" ||
+        ctx.tenantId === "__invalid_saas_session__"
+      ) {
+        throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
       }
       const membership = await resolveLegacyDayforgeMembership({
         tenantId: ctx.tenantId,
@@ -261,7 +271,10 @@ export const adminOrDriverProcedure = baseProcedure.use(
     const { ctx, next } = opts;
     if (
       !ctx.user ||
-      (ctx.user.role !== "admin" && ctx.user.role !== "driver")
+      (ctx.user.role !== "admin" && ctx.user.role !== "driver") ||
+      Boolean(ctx.tenantDenial) ||
+      ctx.tenantId === "__unauthorized_tenant__" ||
+      ctx.tenantId === "__invalid_saas_session__"
     ) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }

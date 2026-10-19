@@ -68,7 +68,7 @@ export function isGoldlineDemoOpenId(openId: string | null | undefined): boolean
 
 /** Platform authority is never implied by a tenant/demo/shared-password role string. */
 export function isPlatformAdministrator(
-  user: Pick<JoystickUser, "openId" | "role"> | null,
+  user: Pick<JoystickUser, "openId" | "role" | "tenantId"> | null,
   env?: OpenIdEnv
 ): boolean {
   return Boolean(
@@ -76,7 +76,8 @@ export function isPlatformAdministrator(
       user.role === "admin" &&
       hasOperatorOpenId(user.openId) &&
       !isGoldlineDemoOpenId(user.openId) &&
-      !isLegacySharedPasswordOpenId(user.openId, env)
+      !isLegacySharedPasswordOpenId(user.openId, env) &&
+      (!user.tenantId || user.tenantId === "default" || user.tenantId === "platform")
   );
 }
 
@@ -175,8 +176,7 @@ export function tenantForAuthenticatedUser(input: {
     if (requested && requested !== persisted) {
       if (
         isExplicitlyAuthorized(requested) ||
-        (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested)) ||
-        (input.user.role === "admin" && isLegacyDayforgeTenant(requested))
+        (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested))
       ) {
         return { tenantId: requested, authority: "persisted_user", denial: null };
       }
@@ -192,8 +192,7 @@ export function tenantForAuthenticatedUser(input: {
   if (requested) {
     if (
       isExplicitlyAuthorized(requested) ||
-      (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested)) ||
-      (input.user.role === "admin" && isLegacyDayforgeTenant(requested))
+      (isPlatformAdministrator(input.user) && isLegacyDayforgeTenant(requested))
     ) {
       return {
         tenantId: requested,

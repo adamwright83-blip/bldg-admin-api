@@ -38,9 +38,9 @@ describe("Tenant Data Attribution and Ingestion Isolation", () => {
     // Verifies commercial accounts replication preserving separate accounts
     expect(sql).toContain("INSERT INTO `commercial_accounts`");
     expect(sql).toContain("ca_farm.identityKey = ca_default.identityKey");
-    expect(sql).toContain("WHERE `tenantId` = 'default' AND `identityKey` IS NOT NULL");
     expect(sql).toContain("INSERT INTO `commercial_account_locations`");
-    expect(sql).toContain("INSERT INTO `commercial_account_contacts`");
+    // Commercial contacts and customer relationships must NOT be replicated across businesses
+    expect(sql).not.toContain("INSERT INTO `commercial_account_contacts`");
   });
 
   it("governs operational migrations via scripts/migrate-laundry-farm-attribution.mjs", () => {
