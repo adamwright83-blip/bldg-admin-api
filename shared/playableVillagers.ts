@@ -18,6 +18,7 @@ import {
   type VillagerVariant,
   COZY_SLOT_ANCHORS,
 } from "./cozyVillagerOutreach";
+export type { VillagerVariant };
 import {
   type CozyCommunicationState,
   type CozyProjectedTarget,
@@ -108,6 +109,19 @@ export const LETTER_APPROACHES: Record<LetterApproachId, LetterApproachOption> =
 
 export type VillagerPersonalityStyle = "enthusiastic" | "concise" | "balanced";
 
+export interface VillagerGreetingContext {
+  customerName: string;
+  isFirstVisit?: boolean;
+  isReturnVisitTomorrowOrLater?: boolean;
+  visitCount?: number;
+  unfinishedDraftCustomer?: string | null;
+  preferredApproach?: LetterApproachId | null;
+  relationshipTier?: "new_acquaintance" | "familiar_friend" | "cherished_partner";
+  customerReplied?: boolean;
+  paidReorderVerified?: boolean;
+  memoryNote?: string | null;
+}
+
 export interface VillagerPersonality {
   variant: VillagerVariant;
   canonicalName: string;
@@ -116,6 +130,7 @@ export interface VillagerPersonality {
   portraitSrc: string;
   firstEncounterGreeting: (customerName: string) => string;
   repeatEncounterGreeting: (customerName: string, memoryNote?: string | null) => string;
+  contextualGreeting?: (ctx: VillagerGreetingContext) => string;
   reactionToApproach: (approach: LetterApproachId, text: string) => {
     pose: VillagerAnimationState;
     dialogue: string;
@@ -151,6 +166,30 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
       memoryNote
         ? `Welcome back! ${memoryNote} Ready to craft another warm note for ${customerName}!`
         : `Back at the writing desk! Ready to craft another warm note for ${customerName}.`,
+    contextualGreeting: (ctx: VillagerGreetingContext) => {
+      if (ctx.unfinishedDraftCustomer) {
+        return `Welcome back! We left off drafting that note for ${ctx.unfinishedDraftCustomer}. It's still on our desk whenever you're ready! ✨`;
+      }
+      if (ctx.customerReplied) {
+        return `Oh! Wonderful news — a reply arrived from ${ctx.customerName}! Let's see what they said! ❤️`;
+      }
+      if (ctx.paidReorderVerified) {
+        return `Celebration! ${ctx.customerName} placed a new verified order with Laundry Farm! Silver Lake is shining brighter today! 🏮✨`;
+      }
+      if (ctx.isReturnVisitTomorrowOrLater) {
+        return `Good morning! Welcome back to Silver Lake. A brand new day to connect with ${ctx.customerName}! ☀️`;
+      }
+      if (ctx.preferredApproach === "helpful_detailed") {
+        return `Back at the writing desk! Ready to craft another warm, detailed letter for ${ctx.customerName}. ✍️`;
+      }
+      if (ctx.preferredApproach === "warm_brief") {
+        return `Welcome back! Ready for another brisk, cheerful note for ${ctx.customerName}. ☀️`;
+      }
+      if (ctx.memoryNote) {
+        return `Welcome back! ${ctx.memoryNote} Ready to craft another warm note for ${ctx.customerName}!`;
+      }
+      return `Oh hello! I'm Barnaby. I keep the hearth warm and the letters heartfelt here in Silver Lake. Let's write something lovely for ${ctx.customerName}!`;
+    },
     reactionToApproach: (approach, text) => {
       switch (approach) {
         case "helpful_detailed":
@@ -230,6 +269,27 @@ export const VILLAGER_PERSONALITIES: Record<string, VillagerPersonality> = {
       memoryNote
         ? `You again. Good. ${memoryNote} Let's keep ${customerName}'s note under forty words.`
         : `You again. Good. Let's get ${customerName}'s message done in under forty words.`,
+    contextualGreeting: (ctx: VillagerGreetingContext) => {
+      if (ctx.unfinishedDraftCustomer) {
+        return `You're back. That unfinished note for ${ctx.unfinishedDraftCustomer} is still on the desk. Let's finish the job.`;
+      }
+      if (ctx.customerReplied) {
+        return `Inbound reply arrived from ${ctx.customerName}. Customer acknowledged. Good work keeping it clear.`;
+      }
+      if (ctx.paidReorderVerified) {
+        return `Order confirmed paid in CleanCloud for ${ctx.customerName}. Real business. Exactly how it should be.`;
+      }
+      if (ctx.isReturnVisitTomorrowOrLater) {
+        return `Morning. Good to see you back. Let's take care of ${ctx.customerName}'s outreach with no fuss.`;
+      }
+      if (ctx.preferredApproach === "warm_brief") {
+        return `Back at the desk. You know I favor brief messages. Let's keep ${ctx.customerName}'s note concise.`;
+      }
+      if (ctx.memoryNote) {
+        return `You again. Good. ${ctx.memoryNote} Let's keep ${ctx.customerName}'s note under forty words.`;
+      }
+      return `Bramble. Lower cottage. Customers don't want a novel; they want clean clothes and zero fuss. Let's make this quick for ${ctx.customerName}.`;
+    },
     reactionToApproach: (approach, text) => {
       switch (approach) {
         case "warm_brief":
@@ -357,7 +417,7 @@ export function getVillagerPersonality(variant: VillagerVariant): VillagerPerson
  * The player chooses where to place an outdoor feature in the courtyard,
  * and the consequence is visibly remembered on future visits.
  */
-export type NeighborhoodFeatureChoice = "tea_table" | "reading_bench";
+export type NeighborhoodFeatureChoice = "tea_table" | "reading_bench" | "lantern_post";
 
 export interface NeighborhoodFeatureConfig {
   id: NeighborhoodFeatureChoice;
@@ -385,18 +445,60 @@ export const NEIGHBORHOOD_FEATURES: Record<NeighborhoodFeatureChoice, Neighborho
     quote: "A peaceful garden bench to sit quietly and enjoy the afternoon sun.",
     badge: "Garden Reading Bench Placed",
   },
+  lantern_post: {
+    id: "lantern_post",
+    name: "Amber Lantern Post",
+    icon: "🏮",
+    description: "A warm iron post casting a golden glow across the evening courtyard cobblestones.",
+    quote: "A guiding lantern welcoming friends home to Silver Lake.",
+    badge: "Amber Lantern Post Placed",
+  },
 };
+
+export interface VillagerMemoryRecord {
+  encountersCount: number;
+  lastEncounterAt: string | null;
+  preferredApproach: LetterApproachId | null;
+  lettersDraftedCount: number;
+  lettersScheduledCount: number;
+  lettersHandoffOpenedCount?: number;
+  lettersOperatorReportedCount?: number;
+  lettersDispatchedCount: number;
+  relationshipTier: "new_acquaintance" | "familiar_friend" | "cherished_partner";
+  memorableMoments: string[];
+}
+
+export interface UnfinishedActivityState {
+  customerId: string;
+  customerName: string;
+  villagerVariant: VillagerVariant;
+  selectedApproach: LetterApproachId;
+  draftBody: string;
+  updatedAt: string;
+}
 
 export interface NeighborhoodMemoryState {
   featureChoice: NeighborhoodFeatureChoice | null;
+  courtyardPlacedAt?: string | null;
   lastVisitedAt: string | null;
+  previousVisitedAt?: string | null;
+  visitCount?: number;
+  isReturnVisitTomorrowOrLater?: boolean;
   encounterCounts: Record<string, number>; // villagerVariant -> count
+  villagerMemories?: Record<string, VillagerMemoryRecord>;
+  unfinishedActivity?: UnfinishedActivityState | null;
+  celebratedMilestones?: string[];
   lastDraftedCustomer: {
     customerId: string;
     customerName: string;
     variant: VillagerVariant;
     completedAt: string;
-    actionType: "send" | "schedule" | "sms_opened";
+    actionType:
+      | "draft_prepared"
+      | "scheduled"
+      | "compose_handoff_opened"
+      | "operator_reported_sent"
+      | "independently_verified_sent";
   } | null;
 }
 

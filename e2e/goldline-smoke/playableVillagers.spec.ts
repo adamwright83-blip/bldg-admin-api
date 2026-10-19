@@ -180,4 +180,67 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     await expect(scheduledBanner).toContainText(/Scheduled — not sent/i);
     await expect(desk).toHaveAttribute("data-communication-state", "scheduled");
   });
+
+  test("6. Proves Phase 4 evolving villager relationship and in-progress draft continuity", async ({
+    page,
+  }) => {
+    await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
+
+    const slot1 = page.locator('div[role="button"][data-house-title*="Blue Two-Story"]').first();
+    await expect(slot1).toBeVisible({ timeout: 10000 });
+    await slot1.click();
+
+    const desk = page.locator('[data-testid="playable-letter-desk"]');
+    await expect(desk).toBeVisible();
+
+    // Verify relationship tier pill is displayed on the desk
+    const relationshipTier = desk.locator('[data-testid="villager-relationship-tier"]');
+    await expect(relationshipTier).toBeVisible();
+    await expect(relationshipTier).toContainText(/New Acquaintance|Familiar Friend|Cherished Partner/i);
+
+    // Edit custom text in letter
+    const textarea = desk.locator('[data-testid="cozy-message-draft-textarea"]');
+    await textarea.fill("Mei, our team would love to wash your linens tomorrow morning!");
+
+    // Close desk without sending
+    await desk.locator('button[aria-label="Close writing desk"]').click();
+    await expect(desk).toBeHidden();
+
+    // Re-open Slot 1 for Mei Lin
+    await slot1.click();
+    await expect(desk).toBeVisible();
+
+    // Verify unfinished draft was preserved and banner shows restoration
+    const restoredBanner = desk.locator('[data-testid="restored-draft-banner"]');
+    await expect(restoredBanner).toBeVisible();
+    await expect(restoredBanner).toContainText(/Restored unfinished letter draft/i);
+
+    // Text content is exactly the modified draft
+    const restoredText = await textarea.inputValue();
+    expect(restoredText).toBe("Mei, our team would love to wash your linens tomorrow morning!");
+  });
+
+  test("7. Proves courtyard placement with Amber Lantern Post and persistent consequence", async ({
+    page,
+  }) => {
+    await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
+
+    const courtyardSpot = page.locator('[data-testid="neighborhood-courtyard-spot"]');
+    await expect(courtyardSpot).toBeVisible({ timeout: 10000 });
+
+    // Open choice modal
+    await courtyardSpot.click();
+    const modal = page.locator('[data-testid="neighborhood-choice-modal"]');
+    await expect(modal).toBeVisible();
+
+    // Select Option C: Amber Lantern Post
+    const chooseLanternPost = page.locator('[data-testid="choose-lantern-post"]');
+    await expect(chooseLanternPost).toBeVisible();
+    await chooseLanternPost.click();
+
+    // Modal closes and spot reflects placed Lantern Post
+    await expect(modal).toBeHidden();
+    await expect(courtyardSpot).toHaveAttribute("data-chosen-feature", "lantern_post");
+    await expect(courtyardSpot).toContainText("Amber Lantern Post");
+  });
 });

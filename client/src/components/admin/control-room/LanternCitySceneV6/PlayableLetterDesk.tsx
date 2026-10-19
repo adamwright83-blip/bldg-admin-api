@@ -5,6 +5,7 @@ import {
   LETTER_APPROACHES,
   getVillagerPersonality,
   type LetterApproachId,
+  type NeighborhoodMemoryState,
 } from "@shared/playableVillagers";
 import { trpc } from "@/lib/trpc";
 import {
@@ -25,6 +26,7 @@ interface PlayableLetterDeskProps {
   isSynthetic?: boolean;
   encounterCount?: number;
   memoryNote?: string | null;
+  neighborhoodMemory?: NeighborhoodMemoryState | null;
   tenantId?: string;
   onSendNow: (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => void;
   onScheduleSend: (
@@ -39,8 +41,20 @@ interface PlayableLetterDeskProps {
     customerId: string,
     customerName: string,
     variant: VillagerVariant,
-    action: "send" | "schedule" | "sms_opened"
+    action:
+      | "draft_prepared"
+      | "scheduled"
+      | "compose_handoff_opened"
+      | "operator_reported_sent"
+      | "independently_verified_sent"
   ) => void;
+  onSaveUnfinishedDraft?: (draft: {
+    customerId: string;
+    customerName: string;
+    villagerVariant: VillagerVariant;
+    letterApproach: LetterApproachId;
+    draftBody: string;
+  }) => void;
 }
 
 export function PlayableLetterDesk({
@@ -52,12 +66,14 @@ export function PlayableLetterDesk({
   isSynthetic = false,
   encounterCount = 1,
   memoryNote = null,
+  neighborhoodMemory = null,
   tenantId = "laundry_farm",
   onSendNow,
   onScheduleSend,
   onClose,
   onSelectIndex,
   onDraftCompleted,
+  onSaveUnfinishedDraft,
 }: PlayableLetterDeskProps) {
   const personality = getVillagerPersonality(target.villagerVariant);
 
@@ -66,6 +82,7 @@ export function PlayableLetterDesk({
   const [message, setMessage] = useState(() =>
     LETTER_APPROACHES.helpful_detailed.generateText(target)
   );
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [approvedBody, setApprovedBody] = useState<string | null>(null);
   const [approvalRevision, setApprovalRevision] = useState(1);
@@ -108,16 +125,34 @@ export function PlayableLetterDesk({
   const reportSent = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
   const ensureDraft = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
-  // Reset state when switching between customers
+  // Reset state when switching between customers or restoring unfinished draft
+  const currentCustomerIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const defaultApproach: LetterApproachId = "helpful_detailed";
-    setSelectedApproach(defaultApproach);
+    if (currentCustomerIdRef.current === target.customerId) {
+      return;
+    }
+    currentCustomerIdRef.current = target.customerId;
+
+    const unfinished =
+      neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId
+        ? neighborhoodMemory.unfinishedActivity
+        : null;
+
+    if (unfinished) {
+      setSelectedApproach(unfinished.selectedApproach);
+      setMessage(unfinished.draftBody);
+      setRestoredDraft(true);
+    } else {
+      const defaultApproach: LetterApproachId = "helpful_detailed";
+      setSelectedApproach(defaultApproach);
+      setMessage(
+        target.preparedMessage ||
+          target.suggestedMessage ||
+          LETTER_APPROACHES[defaultApproach].generateText(target, tenantId)
+      );
+      setRestoredDraft(false);
+    }
     setInteractedApproach(null);
-    setMessage(
-      target.preparedMessage ||
-        target.suggestedMessage ||
-        LETTER_APPROACHES[defaultApproach].generateText(target, tenantId)
-    );
     setApprovedBody(null);
     setApprovalRevision(1);
     setHandoffError(null);
@@ -130,9 +165,34 @@ export function PlayableLetterDesk({
   const reaction = interactedApproach
     ? personality.reactionToApproach(interactedApproach, message)
     : null;
-  const isFirstEncounter = encounterCount <= 1;
 
-  const greetingDialogue = isFirstEncounter
+  const villagerMemory = neighborhoodMemory?.villagerMemories?.[target.villagerVariant];
+  const relationshipTier = villagerMemory?.relationshipTier ?? "new_acquaintance";
+  const preferredApproach = villagerMemory?.preferredApproach ?? null;
+  const isFirstVisit = (neighborhoodMemory?.visitCount ?? encounterCount) <= 1;
+  const isReturnVisitTomorrowOrLater = neighborhoodMemory?.isReturnVisitTomorrowOrLater ?? false;
+  const unfinishedDraftCustomer =
+    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId
+      ? target.displayName
+      : neighborhoodMemory?.unfinishedActivity?.customerName ?? null;
+  const customerReplied =
+    target.reply?.status !== "unavailable" && (target.reply as any)?.direction === "inbound";
+  const paidReorderVerified = target.paidOrder?.status === "verified";
+
+  const greetingDialogue = personality.contextualGreeting
+    ? personality.contextualGreeting({
+        customerName: target.displayName,
+        isFirstVisit,
+        isReturnVisitTomorrowOrLater,
+        visitCount: neighborhoodMemory?.visitCount ?? encounterCount,
+        unfinishedDraftCustomer,
+        preferredApproach,
+        relationshipTier,
+        customerReplied,
+        paidReorderVerified,
+        memoryNote,
+      })
+    : isFirstVisit
     ? personality.firstEncounterGreeting(target.displayName)
     : personality.repeatEncounterGreeting(target.displayName, memoryNote);
 
@@ -143,10 +203,18 @@ export function PlayableLetterDesk({
   const handleSelectApproach = (approachId: LetterApproachId) => {
     setSelectedApproach(approachId);
     setInteractedApproach(approachId);
+    let newMsg = message;
     if (approachId !== "custom") {
-      const generated = LETTER_APPROACHES[approachId].generateText(target, tenantId);
-      setMessage(generated);
+      newMsg = LETTER_APPROACHES[approachId].generateText(target, tenantId);
+      setMessage(newMsg);
     }
+    onSaveUnfinishedDraft?.({
+      customerId: target.customerId,
+      customerName: target.displayName,
+      villagerVariant: target.villagerVariant,
+      letterApproach: approachId,
+      draftBody: newMsg,
+    });
   };
 
   // Web speech recognition (Talk to Text)
@@ -209,11 +277,15 @@ export function PlayableLetterDesk({
   const handleSendNow = () => {
     if (!message.trim() || isSending || !target.hasConsent) return;
     onSendNow(target, message.trim(), recoveryKey);
+    const action =
+      target.silverLakeStatus?.message === "independently_verified_sent"
+        ? "independently_verified_sent"
+        : "operator_reported_sent";
     onDraftCompleted?.(
       target.customerId,
       target.displayName,
       target.villagerVariant,
-      "send"
+      action
     );
   };
 
@@ -225,7 +297,7 @@ export function PlayableLetterDesk({
       target.customerId,
       target.displayName,
       target.villagerVariant,
-      "schedule"
+      "scheduled"
     );
   };
 
@@ -256,7 +328,7 @@ export function PlayableLetterDesk({
         target.customerId,
         target.displayName,
         target.villagerVariant,
-        "sms_opened"
+        "compose_handoff_opened"
       );
       return;
     }
@@ -289,7 +361,7 @@ export function PlayableLetterDesk({
         target.customerId,
         target.displayName,
         target.villagerVariant,
-        "sms_opened"
+        "compose_handoff_opened"
       );
     } catch (err: unknown) {
       setHandoffError(err instanceof Error ? err.message : "The SMS app was not opened.");
@@ -311,6 +383,12 @@ export function PlayableLetterDesk({
               prefillClaim: "not_prefilled",
             }
           : curr
+      );
+      onDraftCompleted?.(
+        target.customerId,
+        target.displayName,
+        target.villagerVariant,
+        "operator_reported_sent"
       );
       return;
     }
@@ -334,6 +412,12 @@ export function PlayableLetterDesk({
               prefillClaim: "not_prefilled",
             }
           : current
+      );
+      onDraftCompleted?.(
+        target.customerId,
+        target.displayName,
+        target.villagerVariant,
+        "operator_reported_sent"
       );
     } catch (err: unknown) {
       setHandoffError(err instanceof Error ? err.message : "The report was not recorded.");
@@ -400,6 +484,34 @@ export function PlayableLetterDesk({
           <div className={styles.speakerLabel}>
             <span>{personality.canonicalName}</span>
             <span className={styles.styleTag}>{personality.style}</span>
+            <span
+              className={styles.styleTag}
+              style={{
+                background:
+                  relationshipTier === "cherished_partner"
+                    ? "rgba(247, 183, 51, 0.25)"
+                    : relationshipTier === "familiar_friend"
+                    ? "rgba(100, 180, 246, 0.2)"
+                    : "rgba(255, 255, 255, 0.08)",
+                color:
+                  relationshipTier === "cherished_partner"
+                    ? "#f7b733"
+                    : relationshipTier === "familiar_friend"
+                    ? "#90caf9"
+                    : "#d9be9e",
+                border:
+                  relationshipTier === "cherished_partner"
+                    ? "1px solid rgba(247, 183, 51, 0.4)"
+                    : "none",
+              }}
+              data-testid="villager-relationship-tier"
+            >
+              {relationshipTier === "cherished_partner"
+                ? "🌟 Cherished Partner"
+                : relationshipTier === "familiar_friend"
+                ? "🤝 Familiar Friend"
+                : "🌱 New Acquaintance"}
+            </span>
           </div>
           <p className={styles.dialogueText} data-testid="villager-dialogue">
             {activeDialogue}
@@ -426,6 +538,28 @@ export function PlayableLetterDesk({
           </span>
         </div>
       </div>
+
+      {/* Restored In-Progress Draft Banner */}
+      {restoredDraft && (
+        <div
+          style={{
+            background: "rgba(247, 183, 51, 0.12)",
+            border: "1px solid rgba(247, 183, 51, 0.4)",
+            borderRadius: 8,
+            padding: "6px 12px",
+            fontSize: 11.5,
+            color: "#fcecd7",
+            margin: "0 16px 12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+          data-testid="restored-draft-banner"
+        >
+          <span>✨</span>
+          <span>Restored unfinished letter draft from your previous session.</span>
+        </div>
+      )}
 
       {/* Collaborative Approach Selector (How should we phrase this?) */}
       <section className={styles.approachSelectorSection}>
@@ -492,8 +626,19 @@ export function PlayableLetterDesk({
             className={styles.inkTextArea}
             value={message}
             onChange={(e) => {
-              setMessage(e.target.value);
+              const val = e.target.value;
+              setMessage(val);
               setSelectedApproach("custom");
+              if (val !== approvedBody) {
+                setApprovedBody(null);
+              }
+              onSaveUnfinishedDraft?.({
+                customerId: target.customerId,
+                customerName: target.displayName,
+                villagerVariant: target.villagerVariant,
+                letterApproach: "custom",
+                draftBody: val,
+              });
             }}
             placeholder="Write your outreach letter with your villager companion..."
             disabled={isActionCommitted}
@@ -750,6 +895,12 @@ export function PlayableLetterDesk({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {handoffError && (
+        <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4, padding: "4px 8px", background: "#fef2f2", borderRadius: 4 }}>
+          {handoffError}
         </div>
       )}
 
