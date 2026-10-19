@@ -307,6 +307,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const page = await context.newPage();
     await resetGoldlineProofWorld(page.request);
     await page.addInitScript(() => {
+      window.localStorage.setItem("goldline.silverLake.legacy", "1");
       window.localStorage.setItem("goldline:day1:dismissed", "1");
       window.localStorage.setItem(
         "goldline:onboarding:v1",

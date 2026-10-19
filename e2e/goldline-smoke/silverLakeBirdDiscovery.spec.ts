@@ -1,3 +1,4 @@
+import fs from "fs";
 import { expect, test } from "@playwright/test";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
@@ -46,8 +47,10 @@ test.describe("Silver Lake Bird's-Eye Discovery Experience", () => {
     await expect(page.locator("dialog")).not.toBeVisible();
 
     const artifactDir =
+      process.env.ARTIFACT_DIR ||
       "/Users/adamwrightpfi/.gemini/antigravity/brain/4225332e-ba0b-4c4e-a6da-8387ff1eea60";
-    if (page.viewportSize()?.width === 1440) {
+    const canSaveArtifact = fs.existsSync(artifactDir);
+    if (page.viewportSize()?.width === 1440 && canSaveArtifact) {
       await page.screenshot({
         path: `${artifactDir}/lantern_city_discovery_bird_eye.png`,
       });
@@ -60,7 +63,7 @@ test.describe("Silver Lake Bird's-Eye Discovery Experience", () => {
     await opportunity.hover();
     await expect(invitationPill).toBeVisible();
 
-    if (page.viewportSize()?.width === 1440) {
+    if (page.viewportSize()?.width === 1440 && canSaveArtifact) {
       await page.screenshot({
         path: `${artifactDir}/lantern_city_discovery_invitation_hover.png`,
       });
@@ -78,7 +81,7 @@ test.describe("Silver Lake Bird's-Eye Discovery Experience", () => {
     // Allow encounter transition to fully settle
     await page.waitForTimeout(600);
 
-    if (page.viewportSize()?.width === 1440) {
+    if (page.viewportSize()?.width === 1440 && canSaveArtifact) {
       await page.screenshot({
         path: `${artifactDir}/lantern_city_discovery_one_tap_encounter.png`,
       });

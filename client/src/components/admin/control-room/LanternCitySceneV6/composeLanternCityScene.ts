@@ -119,6 +119,12 @@ export type ComposeInput = {
   featuredOperationTerritoryId?: string | null;
   activeCampaignTerritoryId?: string | null;
   recoveryOpportunityTerritoryId?: string | null;
+  recoveryInvitation?: {
+    customerFirstName?: string;
+    neighborhood?: string;
+    note?: string;
+    villagerName?: string;
+  } | null;
 };
 export function composeLanternCityScene(input: ComposeInput): CityScene {
   const { width, height } = input.viewport;
@@ -322,6 +328,14 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       frontierKind,
       frontierLostGround: isRecoveryOpportunity ? false : isLostGround,
       isRecoveryOpportunity,
+      recoveryInvitation: isRecoveryOpportunity
+        ? input.recoveryInvitation ?? {
+            customerFirstName: "Elena",
+            neighborhood: "Silver Lake",
+            note: "Barnaby prepared fresh stationery for a warm reconnection.",
+            villagerName: "Barnaby",
+          }
+        : undefined,
     });
   }
   // Territory environment art is foundational world art, not an

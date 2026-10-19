@@ -301,6 +301,15 @@ export default function LanternCityScene({
         recoveryOpportunityTerritoryId: isSilverLakeRecoveryEligible
           ? "silver-lake"
           : null,
+        recoveryInvitation: isSilverLakeRecoveryEligible
+          ? {
+              customerFirstName:
+                ((cozyMission.data?.targets?.[0] as CozyProjectedTarget | undefined)?.displayName?.split(" ")[0]) || "Elena",
+              neighborhood: "Silver Lake",
+              note: "Barnaby prepared fresh stationery for a warm reconnection.",
+              villagerName: "Barnaby",
+            }
+          : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -395,10 +404,9 @@ export default function LanternCityScene({
     element: HTMLElement,
     target: SceneSelectTarget = "default"
   ) {
-    // Only the golden-messenger opportunity leads into the 3D courtyard; an ordinary customer light in
-    // Silver Lake still opens its inspector.
-    if (object.isRecoveryOpportunity && isSilverLakeRecoveryEligible) {
-      // the golden messenger leads straight into the walkable 3D Silver Lake
+    // Only the golden-messenger opportunity leads into the walkable 3D Silver Lake; an ordinary customer
+    // light still opens its inspector.
+    if (object.isRecoveryOpportunity) {
       openSilverLake3D("silver-lake");
       return;
     }
