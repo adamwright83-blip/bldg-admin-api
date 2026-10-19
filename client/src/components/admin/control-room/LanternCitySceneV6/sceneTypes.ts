@@ -72,6 +72,7 @@ export type SceneObject = {
    */
   frontierKind?: FrontierObjectKind;
   frontierLostGround?: boolean;
+  isRecoveryOpportunity?: boolean;
 };
 export type ScenePlate = {
   territoryId: string;

@@ -36,6 +36,16 @@ export function TerritoryStatePlate({ plate }: { plate: ScenePlate }) {
   );
 }
 export function CustomerLantern({ object }: { object: SceneObject }) {
+  if (object.isRecoveryOpportunity) {
+    return (
+      <img
+        className={`${styles.lanternArt} ${styles.amberBreathingLantern}`}
+        src={ASSETS.lanterns.opportunity}
+        alt="Silver Lake recovery opportunity"
+        draggable={false}
+      />
+    );
+  }
   return object.cluster ? (
     <img
       className={styles.lanternArt}
@@ -198,18 +208,22 @@ export function LanternCitySceneRenderer({
           <button
             key={object.id}
             type="button"
-            className={styles.object}
+            className={`${styles.object} ${object.isRecoveryOpportunity ? styles.recoveryOpportunityObject : ""}`}
             style={rectStyle(object.bounds)}
             data-scene-object={object.kind}
             data-scene-id={object.id}
             data-territory-id={object.territoryId}
+            data-recovery-opportunity={object.isRecoveryOpportunity ? "true" : undefined}
+            data-testid={object.isRecoveryOpportunity ? "silver-lake-recovery-opportunity" : undefined}
             data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
             data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
             data-selected={selectedId === object.id}
             aria-label={
-              object.frontierKind
-                ? `${object.name}: frontier objective`
-                : `${object.name}: ${object.status}`
+              object.isRecoveryOpportunity
+                ? "Silver Lake — A neighbor to reconnect with."
+                : object.frontierKind
+                  ? `${object.name}: frontier objective`
+                  : `${object.name}: ${object.status}`
             }
             onClick={event => onSelect(object, event.currentTarget, "default")}
           >
@@ -219,6 +233,20 @@ export function LanternCitySceneRenderer({
             >
               {object.kind === "lantern" ? (
                 <CustomerLantern object={object} />
+              ) : null}
+              {object.isRecoveryOpportunity ? (
+                <div
+                  className={styles.goldenMessengerHost}
+                  data-testid="golden-messenger-bird"
+                  aria-hidden="true"
+                >
+                  <img
+                    src="/assets/lantern-villager-outreach/golden-messenger.png"
+                    alt=""
+                    className={styles.goldenMessengerArt}
+                    draggable={false}
+                  />
+                </div>
               ) : null}
               {object.frontierKind ? (
                 <>
@@ -247,7 +275,18 @@ export function LanternCitySceneRenderer({
                 />
               ) : null}
             </span>
-            {scene.controls.labels ? <TerritoryLabel object={object} /> : null}
+            {object.isRecoveryOpportunity ? (
+              <div
+                className={styles.recoveryInvitationPill}
+                data-testid="recovery-invitation-pill"
+              >
+                <span className={styles.invitationLanternIcon} aria-hidden="true">🏮</span>
+                <span className={styles.invitationText}>Silver Lake — A neighbor to reconnect with.</span>
+              </div>
+            ) : null}
+            {scene.controls.labels && !object.isRecoveryOpportunity ? (
+              <TerritoryLabel object={object} />
+            ) : null}
           </button>
         )
       )}
