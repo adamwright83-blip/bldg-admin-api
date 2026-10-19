@@ -45,7 +45,8 @@ import {
 } from "../../turn/claireTurn";
 import { detectConversationControl } from "../../turn/interpretTurn";
 import { explicitTrackingRequest } from "../../briefing/titleContract";
-import { answerClairePreDriveFollowUp } from "../../preDriveConversation";
+import { answerClairePreDriveFollowUp, conservativeClaireFollowUp } from "../../preDriveConversation";
+import type { PeriodSpec } from "../../../analytics/businessPeriods";
 import {
   assembleGuardedClaireSpeak,
   buildClaireVerifiedFactInventory,
@@ -829,7 +830,11 @@ export async function runClaireV2PrimaryTurn(
       const queries = decision.evidence.filter(
         item => item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
       );
-      const executed = queries.map(item => (item.payload as BusinessQueryResult).query?.period);
+      // A ledger query carries `query.period`; the Laundry Farm company view carries `questionPeriod`.
+      const executed = queries.map(item => {
+        const payload = item.payload as { query?: { period?: PeriodSpec }; questionPeriod?: PeriodSpec };
+        return payload.query?.period ?? payload.questionPeriod;
+      });
       if (queries.length && !executed.some(period => periodMatches(asked, period))) {
         console.warn("[ClaireBrainV2Primary] requested period not verified", {
           event: "claire_brain_v2_period_mismatch",
@@ -916,7 +921,7 @@ export async function runClaireV2PrimaryTurn(
       );
     }
     let personalEnd = false;
-    const composed = await deps.speak({
+    const organInput: Parameters<SpeakingOrgan>[0] = {
       tenantId: input.tenantId,
       utterance,
       brief: input.brief ?? null,
@@ -948,7 +953,23 @@ export async function runClaireV2PrimaryTurn(
       onPersonalTurn: personal => {
         if (personal.endCall) personalEnd = true;
       },
-    });
+    };
+    let composed = await deps.speak(organInput);
+    // The organ's generic "couldn't finish" line means generation failed or a
+    // safety guard discarded the draft. V2 asks once more before speaking it.
+    let organFallback: string | null = null;
+    try {
+      organFallback = conservativeClaireFollowUp({ utterance, brief: input.brief ?? null, context });
+    } catch {
+      organFallback = null;
+    }
+    if (organFallback && composed.trim() === organFallback.trim()) {
+      console.warn("[ClaireBrainV2Primary] speaking organ returned its fallback; retrying once", {
+        event: "claire_brain_v2_organ_retry",
+        conversationKey: input.conversationKey,
+      });
+      composed = await deps.speak(organInput).catch(() => composed);
+    }
 
     const licensedText = [
       ...evidence.map(item => item.text),
