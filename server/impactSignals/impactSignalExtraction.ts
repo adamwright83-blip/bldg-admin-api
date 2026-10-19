@@ -21,7 +21,7 @@ import {
   type ProposedImpactSignal,
 } from "../../shared/impactSignal";
 
-const EXTRACTION_MODEL = "claude-opus-5";
+const EXTRACTION_MODEL = "claude-opus-5-5";
 
 /** How to say each stop kind to the model without overclaiming what it is. */
 const STOP_PHRASE: Record<OperatorStopIdentity["entityType"], string> = {

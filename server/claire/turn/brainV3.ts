@@ -2,7 +2,8 @@ import { parseStrategicProposalControl } from "../../../shared/strategicProposal
 import { isClaireRoleFeedback } from "../../../shared/claireRoleFeedback";
 import { ENV } from "../../_core/env";
 import { invokeLLM } from "../../_core/llm";
-import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../claireModel";
+import { claireModelAcceptsSampling, claireModelDefaultsToThinking, claireModelId } from "../claireModel";
+import { normalizeAnthropicModel } from "../../_core/modelCapabilities";
 
 /**
  * Brain V3's model. It runs before every conversational answer, so it sits on
@@ -10,7 +11,7 @@ import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../cl
  * it be tuned separately from Claire's speaking model. Unset: unchanged.
  */
 export function brainV3ModelId(): string {
-  return process.env.ANTHROPIC_MODEL_CLAIRE_BRAIN_V3?.trim() || ENV.anthropicModelClaire || ENV.anthropicModel;
+  return normalizeAnthropicModel(process.env.ANTHROPIC_MODEL_CLAIRE_BRAIN_V3?.trim() ?? "") || claireModelId();
 }
 import { interpretTurn } from "./interpretTurn";
 import { detectConfirmation } from "../voiceCommitmentLoop";

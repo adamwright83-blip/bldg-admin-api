@@ -76,6 +76,8 @@ function input(
     live,
     liveDeps: { business: hermeticBusiness },
     executeLegacyAdapter: vi.fn(async () => adapterResult()),
+    // Verified membership in the conversation's own tenant.
+    resolveMembership: async ({ tenantId, operatorUserId }) => ({ tenantId, userOpenId: operatorUserId, role: "owner" }),
     ...over,
   };
 }

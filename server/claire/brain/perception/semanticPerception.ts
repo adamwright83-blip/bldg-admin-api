@@ -1,0 +1,236 @@
+/**
+ * Brain V2 semantic perception.
+ *
+ * Deterministic perception reads the surface of a sentence. It cannot tell
+ * "What do you think I should focus on this week?" (a judgment request) from
+ * "What were my sales this week?" (a fact request), or "How was your weekend?"
+ * (a personal question to Claire) from a business question. Legacy Claire
+ * answered that with its own interpreter; Brain V2 owns interpretation, so it
+ * has one of its own.
+ *
+ * Bounded by construction:
+ *   - closed enums only; no free text reaches the executive;
+ *   - it may REFINE what kind of turn this is (business intent, personal probe,
+ *     briefing request, leave-taking); it may not create work, grants, pending
+ *     bindings, entities, or any other authority — those stay deterministic;
+ *   - prior-claim challenge lanes open only when a prior claim exists;
+ *   - hanging up needs agreement: the model can veto a deterministic "end", and
+ *     can add one only for a short leave-taking with no question in it;
+ *   - any failure, timeout, or malformed output returns the deterministic turn.
+ */
+
+import { invokeLLM } from "../../../_core/llm";
+import { ENV } from "../../../_core/env";
+import { CURRENT_HAIKU_MODEL, normalizeAnthropicModel } from "../../../_core/modelCapabilities";
+import type { BusinessIntentKind, DialogueActKind, PerceivedTurn } from "../contracts/perceivedTurn";
+
+export type SemanticReading = {
+  turnKind:
+    | "business_fact_question"
+    | "business_list_question"
+    | "business_judgment_or_strategy"
+    | "daily_briefing_request"
+    | "challenge_prior_claim"
+    | "ask_source_of_prior_claim"
+    | "personal_question_to_claire"
+    | "small_talk"
+    | "report_or_narration"
+    | "work_instruction"
+    | "acknowledgement"
+    | "refusal"
+    | "correction"
+    | "leave_taking"
+    | "unclear";
+  endsConversation: boolean;
+};
+
+export type SemanticPerceptionInput = {
+  tenantId: string;
+  utterance: string;
+  recentTurns: Array<{ speaker: "operator" | "claire"; text: string }>;
+  hasPriorClaims: boolean;
+  holdingPending: boolean;
+};
+
+export type SemanticInterpreter = (input: SemanticPerceptionInput) => Promise<SemanticReading | null>;
+
+const TURN_KINDS: SemanticReading["turnKind"][] = [
+  "business_fact_question",
+  "business_list_question",
+  "business_judgment_or_strategy",
+  "daily_briefing_request",
+  "challenge_prior_claim",
+  "ask_source_of_prior_claim",
+  "personal_question_to_claire",
+  "small_talk",
+  "report_or_narration",
+  "work_instruction",
+  "acknowledgement",
+  "refusal",
+  "correction",
+  "leave_taking",
+  "unclear",
+];
+
+export function semanticPerceptionModelId(env: NodeJS.ProcessEnv = process.env): string {
+  return normalizeAnthropicModel(env.ANTHROPIC_MODEL_CLAIRE_PERCEPTION?.trim() ?? "") || CURRENT_HAIKU_MODEL;
+}
+
+const SYSTEM = [
+  "You classify one turn of a spoken conversation between a small-business operator and Claire, the operator's chief of staff.",
+  "Classify only the operator's latest utterance, using the recent turns for context. Choose exactly one turnKind:",
+  "business_fact_question: asks for a fact or number about their business (sales, revenue, orders, customers, schedule, today's work).",
+  "business_list_question: asks for a list of business records.",
+  "business_judgment_or_strategy: asks for advice, a recommendation, analysis, priorities, or what Claire thinks they should do.",
+  "daily_briefing_request: asks for the day's rundown, morning briefing, or what is on their plate today, with no narrower subject.",
+  "challenge_prior_claim: doubts something Claire just stated as fact. ask_source_of_prior_claim: asks where Claire got it.",
+  "personal_question_to_claire: asks Claire about herself, her life, feelings, or history.",
+  "small_talk: greeting or social chat that is not a question to Claire about herself.",
+  "report_or_narration: tells Claire what happened or how something went. work_instruction: asks Claire to add, save, schedule, remind, or do something.",
+  "acknowledgement, refusal, correction, leave_taking, unclear: as named.",
+  "endsConversation is true only when the operator is clearly finishing the whole conversation now.",
+].join(" ");
+
+/** Production interpreter: newest Haiku, closed schema, ~1s. */
+export const interpretSemanticPerception: SemanticInterpreter = async input => {
+  if (!ENV.anthropicApiKey?.trim()) return null;
+  const result = await invokeLLM({
+    tenantId: input.tenantId,
+    model: semanticPerceptionModelId(),
+    maxTokens: 200,
+    timeoutMs: 6_000,
+    feature: "claire_brain_v2_perception",
+    messages: [
+      { role: "system", content: SYSTEM },
+      {
+        role: "user",
+        content: JSON.stringify({
+          recentTurns: input.recentTurns.slice(-6).map(turn => ({ speaker: turn.speaker, text: turn.text.slice(0, 300) })),
+          claireIsHoldingAPendingProposal: input.holdingPending,
+          utterance: input.utterance.slice(0, 1_000),
+        }),
+      },
+    ],
+    outputSchema: {
+      name: "claire_brain_v2_perception",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["turnKind", "endsConversation"],
+        properties: {
+          turnKind: { type: "string", enum: TURN_KINDS },
+          endsConversation: { type: "boolean" },
+        },
+      },
+    },
+  });
+  const raw = result.choices[0]?.message.content;
+  const parsed = JSON.parse(typeof raw === "string" ? raw : "{}") as Partial<SemanticReading>;
+  if (!parsed.turnKind || !TURN_KINDS.includes(parsed.turnKind) || typeof parsed.endsConversation !== "boolean") {
+    return null;
+  }
+  return { turnKind: parsed.turnKind, endsConversation: parsed.endsConversation };
+};
+
+const QUESTION_KINDS = new Set<SemanticReading["turnKind"]>([
+  "business_fact_question",
+  "business_list_question",
+  "business_judgment_or_strategy",
+  "daily_briefing_request",
+  "challenge_prior_claim",
+  "ask_source_of_prior_claim",
+  "personal_question_to_claire",
+]);
+
+const DETERMINISTIC_ONLY_INTENTS = new Set<BusinessIntentKind>(["query_refinement", "query_requery"]);
+
+/** Fold a semantic reading into the deterministic turn. Pure; authority fields untouched. */
+export function applySemanticReading(
+  perceived: PerceivedTurn,
+  reading: SemanticReading,
+  context: { hasPriorClaims: boolean }
+): PerceivedTurn {
+  const next: PerceivedTurn = { ...perceived, dialogueActs: [...perceived.dialogueActs] };
+  const kind = reading.turnKind;
+
+  if (!DETERMINISTIC_ONLY_INTENTS.has(perceived.businessIntent)) {
+    let intent: BusinessIntentKind = perceived.businessIntent;
+    if (kind === "business_fact_question") intent = perceived.businessIntent === "list_query" ? "list_query" : "fact_question";
+    else if (kind === "business_list_question") intent = "list_query";
+    else if (kind === "business_judgment_or_strategy") intent = "judgment_question";
+    else if (kind === "daily_briefing_request") intent = "broad_briefing";
+    else if (kind === "challenge_prior_claim") intent = context.hasPriorClaims ? "correctness_challenge" : perceived.businessIntent;
+    else if (kind === "ask_source_of_prior_claim") intent = context.hasPriorClaims ? "provenance_question" : perceived.businessIntent;
+    else if (
+      kind === "personal_question_to_claire" ||
+      kind === "small_talk" ||
+      kind === "report_or_narration" ||
+      kind === "acknowledgement" ||
+      kind === "leave_taking"
+    ) {
+      // A deterministic prior-claim lane stays open; anything else was a surface misread.
+      intent =
+        perceived.businessIntent === "correctness_challenge" || perceived.businessIntent === "provenance_question"
+          ? perceived.businessIntent
+          : "none";
+    }
+    next.businessIntent = intent;
+  }
+
+  next.hasBusinessQuestion = next.businessIntent !== "none";
+  next.listRequest = next.businessIntent === "list_query";
+  next.broadBriefingRequest = next.businessIntent === "broad_briefing";
+  next.personalProbe = kind === "personal_question_to_claire" ? true : kind.startsWith("business_") || kind === "daily_briefing_request" ? false : perceived.personalProbe;
+
+  if (QUESTION_KINDS.has(kind) && !next.dialogueActs.includes("question")) next.dialogueActs.push("question");
+  if (!next.hasBusinessQuestion && !QUESTION_KINDS.has(kind)) {
+    next.dialogueActs = next.dialogueActs.filter(act => act !== "question");
+  }
+  const add = (act: DialogueActKind) => {
+    if (!next.dialogueActs.includes(act)) next.dialogueActs.push(act);
+  };
+  if (kind === "acknowledgement") add("acknowledgement");
+  if (kind === "correction") add("correction");
+  if (kind === "personal_question_to_claire" || kind === "report_or_narration") add("confide");
+  if (next.dialogueActs.length > 1) next.dialogueActs = next.dialogueActs.filter(act => act !== "continue");
+  if (!next.dialogueActs.length) next.dialogueActs = ["continue"];
+
+  const words = perceived.assembledText.trim().split(/\s+/).filter(Boolean).length;
+  if (perceived.callControl === "end") {
+    // A question in the same breath is not a goodbye ("Bye the way, what were…").
+    next.callControl = (reading.endsConversation || kind === "leave_taking") && !QUESTION_KINDS.has(kind) ? "end" : "continue";
+  } else if (reading.endsConversation && kind === "leave_taking" && words <= 10 && !next.hasBusinessQuestion) {
+    next.callControl = "end";
+  }
+  if (next.callControl === "end") add("leave_taking");
+  else next.dialogueActs = next.dialogueActs.filter(act => act !== "leave_taking").length
+    ? next.dialogueActs.filter(act => act !== "leave_taking")
+    : ["continue"];
+  return next;
+}
+
+/** Refine with a hard budget. Returns the deterministic turn on any failure. */
+export async function refinePerception(
+  perceived: PerceivedTurn,
+  input: Omit<SemanticPerceptionInput, "utterance">,
+  interpret: SemanticInterpreter = interpretSemanticPerception,
+  budgetMs = 6_500
+): Promise<{ perceived: PerceivedTurn; reading: SemanticReading | null }> {
+  if (perceived.completeness === "incomplete" || !perceived.assembledText.trim()) return { perceived, reading: null };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const reading = await Promise.race([
+      interpret({ ...input, utterance: perceived.assembledText }),
+      new Promise<null>(resolve => {
+        timer = setTimeout(() => resolve(null), budgetMs);
+      }),
+    ]);
+    if (!reading) return { perceived, reading: null };
+    return { perceived: applySemanticReading(perceived, reading, { hasPriorClaims: input.hasPriorClaims }), reading };
+  } catch {
+    return { perceived, reading: null };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

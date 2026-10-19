@@ -6,6 +6,7 @@
  */
 
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
+import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
@@ -34,6 +35,11 @@ export type ClaireBrainTurnInput = {
   productionAuthority?: boolean;
   /** Required when a live decision mints an executable action grant. */
   actionExecutor?: LiveActionExecutor;
+  /**
+   * Optional semantic refinement of the perceived turn (Brain V2 semantic
+   * perception). It may reclassify the KIND of turn; it never creates authority.
+   */
+  refinePerception?: (perceived: PerceivedTurn) => Promise<PerceivedTurn>;
 };
 
 export type ClaireBrainTurnResult = {
@@ -61,11 +67,14 @@ export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<C
   ) {
     completeness = "incomplete";
   }
-  const perceived = perceiveTurn({
+  const surfacePerceived = perceiveTurn({
     rawText: input.rawText,
     assembledText: input.assembledText,
     completeness,
   });
+  const perceived = input.refinePerception
+    ? await input.refinePerception(surfacePerceived).catch(() => surfacePerceived)
+    : surfacePerceived;
   const memory = snapshotWorkingMemory(input.state ?? {}, {
     conversationKey: input.conversationKey,
     tenantId: input.tenantId,

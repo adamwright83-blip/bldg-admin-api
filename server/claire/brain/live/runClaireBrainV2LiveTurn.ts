@@ -14,6 +14,7 @@ import { VerifiedFactInventory, inventoryPlusReceipts } from "../../assertionGua
 import { assembleGuardedClaireSpeak } from "../../verifiedFactInventoryFromContext";
 import type { ExecutiveActionGrant } from "../contracts/grants";
 import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
+import { resolveClaireOperatorAuthority, type MembershipResolver } from "./operatorAuthority";
 import {
   liveExecutiveDeps,
   type ShadowRetrievalContext,
@@ -45,6 +46,8 @@ export type ClaireBrainV2LiveInput = {
   executeLegacyAdapter: (
     grant: ExecutiveActionGrant
   ) => Promise<ClaireTurnResult>;
+  /** Test seam: verified-membership lookup. Production uses the tenant membership resolver. */
+  resolveMembership?: MembershipResolver;
 };
 
 export type ClaireBrainV2LiveResult =
@@ -83,7 +86,7 @@ function hasDayLineWriteEvidence(result: ClaireTurnResult): boolean {
   return Boolean(result.actionIds?.length || result.mutationReceipts?.length);
 }
 
-function guardCommittedDayLineResult(
+export function guardCommittedDayLineResult(
   grant: ExecutiveActionGrant,
   result: ClaireTurnResult
 ): ClaireTurnResult {
@@ -130,12 +133,11 @@ export async function runClaireBrainV2LiveTurn(
   if (input.preparedStrategicConversation || isClaireRoleFeedback(input.assembledText ?? input.rawText)) return { active: false, reason: "outside_live_scope" };
   const env = options.env ?? process.env;
   if (!enabled(env)) return { active: false, reason: "disabled" };
-  if (
-    !isAuthorizedProductionOperator({
-      tenantId: input.tenantId,
-      operatorUserId: input.operatorUserId,
-    })
-  ) {
+  const authority = await resolveClaireOperatorAuthority({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  }, input.resolveMembership ? { resolveMembership: input.resolveMembership } : {});
+  if (!authority.authorized) {
     return { active: false, reason: "operator_not_authorized" };
   }
 

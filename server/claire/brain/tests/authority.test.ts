@@ -61,11 +61,15 @@ describe("Brain V2 production isolation", () => {
       const expected = source === twilio
         ? [
             'from "./brain/live/grantBoundLegacyAdapter"',
+            'from "./brain/live/operatorAuthority"',
+            'from "./brain/live/primaryTurn"',
             'from "./brain/live/runClaireBrainV2LiveTurn"',
             'from "./brain/shadow/observeShadowTurn"',
             'from "./brain/shadow/v1Snapshot"',
           ]
         : [
+            'from "./brain/live/operatorAuthority"',
+            'from "./brain/live/primaryTurn"',
             'from "./brain/live/runClaireBrainV2LiveTurn"',
             'from "./brain/shadow/observeShadowTurn"',
             'from "./brain/shadow/v1Snapshot"',

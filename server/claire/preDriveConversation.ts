@@ -280,6 +280,11 @@ export async function answerClairePreDriveFollowUp(
      */
     retrievedEvidence?: Array<{ source: string; text: string }>;
     /**
+     * Which executive authored `semanticFrame`. Brain V2 primary turns pass
+     * "brain_v2"; legacy turns omit it and keep their exact prompt text.
+     */
+    semanticAuthority?: "brain_v2" | "brain_v3";
+    /**
      * PR1 Claire Intelligence Repair -- corrective pass: this generation
      * path is shared between the Twilio voice call and the desktop/text
      * surface (see server/claire/turn/claireTurn.ts). Defaults to "voice"
@@ -443,7 +448,7 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "brain_v3_semantics",
         text: input.semanticFrame
-          ? `Brain V3 authoritative turn meaning: ${JSON.stringify(input.semanticFrame)}. Use this interpretation to maintain continuity. If it conflicts with the operator words, acknowledge the ambiguity rather than defending the interpretation. Do not claim or initiate writes: execution and receipts are owned by the server.`
+          ? `${input.semanticAuthority === "brain_v2" ? "Brain V2 executive decision for this turn" : "Brain V3 authoritative turn meaning"}: ${JSON.stringify(input.semanticFrame)}. Use this interpretation to maintain continuity. If it conflicts with the operator words, acknowledge the ambiguity rather than defending the interpretation. Do not claim or initiate writes: execution and receipts are owned by the server.`
           : null,
       },
       {

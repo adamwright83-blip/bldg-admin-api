@@ -3,6 +3,8 @@
  * Adapted from PR #192 `sourceVisibility.ts`. Display names are not provenance.
  */
 
+import { isAuthorizedClaireOperatorIdentity } from "../live/operatorAuthority";
+
 export type AccountProvenance = {
   name?: string | null;
   accountType?: string | null;
@@ -27,8 +29,19 @@ export function isOperatorVisibleAccount(account: AccountProvenance | null | und
   return sourceVisibilityForAccount(account) === "operator";
 }
 
+/**
+ * Synchronous IDENTITY gate for the authorized production operator.
+ *
+ * It no longer names a tenant: the operator receives Brain V2 in every tenant
+ * where they hold a verified membership. Membership is verified asynchronously
+ * by `resolveClaireOperatorAuthority` (brain/live/operatorAuthority.ts) on every
+ * live path; this synchronous check only answers "is this the operator identity".
+ * Tenant data authorization is unaffected — readers always run as the
+ * conversation's own tenant.
+ */
 export function isAuthorizedProductionOperator(input: { tenantId: string; operatorUserId: string }): boolean {
-  return input.tenantId === "default" && (input.operatorUserId === "adam-admin" || input.operatorUserId === "adam");
+  if (!input.tenantId.trim()) return false;
+  return isAuthorizedClaireOperatorIdentity(input.operatorUserId);
 }
 
 export function isOperatorVisibleMissionSnapshot(snapshot: {

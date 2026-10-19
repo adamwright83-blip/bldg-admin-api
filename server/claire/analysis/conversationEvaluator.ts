@@ -1,5 +1,6 @@
 import { invokeLLM } from "../../_core/llm";
 import { ENV } from "../../_core/env";
+import { claireModelId } from "../claireModel";
 import type { ConversationTurn } from "../conversation/types";
 import { claireDeliveryTranscriptSuffix, isAuthoritativeOperatorTurn } from "../conversation/speechDelivery";
 import {
@@ -137,7 +138,7 @@ export async function evaluateConversationQualitative(input: {
       tenantId: input.tenantId,
       maxTokens,
       temperature: 0,
-      model: ENV.anthropicModel,
+      model: claireModelId(),
       outputSchema: EVALUATION_JSON_SCHEMA,
       onStopReason: (reason: string | null) => { stopReason = reason; },
       messages: [
