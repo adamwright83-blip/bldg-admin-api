@@ -24,14 +24,15 @@
 }
 
 .lensGuide {
+  /* the same box the runtime renders the lens into: 4:5, centred, as large as fits in 92% of the view */
   position: absolute;
-  top: 4%;
-  bottom: 4%;
+  top: 50%;
   left: 50%;
+  width: min(92vw, calc(92vh * 0.8));
   aspect-ratio: 4 / 5;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   border: 3px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 100vmax rgba(20, 14, 12, 0.55);
+  box-shadow: 0 0 0 100vmax rgba(20, 14, 12, 0.35);
   border-radius: 6px;
   pointer-events: none;
   z-index: 1;
@@ -564,9 +565,14 @@
   }
   .sheet {
     top: auto;
-    bottom: 104px;
-    max-height: 46vh;
+    bottom: 10px;
+    max-height: 40vh;
     transform: none;
+    padding: 12px;
+  }
+  /* on a phone the step list gives its room to the controls (and to the lens box above them) */
+  .steps {
+    display: none;
   }
   .review {
     grid-template-columns: 1fr;

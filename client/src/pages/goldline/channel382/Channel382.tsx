@@ -196,8 +196,9 @@ export default function Channel382({ onExit }: { onExit?: () => void }) {
     go("review");
   };
 
-  // the ad recomposes as the words change
+  // the ad recomposes as the words change, and any change means the file you downloaded is no longer this ad
   useEffect(() => {
+    setExported(false);
     if (!photo) return;
     const c = composeAd(photo, { headline, subline, offer });
     setAdUrl(c.toDataURL("image/png"));

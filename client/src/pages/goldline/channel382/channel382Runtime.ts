@@ -836,10 +836,40 @@ export function createChannel382(container: HTMLElement, cb: { onFrame?: (f: Fra
     r();
   }
 
+  /** the lens box on screen: 4:5, centred, as large as fits in 92% of the view (the page draws its guide the same way) */
+  function lensRect() {
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
+    let gh = h * 0.92;
+    let gw = gh * 0.8;
+    if (gw > w * 0.92) {
+      gw = w * 0.92;
+      gh = gw / 0.8;
+    }
+    return { x: (w - gw) / 2, y: (h - gh) / 2, w: gw, h: gh };
+  }
+  function renderLens() {
+    const r = lensRect();
+    const size = new THREE.Vector2();
+    renderer.getSize(size);
+    lensCam.aspect = 0.8;
+    lensCam.updateProjectionMatrix();
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
+    renderer.clear();
+    // WebGL's viewport origin is bottom-left
+    renderer.setViewport(r.x, size.y - r.y - r.h, r.w, r.h);
+    renderer.setScissor(r.x, size.y - r.y - r.h, r.w, r.h);
+    renderer.setScissorTest(true);
+    renderer.render(scene, lensCam);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
+  }
   function frame() {
     const dt = Math.min(0.05, clock.getDelta());
     if (paused) {
-      renderer.render(scene, view === "lens" ? lensCam : studioCam);
+      if (view === "lens") renderLens();
+      else renderer.render(scene, studioCam);
       return;
     }
     elapsed += dt;
@@ -889,9 +919,10 @@ export function createChannel382(container: HTMLElement, cb: { onFrame?: (f: Fra
     camLook.lerp(studioGoal.look, Math.min(1, dt * 2));
     studioCam.position.copy(camPos);
     studioCam.lookAt(camLook);
-    // through the lens you see exactly what the ad will be: no studio
+    // through the lens you see exactly what the ad will be: no studio, and the very 4:5 frame capture() takes
     for (const o of studioOnly) o.visible = view === "studio";
-    renderer.render(scene, view === "lens" ? lensCam : studioCam);
+    if (view === "lens") renderLens();
+    else renderer.render(scene, studioCam);
     reportFrame();
   }
   renderer.setAnimationLoop(frame);
