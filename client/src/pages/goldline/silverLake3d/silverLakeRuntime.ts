@@ -87,6 +87,22 @@ export async function createSilverLake(
   renderer.domElement.className = "sl3d-canvas";
   renderer.domElement.setAttribute("data-testid", "silver-lake-3d-canvas");
   container.appendChild(renderer.domElement);
+  // Software rendering (no GPU: some Android phones, locked-down PCs, CI) gets a lighter frame so the page,
+  // and the Letter Desk on top of it, stays responsive.
+  const softwareGl = (() => {
+    try {
+      const gl = renderer.getContext();
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      return /swiftshader|llvmpipe|software|basic render/i.test(name);
+    } catch {
+      return false;
+    }
+  })();
+  if (softwareGl) {
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = false;
+  }
   const outline = new OutlineEffect(renderer, { defaultThickness: 0.0042, defaultColor: [0.16, 0.1, 0.07], defaultAlpha: 1, defaultKeepAlive: true });
   disposers.push(() => {
     renderer.setAnimationLoop(null);
@@ -458,7 +474,15 @@ export async function createSilverLake(
     if (!choice) return;
     const wood = new THREE.MeshStandardMaterial({ name: "bench", color: 0xa46a3e, roughness: 0.8 });
     const grp = new THREE.Group();
-    if (choice === "tea_table") {
+    if (choice === "lantern_post") {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.4, 10), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      post.position.y = 1.2;
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.5, 12), new THREE.MeshStandardMaterial({ name: "lamp_glow", color: 0xffcf73, emissive: 0xffcf73, emissiveIntensity: 2.5 }));
+      lamp.position.y = 2.6;
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.35, 12), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      hat.position.y = 3.0;
+      grp.add(post, lamp, hat);
+    } else if (choice === "tea_table") {
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.12, 24), wood);
       top.position.y = 0.9;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 0.9, 10), wood);
@@ -647,7 +671,13 @@ export async function createSilverLake(
   const proj = new THREE.Vector3();
   let elapsed = 0;
 
+  let pausedAt = 0;
   function frame() {
+    // a conversation is open: once the camera has settled, stop drawing so the desk stays snappy
+    if (paused && pausedAt && performance.now() - pausedAt > 1600) {
+      clock.getDelta();
+      return;
+    }
     const dt = Math.min(0.05, clock.getDelta());
     elapsed += dt;
     const now = performance.now();
@@ -818,7 +848,8 @@ export async function createSilverLake(
       featureObj.scale.setScalar(Math.max(0.01, featureGrow) * k);
     }
 
-    outline.render(scene, camera);
+    if (softwareGl) renderer.render(scene, camera);
+    else outline.render(scene, camera);
   }
 
   function talkTo(key: string) {
@@ -882,7 +913,9 @@ export async function createSilverLake(
     },
     setPaused(p) {
       paused = p;
+      pausedAt = p ? performance.now() : 0;
       if (p) keys.clear();
+      else clock.getDelta();
     },
     talkNearest() {
       if (nearKey) talkTo(nearKey);

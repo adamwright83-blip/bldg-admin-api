@@ -16,6 +16,7 @@ import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import type { DriverCurrentStop } from "./objectiveMarksView";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
+import { openSilverLake3D } from "@/pages/goldline/silverLake3d/silverLakeEntry";
 
 // Small Comforts: the playable Tin Can House in Hollywood (zoom to the island, click the house).
 const SmallComforts = lazy(() => import("../SmallComforts/SmallComforts"));
@@ -61,6 +62,8 @@ export default function LanternCityIslands({
   const host = useRef<HTMLDivElement>(null);
   const board = useRef<IslandBoard | null>(null);
   const [ready, setReady] = useState(false);
+  // islands are up and clickable before every building has risen; don't hold people behind a full-screen card
+  const [interactive, setInteractive] = useState(false);
   const [failed, setFailed] = useState(false);
   const [stats, setStats] = useState<{ islands: number; open: number; lanterns: number } | null>(null);
   const [island, setIsland] = useState<IslandInfo | null>(null);
@@ -107,10 +110,16 @@ export default function LanternCityIslands({
     let b: IslandBoard;
     try {
       b = createIslandBoard(host.current, {
-        onReady: () => setReady(true),
+        onReady: () => { setInteractive(true); setReady(true); },
+        onInteractive: () => setInteractive(true),
         onError: e => { console.error("Lantern City failed to load", e); setFailed(true); },
         onStats: setStats,
         onIsland: info => {
+          // Silver Lake is a place you can walk into: clicking it opens the 3D courtyard
+          if (modeRef.current === "explore" && info?.name === "Silver Lake") {
+            openSilverLake3D("silver-lake");
+            return;
+          }
           setIsland(info);
           if (modeRef.current === "report" && info?.name) setSelectedTerritoryId(normalizeTerritoryName(info.name));
         },
@@ -128,7 +137,15 @@ export default function LanternCityIslands({
       return;
     }
     board.current = b;
-    return () => { b.dispose(); board.current = null; };
+    // read-only screen lookups so browser tests can click an island the way a person does
+    const probe = { islandScreen: (name: string) => b.islandScreen(name), islandLabelScreen: (name: string) => b.islandLabelScreen(name), hubScreen: () => b.hubScreen() };
+    (window as unknown as { __lanternIslands?: typeof probe }).__lanternIslands = probe;
+    return () => {
+      b.dispose();
+      board.current = null;
+      const w = window as unknown as { __lanternIslands?: typeof probe };
+      if (w.__lanternIslands === probe) delete w.__lanternIslands;
+    };
   }, []);
 
   useEffect(() => {
@@ -286,7 +303,8 @@ export default function LanternCityIslands({
           <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
         </nav>
       ) : null}
-      {(!ready || !atlas.data && !usingSample) && !failed && !atlas.isError ? <div className={styles.loading} data-lantern-state="loading">Loading Lantern City…</div> : null}
+      {(!interactive || !atlas.data && !usingSample) && !failed && !atlas.isError ? <div className={styles.loading} data-lantern-state="loading">Loading Lantern City…</div> : null}
+      {interactive && !ready && !failed ? <div className={styles.building} role="status" data-lantern-state="building">Raising the buildings…</div> : null}
       {atlas.isError && !usingSample ? (
         <div className={styles.loading} role="alert" data-lantern-state="atlas-unavailable">
           <div>Customer geography is unavailable. Your world could not be loaded.

@@ -95,6 +95,14 @@ function daysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * The calendar day a moment falls on for the business (Pacific), as YYYY-MM-DD. Day Line, Home and the driver all
+ * read business dates in America/Los_Angeles; seeding UTC days put "today's" stops on tomorrow every evening after 5pm.
+ */
+function businessDay(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+}
+
 async function wipeProofTenant(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
   await db.execute(sql.raw("SET FOREIGN_KEY_CHECKS=0"));
   for (const table of PROOF_TENANT_TABLES) {
@@ -320,9 +328,9 @@ async function seed() {
       updatedAt: daysAgo(days),
       paidAt: daysAgo(days),
       serviceType: "wash_fold" as const,
-      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupDate: businessDay(daysAgo(days)),
       pickupTimeWindow: "9:00-11:00",
-      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      deliveryDate: businessDay(daysAgo(days - 1)),
       specialInstructions: `proof-fixture-order-${index}`,
     })) as never
   );
@@ -347,9 +355,9 @@ async function seed() {
       createdAt: daysAgo(days),
       updatedAt: daysAgo(days),
       paidAt: daysAgo(days),
-      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupDate: businessDay(daysAgo(days)),
       pickupTimeWindow: "9:00-11:00",
-      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      deliveryDate: businessDay(daysAgo(days - 1)),
       specialInstructions: `proof-fixture-active-${index}`,
     })) as never
   );
@@ -375,9 +383,9 @@ async function seed() {
       createdAt: daysAgo(days),
       updatedAt: daysAgo(days),
       paidAt: daysAgo(days),
-      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupDate: businessDay(daysAgo(days)),
       pickupTimeWindow: "9:00-11:00",
-      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      deliveryDate: businessDay(daysAgo(days - 1)),
       specialInstructions: `proof-fixture-cooling-${index}`,
     })) as never
   );
@@ -404,9 +412,9 @@ async function seed() {
       createdAt: daysAgo(days),
       updatedAt: daysAgo(days),
       paidAt: daysAgo(days),
-      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupDate: businessDay(daysAgo(days)),
       pickupTimeWindow: "9:00-11:00",
-      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      deliveryDate: businessDay(daysAgo(days - 1)),
       specialInstructions: `proof-fixture-silverlake-${index}`,
     })) as never
   );
@@ -492,9 +500,9 @@ async function seed() {
       createdAt: daysAgo(days),
       updatedAt: daysAgo(days),
       paidAt: daysAgo(days),
-      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupDate: businessDay(daysAgo(days)),
       pickupTimeWindow: "9:00-11:00",
-      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      deliveryDate: businessDay(daysAgo(days - 1)),
       specialInstructions: `proof-fixture-silverlake-opt-out-${index}`,
     })) as never
   );
@@ -892,7 +900,7 @@ async function seed() {
     metadataJson: {
       statement: "Return with the one-sheet tomorrow",
       promisedTo: "front desk",
-      dueDate: new Date().toISOString().slice(0, 10),
+      dueDate: businessDay(new Date()),
     },
   } as never);
 

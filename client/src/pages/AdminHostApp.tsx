@@ -11,7 +11,7 @@ import { trpc } from "@/lib/trpc";
 import {
   adminPathToTab,
   isAdminCommandCenterPath,
-  lanternSceneFor, silverLakeLegacyRequested,
+  lanternSceneFor,
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
@@ -201,7 +201,7 @@ export default function AdminHostApp() {
   const isLanternCity = path === "/growth/lantern-city";
   const isWorldHome = isHome || isLanternCity;
   // one Lantern City (the island board) at Home and /growth/lantern-city; the rest only behind ?scene=
-  const lanternScene = lanternSceneFor(path, window.location.search, { legacySilverLake: silverLakeLegacyRequested() });
+  const lanternScene = lanternSceneFor(path, window.location.search);
   const worldDebugChrome =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("worldTruth") === "1";
@@ -434,7 +434,7 @@ export default function AdminHostApp() {
             <Suspense fallback={<div className="cr-route-loading">Walking into Silver Lake…</div>}>
               <SilverLake3D
                 territoryId={new URLSearchParams(window.location.search).get("territory") ?? "silver-lake"}
-                onExit={() => navigate("/growth/lantern-city")}
+                onExit={() => window.location.assign("/growth/lantern-city")}
               />
             </Suspense>
           ) : lanternScene === "v6" ? (

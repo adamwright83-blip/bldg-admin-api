@@ -69,7 +69,8 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     page,
   }) => {
     await page.goto("/growth/lantern-city?scene=v6");
-    const target = page.locator('[data-scene-object="lantern"]').first();
+    // the golden-messenger opportunity (#654) leads into the 3D Silver Lake; an ordinary customer light opens the inspector
+    const target = page.locator('[data-scene-object="lantern"]:not([data-recovery-opportunity="true"])').first();
     await expect(target).toBeVisible();
     await target.click();
     await expect(page.locator(".owi")).toBeVisible();

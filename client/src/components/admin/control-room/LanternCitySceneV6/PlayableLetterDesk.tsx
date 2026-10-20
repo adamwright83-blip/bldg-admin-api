@@ -171,10 +171,9 @@ export function PlayableLetterDesk({
   const preferredApproach = villagerMemory?.preferredApproach ?? null;
   const isFirstVisit = (neighborhoodMemory?.visitCount ?? encounterCount) <= 1;
   const isReturnVisitTomorrowOrLater = neighborhoodMemory?.isReturnVisitTomorrowOrLater ?? false;
+  // An unfinished note is this customer's; another neighbour's desk does not talk about it.
   const unfinishedDraftCustomer =
-    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId
-      ? target.displayName
-      : neighborhoodMemory?.unfinishedActivity?.customerName ?? null;
+    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId ? target.displayName : null;
   const customerReplied =
     target.reply?.status !== "unavailable" && (target.reply as any)?.direction === "inbound";
   const paidReorderVerified = target.paidOrder?.status === "verified";

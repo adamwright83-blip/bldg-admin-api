@@ -99,8 +99,9 @@ describe("Lantern City report mode", () => {
     expect(source).toContain("SmallComforts");
     expect(source).toContain("Tin Can House");
     expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake")).toBe("silverLake3d");
-    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake&walk=0")).toBe("v6");
-    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake", { legacySilverLake: true })).toBe("v6");
+    expect(lanternSceneFor("/growth/lantern-city", "?cozy=1&territory=silver-lake&walk=0")).toBe("silverLake3d");
+    expect(lanternSceneFor("/growth/lantern-city", "?scene=v6&cozy=1&territory=silver-lake")).toBe("silverLake3d");
+    expect(lanternSceneFor("/growth/lantern-city", "?encounter=1&territory=century-city")).toBe("silverLake3d");
     expect(lanternSceneFor("/growth/lantern-city", "?scene=v6")).toBe("v6");
     expect(lanternSceneFor("/", "")).toBe("islands");
   });

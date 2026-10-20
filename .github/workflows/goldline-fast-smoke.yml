@@ -414,6 +414,15 @@ jobs:
               e2e/goldline-smoke/operatorRepresentative.spec.ts
               e2e/goldline-smoke/cozyVillagerOutreach.spec.ts
               e2e/goldline-smoke/silverLakeBirdDiscovery.spec.ts
+          - name: fast-smoke-silver-lake
+            timeout: 40
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/silverLakeIslandEntry.spec.ts
+              e2e/goldline-smoke/playableVillagers.spec.ts
+              e2e/goldline-smoke/integratedDayLine.spec.ts
+              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
           - name: fast-smoke-territories
             timeout: 5
             command: >-

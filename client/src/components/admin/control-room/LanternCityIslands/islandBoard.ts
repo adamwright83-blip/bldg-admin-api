@@ -32,6 +32,8 @@ export type IslandLantern = { key: string; latitude: number; longitude: number; 
 export type IslandInfo = { name: string; lanterns: number; served: boolean; x: number; z: number };
 export type IslandEvents = {
   onReady?: () => void;
+  /** the islands are drawn and clickable; buildings may still be rising */
+  onInteractive?: () => void;
   onError?: (e: unknown) => void;
   onIsland?: (info: IslandInfo | null) => void;
   onStats?: (s: { islands: number; open: number; lanterns: number }) => void;
@@ -367,6 +369,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     startBuildings();
     ready = true;
     frameBoard();
+    events.onInteractive?.();
     applyLanterns(true);
     if (opts.capture) console.log(`[islands] ${islands.map(l => `${l.name}:${l.plans.length}`).join(" ")}`);
   }
@@ -1654,6 +1657,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       (L.sprite.material.map as THREE.Texture).needsUpdate = true;
     }
   }
+  /** where each visible island name tag sits on screen (container pixels), so tapping a tag picks its island */
+  const labelRects = new Map<number, [number, number, number, number] | null>();
   function placeLabels(cd: number) {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const a = THREE.MathUtils.smoothstep(cd, 2200, 4200);
@@ -1674,6 +1679,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       L.sprite.visible = a > 0.02 && !clash && v.z < 1;
       L.sprite.material.opacity = a;
       if (L.sprite.visible) taken.push(r);
+      labelRects.set(L.island, L.sprite.visible ? r : null);
     }
   }
 
@@ -1686,7 +1692,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     controls.update();
   }
   function frameBoard() {
-    const aspect = Math.max(0.5, container.clientWidth / Math.max(1, container.clientHeight));
+    // phones are narrower than 1:2; fit the real ratio so the east islands (Silver Lake) stay on screen
+    const aspect = Math.max(0.3, container.clientWidth / Math.max(1, container.clientHeight));
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let k = 0; k < F.c.length; k++) if (F.c[k] > 0) {
       const x = F.x0 + (k % F.nx) * F.cell, z = F.z0 + Math.floor(k / F.nx) * F.cell;
@@ -1695,6 +1702,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     // room at the sides for the edge islands' banners
     const ex = x1 - x0 + 2800, ez = z1 - z0 + 900;
     const dist = (Math.max(ex / aspect, ez * 1.25) / (2 * Math.tan((14 * Math.PI) / 180))) * 0.98;
+    // a portrait phone needs to stand further back than the desktop cap to see the whole board
+    controls.maxDistance = Math.max(30000, dist * 1.08);
     frame((x0 + x1) / 2, (z0 + z1) / 2 + ez * 0.06, dist, 0, 0.86);
   }
   let fly: null | { t: number; fromT: THREE.Vector3; fromP: THREE.Vector3; toT: THREE.Vector3; toP: THREE.Vector3; done?: () => void } = null;
@@ -1716,6 +1725,11 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   function operationsHubAt(cx: number, cy: number, radius = 76) {
     if (!operationsHub) return null;
     const r = renderer.domElement.getBoundingClientRect();
+    // The hub is a building on Silver Lake. Until it is drawn big enough to aim at (zoomed in), a tap there
+    // means "Silver Lake", not "this building".
+    const base = new THREE.Vector3(operationsHub.x, H(operationsHub.x, operationsHub.z), operationsHub.z).project(camera);
+    const top = new THREE.Vector3(operationsHub.x, H(operationsHub.x, operationsHub.z) + operationsHub.h, operationsHub.z).project(camera);
+    if (Math.abs(base.y - top.y) * 0.5 * r.height < 36) return null;
     const v = new THREE.Vector3(
       operationsHub.x,
       H(operationsHub.x, operationsHub.z) + operationsHub.h * 0.5,
@@ -1749,7 +1763,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     if (!down || down.pointerId !== e.pointerId || !ready) return;
     const tapSlop = down.pointerType === "touch" ? 22 : down.pointerType === "pen" ? 12 : 6;
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > tapSlop) return;
-    const hubRadius = down.pointerType === "touch" ? 120 : down.pointerType === "pen" ? 96 : 76;
+    // The hub is a building on the Silver Lake island: only a click on the building itself opens the floor.
+    // A click anywhere else on Silver Lake is "go to Silver Lake" (the walkable courtyard).
+    const hubRadius = down.pointerType === "touch" ? 40 : down.pointerType === "pen" ? 32 : 26;
     const hub = operationsHubAt(e.clientX, e.clientY, hubRadius);
     if (hub && !entering) {
       entering = true;
@@ -1769,6 +1785,17 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       return;
     }
     const r = renderer.domElement.getBoundingClientRect();
+    // a tap on an island's name tag picks that island (the tag floats above it, often over water)
+    const lx = e.clientX - r.left, ly = e.clientY - r.top, slop = down.pointerType === "touch" ? 10 : 4;
+    for (const [own, rect] of labelRects) {
+      if (!rect || lx < rect[0] - slop || lx > rect[2] + slop || ly < rect[1] - slop || ly > rect[3] + slop) continue;
+      const l = islands[own];
+      if (!l) continue;
+      activeIslandName = l.name;
+      events.onIsland?.({ name: l.name, lanterns: islandCounts.get(own) ?? 0, served: l.served, x: l.label[0], z: l.label[1] });
+      flyTo(l.label[0], l.label[1], Math.max(2400, Math.sqrt(l.area) * 1.6));
+      return;
+    }
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     // march the ray until it meets an island top
     const o = ray.ray.origin, d = ray.ray.direction;
@@ -1917,6 +1944,27 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     islandAt(name: string) {
       const l = islands.find(i => i.name === name);
       return l ? { x: l.label[0], z: l.label[1], area: l.area } : null;
+    },
+    /** the centre of an island's visible name tag on screen (null when the tag is hidden) */
+    islandLabelScreen(name: string) {
+      const l = islands.find(i => i.name === name);
+      const rect = l ? labelRects.get(l.index) : null;
+      return rect ? { x: (rect[0] + rect[2]) / 2, y: (rect[1] + rect[3]) / 2, visible: true } : null;
+    },
+    /** an island's centre on screen, in container pixels (null until loaded) */
+    islandScreen(name: string) {
+      const l = islands.find(i => i.name === name);
+      if (!ready || !l) return null;
+      const v = new THREE.Vector3(l.label[0], H(l.label[0], l.label[1]), l.label[1]).project(camera);
+      const w = container.clientWidth || 1, h = container.clientHeight || 1;
+      return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, visible: v.z < 1 };
+    },
+    /** the Operations Hub building on screen, in container pixels (null until loaded) */
+    hubScreen() {
+      if (!ready || !operationsHub) return null;
+      const v = new THREE.Vector3(operationsHub.x, H(operationsHub.x, operationsHub.z) + operationsHub.h * 0.5, operationsHub.z).project(camera);
+      const w = container.clientWidth || 1, h = container.clientHeight || 1;
+      return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, visible: v.z < 1 };
     },
     focusIsland(name: string) {
       const l = islands.find(i => i.name === name);

@@ -1,12 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
-// Silver Lake now opens as the walkable 3D courtyard. These specs cover the painted encounter, which
-// stays in the code dormant; they opt into it explicitly.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("goldline.silverLake.legacy", "1"));
-});
-
 test.describe.configure({ mode: "serial" });
 
 test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () => {
@@ -23,7 +17,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     await page.goto("/growth/lantern-city?cozy=1&dev=1");
 
     // Encounter container is visible
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 15000 });
 
     // Mode toggles exist: Playable vs Classic, Real vs Synthetic
@@ -45,11 +39,11 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     // Navigate with synthetic preview enabled for deterministic character slots
     await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
 
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 15000 });
 
     // --- Performance A: Barnaby the Fox (Slot 1 / Mei Lin) ---
-    const slot1 = page.locator('div[role="button"][data-house-title*="Blue Two-Story"]').first();
+    const slot1 = page.locator('[data-testid="silver-lake-villager"][data-house-title*="Blue Two-Story"]').first();
     await expect(slot1).toBeVisible({ timeout: 10000 });
     await slot1.click();
 
@@ -80,7 +74,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
 
     // --- Performance B: Bramble the Badger (Slot 5 / Marcus Vance) ---
     // Select Slot 5 (Lower Stone Cottage)
-    const slot5 = page.locator('div[role="button"][data-house-title*="Lower Purple Stone Cottage"]').first();
+    const slot5 = page.locator('[data-testid="silver-lake-villager"][data-house-title*="Lower Purple Stone Cottage"]').first();
     await expect(slot5).toBeVisible();
     await slot5.click();
     await expect(desk).toBeVisible();
@@ -121,7 +115,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     await expect(courtyardSpot).toContainText("Cozy Cedar Tea Table");
 
     // Leave to Wide City
-    const exitBtn = page.getByRole("button", { name: /Return to Wide City/i });
+    const exitBtn = page.getByRole("button", { name: /Return to (Wide )?City/i });
     await exitBtn.click();
 
     // Re-enter Silver Lake
@@ -139,7 +133,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
   }) => {
     await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
 
-    const slot1 = page.locator('div[role="button"][data-house-title*="Blue Two-Story"]').first();
+    const slot1 = page.locator('[data-testid="silver-lake-villager"][data-house-title*="Blue Two-Story"]').first();
     await expect(slot1).toBeVisible({ timeout: 10000 });
     await slot1.click();
 
@@ -168,7 +162,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
   }) => {
     await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
 
-    const slot1 = page.locator('div[role="button"][data-house-title*="Blue Two-Story"]').first();
+    const slot1 = page.locator('[data-testid="silver-lake-villager"][data-house-title*="Blue Two-Story"]').first();
     await expect(slot1).toBeVisible({ timeout: 10000 });
     await slot1.click();
 
@@ -192,7 +186,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
   }) => {
     await page.goto("/growth/lantern-city?cozy=1&preview=synthetic");
 
-    const slot1 = page.locator('div[role="button"][data-house-title*="Blue Two-Story"]').first();
+    const slot1 = page.locator('[data-testid="silver-lake-villager"][data-house-title*="Blue Two-Story"]').first();
     await expect(slot1).toBeVisible({ timeout: 10000 });
     await slot1.click();
 
