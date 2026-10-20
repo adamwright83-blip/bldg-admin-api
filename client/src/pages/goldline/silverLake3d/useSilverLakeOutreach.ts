@@ -145,7 +145,8 @@ export function useSilverLakeOutreach(territoryId: string) {
     }
   };
 
-  const handleScheduleSend = async (target: CozyProjectedTarget, editedText: string, scheduledForIso: string, idempotencyKey?: string) => {
+  /** true once the schedule is recorded; false when it was refused (the reason is shown) */
+  const handleScheduleSend = async (target: CozyProjectedTarget, editedText: string, scheduledForIso: string, idempotencyKey?: string): Promise<boolean> => {
     if (isSyntheticPreview) {
       setSyntheticTargets(prev =>
         prev.map(t =>
@@ -165,7 +166,7 @@ export function useSilverLakeOutreach(territoryId: string) {
             : t
         )
       );
-      return;
+      return true;
     }
     try {
       await scheduleMutation.mutateAsync({
@@ -179,8 +180,10 @@ export function useSilverLakeOutreach(territoryId: string) {
         idempotencyKey,
       });
       await refreshDurableEvidence();
+      return true;
     } catch (err) {
       alert(`Schedule could not be committed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
     }
   };
 

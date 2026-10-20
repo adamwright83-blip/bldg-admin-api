@@ -170,7 +170,7 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
     await expect(desk).toBeVisible();
 
     // Commit future schedule
-    const scheduleBtn = desk.locator('[data-testid="commit-schedule-button"]');
+    const scheduleBtn = desk.locator('[data-testid="schedule-slot-morning"]');
     await expect(scheduleBtn).toBeEnabled();
     await scheduleBtn.click();
 
@@ -379,7 +379,7 @@ test.describe("Silver Lake reunion quests", () => {
     // a real decision (schedule) unlocks Bella
     await page.locator('[data-testid="silver-lake-villager"][data-customer-id="synthetic:customer:mei_lin"]').click();
     await expect(desk).toBeVisible();
-    await desk.locator('[data-testid="commit-schedule-button"]').click();
+    await desk.locator('[data-testid="schedule-slot-morning"]').click();
     await expect(desk.locator('[data-testid="banner-scheduled"]')).toContainText(/Scheduled — not sent/i);
     await desk.locator('button[aria-label="Close writing desk"]').click();
     await talkTo(page, `quest:${SARAH}`, "Bella");
