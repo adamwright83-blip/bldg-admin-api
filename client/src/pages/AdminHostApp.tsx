@@ -42,6 +42,7 @@ const LanternCityV7 = lazy(() => import("@/components/admin/control-room/Lantern
 const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
 const SilverLake3D = lazy(() => import("./goldline/silverLake3d/SilverLake3D"));
 const BeverlyHills3D = lazy(() => import("./goldline/beverlyHills3d/BeverlyHills3D"));
+const CenturyParkEast3D = lazy(() => import("./goldline/centuryParkEast3d/CenturyParkEast3D"));
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import { OpusLaInspection } from "@/components/admin/control-room/OpusLaInspection";
@@ -441,6 +442,10 @@ export default function AdminHostApp() {
           ) : lanternScene === "beverlyHills3d" ? (
             <Suspense fallback={<div className="cr-route-loading">Rolling out the red carpet…</div>}>
               <BeverlyHills3D onExit={() => window.location.assign("/growth/lantern-city")} />
+            </Suspense>
+          ) : lanternScene === "centuryParkEast3d" ? (
+            <Suspense fallback={<div className="cr-route-loading">Checking the locks…</div>}>
+              <CenturyParkEast3D onExit={() => window.location.assign("/growth/lantern-city?tower=century_park_east")} />
             </Suspense>
           ) : lanternScene === "v6" ? (
             <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />

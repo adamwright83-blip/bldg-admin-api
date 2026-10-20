@@ -69,7 +69,12 @@ export default function LanternCityIslands({
   const [stats, setStats] = useState<{ islands: number; open: number; lanterns: number } | null>(null);
   const [island, setIsland] = useState<IslandInfo | null>(null);
   const [hover, setHover] = useState<{ keys: string[]; x: number; y: number; tower?: string } | null>(null);
-  const [tower, setTower] = useState<string | null>(null);
+  // `?tower=century_park_east` opens straight into that tower (the way back out of its game)
+  const [tower, setTower] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const id = new URLSearchParams(window.location.search).get("tower");
+    return id && /^[a-z_]+$/.test(id) ? id : null;
+  });
   const [inSuitcase, setInSuitcase] = useState(false);
   const [operationsHubTip, setOperationsHubTip] = useState<{ x: number; y: number } | null>(null);
   const [suitcaseTip, setSuitcaseTip] = useState<{ x: number; y: number } | null>(null);
