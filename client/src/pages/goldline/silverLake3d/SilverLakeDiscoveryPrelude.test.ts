@@ -21,7 +21,7 @@ function render(
   return renderToStaticMarkup(createElement(SilverLakeDiscoveryPrelude, {
     targets, synthetic: false, loading: false, loadFailed: false,
     withheldReason: null, focusMissing: false, ...callbacks, ...options,
-  }));
+  })).replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 }
 
 describe("Claire's played-in-the-real-courtyard Silver Lake introduction", () => {

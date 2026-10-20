@@ -134,6 +134,7 @@ export default function SilverLake3D({
   // Opt-in playable prologue. Never intercept a deep link or an ongoing customer action.
   // ?preview=synthetic&discovery=1 is a safe demonstration with no outbound writes.
   const [discoveryOpen, setDiscoveryOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
     const q = new URLSearchParams(window.location.search);
     return q.get("discovery") === "1" && !q.has("customer");
   });
