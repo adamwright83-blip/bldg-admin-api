@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowRight, Check, Pause, Play, RotateCcw } from "lucide-react";
 import { captureProductEvent } from "@/lib/posthog";
@@ -277,7 +278,7 @@ export default function JoystickLanding() {
     });
   }, []);
   return (
-    <main className="joystick-landing" aria-label="Joystick — Your business. A game you can actually win.">
+    <main className="joystick-landing" data-testid="joystick-marketing" aria-label="Joystick — Your business. A game you can actually win.">
       <header className="jl-header">
         <a className="jl-brand" href="/joystick" aria-label="Joystick home">Joystick</a>
         <nav aria-label="Main navigation">
