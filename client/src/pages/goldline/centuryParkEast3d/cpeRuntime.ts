@@ -843,6 +843,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   let ridingUntil = 0;
   let finaleAt = 0;
   let calmUntil = 0;
+  // nobody chases her until she's started playing (or has stood in the lobby reading for half a minute)
+  let armedAt = performance.now() + 30_000;
   const keys = new Set<string>();
   const stick = { x: 0, y: 0 };
   const errandPhase: ErrandPhase[] = ERRAND_SLOTS.map(() => "locked");
@@ -1059,7 +1061,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   function bite(z: (typeof zombies)[number]) {
     bites += 1;
-    invuln = 2.4;
+    invuln = 5;
     blink = 2.4;
     // knocked back, and every dog on her shoulders bolts
     const away = Math.sign(pos.x - z.pos.x) || 1;
@@ -1131,6 +1133,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       const sprint = sprintHeld || keys.has("ShiftLeft") || keys.has("ShiftRight");
       const speed = (sprint ? 5.4 : 3.1) * (flat > 0.5 ? 1.12 : 1); // paper is light
       if (mag > 0.05) {
+        armedAt = Math.min(armedAt, now);
         const nx = pos.x + (ix / Math.max(1, Math.hypot(ix, iz))) * speed * dt;
         const nz = pos.z + (iz / Math.max(1, Math.hypot(ix, iz))) * speed * 0.8 * dt;
         moveTo(pos, floor, nx, nz);
@@ -1210,7 +1213,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
           else z.pos.x = nx;
           z.pos.z += Math.sin(elapsed * 0.7 + z.phase) * 0.25 * dt;
           z.pos.z = THREE.MathUtils.clamp(z.pos.z, -DEPTH + 0.6, -0.6);
-          if (sameFloor && dist < 6 && now >= ridingUntil && now >= calmUntil && !(floor === SPA.floor && pos.x > SPA.x0)) z.state = "chase";
+          if (sameFloor && dist < 6 && now >= ridingUntil && now >= calmUntil && now >= armedAt && !(floor === SPA.floor && pos.x > SPA.x0)) z.state = "chase";
         } else if (z.state === "chase") {
           if (!sameFloor || dist > 9 || (floor === SPA.floor && pos.x > SPA.x0)) z.state = "wander";
           else if (dist > 0.05) {
