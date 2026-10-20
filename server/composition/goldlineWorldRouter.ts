@@ -107,6 +107,11 @@ export const goldlineWorldRouter = router({
         kind: input.kind,
       });
     }),
+  /** Lantern City's Beverly Hills level: the selected business's real commercial prospects there (read-only). */
+  beverlyHillsProspects: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const { loadBeverlyHillsProspects } = await import("../experience/lanternCity/beverlyHillsProspects");
+    return loadBeverlyHillsProspects(ctx.tenantId);
+  }),
   getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
     .input(
       z

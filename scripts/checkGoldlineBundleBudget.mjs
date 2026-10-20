@@ -62,6 +62,7 @@ const LAZY_3D_PREFIXES = [
   "LanternCityV7",
   "LanternCityIslands",
   "SilverLake3D",
+  "BeverlyHills3D",
   "SmallComforts",
   "LaundryOperationsFloor",
   "hero",
