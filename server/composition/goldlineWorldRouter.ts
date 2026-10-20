@@ -46,7 +46,7 @@ import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationCons
 import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
-import { resolveSilverLakeScope } from "../experience/lanternCity/silverLakeScope";
+import { silverLakeOperatorId } from "../experience/lanternCity/silverLakeScope";
 import {
   PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -70,17 +70,16 @@ export const goldlineWorldRouter = router({
         })
         .optional()
     )
-    .query(async ({ ctx, input }) => {
-      const scope = await resolveSilverLakeScope(ctx);
-      return loadCozyRecoverySurfaces({
-        tenantId: scope.tenantId,
-        canonicalOperatorId: scope.operatorId,
-        objective: scope.objective,
+    .query(async ({ ctx, input }) =>
+      loadCozyRecoverySurfaces({
+        tenantId: ctx.tenantId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
+        operatorId: ctx.user.openId,
         territoryId: input?.territoryId,
         requestedCustomerId: input?.requestedCustomerId,
         limit: input?.limit,
-      }).then(surfaces => surfaces.mission);
-    }),
+      }).then(surfaces => surfaces.mission)
+    ),
   getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
     .input(
       z
@@ -200,14 +199,13 @@ export const goldlineWorldRouter = router({
         draftBody: input.draftBody,
       });
     }),
-  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
-    const scope = await resolveSilverLakeScope(ctx);
-    return loadCozyRecoverySurfaces({
-      tenantId: scope.tenantId,
-      canonicalOperatorId: scope.operatorId,
-      objective: scope.objective,
-    }).then(surfaces => surfaces.dayLineCard);
-  }),
+  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) =>
+    loadCozyRecoverySurfaces({
+      tenantId: ctx.tenantId,
+      canonicalOperatorId: await silverLakeOperatorId(ctx),
+      operatorId: ctx.user.openId,
+    }).then(surfaces => surfaces.dayLineCard)
+  ),
   sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
@@ -228,20 +226,19 @@ export const goldlineWorldRouter = router({
         idempotencyKey: z.string().optional(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const scope = await resolveSilverLakeScope(ctx);
-      return sendCozyOutreachNow({
-        tenantId: scope.tenantId,
+    .mutation(async ({ ctx, input }) =>
+      sendCozyOutreachNow({
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        objective: scope.objective,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         expectedPhone: input.expectedPhone,
         slotId: input.slotId,
         territoryId: input.territoryId,
         idempotencyKey: input.idempotencyKey,
-      });
-    }),
+      })
+    ),
   scheduleCozyOutreach: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
@@ -260,11 +257,10 @@ export const goldlineWorldRouter = router({
       const { commitPersonalOutreachDraft } = await import(
         "../experience/lanternCity/cozyVillagerOutreachService"
       );
-      const scope = await resolveSilverLakeScope(ctx);
       return await commitPersonalOutreachDraft({
-        tenantId: scope.tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        objective: scope.objective,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
@@ -291,7 +287,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await listScheduledOutreachMessages({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         status: input?.status,
         limit: input?.limit,
@@ -311,7 +307,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await editScheduledOutreachDraft({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         newMessageBody: input.newMessageBody,
@@ -334,7 +330,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await rescheduleOutreachDraft({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         newScheduledFor: input.newScheduledFor,
@@ -355,7 +351,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await cancelScheduledOutreachDraft({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         reason: input.reason,
@@ -374,11 +370,10 @@ export const goldlineWorldRouter = router({
       const { approveDurablePersonalOutreach } = await import(
         "../experience/lanternCity/cozyVillagerOutreachService"
       );
-      const scope = await resolveSilverLakeScope(ctx);
       return await approveDurablePersonalOutreach({
-        tenantId: scope.tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
-        objective: scope.objective,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         messageId: input.messageId,
         expectedRevisionCount: input.expectedRevisionCount,
         confirmation: input.confirmation,
@@ -396,7 +391,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await sendEarlyOutreachDraft({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         leaseHolder: `operator_${ctx.user.openId}`,
@@ -421,7 +416,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
       );
       return await openApprovedSmsCompose({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         revisionCount: input.revisionCount,
@@ -449,7 +444,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
       );
       return await reportSmsComposeOperatorSent({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
         revisionCount: input.revisionCount,
@@ -477,7 +472,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/personalNumber/smsComposeHandoffAudit"
       );
       return await smsComposeHandoffSnapshot({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         items: input.items,
       });
@@ -487,7 +482,7 @@ export const goldlineWorldRouter = router({
       "../experience/lanternCity/personalNumber/personalSenderIdentityStore"
     );
     return await getPersonalSenderStatus({
-      tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+      tenantId: ctx.tenantId,
       operatorId: ctx.user.openId,
     });
   }),
@@ -512,7 +507,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/personalNumber/personalOutreachReplyService"
       );
       return await recordPersonalOutreachReply({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         customerId: input.customerId,
         customerName: input.customerName,
@@ -540,7 +535,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/personalNumber/personalOutreachReplyService"
       );
       return await listPersonalOutreachReplies({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         customerId: input?.customerId,
         direction: input?.direction,
@@ -558,7 +553,7 @@ export const goldlineWorldRouter = router({
         "../experience/lanternCity/scheduledOutreachService"
       );
       return await getScheduledOutreachRevisions({
-        tenantId: (await resolveSilverLakeScope(ctx)).tenantId,
+        tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         messageId: input.messageId,
       });

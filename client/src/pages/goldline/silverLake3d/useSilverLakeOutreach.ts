@@ -65,6 +65,9 @@ export function useSilverLakeOutreach(territoryId: string) {
     { staleTime: 0, refetchOnWindowFocus: true }
   );
   const sendMutation = trpc.system.goldlineWorld.sendCozyOutreachNow.useMutation();
+  // The operator's explicit, append-only decision that this business focuses on this neighbourhood.
+  const focusMutation = trpc.system.persistentOperator.decideOperatingMandate.useMutation();
+  const [focusError, setFocusError] = useState<string | null>(null);
   const scheduleMutation = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
   const targets = useMemo(
@@ -81,6 +84,22 @@ export function useSilverLakeOutreach(territoryId: string) {
       utils.system.goldlineWorld.cozyRecoveryDayLineCard.invalidate(),
       utils.system.goldlineWorld.listScheduledOutreach.invalidate(),
     ]);
+  };
+
+  const confirmFocus = async () => {
+    setFocusError(null);
+    const area = territoryId.replace(/-/g, " ");
+    try {
+      await focusMutation.mutateAsync({
+        kind: "focus",
+        action: "confirm",
+        area,
+        statement: `Recover lapsed customers in ${area.replace(/\b\w/g, c => c.toUpperCase())}`,
+      });
+      await refreshDurableEvidence();
+    } catch (err) {
+      setFocusError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const handleSelectIndex = (index: number) => {
@@ -263,6 +282,11 @@ export function useSilverLakeOutreach(territoryId: string) {
     /** the server withheld the list (e.g. the recovery objective could not be read): never present that as "nobody" */
     withheldReason: (!isSyntheticPreview && (missionQuery.data as { withheldReason?: string | null } | undefined)?.withheldReason) || null,
     emptyMeansNoLapsed: isSyntheticPreview || (missionQuery.data as { emptyMeansNoLapsedCustomers?: boolean } | undefined)?.emptyMeansNoLapsedCustomers === true,
+    /** the selected business has no neighbourhood focus yet; the operator can confirm one */
+    focusMissing: !isSyntheticPreview && (missionQuery.data as { focusMissing?: boolean } | undefined)?.focusMissing === true,
+    confirmFocus,
+    confirmingFocus: focusMutation.isPending,
+    focusError,
     objectiveId: (missionQuery.data?.objectiveId ?? null) as string | null,
     isSending: sendMutation.isPending || scheduleMutation.isPending,
     neighborhoodMemory,

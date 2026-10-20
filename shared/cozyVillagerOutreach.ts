@@ -182,5 +182,7 @@ export interface CozyEncounterMission {
   targets: CozyCustomerTarget[];
   /** Set when the book cannot be presented. An empty village is not this. */
   withheldReason?: string | null;
+  /** The selected business has no neighbourhood focus; the operator may confirm one. */
+  focusMissing?: boolean;
   emptyMeansNoLapsedCustomers?: boolean;
 }

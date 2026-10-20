@@ -18,6 +18,7 @@ import {
   type SilverLakeHandle,
   type VillagerView,
 } from "./silverLakeRuntime";
+import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
 import styles from "./silver-lake-3d.module.css";
 
@@ -377,6 +378,22 @@ export default function SilverLake3D({
           <p className={styles.rosterEmpty} data-testid="silver-lake-villagers-withheld" data-outreach-withheld="true">
             {o.withheldReason}
           </p>
+        ) : null}
+        {targets.length === 0 && !o.loading && !o.loadFailed && o.focusMissing ? (
+          // The business shown is the one selected; nothing switches on its own. Choosing the focus is the operator's call.
+          <div className={styles.focusChoice} data-testid="silver-lake-focus-missing">
+            <BusinessSwitcher />
+            <button
+              type="button"
+              className={styles.focusButton}
+              disabled={o.confirmingFocus}
+              onClick={() => void o.confirmFocus()}
+              data-testid="silver-lake-confirm-focus"
+            >
+              {o.confirmingFocus ? "Setting focus…" : "Focus this business on Silver Lake"}
+            </button>
+            {o.focusError ? <p role="alert" className={styles.rosterEmpty}>{o.focusError}</p> : null}
+          </div>
         ) : null}
         {targets.length === 0 && !o.loading && !o.loadFailed && !o.withheldReason ? (
           <p className={styles.rosterEmpty} data-testid="silver-lake-no-villagers">

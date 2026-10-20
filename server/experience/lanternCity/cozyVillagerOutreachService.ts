@@ -14,7 +14,6 @@ import {
   assertPersonalOutreachHandoff,
   buildPersonalSuggestedMessage,
   readPersonalOutreachRoster,
-  type OutreachObjectiveScope,
   type PersonalOutreachContact,
 } from "../../strategy/personalOutreachWrite";
 import { normalizeSmsPhone } from "../../_core/sms";
@@ -168,7 +167,6 @@ export async function getCozyEncounterMission(input: {
   requestedCustomerId?: string;
   limit?: number;
   now?: Date;
-  objective?: OutreachObjectiveScope;
 }): Promise<CozyEncounterMission> {
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const now = input.now ?? new Date();
@@ -186,7 +184,6 @@ export async function getCozyEncounterMission(input: {
     now,
     territoryId,
     limit: input.requestedCustomerId ? Math.max(targetLimit, 50) : targetLimit,
-    objective: input.objective,
   }).catch((err) => {
     console.error("[cozyVillagerOutreach] Failed to read personal outreach roster:", err);
     return null;
@@ -346,6 +343,7 @@ export async function getCozyEncounterMission(input: {
     activeTargetCount: targets.length,
     targets,
     withheldReason,
+    ...(roster?.focusMissing ? { focusMissing: true } : {}),
     emptyMeansNoLapsedCustomers: roster?.emptyMeansNoLapsedCustomers ?? false,
   };
 }
@@ -371,7 +369,8 @@ export async function commitPersonalOutreachDraft(input: {
   deliveryIntent?: "immediate" | "scheduled";
   dstAmbiguityChoice?: "first" | "second";
   now?: Date;
-  objective?: OutreachObjectiveScope;
+  /** The operator's canonical identity, under which their objective is filed. Defaults to `operatorId`. */
+  canonicalOperatorId?: string;
 }) {
   const now = input.now ?? new Date();
   const timezone = input.timezone ?? "America/Los_Angeles";
@@ -395,13 +394,12 @@ export async function commitPersonalOutreachDraft(input: {
   }
   const allowed = await assertPersonalOutreachHandoff({
     tenantId: input.tenantId,
-    canonicalOperatorId: input.operatorId,
+    canonicalOperatorId: input.canonicalOperatorId ?? input.operatorId,
     customerId: input.customerId,
     messageBody,
     territoryId: input.territoryId,
     now,
     timeZone: timezone,
-    objective: input.objective,
   });
   if (input.expectedPhone) {
     const expected = normalizeSmsPhone(input.expectedPhone);
@@ -462,7 +460,7 @@ export async function approveDurablePersonalOutreach(input: {
   expectedRevisionCount: number;
   territoryId?: string;
   now?: Date;
-  objective?: OutreachObjectiveScope;
+  canonicalOperatorId?: string;
 }) {
   if (input.confirmation !== PERSONAL_OUTREACH_SCHEDULE_APPROVAL) {
     throw new Error("The exact message, recipient, and send time must be explicitly approved.");
@@ -502,13 +500,12 @@ export async function approveDurablePersonalOutreach(input: {
   }
   await assertPersonalOutreachHandoff({
     tenantId: input.tenantId,
-    canonicalOperatorId: input.operatorId,
+    canonicalOperatorId: input.canonicalOperatorId ?? input.operatorId,
     customerId: message.customerId,
     messageBody: message.currentMessageBody,
     territoryId: input.territoryId ?? message.territoryId ?? undefined,
     now,
     timeZone: message.timezone || "America/Los_Angeles",
-    objective: input.objective,
   });
   const approval = await recordExplicitOutreachApproval({
     tenantId: input.tenantId,
@@ -537,7 +534,7 @@ export async function sendCozyOutreachNow(input: {
   idempotencyKey?: string;
   now?: Date;
   testSenderAdapter?: OutboundTestSenderAdapter;
-  objective?: OutreachObjectiveScope;
+  canonicalOperatorId?: string;
 }): Promise<{
   success: boolean;
   status: "dispatched" | "awaiting_sender_setup";
@@ -565,7 +562,7 @@ export async function sendCozyOutreachNow(input: {
     deliveryIntent: "immediate",
     idempotencyKey: input.idempotencyKey,
     now,
-    objective: input.objective,
+    canonicalOperatorId: input.canonicalOperatorId,
   });
   const browser = evaluateGoogleMessagesBrowserTransport();
   return {
