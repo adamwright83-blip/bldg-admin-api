@@ -81,7 +81,8 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const scheduleBtn = drawer.getByTestId("schedule-slot-morning");
     await expect(scheduleBtn).toBeEnabled();
     await scheduleBtn.click();
-    await expect(drawer.getByTestId("banner-scheduled")).toContainText(/Scheduled for \w{3}, \w{3} \d{1,2} · 10:00 AM/);
+    // the banner follows the schedule mutation; under software WebGL on CI the courtyard behind it slows that down
+    await expect(drawer.getByTestId("banner-scheduled")).toContainText(/Scheduled for \w{3}, \w{3} \d{1,2} · 10:00 AM/, { timeout: 20_000 });
 
     await expect(drawer.getByText(/Scheduled — not sent/i)).toBeVisible({ timeout: 5000 });
     await expect(drawer).toHaveAttribute("data-communication-state", "scheduled");

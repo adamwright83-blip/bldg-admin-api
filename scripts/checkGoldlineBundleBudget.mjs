@@ -63,6 +63,7 @@ const LAZY_3D_PREFIXES = [
   "LanternCityIslands",
   "SilverLake3D",
   "BeverlyHills3D",
+  "CenturyParkEast3D",
   "SmallComforts",
   "LaundryOperationsFloor",
   "hero",

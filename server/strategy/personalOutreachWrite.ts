@@ -33,6 +33,8 @@ import {
 } from "./personalOutreachEligibility";
 import { SILVER_LAKE_AREA_TERMS } from "./silverLakeEligibility";
 import { readObjectiveArea } from "./strategicEvidenceReaders";
+import { TENANT_CONFIG, type TenantId } from "../../shared/tenantConfig";
+import { TOWER_OUTREACH_AREAS } from "../../shared/towerOutreachAreas";
 
 export class PersonalOutreachBlocked extends Error {
   readonly code = "personal_outreach_blocked" as const;
@@ -105,6 +107,38 @@ function addressMatchesArea(address: string, areaLabel: string): boolean {
   return terms.some(term => new RegExp(`\\b${escape(term)}\\b`, "i").test(address));
 }
 
+type OutreachArea = {
+  label: string;
+  filters: { addressAny: string[]; addressLabel: string };
+  /** A tower's own threshold on top of the canonical dormant line; null for a neighbourhood focus. */
+  minQuietDays: number | null;
+  tower: boolean;
+};
+
+/**
+ * The area a personal-outreach roster or hand-off is scoped to. A tower the business serves (Century Park East) is
+ * its own area: the building's street addresses, with no neighbourhood focus needed, because the operator chose the
+ * building by opening it. Every other territory is the operator's applied neighbourhood focus, unchanged.
+ */
+async function resolveOutreachArea(input: { tenantId: string; canonicalOperatorId: string; territoryId?: string }): Promise<OutreachArea | null> {
+  const tower = input.territoryId ? TOWER_OUTREACH_AREAS[input.territoryId] : undefined;
+  if (tower) {
+    return { label: tower.label, filters: { addressAny: [...tower.addressAny], addressLabel: `at ${tower.label}` }, minQuietDays: tower.minQuietDays, tower: true };
+  }
+  const area = await readObjectiveArea(input);
+  return area ? { label: area.label, filters: area.filters, minQuietDays: null, tower: false } : null;
+}
+
+function addressInArea(address: string, area: OutreachArea): boolean {
+  if (!area.tower) return addressMatchesArea(address, area.label);
+  const escape = (term: string) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return area.filters.addressAny.some(term => new RegExp(`\\b${escape(term)}\\b`, "i").test(address));
+}
+
+function brandFor(tenantId: string): string {
+  return TENANT_CONFIG[tenantId as TenantId]?.brandName ?? "Laundry Farm";
+}
+
 function territoryMatches(areaLabel: string, requested: string | undefined): boolean {
   const left = areaLabel.toLowerCase().replace(/[^a-z0-9]/g, "");
   const right = (requested ?? areaLabel).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -118,9 +152,9 @@ function daysBetween(lastOrderDate: string, today: string): number {
   return Math.round((now - last) / 86_400_000);
 }
 
-export function buildPersonalSuggestedMessage(name: string, daysSinceLastOrder: number): string {
+export function buildPersonalSuggestedMessage(name: string, daysSinceLastOrder: number, brandName = "Laundry Farm"): string {
   const firstName = name.split(" ")[0] || name;
-  return `Hey ${firstName}! It's Adam from Laundry Farm. It's been about ${daysSinceLastOrder} days since your last pickup. We can take laundry off your plate when you want.`;
+  return `Hey ${firstName}! It's Adam from ${brandName}. It's been about ${daysSinceLastOrder} days since your last pickup. We can take laundry off your plate when you want.`;
 }
 
 export async function readPersonalOutreachRoster(input: {
@@ -133,7 +167,7 @@ export async function readPersonalOutreachRoster(input: {
 }): Promise<PersonalOutreachRoster | null> {
   if (!input.tenantId.trim()) return null;
   let unreadable = false;
-  const area = await readObjectiveArea(input).catch(() => {
+  const area = await resolveOutreachArea(input).catch(() => {
     unreadable = true;
     return null;
   });
@@ -233,7 +267,7 @@ export async function readPersonalOutreachRoster(input: {
       freshness,
       sourceReadable: true,
       matched: member.matched,
-      inTerritory: address ? addressMatchesArea(address, area.label) : true,
+      inTerritory: address ? addressInArea(address, area) : !area.tower,
       paidOrders: member.orderCount,
       capturedCents: member.revenueCents,
       lastOrderDate: member.lastOrderDate,
@@ -252,6 +286,7 @@ export async function readPersonalOutreachRoster(input: {
       today,
     });
     if (!decision.eligible) continue;
+    if (area.minQuietDays !== null && (days === null || days < area.minQuietDays)) continue;
     contacts.push({
       identityId: member.identityId,
       name: member.displayName,
@@ -292,9 +327,10 @@ export async function assertPersonalOutreachHandoff(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const today = now.toISOString().slice(0, 10);
-  const area = await readObjectiveArea({
+  const area = await resolveOutreachArea({
     tenantId: input.tenantId,
     canonicalOperatorId: input.canonicalOperatorId,
+    territoryId: input.territoryId,
   }).catch(() => null);
   if (!area) {
     throw new PersonalOutreachBlocked(
@@ -387,7 +423,7 @@ export async function assertPersonalOutreachHandoff(input: {
     freshness,
     sourceReadable: true,
     matched: member.matched,
-    inTerritory: territoryMatches(area.label, input.territoryId) && (address ? addressMatchesArea(address, area.label) : true),
+    inTerritory: territoryMatches(area.label, input.territoryId) && (address ? addressInArea(address, area) : !area.tower),
     paidOrders: member.orderCount,
     capturedCents: member.revenueCents,
     lastOrderDate: member.lastOrderDate,
@@ -408,6 +444,12 @@ export async function assertPersonalOutreachHandoff(input: {
   if (!decision.eligible || !smsDigits || !phone) {
     throw new PersonalOutreachBlocked(decision.explanation, decision.blocks.length ? decision.blocks : ["unmatched_identity"]);
   }
+  if (area.minQuietDays !== null && (days === null || days < area.minQuietDays)) {
+    throw new PersonalOutreachBlocked(
+      `${member.displayName} last ordered ${days ?? "an unknown number of"} days ago; ${area.label} waits until ${area.minQuietDays} days.`,
+      ["recent_order"]
+    );
+  }
   return {
     customerId: member.identityId,
     customerName: member.displayName,
@@ -415,6 +457,6 @@ export async function assertPersonalOutreachHandoff(input: {
     daysSinceLastOrder: days ?? DEFAULT_DOCTRINE.dormantQuietDays,
     territoryId: input.territoryId ?? "silver-lake",
     territoryName: area.label,
-    suggestedMessage: buildPersonalSuggestedMessage(member.displayName, days ?? DEFAULT_DOCTRINE.dormantQuietDays),
+    suggestedMessage: buildPersonalSuggestedMessage(member.displayName, days ?? DEFAULT_DOCTRINE.dormantQuietDays, brandFor(input.tenantId)),
   };
 }

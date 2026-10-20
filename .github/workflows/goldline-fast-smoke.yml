@@ -424,10 +424,11 @@ jobs:
               && pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
           - name: fast-smoke-beverly-hills
-            timeout: 15
+            timeout: 25
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/beverlyHills.spec.ts
+              e2e/goldline-smoke/centuryParkEast.spec.ts
           - name: fast-smoke-territories
             timeout: 5
             command: >-

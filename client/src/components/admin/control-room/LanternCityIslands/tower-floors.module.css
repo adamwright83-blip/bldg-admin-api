@@ -64,9 +64,14 @@
   display: grid;
   grid-template-columns: 1fr 260px;
 }
-.stage {
+.stageWrap {
   position: relative;
   min-height: 0;
+  overflow: hidden;
+}
+.stage {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 .list {
@@ -91,7 +96,7 @@
 }
 .list li {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 2px 8px;
   align-items: center;
 }
@@ -145,4 +150,140 @@
     border-left: 0;
     border-top: 1px solid rgba(255, 244, 220, 0.12);
   }
+}
+
+.headActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.head .playButton {
+  background: #8fe36a;
+  color: #12300a;
+  animation: knock 1.4s ease-in-out infinite;
+}
+.quietRow span {
+  opacity: 0.75;
+}
+.textLink {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font: 700 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(255, 244, 220, 0.14);
+  color: var(--ink);
+  text-decoration: none;
+}
+.list li button {
+  grid-column: 3;
+}
+/* the lobby: something is banging on the glass (zombie night), or the dogs are napping by the door (cozy) */
+.lobbyDoor {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+.lobbyZombie {
+  background: radial-gradient(ellipse at 50% 80%, rgba(143, 227, 106, 0.35), transparent 70%);
+}
+.lobbyCozy {
+  background: radial-gradient(ellipse at 50% 80%, rgba(255, 200, 77, 0.3), transparent 70%);
+}
+.lobbyHands {
+  font-size: clamp(14px, 2.4vw, 30px);
+  letter-spacing: 0.2em;
+  animation: knock 0.9s ease-in-out infinite;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+.lobbyTag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(20, 16, 34, 0.85);
+  color: #fff4dc;
+  font: 700 12px/1.2 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+@keyframes knock {
+  0%, 60%, 100% { transform: translateX(0); }
+  65% { transform: translateX(-3px) rotate(-3deg); }
+  75% { transform: translateX(3px) rotate(3deg); }
+  85% { transform: translateX(-2px); }
+}
+.unitCard {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 25;
+  width: min(440px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid rgba(255, 244, 220, 0.2);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 10px;
+}
+.unitHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink2);
+}
+.unitHead button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+.unitRow {
+  display: grid;
+  gap: 4px;
+}
+.unitRow span {
+  font-size: 13px;
+  color: var(--ink2);
+}
+.unitActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.textButton {
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: #3a2600;
+  font: 700 14px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.unitActions button {
+  appearance: none;
+  border: 1px solid rgba(255, 244, 220, 0.3);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--ink);
+  font: 700 13px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
