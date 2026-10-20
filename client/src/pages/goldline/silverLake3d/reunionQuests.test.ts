@@ -12,7 +12,12 @@ import {
   hasRealDecision,
   questPhases,
   questSlotsFor,
+  questTaskList,
   reunionBeats,
+  stepIdFromItemKey,
+  stepItemKey,
+  stepItems,
+  applyStepItem,
   type QuestSpot,
 } from "./reunionQuests";
 
@@ -38,11 +43,11 @@ describe("reunion quests: who gets one", () => {
     const chain = assignReunionQuests(targets());
     // David (scheduled) and Elena (send observed) are decided; Lucas is consent-blocked and can never be written to
     expect(chain.map(q => [q.customerId, q.template.id])).toEqual([
-      [MEI, "cat_hose_flute"],
-      [SARAH, "bunny_kite"],
-      [MARCUS, "bear_watering_can"],
-      [CHLOE, "otter_duck"],
-      [GRACE, "squirrel_acorn_jar"],
+      [MEI, "squirrel_hoa_letter"],
+      [SARAH, "cat_hose_flute"],
+      [MARCUS, "bunny_kite"],
+      [CHLOE, "bear_watering_can"],
+      [GRACE, "otter_duck"],
     ]);
     const list = byId(targets());
     for (const q of chain) expect(q.template.giver.variant).not.toBe(list.get(q.customerId)!.villagerVariant);
@@ -54,6 +59,11 @@ describe("reunion quests: who gets one", () => {
     expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.spotId)).size).toBe(REUNION_QUEST_TEMPLATES.length);
   });
 
+  it("opens with Hazel's HOA letter", () => {
+    expect(REUNION_QUEST_TEMPLATES[0].id).toBe("squirrel_hoa_letter");
+    expect(assignReunionQuests(targets())[0].template.id).toBe("squirrel_hoa_letter");
+  });
+
   it("has an authored template for every villager animal, so all eight doorsteps can host an errand", () => {
     expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.giver.variant))).toEqual(new Set(VILLAGER_VARIANTS));
     const everyone = targets().map(t => ({ ...t, communicationState: "draft_prepared", status: "draft_ready", hasConsent: true, silverLakeStatus: { ...t.silverLakeStatus, message: "draft_prepared" } }) as CozyProjectedTarget);
@@ -61,8 +71,8 @@ describe("reunion quests: who gets one", () => {
   });
 
   it("Cleo's flute is a found object, never a real instrument", () => {
-    const cat = REUNION_QUEST_TEMPLATES[0];
-    expect(cat.id).toBe("cat_hose_flute");
+    const cat = REUNION_QUEST_TEMPLATES.find(t => t.id === "cat_hose_flute")!;
+    expect(cat.giver.variant).toBe("cat");
     expect(cat.item.name).toBe("old garden hose");
     expect(cat.item.name).not.toMatch(/flute|whistle|recorder|pipe|horn|trumpet|instrument/i);
   });
@@ -154,17 +164,18 @@ describe("reunion quests: never invent facts about the real customer", () => {
     const [q] = assignReunionQuests(targets());
     const mei = targets().find(t => t.customerId === MEI)!;
     const text = reunionBeats(q.template, questSlotsFor(q.template, spots[0], mei)).map(b => b.text).join(" ");
-    expect(text).toContain("Cleo lifts the old garden hose like a flute");
-    expect(text).toContain("Mei Lin follows the tune");
-    expect(text).toContain("42 days since your last order");
-    expect(text).toContain("5 orders with us");
+    expect(text).toContain("You write the letter in your best quill handwriting");
+    expect(text).toContain("Mei Lin is there");
+    expect(text).toContain("42 days since the last pickup");
+    expect(text).toContain("5 orders, then nothing");
+    expect(text).toContain("You should write to Mei.");
   });
 
   it("drops a beat whose real number is missing instead of guessing", () => {
     const [q] = assignReunionQuests(targets());
     const mei = { ...targets().find(t => t.customerId === MEI)!, daysSinceLastOrder: null, paidOrders: undefined } as unknown as CozyProjectedTarget;
     const text = reunionBeats(q.template, questSlotsFor(q.template, spots[0], mei)).map(b => b.text).join(" ");
-    expect(text).not.toMatch(/days|orders? with us|undefined|null|NaN/);
+    expect(text).not.toMatch(/days|orders?, then|orders? with us|undefined|null|NaN/);
     expect(text).toContain("You should write to Mei.");
   });
 
@@ -211,5 +222,64 @@ describe("reunion quests: progress saved on the server", () => {
     expect(p.found.has(MEI)).toBe(true);
     expect(p.reunited.has(MEI)).toBe(true);
     expect(p.templateByCustomer.get(MEI)).toBe("cat_hose_flute");
+  });
+});
+
+describe("reunion quests: Hazel's HOA letter is a chain of linked steps", () => {
+  const hoa = REUNION_QUEST_TEMPLATES.find(t => t.id === "squirrel_hoa_letter")!;
+  const steps = hoa.steps!;
+
+  it("shows Adam's three tasks, in order; the glove is the puzzle, not a task", () => {
+    expect(hoa.tasks).toEqual([
+      "Shake the porcupine",
+      "Dip its shed quill in the ink well",
+      "Write a letter to the squirrel to appease its HOA complaint",
+    ]);
+    expect(steps.map(st => st.id)).toEqual(["glove", "shake", "quill", "dip"]);
+  });
+
+  it("every step's prop sits on a spot that exists", () => {
+    const ids = new Set(spots.map(sp => sp.id));
+    for (const st of steps) expect(ids.has(st.spotId)).toBe(true);
+  });
+
+  it("Pip can't be shaken bare-handed: the glove comes first", () => {
+    const early = applyStepItem(hoa, 0, "shake");
+    expect(early.ok).toBe(false);
+    expect(early.line).toMatch(/OW/);
+    expect(early.next).toBe(0);
+    const glove = applyStepItem(hoa, 0, "glove");
+    expect(glove).toMatchObject({ ok: true, next: 1 });
+    expect(glove.line).toMatch(/tea cosy/i);
+    expect(applyStepItem(hoa, 1, "shake")).toMatchObject({ ok: true, next: 2 });
+    expect(applyStepItem(hoa, 3, "shake").ok).toBe(false);
+  });
+
+  it("the ink well needs the quill; dipping it is the last step", () => {
+    expect(applyStepItem(hoa, 1, "dip").ok).toBe(false);
+    expect(applyStepItem(hoa, 2, "quill")).toMatchObject({ ok: true, next: 3 });
+    expect(applyStepItem(hoa, 3, "dip")).toMatchObject({ ok: true, next: 4 });
+    expect(stepItems(hoa, 4)).toEqual([]);
+  });
+
+  it("pick-ups appear only at their own step; Pip and the ink well stay all along", () => {
+    expect(stepItems(hoa, 0).map(i => i.stepId)).toEqual(["glove", "shake", "dip"]);
+    expect(stepItems(hoa, 1).map(i => i.stepId)).toEqual(["shake", "dip"]);
+    expect(stepItems(hoa, 2).map(i => i.stepId)).toEqual(["shake", "quill", "dip"]);
+    expect(stepItems(hoa, 3).map(i => i.stepId)).toEqual(["shake", "dip"]);
+  });
+
+  it("ticks the tasks as the steps land, and the letter on the hand-over", () => {
+    expect(questTaskList(hoa, 0, "need").map(t => t.done)).toEqual([false, false, false]);
+    expect(questTaskList(hoa, 2, "need").map(t => t.done)).toEqual([true, false, false]);
+    expect(questTaskList(hoa, 4, "carrying").map(t => t.done)).toEqual([true, true, false]);
+    expect(questTaskList(hoa, 4, "waiting").map(t => t.done)).toEqual([true, true, true]);
+  });
+
+  it("a step prop's key reads back its customer and step, even with colons in the customer id", () => {
+    const key = stepItemKey("cleancloud:42", "shake");
+    expect(key).toBe("item:cleancloud:42#shake");
+    expect(stepIdFromItemKey(key)).toBe("shake");
+    expect(stepIdFromItemKey("item:cleancloud:42")).toBeNull();
   });
 });
