@@ -476,11 +476,11 @@ export default function SilverLake3D({
       }}
     >
       <div ref={hostRef} className={styles.stage} />
-      {discoveryOpen && (ready || failed) ? (
+      {discoveryOpen && ready ? (
         <SilverLakeDiscoveryPrelude
           targets={targets}
           synthetic={o.isSyntheticPreview}
-          loading={o.loading}
+          loading={o.loading || (!o.loadFailed && !o.withheldReason && targets.length > 0 && !rq.on)}
           loadFailed={o.loadFailed}
           withheldReason={o.withheldReason}
           focusMissing={o.focusMissing}
