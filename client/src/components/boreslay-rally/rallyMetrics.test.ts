@@ -21,6 +21,20 @@ describe("local Rally metrics", () => {
     event("gate_score_for", { banked: true, ownGoal: true });
     event("surge_on");
     event("frozen");
+
+    state.excuse.vx = -720;
+    state.excuse.vy = 80;
+    state.excuse.speedTier = 3;
+    state.spark.frozenUntil = state.timeMs + 1000;
+    state.mission.status = "ready";
+    event("rescue_ready");
+    state.mission.status = "accepted";
+    event("rescue_accepted");
+    state.mission.status = "ready";
+    event("rescue_ready");
+    state.mission.status = "expired";
+    event("status");
+
     event("regulation_expired");
     event("sudden_death");
     metrics.shareOffered();
@@ -45,6 +59,10 @@ describe("local Rally metrics", () => {
       "surges",
       "frozen",
       "bash_count",
+      "sales_mission_offered",
+      "sales_mission_accepted",
+      "sales_mission_expired",
+      "sales_mission_response_ms",
       "regulation_expired",
       "sudden_death",
       "share_offered",
@@ -53,6 +71,7 @@ describe("local Rally metrics", () => {
       "avg_rally_tier",
       "rematch",
     ]));
+    expect(exported.schema).toBe("boreslay-rally-metrics-v3");
     expect(exported.session).toMatchObject({ mode: "buttHybrid", controlMode: "duel", source: "url", matches: 1 });
     expect(setItem).toHaveBeenCalled();
   });

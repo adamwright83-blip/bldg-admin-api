@@ -24,6 +24,10 @@ export type RallyMetricName =
   | "frozen"
   | "avg_rally_tier"
   | "bash_count"
+  | "sales_mission_offered"
+  | "sales_mission_accepted"
+  | "sales_mission_expired"
+  | "sales_mission_response_ms"
   | "share_offered"
   | "share_accepted"
   | "session_length";
@@ -35,7 +39,7 @@ export type RallyMetricEvent = {
   detail?: Record<string, unknown>;
 };
 
-const STORAGE_KEY = "boreslay-rally-metrics-v2";
+const STORAGE_KEY = "boreslay-rally-metrics-v3";
 
 export class RallyMetrics {
   private events: RallyMetricEvent[] = [];
@@ -45,6 +49,7 @@ export class RallyMetrics {
   private serveIndex = 0;
   private matches = 0;
   private rallyTiers: number[] = [];
+  private salesMissionOfferedAt: number | null = null;
   private storage?: Storage;
   readonly mode: RallyState["scoringMode"];
   readonly controlMode: RallyState["controlMode"];
@@ -72,6 +77,7 @@ export class RallyMetrics {
     this.firstScoreRecorded = false;
     this.serveIndex = 0;
     this.rallyTiers = [];
+    this.salesMissionOfferedAt = null;
     this.track("match_start", this.matches);
     this.track("matches_per_session", this.matches);
   }
@@ -121,6 +127,43 @@ export class RallyMetrics {
     if (event.type === "frozen") this.track("frozen", 1);
     if (event.type === "regulation_expired") this.track("regulation_expired", true);
     if (event.type === "sudden_death") this.track("sudden_death", true);
+    if (event.type === "rescue_ready") {
+      this.salesMissionOfferedAt = Date.now();
+      this.track("sales_mission_offered", true, {
+        matchElapsedMs: RALLY_CONFIG.scoring.regulationMs - state.regulationRemainingMs,
+        regulationRemainingMs: state.regulationRemainingMs,
+        scoreFor: state.sparkScore,
+        scoreAgainst: state.clockheadScore,
+        scrollTier: state.excuse.speedTier,
+        scrollSpeed: Math.round(Math.hypot(state.excuse.vx, state.excuse.vy)),
+        frozen: state.timeMs < state.spark.frozenUntil,
+      });
+    }
+    if (event.type === "rescue_accepted") {
+      const responseMs = this.salesMissionOfferedAt === null
+        ? null
+        : Date.now() - this.salesMissionOfferedAt;
+      this.track("sales_mission_accepted", true, {
+        responseMs,
+        regulationRemainingMs: state.regulationRemainingMs,
+        scoreFor: state.sparkScore,
+        scoreAgainst: state.clockheadScore,
+      });
+      if (responseMs !== null) this.track("sales_mission_response_ms", responseMs);
+      this.salesMissionOfferedAt = null;
+    }
+    if (event.type === "status" && state.mission.status === "expired") {
+      const responseMs = this.salesMissionOfferedAt === null
+        ? null
+        : Date.now() - this.salesMissionOfferedAt;
+      this.track("sales_mission_expired", true, {
+        responseMs,
+        regulationRemainingMs: state.regulationRemainingMs,
+        scoreFor: state.sparkScore,
+        scoreAgainst: state.clockheadScore,
+      });
+      this.salesMissionOfferedAt = null;
+    }
     if (
       !this.firstScoreRecorded &&
       (event.type === "gate_score_for" || event.type === "gate_score_against")
@@ -149,7 +192,7 @@ export class RallyMetrics {
 
   exportData() {
     return {
-      schema: "boreslay-rally-metrics-v2",
+      schema: "boreslay-rally-metrics-v3",
       generatedAt: new Date().toISOString(),
       session: {
         mode: this.mode,
