@@ -21,6 +21,7 @@ import {
 import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
 import { createCozyMusic, type CozyMusic } from "./cozyMusic";
+import SilverLakeDiscoveryPrelude from "./SilverLakeDiscoveryPrelude";
 import { customerIdFromQuestKey, questGiverKey, useReunionQuests } from "./useReunionQuests";
 import type { QuestSpot, ReunionBeat } from "./reunionQuests";
 import styles from "./silver-lake-3d.module.css";
@@ -130,6 +131,12 @@ export default function SilverLake3D({
   const [reunion, setReunion] = useState<{ customerId: string; beats: ReunionBeat[]; index: number } | null>(null);
   const [nearItem, setNearItem] = useState<{ key: string; hop: boolean } | null>(null);
   const [questNote, setQuestNote] = useState<string | null>(null);
+  // Opt-in playable prologue. Never intercept a deep link or an ongoing customer action.
+  // ?preview=synthetic&discovery=1 is a safe demonstration with no outbound writes.
+  const [discoveryOpen, setDiscoveryOpen] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return q.get("discovery") === "1" && !q.has("customer");
+  });
 
   const o = useSilverLakeOutreach(territoryId);
   const { targets, selectedTarget, setSelectedSlotId } = o;
@@ -357,10 +364,16 @@ export default function SilverLake3D({
   }, [ready, o.neighborhoodMemory.featureChoice]);
 
   useEffect(() => {
+    if (!ready) return;
+    runtimeRef.current?.setDiscoverySurvey(discoveryOpen);
+    return () => runtimeRef.current?.setDiscoverySurvey(false);
+  }, [discoveryOpen, ready]);
+
+  useEffect(() => {
     runtimeRef.current?.setPaused(
-      Boolean(selectedTarget) || Boolean(ambientKey) || Boolean(questTalkId) || Boolean(reunion)
+      Boolean(discoveryOpen) || Boolean(selectedTarget) || Boolean(ambientKey) || Boolean(questTalkId) || Boolean(reunion)
     );
-  }, [selectedTarget, ambientKey, questTalkId, reunion, ready]);
+  }, [discoveryOpen, selectedTarget, ambientKey, questTalkId, reunion, ready]);
 
   // a deep link with a named customer (Home, the Day Line, the outbox) opens that neighbour's desk straight away
   useEffect(() => {
@@ -438,6 +451,19 @@ export default function SilverLake3D({
   const reunionQuest = reunion ? rq.quest(reunion.customerId) : null;
   const reunionTarget = reunion ? targetByKey.get(`customer:${reunion.customerId}`) ?? null : null;
 
+  const followDiscoveredLight = (t: CozyProjectedTarget) => {
+    // Discovery is a camera and story introduction, not a new action system.
+    // The EXISTING authored villager quest owns all meaningful game progression.
+    setDiscoveryOpen(false);
+    const q = rq.quest(t.customerId);
+    if (q && q.phase !== "done") {
+      runtimeRef.current?.focusVillager(questGiverKey(t.customerId));
+      setQuestTalkId(t.customerId);
+    } else {
+      openCustomer(t, true);
+    }
+  };
+
   return (
     <div
       className={styles.root}
@@ -450,6 +476,18 @@ export default function SilverLake3D({
       }}
     >
       <div ref={hostRef} className={styles.stage} />
+      {discoveryOpen && (ready || failed) ? (
+        <SilverLakeDiscoveryPrelude
+          targets={targets}
+          synthetic={o.isSyntheticPreview}
+          loading={o.loading}
+          loadFailed={o.loadFailed}
+          withheldReason={o.withheldReason}
+          focusMissing={o.focusMissing}
+          onClose={() => setDiscoveryOpen(false)}
+          onSelect={followDiscoveredLight}
+        />
+      ) : null}
 
       {!ready && !failed ? (
         <div className={styles.loading} aria-hidden>
@@ -600,7 +638,7 @@ export default function SilverLake3D({
         })}
       </nav>
 
-      {ready && !talking ? (
+      {ready && !talking && !discoveryOpen ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD / arrows to walk</span>
           <span>Shift to run</span>
