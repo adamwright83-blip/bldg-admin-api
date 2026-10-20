@@ -544,6 +544,11 @@
   .errands li em {
     display: none;
   }
+  /* on a phone the card lists only the errand that's open */
+  .errands li.phase_locked,
+  .errands li.phase_done {
+    display: none;
+  }
   .hudRight {
     justify-content: flex-start;
   }

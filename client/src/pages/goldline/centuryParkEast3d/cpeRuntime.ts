@@ -81,7 +81,7 @@ const FLOORS: { name: string; rooms: Room[] }[] = [
     rooms: [
       { name: "Package room", x0: 0, x1: 8, wall: "#c8674e", floor: "#8a6a52" },
       { name: "Mailroom", x0: 8, x1: 15, wall: "#8fa68a", floor: "#6f6a5e" },
-      { name: "Lobby", x0: 15, x1: 27, wall: "#e9dcc3", floor: "#d8cbb8" },
+      { name: "Lobby", x0: 15, x1: 27, wall: "#e2d2b6", floor: "#c9b9a2" },
       { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
       { name: "Leasing lounge", x0: 30, x1: 38, wall: "#4f7b86", floor: "#b89a74" },
     ],
@@ -93,7 +93,7 @@ const FLOORS: { name: string; rooms: Room[] }[] = [
       { name: "Gym", x0: 9, x1: 18, wall: "#d9a55b", floor: "#40434a" },
       { name: "Closet hall", x0: 18, x1: 27, wall: "#7d5a78", floor: "#c9b49a" },
       { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Dog spa", x0: 30, x1: 38, wall: "#e7c7b8", floor: "#f0e6d6" },
+      { name: "Dog spa", x0: 30, x1: 38, wall: "#d9a9a0", floor: "#b9a596" },
     ],
   },
   {
@@ -833,7 +833,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   let facing = 1; // +x
   let heading = Math.PI / 2;
   let bites = 0;
-  let invuln = 4;
+  let invuln = 4; // a grace period on arrival (no blinking: she's just walked in)
+  let blink = 0;
   let flat = 0; // 0 = 3D, 1 = paper
   let flatTarget = 0;
   let flip = 1;
@@ -1059,6 +1060,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   function bite(z: (typeof zombies)[number]) {
     bites += 1;
     invuln = 2.4;
+    blink = 2.4;
     // knocked back, and every dog on her shoulders bolts
     const away = Math.sign(pos.x - z.pos.x) || 1;
     moveTo(pos, floor, pos.x + away * 1.4, pos.z, 0.3);
@@ -1082,7 +1084,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   // ---------------------------------------------------------------- post
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.5, 0.82);
+  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.45, 0.96);
   if (bloom) composer.addPass(bloom);
   composer.addPass(new OutputPass());
   function resize() {
@@ -1155,6 +1157,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       vy = 0;
     }
     invuln = Math.max(0, invuln - dt);
+    blink = Math.max(0, blink - dt);
     flat += (flatTarget - flat) * Math.min(1, dt * 7);
     flip = Math.min(1, flip + dt * 9);
     paper.position.copy(pos);
@@ -1163,7 +1166,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     hero.root.position.set(0, 0, 0);
     hero.root.rotation.y = heading;
     hero.root.scale.set(flat > 0.5 ? Math.abs(flip) : 1, 1, 1);
-    hero.root.visible = !(invuln > 0 && Math.floor(elapsed * 14) % 2 === 0);
+    hero.root.visible = !(blink > 0 && Math.floor(elapsed * 14) % 2 === 0);
     heroShadow.position.set(pos.x, fy(floor) + 0.02, pos.z);
     heroShadow.scale.setScalar(THREE.MathUtils.lerp(1, 0.6, flat));
     hero.mixer.update(frozen ? 0 : dt);
@@ -1401,8 +1404,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     // ---- camera: a dollhouse shot of her floor; the party pulls back to the whole building
     const goal = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.6), 62)
-      : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), fy(floor) + 3.9, camera.aspect < 1 ? 19 : 13.5);
-    const look = finaleAt ? new THREE.Vector3(WIDTH / 2, fy(1.5), -2.5) : new THREE.Vector3(goal.x, fy(floor) + 1.45, -2.6);
+      : camera.aspect < 1
+        ? new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 2, WIDTH - 2), fy(floor) + 3.9, 10.5)
+        : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), fy(floor) + 3.9, 13.5);
+    // on a phone the card covers the top third: aim above her so the floor sits in the open middle
+    const look = finaleAt
+      ? new THREE.Vector3(WIDTH / 2, fy(1.5), -2.5)
+      : new THREE.Vector3(goal.x, fy(floor) + (camera.aspect < 1 ? 2.3 : 1.45), -2.6);
     camPos.lerp(goal, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camLook.lerp(look, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camera.position.copy(camPos);
