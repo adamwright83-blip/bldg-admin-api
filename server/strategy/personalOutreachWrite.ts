@@ -32,6 +32,21 @@ import {
 import { SILVER_LAKE_AREA_TERMS } from "./silverLakeEligibility";
 import { readObjectiveArea } from "./strategicEvidenceReaders";
 
+/**
+ * Whose objective a roster serves, when the customers live in another book: the signed-in tenant and the operator's
+ * canonical identity hold the focus (e.g. "maximize sales in Silver Lake"), and the roster's own `tenantId` is the
+ * book the customers, consent and drafts come from. Omitted, the roster's tenant is both.
+ */
+export type OutreachObjectiveScope = { tenantId: string; canonicalOperatorId: string };
+
+function objectiveAreaFor(input: { tenantId: string; canonicalOperatorId: string; objective?: OutreachObjectiveScope }) {
+  return readObjectiveArea(
+    input.objective
+      ? { ...input.objective, orderBookTenantId: input.tenantId }
+      : { tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId }
+  );
+}
+
 export class PersonalOutreachBlocked extends Error {
   readonly code = "personal_outreach_blocked" as const;
   readonly blocks: PersonalOutreachBlock[];
@@ -124,9 +139,10 @@ export async function readPersonalOutreachRoster(input: {
   now: Date;
   territoryId?: string;
   limit?: number;
+  objective?: OutreachObjectiveScope;
 }): Promise<PersonalOutreachRoster | null> {
   if (!input.tenantId.trim()) return null;
-  const area = await readObjectiveArea(input).catch(() => null);
+  const area = await objectiveAreaFor(input).catch(() => null);
   if (!area) {
     return withheldRoster({
       area: "Silver Lake",
@@ -275,14 +291,12 @@ export async function assertPersonalOutreachHandoff(input: {
   territoryId?: string;
   now?: Date;
   timeZone?: string;
+  objective?: OutreachObjectiveScope;
 }): Promise<PersonalHandoffIdentity> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const today = now.toISOString().slice(0, 10);
-  const area = await readObjectiveArea({
-    tenantId: input.tenantId,
-    canonicalOperatorId: input.canonicalOperatorId,
-  }).catch(() => null);
+  const area = await objectiveAreaFor(input).catch(() => null);
   if (!area) {
     throw new PersonalOutreachBlocked(
       `The recovery objective could not be read. ${NOT_AN_EMPTY_LIST}`,

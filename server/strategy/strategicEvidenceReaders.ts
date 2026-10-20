@@ -550,10 +550,16 @@ const FOCUS_WINDOW_DAYS = 90;
  * The operator's applied area focus, by the operating mandate's rule: an area
  * the operator confirmed first, else the newest conversational remark naming
  * a neighborhood the business has orders in. Returned as business-query
- * address filters for the area's call sheets and rosters.
+ * address filters for the area's call sheets and rosters. `orderBookTenantId`
+ * names the book whose orders count, when the area's customers live in a
+ * book other than the signed-in tenant's (Silver Lake reads Laundry Farm's).
  */
-export async function readObjectiveArea(input: { tenantId: string; canonicalOperatorId: string }) {
-  const focus = await loadAppliedMandateFocus({ tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId });
+export async function readObjectiveArea(input: { tenantId: string; canonicalOperatorId: string; orderBookTenantId?: string }) {
+  const focus = await loadAppliedMandateFocus({
+    tenantId: input.tenantId,
+    canonicalOperatorId: input.canonicalOperatorId,
+    orderBookTenantId: input.orderBookTenantId,
+  });
   if (!focus?.area) return null;
   const filters = areaLedgerFilters(focus.area);
   if (!filters) return null;

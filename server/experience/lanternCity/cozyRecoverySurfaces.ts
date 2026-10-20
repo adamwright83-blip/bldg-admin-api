@@ -11,6 +11,7 @@ import {
   type CozyRecoverySurfaces,
 } from "../../../shared/cozyVillagerEvidence";
 import { loadMissionPresentations } from "../../agents/daphne/missionFollowUp";
+import type { OutreachObjectiveScope } from "../../strategy/personalOutreachWrite";
 import { readObjectiveArea } from "../../strategy/strategicEvidenceReaders";
 import { getCozyEncounterMission } from "./cozyVillagerOutreachService";
 import { listPersonalOutreachReplies } from "./personalNumber/personalOutreachReplyService";
@@ -53,6 +54,8 @@ export async function loadCozyRecoverySurfaces(input: {
   limit?: number;
   now?: Date;
   timeZone?: string;
+  /** Whose objective this is, when `tenantId` is another book (see OutreachObjectiveScope). */
+  objective?: OutreachObjectiveScope;
 }): Promise<CozyRecoverySurfaces> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
@@ -65,6 +68,7 @@ export async function loadCozyRecoverySurfaces(input: {
       limit: input.limit,
       now,
       timeZone,
+      objective: input.objective,
     }),
     listScheduledOutreachMessages({
       tenantId: input.tenantId,
@@ -79,14 +83,14 @@ export async function loadCozyRecoverySurfaces(input: {
       tenantId: input.tenantId,
       operatorId: input.canonicalOperatorId,
     }).catch(() => []),
-    readObjectiveArea({
-      tenantId: input.tenantId,
-      canonicalOperatorId: input.canonicalOperatorId,
-    }).catch(() => null),
-    loadMissionPresentations({
-      tenantId: input.tenantId,
-      canonicalOperatorId: input.canonicalOperatorId,
-    }).catch(() => new Map()),
+    readObjectiveArea(
+      input.objective
+        ? { ...input.objective, orderBookTenantId: input.tenantId }
+        : { tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId }
+    ).catch(() => null),
+    loadMissionPresentations(
+      input.objective ?? { tenantId: input.tenantId, canonicalOperatorId: input.canonicalOperatorId }
+    ).catch(() => new Map()),
   ]);
   const presentationRecord =
     presentations.get("customer_recovery") ?? presentations.get("*") ?? null;

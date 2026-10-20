@@ -118,6 +118,8 @@ async function loadFocusSources(input: {
   canonicalOperatorId: string;
   now: Date;
   timeZone?: string | null;
+  /** The book whose orders say where the business sells, when it is not the signed-in tenant's own. */
+  orderBookTenantId?: string;
 }) {
   const { tenantId, now } = input;
   const timeZone = input.timeZone?.trim() || (await resolveOperatorTimeZone(tenantId)) || "UTC";
@@ -131,7 +133,7 @@ async function loadFocusSources(input: {
   const areas = [...new Set(remarkSources.flatMap(r => (r.area ? [r.area.key] : [])))].sort();
   const areaPlanning = strategyMarketMode(verticalKey) !== "online";
   const areaOrders: Record<string, number | null> = areaPlanning
-    ? await countAreaOrders({ tenantId, areas, businessDate, timeZone, now })
+    ? await countAreaOrders({ tenantId: input.orderBookTenantId ?? tenantId, areas, businessDate, timeZone, now })
     : Object.fromEntries(areas.map(area => [area, null]));
   return { timeZone, businessDate, verticalKey, remarks: remarkSources, decisions, areaPlanning, areaOrders };
 }
@@ -147,6 +149,7 @@ export async function loadAppliedMandateFocus(input: {
   canonicalOperatorId: string;
   now?: Date;
   timeZone?: string | null;
+  orderBookTenantId?: string;
 }): Promise<MandateFocus | null> {
   const sources = await loadFocusSources({ ...input, now: input.now ?? new Date() });
   const resolved = resolveMandateFocuses(sources, sha256);
