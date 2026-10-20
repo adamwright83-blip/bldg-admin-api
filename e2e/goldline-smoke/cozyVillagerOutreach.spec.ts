@@ -41,7 +41,11 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
 
     const world = page.locator('[data-testid="silver-lake-3d"]');
     await expect(world).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId("silver-lake-no-villagers")).toBeVisible({ timeout: 15000 });
+    // the server withholds another area's customers and says why; the roster repeats that, never "nobody"
+    const withheld = page.getByTestId("silver-lake-villagers-withheld");
+    await expect(withheld).toBeVisible({ timeout: 15000 });
+    await expect(withheld).toContainText(/not century-city/i);
+    await expect(page.getByText(/No one to reconnect with/i)).toHaveCount(0);
     await expect(page.getByTestId("silver-lake-villager")).toHaveCount(0);
   });
 

@@ -373,12 +373,14 @@ export default function SilverLake3D({
             Your neighbours could not load right now. Nothing has been sent.
           </p>
         ) : null}
-        {targets.length === 0 && !o.loading && !o.loadFailed ? (
-          <p
-            className={styles.rosterEmpty}
-            data-testid="silver-lake-no-villagers"
-          >
-            No one to reconnect with here today. Explore freely.
+        {targets.length === 0 && !o.loading && !o.loadFailed && o.withheldReason ? (
+          <p className={styles.rosterEmpty} data-testid="silver-lake-villagers-withheld" data-outreach-withheld="true">
+            {o.withheldReason}
+          </p>
+        ) : null}
+        {targets.length === 0 && !o.loading && !o.loadFailed && !o.withheldReason ? (
+          <p className={styles.rosterEmpty} data-testid="silver-lake-no-villagers">
+            {o.emptyMeansNoLapsed ? "No one to reconnect with here today. Explore freely." : "No neighbours are listed here right now."}
           </p>
         ) : null}
         {targets.map(t => {
