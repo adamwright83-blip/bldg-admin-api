@@ -1040,6 +1040,13 @@ export async function createBeverlyHills(container: HTMLElement, assetBase: stri
   function resize() {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
+    if (softwareGl) {
+      // No GPU (CI, locked-down PCs, some Android phones): cap the frame at ~0.4 megapixels so the CPU
+      // rasteriser leaves the page responsive. A full-size desktop frame starved input for minutes on CI.
+      const pr = Math.min(1, Math.sqrt(400_000 / Math.max(1, w * h)));
+      renderer.setPixelRatio(pr);
+      composer.setPixelRatio(pr);
+    }
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     renderer.getDrawingBufferSize(size);
