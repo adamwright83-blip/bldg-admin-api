@@ -5,6 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const outreach = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock("./useSilverLakeOutreach", () => ({ useSilverLakeOutreach: () => outreach.value }));
 vi.mock("./silverLakeRuntime", () => ({ createSilverLake: vi.fn(() => new Promise(() => {})) }));
+vi.mock("./useReunionQuests", () => ({
+  questGiverKey: (id: string) => `quest:${id}`,
+  customerIdFromQuestKey: () => null,
+  useReunionQuests: () => ({ on: false, passing: false, chain: [], phases: new Map(), quest: () => null, items: [], pickItem: () => {}, startReunion: () => [], pass: async () => {}, isPassed: () => false, activeCustomerId: null, reunited: new Set(), decided: () => false }),
+}));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/PlayableLetterDesk", () => ({ PlayableLetterDesk: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/CozyMessageComposer", () => ({ CozyMessageComposer: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/NeighborhoodCourtyardFeature", () => ({ NeighborhoodCourtyardFeature: () => null }));

@@ -132,8 +132,14 @@ export default function SilverLake3D({
 
   const o = useSilverLakeOutreach(territoryId);
   const { targets, selectedTarget, setSelectedSlotId } = o;
-  // Reunion quests run in the synthetic preview only, until a pass can be recorded on the server.
-  const rq = useReunionQuests(o.isSyntheticPreview && ready, targets, questSpots);
+  // Reunion quests: real customers keep their progress and passes on the server; the synthetic preview never writes.
+  const rq = useReunionQuests({
+    enabled: ready,
+    synthetic: o.isSyntheticPreview,
+    territoryId,
+    targets,
+    spots: questSpots,
+  });
 
   // ---------------------------------------------------------------- villagers in the world
   const views = useMemo<VillagerView[]>(() => {
@@ -187,9 +193,15 @@ export default function SilverLake3D({
         done: isDone(t),
       });
     }
+    // an ambient neighbour never duplicates a quest giver (Bella can't be on two doorsteps)
+    const taken = new Set(out.filter(v => v.key.startsWith("quest:")).map(v => v.name));
     COZY_SLOT_IDS.forEach((_, slot) => {
       if (used.has(slot)) return;
-      const variant = VILLAGER_VARIANTS[slot % VILLAGER_VARIANTS.length];
+      const variant =
+        [...VILLAGER_VARIANTS.slice(slot % VILLAGER_VARIANTS.length), ...VILLAGER_VARIANTS].find(
+          v => !taken.has(AMBIENT_NAMES[v])
+        ) ?? VILLAGER_VARIANTS[slot % VILLAGER_VARIANTS.length];
+      taken.add(AMBIENT_NAMES[variant]);
       out.push({
         key: `ambient:${variant}`,
         slot,
@@ -361,9 +373,14 @@ export default function SilverLake3D({
   );
 
   const passOn = useCallback(
-    (customerId: string) => {
+    async (customerId: string) => {
       const t = targetByKey.get(`customer:${customerId}`);
-      rq.pass(customerId);
+      try {
+        await rq.pass(customerId);
+      } catch (err) {
+        setQuestNote(`The pass was not recorded, so nothing changed. ${err instanceof Error ? err.message : ""}`.trim());
+        return;
+      }
       setQuestTalkId(null);
       setReunion(null);
       if (t) setQuestNote(`You passed on ${t.displayName} for now. Nothing was sent.`);
@@ -603,13 +620,8 @@ export default function SilverLake3D({
             <div>
               <strong>{ambientView.name}</strong>
               <p>
-                {
-                  AMBIENT_LINES[
-                    VILLAGER_VARIANTS[
-                      ambientView.slot % VILLAGER_VARIANTS.length
-                    ]
-                  ]
-                }
+                {AMBIENT_LINES[ambientView.key.slice("ambient:".length) as VillagerVariant] ??
+                  AMBIENT_LINES[VILLAGER_VARIANTS[ambientView.slot % VILLAGER_VARIANTS.length]]}
               </p>
               <button type="button" onClick={closeTalk}>
                 Bye for now
@@ -619,7 +631,7 @@ export default function SilverLake3D({
         </div>
       ) : null}
 
-      {rq.on && (questNote || carrying) && !talking ? (
+      {rq.on && (questNote || (carrying && !talking)) ? (
         <div className={styles.questNote} role="status" data-testid="quest-note">
           {questNote ??
             (carrying ? `Carrying the ${carrying.template.item.name} for ${carrying.template.giver.name}.` : null)}
@@ -655,7 +667,8 @@ export default function SilverLake3D({
                     <button
                       type="button"
                       className={styles.questQuiet}
-                      onClick={() => passOn(questTalk.target.customerId)}
+                      onClick={() => void passOn(questTalk.target.customerId)}
+                      disabled={rq.passing}
                       data-testid="quest-pass"
                     >
                       Pass on {questTalk.slots.customerFirst} for now
@@ -748,7 +761,8 @@ export default function SilverLake3D({
                   <button
                     type="button"
                     className={styles.questQuiet}
-                    onClick={() => passOn(reunion.customerId)}
+                    onClick={() => void passOn(reunion.customerId)}
+                    disabled={rq.passing}
                     data-testid="reunion-pass"
                   >
                     Pass on {reunionQuest.slots.customerFirst} for now

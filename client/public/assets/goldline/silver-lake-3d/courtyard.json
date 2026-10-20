@@ -431,6 +431,30 @@
    "y": 7.0,
    "z": 0.0,
    "reach": "ground"
+  },
+  {
+   "id": "washing_line",
+   "hint": "tangled on the washing line by the orange cottage",
+   "x": -14.36,
+   "y": 2.52,
+   "z": 1.9,
+   "reach": "hop"
+  },
+  {
+   "id": "mailbox",
+   "hint": "on top of the mailbox by the blue cottage",
+   "x": -1.4,
+   "y": 8.55,
+   "z": 1.25,
+   "reach": "ground"
+  },
+  {
+   "id": "under_bench",
+   "hint": "under the bench by the fountain",
+   "x": 3.51,
+   "y": 1.92,
+   "z": 0.05,
+   "reach": "ground"
   }
  ]
 }

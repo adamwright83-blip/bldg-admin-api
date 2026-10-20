@@ -537,21 +537,23 @@ export async function createSilverLake(
     new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
   function buildProp(kind: QuestItemKind): THREE.Group {
     const grp = new THREE.Group();
-    if (kind === "flute") {
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.95, 12), toon(0xb9824a));
-      body.rotation.z = Math.PI / 2.4;
-      grp.add(body);
-      for (let i = 0; i < 4; i++) {
-        const hole = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), toon(0x4a2c18));
-        const t = -0.18 + i * 0.13;
-        hole.position.set(-Math.sin(Math.PI / 2.4) * t, Math.cos(Math.PI / 2.4) * t, 0.06);
-        grp.add(hole);
-      }
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.02, 6, 14), toon(0x3d5a45));
-      band.rotation.y = Math.PI / 2;
-      band.rotation.z = Math.PI / 2.4;
-      band.position.set(Math.sin(Math.PI / 2.4) * 0.36, -Math.cos(Math.PI / 2.4) * 0.36, 0);
-      grp.add(band);
+    if (kind === "garden_hose") {
+      // a length of old garden hose, loosely curled, with a brass nozzle: Cleo's "flute"
+      const path = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-0.42, 0.02, 0.1),
+        new THREE.Vector3(-0.2, 0.06, -0.14),
+        new THREE.Vector3(0.08, 0.02, -0.12),
+        new THREE.Vector3(0.22, 0.05, 0.1),
+        new THREE.Vector3(0.02, 0.1, 0.24),
+        new THREE.Vector3(-0.14, 0.16, 0.06),
+        new THREE.Vector3(0.12, 0.2, -0.04),
+        new THREE.Vector3(0.42, 0.18, 0.02),
+      ]);
+      const hose = new THREE.Mesh(new THREE.TubeGeometry(path, 48, 0.045, 10, false), toon(0x5aa04a));
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.055, 0.14, 10), toon(0xc9a24a, { metalness: 0.4 }));
+      nozzle.position.set(0.48, 0.18, 0.02);
+      nozzle.rotation.z = Math.PI / 2;
+      grp.add(hose, nozzle);
     } else if (kind === "kite") {
       const sail = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.04), toon(0xff8a73));
       sail.rotation.z = Math.PI / 4;
@@ -581,6 +583,44 @@ export async function createSilverLake(
       beak.rotation.z = -Math.PI / 2;
       beak.position.set(0.3, 0.19, 0);
       grp.add(body, head, beak);
+    } else if (kind === "scarf") {
+      const red = toon(0xd9534f);
+      const cream = toon(0xfbf6ec);
+      for (let i = 0; i < 6; i++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.05, 0.16), i % 2 ? cream : red);
+        band.position.set(-0.3 + i * 0.11, Math.sin(i * 0.9) * 0.05, 0);
+        band.rotation.z = Math.sin(i * 0.9) * 0.3;
+        grp.add(band);
+      }
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, 0.04), red);
+      tail.position.set(0.32, -0.16, 0);
+      grp.add(tail);
+    } else if (kind === "spectacles") {
+      const rim = toon(0x3b2a1e);
+      for (const x of [-0.12, 0.12]) {
+        const lens = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.018, 8, 20), rim);
+        lens.position.x = x;
+        const glass = new THREE.Mesh(new THREE.CircleGeometry(0.085, 20), toon(0xcfe7fa, { transparent: true, opacity: 0.6 }));
+        glass.position.x = x;
+        grp.add(lens, glass);
+      }
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.02, 0.02), rim);
+      grp.add(bridge);
+      for (const x of [-0.21, 0.21]) {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.24), rim);
+        arm.position.set(x, 0, -0.12);
+        grp.add(arm);
+      }
+    } else if (kind === "teacup") {
+      const china = toon(0xfbf6ec);
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.16, 18), china);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.135, 0.03, 18), toon(0x8fc6ef));
+      band.position.y = 0.05;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), china);
+      handle.position.set(0.15, 0.01, 0);
+      const saucer = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.025, 20), china);
+      saucer.position.y = -0.09;
+      grp.add(cup, band, handle, saucer);
     } else {
       const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.32, 16), toon(0xdcefee, { transparent: true, opacity: 0.85 }));
       const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.07, 16), toon(0xa46a3e));

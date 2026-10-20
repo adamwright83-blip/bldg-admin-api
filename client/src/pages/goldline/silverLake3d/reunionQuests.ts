@@ -10,7 +10,15 @@ import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
  * is missing is dropped, never guessed. The customer never speaks and is never given a pronoun.
  */
 
-export type QuestItemKind = "flute" | "kite" | "watering_can" | "rubber_duck" | "acorn_jar";
+export type QuestItemKind =
+  | "garden_hose"
+  | "kite"
+  | "watering_can"
+  | "rubber_duck"
+  | "acorn_jar"
+  | "scarf"
+  | "spectacles"
+  | "teacup";
 
 export type QuestSpot = {
   id: string;
@@ -32,28 +40,34 @@ export type ReunionQuestTemplate = {
   reunion: ReunionBeat[];
 };
 
+/**
+ * One authored template per villager animal, so every customer in the courtyard can get an errand. Cleo's comes first
+ * and is the most polished. Cats invent their own instruments from whatever they find, so Cleo's "flute" is an old
+ * garden hose, never an actual instrument.
+ */
 export const REUNION_QUEST_TEMPLATES: readonly ReunionQuestTemplate[] = [
   {
-    id: "cat_flute",
+    id: "cat_hose_flute",
     giver: { variant: "cat", name: "Cleo" },
-    item: { kind: "flute", name: "flute" },
+    item: { kind: "garden_hose", name: "old garden hose" },
     spotId: "tree_hollow",
     lines: {
-      locked: "Shh. I'm composing. Come back in a bit?",
-      need: "I've got a song stuck in my whiskers and nothing to play it on. I'm sure I saw a {item} {hint}.",
-      carrying: "Is that... a {item}? For me? Oh, give it here.",
-      waiting: "{customerFirst} is still here, humming along. Write when you're ready.",
-      thanks: "Thank you for the {item}. I'm nearly good at it now.",
+      locked: "Shh. I'm tuning a stick. Come back in a bit?",
+      need: "I've got a song stuck in my whiskers and nothing to play it on. I need a flute. Something long, hollow and a bit bendy. I'm sure I saw an {item} {hint}.",
+      carrying: "Long. Hollow. A bit bendy. That's the finest flute I've ever seen. Give it here.",
+      waiting: "{customerFirst} is still here. Write when you're ready. I'll play something soothing.",
+      thanks: "Thank you for the flute. I've written a whole symphony. It's mostly one note.",
     },
     reunion: [
-      { speaker: "narrator", text: "Cleo plays three wobbly notes. Then a fourth, much worse one." },
+      { speaker: "narrator", text: "Cleo lifts the old garden hose like a flute and plays three wobbly notes. Then a fourth, much worse one." },
+      { speaker: "narrator", text: "Somewhere behind the cottages, a dog howls along." },
       { speaker: "narrator", text: "{customerName} follows the tune into the courtyard." },
       {
         speaker: "giver",
         text: "{customerFirst}! I'd know that walk anywhere. It's been {daysSinceLastOrder} days since your last order. The washing line has been sulking.",
       },
       { speaker: "giver", text: "{paidOrders} {orderWord} with us, and then the courtyard went quiet." },
-      { speaker: "giver", text: "You should write to {customerFirst}. Go on, I'll keep practising." },
+      { speaker: "giver", text: "You should write to {customerFirst}. Go on. I'm going to keep practising." },
     ],
   },
   {
@@ -65,7 +79,7 @@ export const REUNION_QUEST_TEMPLATES: readonly ReunionQuestTemplate[] = [
       locked: "Busy, busy! Come back in a bit?",
       need: "My {item} went on an adventure without me. Last seen {hint}. I can't jump that high. Can you?",
       carrying: "My {item}! You actually got it down!",
-      waiting: "{customerFirst} is watching the {item}. Write when you're ready.",
+      waiting: "{customerFirst} is by the fountain. Write when you're ready.",
       thanks: "The {item} hasn't escaped since. Thank you!",
     },
     reunion: [
@@ -84,7 +98,7 @@ export const REUNION_QUEST_TEMPLATES: readonly ReunionQuestTemplate[] = [
       locked: "Mm. Pumpkin business. Later, friend.",
       need: "The pumpkins are thirsty and I've misplaced my {item}. Try {hint}.",
       carrying: "My {item}! The pumpkins thank you. Quietly.",
-      waiting: "{customerFirst} is admiring the pumpkins. Write when you're ready.",
+      waiting: "{customerFirst} is by the pumpkins. Write when you're ready.",
       thanks: "Biggest pumpkins in Silver Lake. Thanks to you.",
     },
     reunion: [
@@ -123,13 +137,70 @@ export const REUNION_QUEST_TEMPLATES: readonly ReunionQuestTemplate[] = [
       locked: "Counting. Don't make me lose count. Later!",
       need: "I hid my {item} so well I can't find it. Possibly {hint}. Possibly not.",
       carrying: "My {item}! Every acorn accounted for. Probably.",
-      waiting: "{customerFirst} is helping me count. Write when you're ready.",
+      waiting: "{customerFirst} is here. I'm counting. Write when you're ready.",
       thanks: "Still counting. Still grateful.",
     },
     reunion: [
       { speaker: "narrator", text: "Sammy counts the acorns, and loses count." },
       { speaker: "narrator", text: "{customerName} wanders over." },
       { speaker: "giver", text: "{customerFirst}! {paidOrders} {orderWord}, I counted. Then nothing for {daysSinceLastOrder} days." },
+      { speaker: "giver", text: "You should write to {customerFirst}." },
+    ],
+  },
+  {
+    id: "fox_lucky_scarf",
+    giver: { variant: "fox", name: "Fennel" },
+    item: { kind: "scarf", name: "lucky scarf" },
+    spotId: "washing_line",
+    lines: {
+      locked: "Can't stop, looking for something lucky. Later?",
+      need: "The wind stole my {item}. It's {hint}, flapping at me. Rude. You'll have to hop for it.",
+      carrying: "My {item}! My luck is back. I can feel it in my tail.",
+      waiting: "{customerFirst} is here. Write when you're ready. I'm feeling lucky.",
+      thanks: "Still wearing the {item}. Still lucky.",
+    },
+    reunion: [
+      { speaker: "narrator", text: "Fennel wraps the scarf on twice and strikes a pose." },
+      { speaker: "narrator", text: "{customerName} walks in, right on cue." },
+      { speaker: "giver", text: "{customerFirst}! See? Lucky. {daysSinceLastOrder} days since your last order, and here you are." },
+      { speaker: "giver", text: "You should write to {customerFirst}." },
+    ],
+  },
+  {
+    id: "badger_spectacles",
+    giver: { variant: "badger", name: "Bramble" },
+    item: { kind: "spectacles", name: "reading glasses" },
+    spotId: "mailbox",
+    lines: {
+      locked: "Reading. Well, trying to. Later.",
+      need: "I can't read a thing without my {item}. Last seen {hint}. Probably.",
+      carrying: "Ah. Words again. Thank you.",
+      waiting: "{customerFirst} is here. Write when you're ready. Short is fine.",
+      thanks: "Read three letters today. All short. Excellent.",
+    },
+    reunion: [
+      { speaker: "narrator", text: "Bramble puts the glasses on and squints across the courtyard." },
+      { speaker: "narrator", text: "{customerName} comes into focus." },
+      { speaker: "giver", text: "{customerFirst}. {paidOrders} {orderWord}, then {daysSinceLastOrder} days of nothing. I keep records." },
+      { speaker: "giver", text: "You should write to {customerFirst}. Keep it short." },
+    ],
+  },
+  {
+    id: "hedgehog_teacup",
+    giver: { variant: "hedgehog", name: "Henry" },
+    item: { kind: "teacup", name: "favourite teacup" },
+    spotId: "under_bench",
+    lines: {
+      locked: "The kettle's nearly on. Come back in a bit?",
+      need: "The tea's brewing and my {item} has wandered off. I think it's {hint}.",
+      carrying: "My {item}! Just in time. The tea was getting nervous.",
+      waiting: "{customerFirst} is here. Write when you're ready. Tea's poured.",
+      thanks: "Best cup of tea in Silver Lake. Thank you.",
+    },
+    reunion: [
+      { speaker: "narrator", text: "Henry pours a cup of tea. Then, after some thought, a second one." },
+      { speaker: "narrator", text: "{customerName} arrives just as the kettle whistles." },
+      { speaker: "giver", text: "{customerFirst}! {daysSinceLastOrder} days. I kept the kettle warm." },
       { speaker: "giver", text: "You should write to {customerFirst}." },
     ],
   },
@@ -210,33 +281,46 @@ export function hasRealDecision(target: CozyProjectedTarget, passes: ReadonlySet
   return target.status === "scheduled" || target.status === "accepted";
 }
 
-/** Actionable now and still waiting on a decision: the only customers a quest may introduce. */
+/**
+ * Waiting on a decision the operator can make: consent present, not consent-blocked, nothing decided yet. A customer
+ * who cannot be contacted never gets an errand that ends at a letter.
+ */
 export function isQuestEligible(target: CozyProjectedTarget, passes: ReadonlySet<string>): boolean {
-  return target.communicationState === "draft_prepared" && target.hasConsent && !hasRealDecision(target, passes);
+  return target.hasConsent && target.communicationState !== "consent_blocked" && !hasRealDecision(target, passes);
 }
 
 export type QuestAssignment = { template: ReunionQuestTemplate; customerId: string };
 
 /**
- * Who gets a quest, in slot order. Assignment is made once per visit from the targets as first projected, so a
- * decision later in the visit completes a quest instead of reshuffling the chain.
+ * Who gets which errand, in slot order. A customer with saved progress keeps that errand, even once decided (the
+ * giver then just says thanks, with the customer beside them). Otherwise each takes the
+ * next free template whose giver is a different animal, or the next free one if only same-animal givers are left.
+ * Templates are not reused within a visit. Assignment is made once per visit, so a decision later in the visit
+ * completes a quest instead of reshuffling the chain.
  */
 export function assignReunionQuests(
   targets: readonly CozyProjectedTarget[],
   passes: ReadonlySet<string> = new Set(),
-  templates: readonly ReunionQuestTemplate[] = REUNION_QUEST_TEMPLATES
+  templates: readonly ReunionQuestTemplate[] = REUNION_QUEST_TEMPLATES,
+  kept: ReadonlyMap<string, string> = new Map()
 ): QuestAssignment[] {
+  // a customer with saved progress keeps their giver even once decided, so the world remembers the reunion
+  const reachable = (t: CozyProjectedTarget) => t.hasConsent && t.communicationState !== "consent_blocked";
+  const ordered = [...targets]
+    .sort((a, b) => a.slotId.localeCompare(b.slotId))
+    .filter(t => isQuestEligible(t, passes) || (kept.has(t.customerId) && reachable(t)));
   const free = [...templates];
-  const out: QuestAssignment[] = [];
-  const ordered = [...targets].sort((a, b) => a.slotId.localeCompare(b.slotId));
+  const chosen = new Map<string, ReunionQuestTemplate>();
   for (const t of ordered) {
-    if (!isQuestEligible(t, passes)) continue;
-    const i = free.findIndex(tpl => tpl.giver.variant !== t.villagerVariant);
-    if (i < 0) continue;
-    out.push({ template: free[i], customerId: t.customerId });
-    free.splice(i, 1);
+    const i = free.findIndex(tpl => tpl.id === kept.get(t.customerId));
+    if (i >= 0) chosen.set(t.customerId, free.splice(i, 1)[0]);
   }
-  return out;
+  for (const t of ordered) {
+    if (chosen.has(t.customerId) || free.length === 0) continue;
+    const different = free.findIndex(tpl => tpl.giver.variant !== t.villagerVariant);
+    chosen.set(t.customerId, free.splice(different >= 0 ? different : 0, 1)[0]);
+  }
+  return ordered.filter(t => chosen.has(t.customerId)).map(t => ({ template: chosen.get(t.customerId)!, customerId: t.customerId }));
 }
 
 export type QuestPhase =

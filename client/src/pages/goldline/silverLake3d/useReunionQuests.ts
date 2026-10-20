@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import { projectReunionProgress, type ReunionEventKind } from "@shared/silverLakeReunionEvents";
 import {
   assignReunionQuests,
   fillLine,
@@ -17,11 +19,11 @@ import {
 import type { QuestItemView } from "./silverLakeRuntime";
 
 /**
- * Reunion-quest state for one visit to the courtyard (docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md).
+ * Reunion-quest state for the courtyard (docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md).
  *
- * Fiction progress (item found, reunion seen) and passes live here, in memory. Real decisions are read from the
- * targets the outreach hook already projects. Quests are only switched on for the synthetic preview: a pass for a
- * real customer needs a server record first, which does not exist yet.
+ * Real decisions are read from the targets the outreach hook already projects. Fiction progress (item found, reunion
+ * seen) and explicit passes are append-only server events for real customers; the synthetic preview keeps them in
+ * memory and never writes. A pass for a real customer only counts once the server has recorded it.
  */
 
 export const questGiverKey = (customerId: string) => `quest:${customerId}`;
@@ -39,16 +41,50 @@ export type ActiveQuest = {
   line: string;
 };
 
-export function useReunionQuests(enabled: boolean, targets: readonly CozyProjectedTarget[], spots: readonly QuestSpot[]) {
-  const [chain, setChain] = useState<QuestAssignment[] | null>(null);
-  const [passes, setPasses] = useState<ReadonlySet<string>>(() => new Set());
-  const [found, setFound] = useState<ReadonlySet<string>>(() => new Set());
-  const [reunited, setReunited] = useState<ReadonlySet<string>>(() => new Set());
+const union = (a: ReadonlySet<string>, b: ReadonlySet<string>) => (b.size ? new Set([...a, ...b]) : a);
 
-  // the chain is assigned once per visit, from the targets as first projected
+export function useReunionQuests(input: {
+  enabled: boolean;
+  synthetic: boolean;
+  territoryId: string;
+  targets: readonly CozyProjectedTarget[];
+  spots: readonly QuestSpot[];
+}) {
+  const { enabled, synthetic, territoryId, targets, spots } = input;
+  const [chain, setChain] = useState<QuestAssignment[] | null>(null);
+  // this visit's own progress; for real customers the server's events are merged in below
+  const [localPasses, setLocalPasses] = useState<ReadonlySet<string>>(() => new Set());
+  const [localFound, setLocalFound] = useState<ReadonlySet<string>>(() => new Set());
+  const [localReunited, setLocalReunited] = useState<ReadonlySet<string>>(() => new Set());
+
+  const eventsQuery = trpc.system.goldlineWorld.reunionQuestEvents.useQuery(
+    { territoryId },
+    { enabled: enabled && !synthetic, staleTime: 5000, refetchOnWindowFocus: false }
+  );
+  const recordEvent = trpc.system.goldlineWorld.recordReunionQuestEvent.useMutation();
+  const server = useMemo(
+    () => (synthetic ? null : projectReunionProgress(eventsQuery.data?.events ?? [])),
+    [synthetic, eventsQuery.data]
+  );
+  const passes = useMemo(() => union(server?.passes ?? new Set(), localPasses), [server, localPasses]);
+  const found = useMemo(() => union(server?.found ?? new Set(), localFound), [server, localFound]);
+  const reunited = useMemo(() => union(server?.reunited ?? new Set(), localReunited), [server, localReunited]);
+  const progressReady = synthetic || eventsQuery.isSuccess || eventsQuery.isError;
+
+  // the chain is assigned once per visit, from the targets as first projected; saved progress keeps its errand
   useEffect(() => {
-    if (enabled && !chain && targets.length > 0 && spots.length > 0) setChain(assignReunionQuests(targets));
-  }, [enabled, chain, targets, spots]);
+    if (enabled && progressReady && !chain && targets.length > 0 && spots.length > 0)
+      setChain(assignReunionQuests(targets, passes, undefined, server?.templateByCustomer));
+  }, [enabled, progressReady, chain, targets, spots, passes, server]);
+
+  const record = useCallback(
+    (customerId: string, kind: ReunionEventKind) => {
+      const templateId = chain?.find(q => q.customerId === customerId)?.template.id;
+      if (synthetic || !templateId) return Promise.resolve();
+      return recordEvent.mutateAsync({ territoryId, customerId, templateId, kind }).then(() => undefined);
+    },
+    [chain, synthetic, recordEvent, territoryId]
+  );
 
   const targetsById = useMemo(() => new Map(targets.map(t => [t.customerId, t])), [targets]);
   const spotsById = useMemo(() => new Map(spots.map(s => [s.id, s])), [spots]);
@@ -89,26 +125,39 @@ export function useReunionQuests(enabled: boolean, targets: readonly CozyProject
       .map(q => ({ key: questItemKey(q.customerId), kind: q.template.item.kind, spotId: q.template.spotId }));
   }, [chain, phases]);
 
-  const pickItem = useCallback((itemKey: string) => {
-    const id = customerIdFromQuestKey(itemKey);
-    if (id) setFound(prev => new Set(prev).add(id));
-  }, []);
+  const pickItem = useCallback(
+    (itemKey: string) => {
+      const id = customerIdFromQuestKey(itemKey);
+      if (!id) return;
+      setLocalFound(prev => new Set(prev).add(id));
+      record(id, "item_found").catch(err => console.warn("Reunion quest progress was not saved:", err));
+    },
+    [record]
+  );
 
   /** gives the item back: the reunion starts, and from here on the customer stands beside the giver */
   const startReunion = useCallback(
     (customerId: string): ReunionBeat[] => {
       const q = quest(customerId);
       if (!q) return [];
-      setReunited(prev => new Set(prev).add(customerId));
+      setLocalReunited(prev => new Set(prev).add(customerId));
+      record(customerId, "reunited").catch(err => console.warn("Reunion quest progress was not saved:", err));
       return reunionBeats(q.template, q.slots);
     },
-    [quest]
+    [quest, record]
   );
 
-  /** the operator's explicit pass: a real decision, and nothing is sent */
-  const pass = useCallback((customerId: string) => {
-    setPasses(prev => new Set(prev).add(customerId));
-  }, []);
+  /**
+   * The operator's explicit pass: a real decision, and nothing is sent. For a real customer it counts only after the
+   * server has recorded it; a failure throws and nothing changes.
+   */
+  const pass = useCallback(
+    async (customerId: string) => {
+      await record(customerId, "passed");
+      setLocalPasses(prev => new Set(prev).add(customerId));
+    },
+    [record]
+  );
 
   const isPassed = useCallback((customerId: string) => passes.has(customerId), [passes]);
 
@@ -120,6 +169,7 @@ export function useReunionQuests(enabled: boolean, targets: readonly CozyProject
 
   return {
     on: Boolean(enabled && chain),
+    passing: recordEvent.isPending,
     chain: chain ?? [],
     phases,
     quest,

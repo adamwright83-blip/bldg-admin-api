@@ -80,6 +80,33 @@ export const goldlineWorldRouter = router({
         limit: input?.limit,
       }).then(surfaces => surfaces.mission)
     ),
+  /** Reunion quests: fiction progress and explicit passes for the selected business. Never an outreach state. */
+  reunionQuestEvents: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake") }).optional())
+    .query(async ({ ctx, input }) => {
+      const { listReunionEvents } = await import("../experience/lanternCity/reunionQuestEvents");
+      return { events: await listReunionEvents({ tenantId: ctx.tenantId, territoryId: input?.territoryId ?? "silver-lake" }) };
+    }),
+  recordReunionQuestEvent: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        customerId: z.string().min(1).max(191),
+        templateId: z.string().min(3).max(64),
+        kind: z.enum(["item_found", "reunited", "passed"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordReunionEvent } = await import("../experience/lanternCity/reunionQuestEvents");
+      return recordReunionEvent({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        operatorId: ctx.user.openId,
+        customerId: input.customerId,
+        templateId: input.templateId,
+        kind: input.kind,
+      });
+    }),
   getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
     .input(
       z

@@ -686,6 +686,7 @@
 
 .questNote {
   position: absolute;
+  z-index: 120;
   left: 50%;
   top: 126px;
   transform: translateX(-50%);

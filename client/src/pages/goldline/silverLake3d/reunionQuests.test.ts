@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildSyntheticSilverLakeTargets } from "@shared/playableVillagers";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import { VILLAGER_VARIANTS } from "@shared/cozyVillagerOutreach";
+import { projectReunionProgress, REUNION_PASS_HOLDS_DAYS } from "@shared/silverLakeReunionEvents";
 import {
   REUNION_QUEST_TEMPLATES,
   assignReunionQuests,
@@ -17,7 +19,9 @@ import {
 const targets = () => buildSyntheticSilverLakeTargets("laundry_farm");
 const byId = (list: CozyProjectedTarget[]) => new Map(list.map(t => [t.customerId, t]));
 const MEI = "synthetic:customer:mei_lin";
+const SARAH = "synthetic:customer:sarah_jenkins";
 const MARCUS = "synthetic:customer:marcus_vance";
+const CHLOE = "synthetic:customer:chloe_bennett";
 const GRACE = "synthetic:customer:grace_holloway";
 const none = { found: new Set<string>(), reunited: new Set<string>() };
 const decide = (list: CozyProjectedTarget[], id: string, patch: Partial<CozyProjectedTarget>) =>
@@ -30,20 +34,57 @@ const spots: QuestSpot[] = JSON.parse(
 ).questSpots;
 
 describe("reunion quests: who gets one", () => {
-  it("introduces only actionable, undecided customers, in slot order, never with a giver of the same animal", () => {
+  it("gives every reachable, undecided customer an errand, in slot order, never with a giver of the same animal", () => {
     const chain = assignReunionQuests(targets());
+    // David (scheduled) and Elena (send observed) are decided; Lucas is consent-blocked and can never be written to
     expect(chain.map(q => [q.customerId, q.template.id])).toEqual([
-      [MEI, "cat_flute"],
-      [MARCUS, "bunny_kite"],
-      [GRACE, "bear_watering_can"],
+      [MEI, "cat_hose_flute"],
+      [SARAH, "bunny_kite"],
+      [MARCUS, "bear_watering_can"],
+      [CHLOE, "otter_duck"],
+      [GRACE, "squirrel_acorn_jar"],
     ]);
     const list = byId(targets());
     for (const q of chain) expect(q.template.giver.variant).not.toBe(list.get(q.customerId)!.villagerVariant);
   });
 
-  it("every template's hiding spot exists in courtyard.json", () => {
+  it("every template's hiding spot exists in courtyard.json, and no two templates share one", () => {
     const ids = new Set(spots.map(s => s.id));
     for (const t of REUNION_QUEST_TEMPLATES) expect(ids.has(t.spotId)).toBe(true);
+    expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.spotId)).size).toBe(REUNION_QUEST_TEMPLATES.length);
+  });
+
+  it("has an authored template for every villager animal, so all eight doorsteps can host an errand", () => {
+    expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.giver.variant))).toEqual(new Set(VILLAGER_VARIANTS));
+    const everyone = targets().map(t => ({ ...t, communicationState: "draft_prepared", status: "draft_ready", hasConsent: true, silverLakeStatus: { ...t.silverLakeStatus, message: "draft_prepared" } }) as CozyProjectedTarget);
+    expect(assignReunionQuests(everyone)).toHaveLength(8);
+  });
+
+  it("Cleo's flute is a found object, never a real instrument", () => {
+    const cat = REUNION_QUEST_TEMPLATES[0];
+    expect(cat.id).toBe("cat_hose_flute");
+    expect(cat.item.name).toBe("old garden hose");
+    expect(cat.item.name).not.toMatch(/flute|whistle|recorder|pipe|horn|trumpet|instrument/i);
+  });
+
+  it("a customer with saved progress keeps the same errand on a later visit", () => {
+    const kept = new Map([[MARCUS, "cat_hose_flute"]]);
+    const chain = assignReunionQuests(targets(), new Set(), undefined, kept);
+    expect(chain.find(q => q.customerId === MARCUS)!.template.id).toBe("cat_hose_flute");
+    expect(chain.find(q => q.customerId === MEI)!.template.id).not.toBe("cat_hose_flute");
+  });
+
+  it("a decided customer with saved progress keeps their giver, who just says thanks", () => {
+    const kept = new Map([[MEI, "cat_hose_flute"]]);
+    const chain = assignReunionQuests(targets(), new Set([MEI]), undefined, kept);
+    expect(chain[0]).toMatchObject({ customerId: MEI, template: { id: "cat_hose_flute" } });
+    const phases = questPhases(chain, byId(targets()), new Set([MEI]), none);
+    expect(phases.get(MEI)).toBe("done");
+    expect(phases.get(SARAH)).toBe("need");
+  });
+
+  it("never gives a consent-blocked customer an errand", () => {
+    expect(assignReunionQuests(targets()).some(q => q.customerId === "synthetic:customer:lucas_morales")).toBe(false);
   });
 });
 
@@ -53,8 +94,8 @@ describe("reunion quests: the unlock rule", () => {
     const chain = assignReunionQuests(list);
     const phases = questPhases(chain, byId(list), new Set(), none);
     expect(phases.get(MEI)).toBe("need");
+    expect(phases.get(SARAH)).toBe("locked");
     expect(phases.get(MARCUS)).toBe("locked");
-    expect(phases.get(GRACE)).toBe("locked");
   });
 
   it("solving the puzzle and watching the reunion does not unlock the next villager", () => {
@@ -63,7 +104,7 @@ describe("reunion quests: the unlock rule", () => {
     const progress = { found: new Set([MEI]), reunited: new Set([MEI]) };
     const phases = questPhases(chain, byId(list), new Set(), progress);
     expect(phases.get(MEI)).toBe("waiting");
-    expect(phases.get(MARCUS)).toBe("locked");
+    expect(phases.get(SARAH)).toBe("locked");
   });
 
   it("opening the desk, editing, saving or approving the text does not count as a decision", () => {
@@ -86,8 +127,8 @@ describe("reunion quests: the unlock rule", () => {
     const after = before.map(t => (t.customerId === MEI ? (changed as CozyProjectedTarget) : t));
     const phases = questPhases(chain, byId(after), new Set(), none);
     expect(phases.get(MEI)).toBe("done");
-    expect(phases.get(MARCUS)).toBe("need");
-    expect(phases.get(GRACE)).toBe("locked");
+    expect(phases.get(SARAH)).toBe("need");
+    expect(phases.get(MARCUS)).toBe("locked");
   });
 
   it("an explicit pass is a real decision", () => {
@@ -95,7 +136,7 @@ describe("reunion quests: the unlock rule", () => {
     const chain = assignReunionQuests(list);
     const phases = questPhases(chain, byId(list), new Set([MEI]), none);
     expect(phases.get(MEI)).toBe("done");
-    expect(phases.get(MARCUS)).toBe("need");
+    expect(phases.get(SARAH)).toBe("need");
   });
 
   it("writing to a later customer directly completes that quest without skipping the active one", () => {
@@ -103,8 +144,8 @@ describe("reunion quests: the unlock rule", () => {
     const chain = assignReunionQuests(targets());
     const phases = questPhases(chain, byId(list), new Set(), none);
     expect(phases.get(MEI)).toBe("need");
+    expect(phases.get(SARAH)).toBe("locked");
     expect(phases.get(MARCUS)).toBe("done");
-    expect(phases.get(GRACE)).toBe("locked");
   });
 });
 
@@ -113,6 +154,7 @@ describe("reunion quests: never invent facts about the real customer", () => {
     const [q] = assignReunionQuests(targets());
     const mei = targets().find(t => t.customerId === MEI)!;
     const text = reunionBeats(q.template, questSlotsFor(q.template, spots[0], mei)).map(b => b.text).join(" ");
+    expect(text).toContain("Cleo lifts the old garden hose like a flute");
     expect(text).toContain("Mei Lin follows the tune");
     expect(text).toContain("42 days since your last order");
     expect(text).toContain("5 orders with us");
@@ -147,5 +189,27 @@ describe("reunion quests: never invent facts about the real customer", () => {
       for (const line of lines) expect(line).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
       for (const b of tpl.reunion) expect(["giver", "narrator"]).toContain(b.speaker);
     }
+  });
+});
+
+describe("reunion quests: progress saved on the server", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const at = (daysAgo: number) => new Date(now.getTime() - daysAgo * 86_400_000).toISOString();
+
+  it("a pass holds for a week, then the customer waits on a decision again", () => {
+    const fresh = projectReunionProgress([{ customerId: MEI, templateId: "cat_hose_flute", kind: "passed", createdAt: at(2) }], now);
+    expect(fresh.passes.has(MEI)).toBe(true);
+    const stale = projectReunionProgress(
+      [{ customerId: MEI, templateId: "cat_hose_flute", kind: "passed", createdAt: at(REUNION_PASS_HOLDS_DAYS + 1) }],
+      now
+    );
+    expect(stale.passes.has(MEI)).toBe(false);
+  });
+
+  it("a reunion implies the item was found, and remembers the errand", () => {
+    const p = projectReunionProgress([{ customerId: MEI, templateId: "cat_hose_flute", kind: "reunited", createdAt: at(1) }], now);
+    expect(p.found.has(MEI)).toBe(true);
+    expect(p.reunited.has(MEI)).toBe(true);
+    expect(p.templateByCustomer.get(MEI)).toBe("cat_hose_flute");
   });
 });

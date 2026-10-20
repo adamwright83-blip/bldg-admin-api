@@ -246,23 +246,24 @@ test.describe("Silver Lake Playable Villager Outreach Experience (Phase 3)", () 
 });
 
 /**
- * Reunion quests (docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md), synthetic preview only.
- * Cleo the cat needs a flute; the flute brings Mei Lin back; the Letter Desk opens; Bella stays on a one-liner
- * until the operator makes a real decision on Mei Lin.
+ * Reunion quests (docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md).
+ * Cleo the cat needs a flute and makes do with an old garden hose; the hose brings Mei Lin back; the Letter Desk
+ * opens; Bella stays on a one-liner until the operator makes a real decision on Mei Lin.
  */
 const MEI = "synthetic:customer:mei_lin";
-const MARCUS = "synthetic:customer:marcus_vance";
+const SARAH = "synthetic:customer:sarah_jenkins";
 type CourtyardHook = {
   state(): { intro: boolean; near: string | null };
   teleportNear(key: string): boolean;
   teleportToItem(key: string): boolean;
   items(): string[];
 };
+const hook = (page: Page) => page.evaluate(() => (window as unknown as { __silverLake3d: CourtyardHook }).__silverLake3d.items());
 
-async function enterCourtyard(page: Page) {
+async function enterCourtyard(page: Page, url = "/growth/lantern-city?cozy=1&territory=silver-lake&preview=synthetic") {
   // reduced motion: no intro fly-in and no bobbing prompts, so clicks land on a still target
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/growth/lantern-city?cozy=1&territory=silver-lake&preview=synthetic");
+  await page.goto(url);
   await expect(page.locator('[data-testid="silver-lake-3d"]')).toBeVisible({ timeout: 15000 });
   const world = page.locator('[data-testid="silver-lake-3d-canvas"], [data-testid="silver-lake-3d-unavailable"]').first();
   await expect(world).toBeVisible({ timeout: 30000 });
@@ -275,26 +276,30 @@ async function enterCourtyard(page: Page) {
   return true;
 }
 
-async function talkTo(page: Page, key: string, name: string) {
-  await page.evaluate(k => (window as unknown as { __silverLake3d: CourtyardHook }).__silverLake3d.teleportNear(k), key);
+async function talkTo(page: Page, key: string, name: string | RegExp) {
+  // the giver appears once the visit's quests are assigned (for real customers, after saved progress loads)
+  await expect
+    .poll(() => page.evaluate(k => (window as unknown as { __silverLake3d: CourtyardHook }).__silverLake3d.teleportNear(k), key))
+    .toBe(true);
   const prompt = page.locator('[data-testid="silver-lake-3d-talk"]');
-  await expect(prompt).toContainText(`Talk to ${name}`);
+  await expect(prompt).toContainText(typeof name === "string" ? `Talk to ${name}` : name);
   await prompt.click();
 }
 
-async function findItem(page: Page, customerId: string) {
+async function findItem(page: Page, customerId: string, item = "old garden hose", giver = "Cleo") {
+  await expect.poll(() => hook(page)).toContain(`item:${customerId}`);
   await page.evaluate(
     k => (window as unknown as { __silverLake3d: CourtyardHook }).__silverLake3d.teleportToItem(k),
     `item:${customerId}`
   );
   const pick = page.locator('[data-testid="silver-lake-3d-pick"]');
-  await expect(pick).toContainText("Pick up the flute");
+  await expect(pick).toContainText(`Pick up the ${item}`);
   await pick.click();
-  await expect(page.locator('[data-testid="quest-note"]')).toContainText("You found the flute! Bring it to Cleo.");
+  await expect(page.locator('[data-testid="quest-note"]')).toContainText(`You found the ${item}! Bring it to ${giver}.`);
 }
 
-async function reunite(page: Page) {
-  await talkTo(page, `quest:${MEI}`, "Cleo");
+async function reunite(page: Page, customerId = MEI, giver: string | RegExp = "Cleo") {
+  await talkTo(page, `quest:${customerId}`, giver);
   const dialog = page.locator('[data-testid="quest-dialog"]');
   await expect(dialog).toHaveAttribute("data-quest-phase", "carrying");
   await dialog.locator('[data-testid="quest-give"]').click();
@@ -307,21 +312,21 @@ async function reunite(page: Page) {
 }
 
 async function expectBellaLocked(page: Page) {
-  await talkTo(page, `quest:${MARCUS}`, "Bella");
+  await talkTo(page, `quest:${SARAH}`, "Bella");
   const dialog = page.locator('[data-testid="quest-dialog"]');
   await expect(dialog).toHaveAttribute("data-quest-phase", "locked");
   await expect(dialog.locator('[data-testid="quest-line"]')).toHaveText("Busy, busy! Come back in a bit?");
-  await expect(dialog.locator('[data-testid="quest-skip"]')).toHaveText("Just write to Marcus");
+  await expect(dialog.locator('[data-testid="quest-skip"]')).toHaveText("Just write to Sarah");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 }
 
-test.describe("Silver Lake reunion quests (synthetic preview)", () => {
+test.describe("Silver Lake reunion quests", () => {
   test.beforeEach(async ({ page }) => {
     await resetGoldlineProofWorld(page.request);
   });
 
-  test("8. Cleo's flute: find it, the reunion shows Mei Lin's real numbers, the Letter Desk opens, and only scheduling unlocks Bella", async ({
+  test("8. Cleo's garden-hose flute: find it, the reunion shows Mei Lin's real numbers, the Letter Desk opens, and only scheduling unlocks Bella", async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -334,19 +339,20 @@ test.describe("Silver Lake reunion quests (synthetic preview)", () => {
     // Cleo's need, with the always-visible skip
     await talkTo(page, `quest:${MEI}`, "Cleo");
     const dialog = page.locator('[data-testid="quest-dialog"]');
-    await expect(dialog).toHaveAttribute("data-quest-id", "cat_flute");
+    await expect(dialog).toHaveAttribute("data-quest-id", "cat_hose_flute");
     await expect(dialog).toHaveAttribute("data-quest-phase", "need");
-    await expect(dialog.locator('[data-testid="quest-line"]')).toContainText("nothing to play it on");
+    await expect(dialog.locator('[data-testid="quest-line"]')).toContainText("Something long, hollow and a bit bendy");
     await expect(dialog.locator('[data-testid="quest-skip"]')).toHaveText("Just write to Mei");
     await page.keyboard.press("Escape");
 
     // the next giver only has a one-liner
     await expectBellaLocked(page);
 
-    // find the flute and bring it back: the reunion plays with real numbers only
+    // find the hose and bring it back: the reunion plays with real numbers only
     await findItem(page, MEI);
     const vignette = await reunite(page);
     const beats = vignette.locator('[data-testid="reunion-beat"]');
+    await expect(beats.filter({ hasText: "Cleo lifts the old garden hose like a flute" })).toHaveCount(1);
     await expect(beats.filter({ hasText: "Mei Lin follows the tune into the courtyard." })).toHaveCount(1);
     await expect(beats.filter({ hasText: "42 days since your last order" })).toHaveCount(1);
     await expect(beats.filter({ hasText: "5 orders with us" })).toHaveCount(1);
@@ -359,7 +365,7 @@ test.describe("Silver Lake reunion quests (synthetic preview)", () => {
     const letter = await desk.locator('[data-testid="cozy-message-draft-textarea"]').inputValue();
     expect(letter).toContain("Mei");
     expect(letter).toContain("42 days");
-    expect(letter).not.toMatch(/flute|Cleo|courtyard|\bcat\b/i);
+    expect(letter).not.toMatch(/hose|flute|Cleo|courtyard|\bcat\b/i);
 
     // solving the puzzle and opening the desk is not a decision: Bella is still locked
     await desk.locator('button[aria-label="Close writing desk"]').click();
@@ -372,7 +378,7 @@ test.describe("Silver Lake reunion quests (synthetic preview)", () => {
     await desk.locator('[data-testid="commit-schedule-button"]').click();
     await expect(desk.locator('[data-testid="banner-scheduled"]')).toContainText(/Scheduled — not sent/i);
     await desk.locator('button[aria-label="Close writing desk"]').click();
-    await talkTo(page, `quest:${MARCUS}`, "Bella");
+    await talkTo(page, `quest:${SARAH}`, "Bella");
     await expect(dialog).toHaveAttribute("data-quest-phase", "need");
     await expect(dialog.locator('[data-testid="quest-line"]')).toContainText("kite");
     expect(errors).toEqual([]);
@@ -387,7 +393,7 @@ test.describe("Silver Lake reunion quests (synthetic preview)", () => {
     await expect(page.locator('[data-testid="quest-note"]')).toContainText("You passed on Mei Lin for now. Nothing was sent.");
     const mei = page.locator('[data-testid="silver-lake-villager"][data-customer-id="synthetic:customer:mei_lin"]');
     await expect(mei).toHaveAttribute("data-communication-state", "draft_prepared");
-    await talkTo(page, `quest:${MARCUS}`, "Bella");
+    await talkTo(page, `quest:${SARAH}`, "Bella");
     await expect(page.locator('[data-testid="quest-dialog"]')).toHaveAttribute("data-quest-phase", "need");
   });
 
@@ -398,5 +404,32 @@ test.describe("Silver Lake reunion quests (synthetic preview)", () => {
     const desk = page.locator('[data-testid="playable-letter-desk"]');
     await expect(desk).toBeVisible();
     await expect(desk).toHaveAttribute("data-villager-variant", "fox");
+  });
+
+  test("11. Real customers: the reunion and a pass are saved on the server and survive a reload; nothing is sent", async ({
+    page,
+  }) => {
+    const real = "/growth/lantern-city?cozy=1&territory=silver-lake";
+    test.skip(!(await enterCourtyard(page, real)), "this runner has no WebGL, so the courtyard (and its quests) cannot start");
+    await expect.poll(() => hook(page), { timeout: 15000 }).toHaveLength(1);
+    const [itemKey] = await hook(page);
+    const customerId = itemKey.slice("item:".length);
+    const roster = page.locator(`[data-testid="silver-lake-villager"][data-customer-id="${customerId}"]`);
+    const stateBefore = await roster.getAttribute("data-communication-state");
+
+    await findItem(page, customerId);
+    const vignette = await reunite(page, customerId);
+    await expect(vignette).not.toContainText(/undefined|NaN|null/);
+    await vignette.locator('[data-testid="reunion-pass"]').click();
+    await expect(page.locator('[data-testid="quest-note"]')).toContainText("for now. Nothing was sent.");
+    await expect(roster).toHaveAttribute("data-communication-state", stateBefore ?? "");
+
+    // the pass is on the server: after a reload Cleo is done, and the next errand (if any) is the open one
+    await enterCourtyard(page, real);
+    await talkTo(page, `quest:${customerId}`, "Cleo");
+    await expect(page.locator('[data-testid="quest-dialog"]')).toHaveAttribute("data-quest-phase", "done");
+    await page.keyboard.press("Escape");
+    expect(await hook(page)).not.toContain(itemKey);
+    await expect(roster).toHaveAttribute("data-communication-state", stateBefore ?? "");
   });
 });

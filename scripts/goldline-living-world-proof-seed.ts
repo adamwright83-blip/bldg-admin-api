@@ -50,6 +50,7 @@ const TENANT = "default";
 /** Proof-tenant tables tests and this fixture write. Auth/users are left alone. */
 const PROOF_TENANT_TABLES = [
   "authority_receipts",
+  "silver_lake_reunion_events",
   "scheduled_outreach_revisions",
   "scheduled_outreach_messages",
   "daphne_goals",
@@ -108,7 +109,8 @@ async function wipeProofTenant(db: NonNullable<Awaited<ReturnType<typeof getDb>>
   for (const table of PROOF_TENANT_TABLES) {
     const col =
       table === "scheduled_outreach_messages" ||
-      table === "scheduled_outreach_revisions"
+      table === "scheduled_outreach_revisions" ||
+      table === "silver_lake_reunion_events"
         ? "tenant_id"
         : "tenantId";
     await db.execute(
