@@ -1787,12 +1787,19 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const r = renderer.domElement.getBoundingClientRect();
     // a tap on an island's name tag picks that island (the tag floats above it, often over water)
     const lx = e.clientX - r.left, ly = e.clientY - r.top, slop = down.pointerType === "touch" ? 10 : 4;
+    // Tags sit close together on a phone: a tag the tap is inside wins over one it only grazes (touch slop),
+    // and among those, the nearest tag centre wins.
+    let pick = -1, pickScore = Infinity;
     for (const [own, rect] of labelRects) {
       if (!rect || lx < rect[0] - slop || lx > rect[2] + slop || ly < rect[1] - slop || ly > rect[3] + slop) continue;
-      const l = islands[own];
-      if (!l) continue;
+      const inside = lx >= rect[0] && lx <= rect[2] && ly >= rect[1] && ly <= rect[3];
+      const score = Math.hypot(lx - (rect[0] + rect[2]) / 2, ly - (rect[1] + rect[3]) / 2) + (inside ? 0 : 100000);
+      if (score < pickScore) { pickScore = score; pick = own; }
+    }
+    if (pick >= 0 && islands[pick]) {
+      const l = islands[pick];
       activeIslandName = l.name;
-      events.onIsland?.({ name: l.name, lanterns: islandCounts.get(own) ?? 0, served: l.served, x: l.label[0], z: l.label[1] });
+      events.onIsland?.({ name: l.name, lanterns: islandCounts.get(pick) ?? 0, served: l.served, x: l.label[0], z: l.label[1] });
       flyTo(l.label[0], l.label[1], Math.max(2400, Math.sqrt(l.area) * 1.6));
       return;
     }

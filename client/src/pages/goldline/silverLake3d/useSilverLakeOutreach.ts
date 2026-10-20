@@ -260,6 +260,9 @@ export function useSilverLakeOutreach(territoryId: string) {
     targets,
     loading: !isSyntheticPreview && missionQuery.isLoading,
     loadFailed: !isSyntheticPreview && missionQuery.isError,
+    /** the server withheld the list (e.g. the recovery objective could not be read): never present that as "nobody" */
+    withheldReason: (!isSyntheticPreview && (missionQuery.data as { withheldReason?: string | null } | undefined)?.withheldReason) || null,
+    emptyMeansNoLapsed: isSyntheticPreview || (missionQuery.data as { emptyMeansNoLapsedCustomers?: boolean } | undefined)?.emptyMeansNoLapsedCustomers === true,
     objectiveId: (missionQuery.data?.objectiveId ?? null) as string | null,
     isSending: sendMutation.isPending || scheduleMutation.isPending,
     neighborhoodMemory,
