@@ -5,7 +5,10 @@ import "./joystick-landing.css";
 
 const START_PATH = "/joystick-start";
 const MEDIA = "/joystick/gameplay";
-const INITIAL_DRAFT = "Hi Maya, need a pickup this week? Happy to help.";
+// the same sample customer the clip ends on (the game's synthetic preview), so the story lines up
+const INITIAL_DRAFT = "Hey Mei! It's been about 42 days since your last pickup. Want us to grab your laundry this week?";
+/** the clip reaches Hazel pointing out Mei Lin at about 11.5s; the desk slides up then */
+const DESK_AT_SECONDS = 11.5;
 const GAMES = [
   {
     id: "silver-lake",
@@ -145,11 +148,11 @@ function ExampleGame() {
           src={playback.load ? `${MEDIA}/silver-lake.mp4` : undefined}
           poster={`${MEDIA}/silver-lake.jpg`}
           muted loop playsInline preload="none"
-          aria-label="Silver Lake gameplay: a courtyard encounter leads to an editable customer check-in."
+          aria-label="Silver Lake gameplay: wearing a tea cosy as a glove, she shakes the porcupine, dips its shed quill in the ink well, and writes the squirrel a letter to settle its HOA complaint. The squirrel points out a quiet customer, and an editable check-in follows."
           onPlay={playback.onPlay}
           onPause={playback.onPause}
           onError={playback.onError}
-          onTimeUpdate={() => setAtDesk((videoRef.current?.currentTime ?? 0) >= 7)}
+          onTimeUpdate={() => setAtDesk((videoRef.current?.currentTime ?? 0) >= DESK_AT_SECONDS)}
         />
         <div className="jl-scene-caption">
           <span className="jl-kicker">THE WIN-BACK GAME</span>
@@ -173,7 +176,7 @@ function ExampleGame() {
           <div className="jl-desk-content">
             <div className="jl-customer">
               <span className="jl-customer-avatar" aria-hidden="true">M</span>
-              <div><h2>Maya R.</h2><p>It’s been a little while.</p><span>Time for a friendly check-in.</span></div>
+              <div><h2>Mei L.</h2><p>42 days since the last pickup · 5 orders</p><span>The sample customer from the game above.</span></div>
             </div>
             <div className="jl-draft">
               <label className="jl-draft-label" htmlFor="joystick-example-draft">
@@ -259,6 +262,14 @@ export default function JoystickLanding() {
       path: window.location.pathname,
       source: "joystick_landing",
       concept: "playable_worlds",
+    });
+    captureProductEvent("landing_pricing_viewed", {
+      monthly_usd: 49,
+      trial_days: 7,
+      card_required_at_signup: true,
+      annual_shown: false,
+      checkout_live: false,
+      source: "joystick_landing",
     });
     captureProductEvent("landing_checkout_unavailable", {
       checkout_live: false,
