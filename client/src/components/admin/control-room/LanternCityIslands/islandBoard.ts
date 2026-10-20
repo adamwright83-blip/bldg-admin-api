@@ -32,6 +32,8 @@ export type IslandLantern = { key: string; latitude: number; longitude: number; 
 export type IslandInfo = { name: string; lanterns: number; served: boolean; x: number; z: number };
 export type IslandEvents = {
   onReady?: () => void;
+  /** the islands are drawn and clickable; buildings may still be rising */
+  onInteractive?: () => void;
   onError?: (e: unknown) => void;
   onIsland?: (info: IslandInfo | null) => void;
   onStats?: (s: { islands: number; open: number; lanterns: number }) => void;
@@ -367,6 +369,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     startBuildings();
     ready = true;
     frameBoard();
+    events.onInteractive?.();
     applyLanterns(true);
     if (opts.capture) console.log(`[islands] ${islands.map(l => `${l.name}:${l.plans.length}`).join(" ")}`);
   }
