@@ -46,6 +46,7 @@ import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationCons
 import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
+import { silverLakeOperatorId } from "../experience/lanternCity/silverLakeScope";
 import {
   PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -69,10 +70,11 @@ export const goldlineWorldRouter = router({
         })
         .optional()
     )
-    .query(({ ctx, input }) =>
+    .query(async ({ ctx, input }) =>
       loadCozyRecoverySurfaces({
         tenantId: ctx.tenantId,
-        canonicalOperatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
+        operatorId: ctx.user.openId,
         territoryId: input?.territoryId,
         requestedCustomerId: input?.requestedCustomerId,
         limit: input?.limit,
@@ -197,10 +199,11 @@ export const goldlineWorldRouter = router({
         draftBody: input.draftBody,
       });
     }),
-  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) =>
     loadCozyRecoverySurfaces({
       tenantId: ctx.tenantId,
-      canonicalOperatorId: ctx.user.openId,
+      canonicalOperatorId: await silverLakeOperatorId(ctx),
+      operatorId: ctx.user.openId,
     }).then(surfaces => surfaces.dayLineCard)
   ),
   sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
@@ -223,10 +226,11 @@ export const goldlineWorldRouter = router({
         idempotencyKey: z.string().optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
+    .mutation(async ({ ctx, input }) =>
       sendCozyOutreachNow({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         expectedPhone: input.expectedPhone,
@@ -256,6 +260,7 @@ export const goldlineWorldRouter = router({
       return await commitPersonalOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
@@ -368,6 +373,7 @@ export const goldlineWorldRouter = router({
       return await approveDurablePersonalOutreach({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         messageId: input.messageId,
         expectedRevisionCount: input.expectedRevisionCount,
         confirmation: input.confirmation,

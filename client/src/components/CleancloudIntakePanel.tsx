@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { validateIntakePlan } from "@shared/cleancloudIntake";
+import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 export function CleancloudIntakePanel() {
   const feed = trpc.system.gumball.intake.list.useQuery(undefined, {
     refetchInterval: 5000,
@@ -13,6 +14,8 @@ export function CleancloudIntakePanel() {
     retry: false,
   });
   const gmailConnect = trpc.system.gumball.gmailConnectUrl.useMutation();
+  const directSync = trpc.system.gumball.directSync.useMutation();
+  const [syncNote, setSyncNote] = useState("");
   const [selected, setSelected] = useState<string | null>(null),
     [search, setSearch] = useState(""),
     [quantities, setQuantities] = useState<Record<string, string>>({}),
@@ -41,7 +44,11 @@ export function CleancloudIntakePanel() {
       className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4"
       aria-label="CleanCloud intake pilot"
     >
-      <h3 className="text-lg font-semibold">CleanCloud intake</h3>
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="text-lg font-semibold">CleanCloud intake</h3>
+        {/* Which business's CleanCloud this panel connects and syncs (only owners of more than one see a choice). */}
+        <BusinessSwitcher />
+      </div>
       {directStatus.data?.gmail.configured ? (
         <div className="my-2 flex items-center gap-3 text-sm">
           <span>
@@ -66,6 +73,40 @@ export function CleancloudIntakePanel() {
           >
             {directStatus.data.gmail.connected ? "Reconnect Gmail" : "Connect Gmail"}
           </button>
+        </div>
+      ) : null}
+      {directStatus.data?.configured && directStatus.data.paired ? (
+        <div className="my-2 flex flex-wrap items-center gap-3 text-sm">
+          <span>
+            CleanCloud {directStatus.data.storeLabel ?? "store"} last synced:{" "}
+            {directStatus.data.lastSuccessAt
+              ? new Date(directStatus.data.lastSuccessAt).toLocaleString()
+              : "never"}
+          </span>
+          <button
+            type="button"
+            className={button}
+            disabled={directSync.isPending}
+            onClick={async () => {
+              setError("");
+              setSyncNote("");
+              try {
+                const result = await directSync.mutateAsync();
+                setSyncNote(
+                  result.success
+                    ? `Synced ${result.range.from} to ${result.range.to}.`
+                    : `Sync did not complete for ${result.range.from} to ${result.range.to}.`
+                );
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "CleanCloud sync failed.");
+              } finally {
+                await directStatus.refetch();
+              }
+            }}
+          >
+            {directSync.isPending ? "Syncing… (up to 2 min)" : "Sync CleanCloud now"}
+          </button>
+          {syncNote ? <span role="status">{syncNote}</span> : null}
         </div>
       ) : null}
       <p className="my-2 text-sm">

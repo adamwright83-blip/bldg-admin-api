@@ -62,6 +62,8 @@ export type PersonalOutreachRoster = {
   lapsedCount: number | null;
   emptyMeansNoLapsedCustomers: boolean;
   withheldReason: string | null;
+  /** No neighbourhood focus is set for this business: the operator can confirm one. Not a read failure. */
+  focusMissing?: boolean;
   contacts: PersonalOutreachContact[];
 };
 
@@ -82,6 +84,7 @@ function withheldRoster(input: {
   area: string;
   freshness: CustomerTruthDisposition;
   reason: string;
+  focusMissing?: boolean;
 }): PersonalOutreachRoster {
   return {
     area: input.area,
@@ -89,6 +92,7 @@ function withheldRoster(input: {
     lapsedCount: null,
     emptyMeansNoLapsedCustomers: false,
     withheldReason: input.reason,
+    ...(input.focusMissing ? { focusMissing: true } : {}),
     contacts: [],
   };
 }
@@ -126,12 +130,19 @@ export async function readPersonalOutreachRoster(input: {
   limit?: number;
 }): Promise<PersonalOutreachRoster | null> {
   if (!input.tenantId.trim()) return null;
-  const area = await readObjectiveArea(input).catch(() => null);
+  let unreadable = false;
+  const area = await readObjectiveArea(input).catch(() => {
+    unreadable = true;
+    return null;
+  });
   if (!area) {
     return withheldRoster({
       area: "Silver Lake",
       freshness: "source_unavailable",
-      reason: `The recovery objective could not be read. ${NOT_AN_EMPTY_LIST}`,
+      reason: unreadable
+        ? `The recovery objective could not be read. ${NOT_AN_EMPTY_LIST}`
+        : `This business has no neighbourhood focus yet, so no customers are presented. ${NOT_AN_EMPTY_LIST}`,
+      focusMissing: !unreadable,
     });
   }
   if (!territoryMatches(area.label, input.territoryId)) {

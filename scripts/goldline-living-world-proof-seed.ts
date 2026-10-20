@@ -640,14 +640,15 @@ async function seed() {
 
   /**
    * Active Daphne goal with Silver Lake address scope, authorizing canonical
-   * win-back dossier and Lantern City cozy villager missions.
+   * win-back dossier and Lantern City cozy villager missions. Filed under the
+   * canonical operator identity, as Daphne files real goals; never the login id.
    */
   await db
     .insert(daphneGoals)
     .values({
       id: "dgoal_proof_silver_lake_objective",
       tenantId: TENANT,
-      canonicalOperatorId: process.env.OWNER_OPEN_ID || "admin-owner",
+      canonicalOperatorId: `tenant:${TENANT}:operator:${process.env.OWNER_OPEN_ID || "admin-owner"}`,
       goalKey: "silver_lake_recovery",
       horizon: "current",
       statement: "Recover dormant laundry customers in Silver Lake",
@@ -659,6 +660,7 @@ async function seed() {
       set: {
         status: "active",
         statement: "Recover dormant laundry customers in Silver Lake",
+        canonicalOperatorId: `tenant:${TENANT}:operator:${process.env.OWNER_OPEN_ID || "admin-owner"}`,
       },
     });
 

@@ -553,6 +553,32 @@
   font-weight: 700;
 }
 
+.focusChoice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.focusButton {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 2px solid #5a3a24;
+  background: #ffd36b;
+  box-shadow: 0 3px 0 #5a3a24;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.focusButton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .rosterItem {
   display: flex;
   align-items: center;

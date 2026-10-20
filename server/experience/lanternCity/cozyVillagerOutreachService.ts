@@ -343,6 +343,7 @@ export async function getCozyEncounterMission(input: {
     activeTargetCount: targets.length,
     targets,
     withheldReason,
+    ...(roster?.focusMissing ? { focusMissing: true } : {}),
     emptyMeansNoLapsedCustomers: roster?.emptyMeansNoLapsedCustomers ?? false,
   };
 }
@@ -368,6 +369,8 @@ export async function commitPersonalOutreachDraft(input: {
   deliveryIntent?: "immediate" | "scheduled";
   dstAmbiguityChoice?: "first" | "second";
   now?: Date;
+  /** The operator's canonical identity, under which their objective is filed. Defaults to `operatorId`. */
+  canonicalOperatorId?: string;
 }) {
   const now = input.now ?? new Date();
   const timezone = input.timezone ?? "America/Los_Angeles";
@@ -391,7 +394,7 @@ export async function commitPersonalOutreachDraft(input: {
   }
   const allowed = await assertPersonalOutreachHandoff({
     tenantId: input.tenantId,
-    canonicalOperatorId: input.operatorId,
+    canonicalOperatorId: input.canonicalOperatorId ?? input.operatorId,
     customerId: input.customerId,
     messageBody,
     territoryId: input.territoryId,
@@ -457,6 +460,7 @@ export async function approveDurablePersonalOutreach(input: {
   expectedRevisionCount: number;
   territoryId?: string;
   now?: Date;
+  canonicalOperatorId?: string;
 }) {
   if (input.confirmation !== PERSONAL_OUTREACH_SCHEDULE_APPROVAL) {
     throw new Error("The exact message, recipient, and send time must be explicitly approved.");
@@ -496,7 +500,7 @@ export async function approveDurablePersonalOutreach(input: {
   }
   await assertPersonalOutreachHandoff({
     tenantId: input.tenantId,
-    canonicalOperatorId: input.operatorId,
+    canonicalOperatorId: input.canonicalOperatorId ?? input.operatorId,
     customerId: message.customerId,
     messageBody: message.currentMessageBody,
     territoryId: input.territoryId ?? message.territoryId ?? undefined,
@@ -530,6 +534,7 @@ export async function sendCozyOutreachNow(input: {
   idempotencyKey?: string;
   now?: Date;
   testSenderAdapter?: OutboundTestSenderAdapter;
+  canonicalOperatorId?: string;
 }): Promise<{
   success: boolean;
   status: "dispatched" | "awaiting_sender_setup";
@@ -557,6 +562,7 @@ export async function sendCozyOutreachNow(input: {
     deliveryIntent: "immediate",
     idempotencyKey: input.idempotencyKey,
     now,
+    canonicalOperatorId: input.canonicalOperatorId,
   });
   const browser = evaluateGoogleMessagesBrowserTransport();
   return {

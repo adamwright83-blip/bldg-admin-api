@@ -8,6 +8,7 @@ vi.mock("./silverLakeRuntime", () => ({ createSilverLake: vi.fn(() => new Promis
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/PlayableLetterDesk", () => ({ PlayableLetterDesk: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/CozyMessageComposer", () => ({ CozyMessageComposer: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/NeighborhoodCourtyardFeature", () => ({ NeighborhoodCourtyardFeature: () => null }));
+vi.mock("@/components/admin/BusinessSwitcher", () => ({ BusinessSwitcher: () => createElement("span", { "data-testid": "business-switcher" }) }));
 import SilverLake3D from "./SilverLake3D";
 
 const base = {
@@ -68,5 +69,26 @@ describe("Silver Lake 3D neighbours roster tells the truth", () => {
     const html = render();
     expect(html).toContain("could not load right now. Nothing has been sent.");
     expect(html).not.toContain("No one to reconnect with");
+  });
+
+  it("a business with no neighbourhood focus says so and offers the switcher and an explicit focus choice", () => {
+    outreach.value = {
+      ...base,
+      withheldReason: "This business has no neighbourhood focus yet, so no customers are presented. Missing customers are not proof that nobody is inactive.",
+      focusMissing: true,
+      confirmFocus: async () => {},
+      confirmingFocus: false,
+      focusError: null,
+    };
+    const html = render();
+    expect(html).toContain('data-testid="silver-lake-focus-missing"');
+    expect(html).toContain('data-testid="business-switcher"');
+    expect(html).toContain("Focus this business on Silver Lake");
+    expect(html).not.toContain("No one to reconnect with");
+  });
+
+  it("an unreadable objective offers no focus choice", () => {
+    outreach.value = { ...base, withheldReason: "The recovery objective could not be read. Missing customers are not proof that nobody is inactive.", focusMissing: false };
+    expect(render()).not.toContain("silver-lake-confirm-focus");
   });
 });
