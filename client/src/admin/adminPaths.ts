@@ -58,7 +58,7 @@ export function isAdminCommandCenterPath(path: string): boolean {
   return path === "/" || path === "/home" || path.startsWith("/home/");
 }
 
-export type LanternScene = "islands" | "map" | "v6" | "atlas" | "silverLake3d" | null;
+export type LanternScene = "islands" | "map" | "v6" | "atlas" | "silverLake3d" | "beverlyHills3d" | null;
 /**
  * Which Lantern City a path shows. Silver Lake (any `cozy` or `encounter` link, including old deep links)
  * always opens the walkable 3D courtyard; the painted 2D encounter is archived and has no route.
@@ -67,6 +67,7 @@ export function lanternSceneFor(path: string, search: string): LanternScene {
   if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
   const params = new URLSearchParams(search);
   if (params.get("cozy") === "1" || params.get("encounter") === "1") return "silverLake3d";
+  if (params.get("level") === "beverly-hills") return "beverlyHills3d";
   const scene = params.get("scene");
   if (scene === "map" || scene === "v7") return "map";
   if (scene === "v6") return "v6";

@@ -17,6 +17,7 @@ import type { DriverCurrentStop } from "./objectiveMarksView";
 import { devSampleCustomers } from "./devSample";
 import styles from "./lantern-city-islands.module.css";
 import { openSilverLake3D } from "@/pages/goldline/silverLake3d/silverLakeEntry";
+import { openBeverlyHills3D } from "@/pages/goldline/beverlyHills3d/beverlyHillsEntry";
 
 // Small Comforts: the playable Tin Can House in Hollywood (zoom to the island, click the house).
 const SmallComforts = lazy(() => import("../SmallComforts/SmallComforts"));
@@ -118,6 +119,11 @@ export default function LanternCityIslands({
           // Silver Lake is a place you can walk into: clicking it opens the 3D courtyard
           if (modeRef.current === "explore" && info?.name === "Silver Lake") {
             openSilverLake3D("silver-lake");
+            return;
+          }
+          // Beverly Hills is the commercial level: the velvet rope, and the real prospects behind it
+          if (modeRef.current === "explore" && info?.name === "Beverly Hills") {
+            openBeverlyHills3D();
             return;
           }
           setIsland(info);
