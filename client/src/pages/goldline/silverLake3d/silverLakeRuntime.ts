@@ -840,7 +840,7 @@ export async function createSilverLake(
   const camPos = new THREE.Vector3();
   const camLook = new THREE.Vector3();
   const intro = { t: 0, dur: reduceMotion ? 0 : 2.6 };
-  let focus: { target: THREE.Vector3; until: number } | null = null;
+  let focus: { target: THREE.Vector3; until: number; look?: THREE.Vector3 } | null = null;
   let discoverySurvey = false;
   function blocked(x: number, z: number) {
     for (const poly of polys) {
@@ -993,7 +993,7 @@ export async function createSilverLake(
       camPos.x = damp(camPos.x, focus.target.x, 3, dt);
       camPos.y = damp(camPos.y, focus.target.y, 3, dt);
       camPos.z = damp(camPos.z, focus.target.z, 3, dt);
-      camLook.lerp(proj, 1 - Math.exp(-4 * dt));
+      camLook.lerp(focus.look ?? proj, 1 - Math.exp(-4 * dt));
     } else {
       focus = null;
       camPos.x = damp(camPos.x, tmp.x, 6, dt);
@@ -1173,7 +1173,7 @@ export async function createSilverLake(
   // her makeshift glove: the tea cosy, worn on the right hand
   const glove = teaCosyMesh();
   // pulled over the hand like a big knitted oven mitt, pom-pom at the fingertips
-  glove.scale.setScalar(1.4);
+  glove.scale.setScalar(1.9);
   glove.rotation.x = Math.PI / 2;
   glove.position.set(0, 0, 0);
   glove.visible = false;
@@ -1207,6 +1207,28 @@ export async function createSilverLake(
     /** Blender coordinates, like courtyard.json */
     teleportTo: (x: number, y: number) => {
       pos.copy(b2t(x, y));
+      return true;
+    },
+    /**
+     * capture: stand her `dist` from a prop or villager at angle `from` (radians, around it), facing it, and hold a
+     * side-on two-shot of both for `ms`. Used to film the landing page's gameplay, never by the game itself.
+     */
+    twoShot: (key: string, opts: { from?: number; dist?: number; side?: number; camDist?: number; camHeight?: number; ms?: number } = {}) => {
+      const it = questItems.get(key);
+      const v = villagers.get(key);
+      const at = it?.base ?? v?.base;
+      if (!at) return false;
+      const from = opts.from ?? 0;
+      const dist = opts.dist ?? 1.3;
+      pos.set(at.x + Math.sin(from) * dist, 0, at.z + Math.cos(from) * dist);
+      heading = Math.atan2(at.x - pos.x, at.z - pos.z);
+      speed = 0;
+      const mid = new THREE.Vector3((at.x + pos.x) / 2, 0, (at.z + pos.z) / 2);
+      const sideDir = new THREE.Vector3(at.z - pos.z, 0, -(at.x - pos.x)).normalize().multiplyScalar(opts.side ?? 1);
+      const camAt = mid.clone().add(sideDir.multiplyScalar(opts.camDist ?? 4.2)).add(new THREE.Vector3(0, opts.camHeight ?? 1.9, 0));
+      focus = { target: camAt, look: mid.clone().add(new THREE.Vector3(0, 0.75, 0)), until: performance.now() + (opts.ms ?? 4000) };
+      camPos.copy(camAt);
+      camLook.copy(focus.look!);
       return true;
     },
     teleportNear: (key: string) => {
