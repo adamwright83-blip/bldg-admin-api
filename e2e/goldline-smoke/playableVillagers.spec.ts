@@ -271,7 +271,8 @@ async function enterCourtyard(page: Page, url = "/growth/lantern-city?cozy=1&ter
   await page.waitForFunction(
     () => (window as unknown as { __silverLake3d?: CourtyardHook }).__silverLake3d?.state().intro === true,
     undefined,
-    { timeout: 30000 }
+    // software WebGL on CI can take well over a minute to load the courtyard
+    { timeout: 120_000 }
   );
   return true;
 }
@@ -323,8 +324,9 @@ async function expectBellaLocked(page: Page) {
 
 test.describe("Silver Lake reunion quests", () => {
   test.beforeEach(async ({ page }) => {
-    // walking the courtyard under software WebGL on CI takes 1–2 minutes a test; the suite default is 90s
-    test.setTimeout(180_000);
+    // walking the courtyard under software WebGL on CI takes 1–2 minutes a test, and test 11 loads it twice;
+    // the suite default is 90s
+    test.setTimeout(300_000);
     await resetGoldlineProofWorld(page.request);
   });
 
