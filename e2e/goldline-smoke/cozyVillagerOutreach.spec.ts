@@ -77,14 +77,11 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await expect(textarea).toBeVisible();
     await textarea.fill(uniqueText);
 
-    // 3. Commit future schedule
-    const scheduleBtn = drawer.getByRole("button", { name: /SCHEDULE/i });
+    // 3. Tapping a time card schedules the letter for that time
+    const scheduleBtn = drawer.getByTestId("schedule-slot-morning");
     await expect(scheduleBtn).toBeEnabled();
     await scheduleBtn.click();
-
-    const commitBtn = drawer.getByRole("button", { name: /COMMIT/i });
-    await expect(commitBtn).toBeVisible();
-    await commitBtn.click();
+    await expect(drawer.getByTestId("banner-scheduled")).toContainText(/Scheduled for \w{3}, \w{3} \d{1,2} · 10:00 AM/);
 
     await expect(drawer.getByText(/Scheduled — not sent/i)).toBeVisible({ timeout: 5000 });
     await expect(drawer).toHaveAttribute("data-communication-state", "scheduled");
@@ -230,8 +227,7 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     await page.goto("/growth/lantern-city?cozy=1");
     await expect(encounter).toBeVisible({ timeout: 15_000 });
     await villager.click();
-    await drawer.getByRole("button", { name: /SCHEDULE/i }).click();
-    await drawer.getByRole("button", { name: /COMMIT/i }).click();
+    await drawer.getByTestId("schedule-slot-morning").click();
     await expect(drawer.getByText(/Scheduled — not sent/i)).toBeVisible({ timeout: 10_000 });
     await expect(drawer).toHaveAttribute("data-communication-state", "scheduled");
     await expect(villager).toHaveAttribute("data-communication-state", "scheduled");

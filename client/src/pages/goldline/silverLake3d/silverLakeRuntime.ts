@@ -837,11 +837,14 @@ export async function createSilverLake(
   let elapsed = 0;
 
   let pausedAt = 0;
+  let skipFrame = false;
   function frame() {
-    // a conversation is open: once the camera has settled, stop drawing so the desk stays snappy
+    // A conversation is open: the courtyard stays alive behind the desk (neighbours keep swaying), drawn at half rate
+    // once the camera has settled so the desk stays snappy. Never stop drawing outright: a resize clears the canvas,
+    // and nothing would repaint it (it read as an empty sky).
     if (paused && pausedAt && performance.now() - pausedAt > 1600) {
-      clock.getDelta();
-      return;
+      skipFrame = !skipFrame;
+      if (skipFrame) return;
     }
     const dt = Math.min(0.05, clock.getDelta());
     elapsed += dt;
@@ -964,6 +967,8 @@ export async function createSilverLake(
       v.card.rotation.y = yawToCam - v.group.rotation.y;
       const bob = reduceMotion ? 0 : Math.abs(Math.sin(elapsed * (near ? 6 : 2.2) + v.phase)) * (near ? 0.22 : 0.07);
       v.card.position.y = v.card.scale.y / 2 + bob;
+      // a slow, lulling side-to-side sway, each neighbour on its own beat
+      v.card.rotation.z = reduceMotion ? 0 : Math.sin(elapsed * 1.3 + v.phase * 1.7) * 0.055;
       const sq = reduceMotion ? 1 : 1 + Math.sin(elapsed * 2.2 + v.phase) * 0.025;
       v.card.scale.x = Math.abs(v.card.scale.x) * 1;
       v.card.scale.y = (v.card.scale.y / (v.card.userData.sq ?? 1)) * sq;

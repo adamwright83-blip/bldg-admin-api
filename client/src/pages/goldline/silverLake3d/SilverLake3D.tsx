@@ -20,6 +20,7 @@ import {
 } from "./silverLakeRuntime";
 import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
+import { createCozyMusic, type CozyMusic } from "./cozyMusic";
 import { customerIdFromQuestKey, questGiverKey, useReunionQuests } from "./useReunionQuests";
 import type { QuestSpot, ReunionBeat } from "./reunionQuests";
 import styles from "./silver-lake-3d.module.css";
@@ -232,6 +233,36 @@ export default function SilverLake3D({
   );
 
   // ---------------------------------------------------------------- runtime lifecycle
+  // The lullaby: starts on the first click or tap in Silver Lake (browsers need a gesture), keeps playing while a
+  // letter is open, remembers mute per device.
+  const musicRef = useRef<CozyMusic | null>(null);
+  const [musicOn, setMusicOn] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem("silverLake.music") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const startMusic = useCallback(() => {
+    if (!musicRef.current) musicRef.current = createCozyMusic();
+    musicRef.current.start();
+  }, []);
+  useEffect(() => () => {
+    musicRef.current?.dispose();
+    musicRef.current = null;
+  }, []);
+  const toggleMusic = () => {
+    const next = !musicOn;
+    setMusicOn(next);
+    try {
+      window.localStorage.setItem("silverLake.music", next ? "on" : "off");
+    } catch {
+      /* the choice just isn't remembered */
+    }
+    if (next) startMusic();
+    musicRef.current?.setMuted(!next);
+  };
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -413,6 +444,10 @@ export default function SilverLake3D({
       data-testid="silver-lake-3d"
       data-preview-mode={o.isSyntheticPreview ? "synthetic" : "real"}
       data-territory={territoryId}
+      data-music={musicOn ? "on" : "off"}
+      onPointerDownCapture={() => {
+        if (musicOn) startMusic();
+      }}
     >
       <div ref={hostRef} className={styles.stage} />
 
@@ -477,6 +512,16 @@ export default function SilverLake3D({
           ) : null}
         </div>
         <div className={styles.hudRight}>
+          <button
+            type="button"
+            className={styles.hudButton}
+            onClick={toggleMusic}
+            aria-pressed={musicOn}
+            aria-label={musicOn ? "Turn the music off" : "Turn the music on"}
+            data-testid="silver-lake-music-toggle"
+          >
+            {musicOn ? "♪ Music on" : "♪ Music off"}
+          </button>
           <button type="button" className={styles.hudButton} onClick={onExit}>
             Return to City
           </button>
