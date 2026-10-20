@@ -53,8 +53,7 @@ export type PersonalOutreachBlock =
   | "opted_out"
   | "contact_restricted"
   | "outreach_frequency"
-  | "permission_unreadable"
-  | "stop_option_missing";
+  | "permission_unreadable";
 
 export type PersonalOutreachDecision = {
   eligible: boolean;
@@ -84,11 +83,13 @@ const BLOCK_SENTENCE: Record<PersonalOutreachBlock, string> = {
   outreach_frequency: "An earlier outreach is still inside the cooldown, so this handoff is blocked.",
   permission_unreadable:
     "Opt-out and contact-restriction records could not be read. The handoff is blocked so an opt-out cannot be missed.",
-  stop_option_missing:
-    "The approved message does not offer a way to not receive further texts. The handoff stays closed until it does.",
 };
 
-/** §17538.41(c) requires an option not to receive further texts from this business. */
+/**
+ * Whether a text offers a way not to receive further texts (Cal. Bus. & Prof. Code §17538.41(c) applies to text
+ * advertisements). Personal texts the operator sends from their own phone are not blocked on it: the wording is the
+ * operator's call. Recorded opt-outs still always block.
+ */
 export function messageOffersStopOption(body: string): boolean {
   return /\b(reply\s+stop|text\s+stop|opt[\s-]?out|unsubscribe)\b/i.test(body);
 }
@@ -138,11 +139,6 @@ export function evaluatePersonalOutreach(input: {
   lastOutreachOn: string | null;
   today: string;
   cooldownDays?: number;
-  /**
-   * When set, the approved text must offer a way not to receive further texts.
-   * Omit it when only deciding whether the person may be presented.
-   */
-  approvedMessage?: string | null;
 }): PersonalOutreachDecision {
   const blocks: PersonalOutreachBlock[] = [];
   if (!input.sourceReadable) blocks.push("source_unreadable");
@@ -167,9 +163,6 @@ export function evaluatePersonalOutreach(input: {
       input.cooldownDays ?? PERSONAL_OUTREACH_COOLDOWN_DAYS
     );
     if (cooldownUntil > input.today) blocks.push("outreach_frequency");
-  }
-  if (input.approvedMessage !== undefined && input.approvedMessage !== null) {
-    if (!messageOffersStopOption(input.approvedMessage)) blocks.push("stop_option_missing");
   }
   return {
     eligible: blocks.length === 0,

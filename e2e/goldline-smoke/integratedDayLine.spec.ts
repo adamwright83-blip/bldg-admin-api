@@ -60,7 +60,8 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
 
   const textarea = drawer.getByTestId("cozy-message-draft-textarea");
   const suggested = await textarea.inputValue();
-  expect(suggested).toMatch(/Reply STOP/i);
+  // a personal text from the operator's own phone: no business opt-out boilerplate is added for them
+  expect(suggested).not.toMatch(/Reply STOP/i);
   const approved = suggested.includes("this week")
     ? suggested
     : suggested.replace(

@@ -343,12 +343,12 @@ test.describe("Lantern City Cozy Villager Outreach Playable Encounter", () => {
     const textarea = drawer.getByTestId("cozy-message-draft-textarea");
     const suggested = await textarea.inputValue();
     expect(suggested).toMatch(/Hey Mei/i);
-    expect(suggested).toMatch(/Reply STOP/i);
+    // a personal text from the operator's own phone: no business opt-out boilerplate is added for them
+    expect(suggested).not.toMatch(/Reply STOP/i);
     const approved = suggested.replace(
       "We can take laundry off your plate when you want.",
       "We can take laundry off your plate this week when you want."
     );
-    expect(approved).toMatch(/Reply STOP/i);
     expect(approved).not.toBe(suggested);
     await textarea.fill(approved);
     await drawer.getByRole("button", { name: "APPROVE" }).click();

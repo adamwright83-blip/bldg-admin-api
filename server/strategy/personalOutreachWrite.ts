@@ -1,8 +1,10 @@
 /**
- * Live read for operator-initiated personal outreach.
- * Marketing SMS opt-in is not required here. Recorded opt-out, a contact
- * restriction, a missing relationship, a stale book, and a missing stop
- * option still block. The automated path keeps evaluateDormantOutreach.
+ * Live read for operator-initiated personal outreach: a text the operator sends
+ * from their own phone, in their own thread with the customer. Marketing SMS
+ * opt-in is not required here, and the wording (including any opt-out line) is
+ * the operator's. A recorded opt-out, a contact restriction, a missing
+ * relationship and a stale book still block. The automated path keeps
+ * evaluateDormantOutreach.
  */
 import { DEFAULT_DOCTRINE } from "../../shared/claireProactive";
 import { normalizeIdentityPhone } from "../analytics/customerIdentityResolution";
@@ -118,7 +120,7 @@ function daysBetween(lastOrderDate: string, today: string): number {
 
 export function buildPersonalSuggestedMessage(name: string, daysSinceLastOrder: number): string {
   const firstName = name.split(" ")[0] || name;
-  return `Hey ${firstName}! It's Adam from Laundry Farm. It's been about ${daysSinceLastOrder} days since your last pickup. We can take laundry off your plate when you want. Reply STOP if you don't want these texts.`;
+  return `Hey ${firstName}! It's Adam from Laundry Farm. It's been about ${daysSinceLastOrder} days since your last pickup. We can take laundry off your plate when you want.`;
 }
 
 export async function readPersonalOutreachRoster(input: {
@@ -325,7 +327,6 @@ export async function assertPersonalOutreachHandoff(input: {
       permissionReadable: false,
       lastOutreachOn: null,
       today,
-      approvedMessage: input.messageBody,
     });
     const cleancloud = coverage?.sources.find(source => source.sourceId === "cleancloud");
     const gap = cleancloud && cleancloud.status !== "fresh" ? ` CleanCloud coverage is ${cleancloud.status}.` : "";
@@ -403,7 +404,6 @@ export async function assertPersonalOutreachHandoff(input: {
       smsDigits
     ),
     today,
-    approvedMessage: input.messageBody,
   });
   if (!decision.eligible || !smsDigits || !phone) {
     throw new PersonalOutreachBlocked(decision.explanation, decision.blocks.length ? decision.blocks : ["unmatched_identity"]);
