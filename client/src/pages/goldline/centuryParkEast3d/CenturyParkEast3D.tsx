@@ -89,6 +89,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
   const [knockedOut, setKnockedOut] = useState(false);
   const [dogs, setDogs] = useState({ carried: 0, saved: 0, total: 12 });
   const [charges, setCharges] = useState(0);
+  const [climbing, setClimbing] = useState<number | null>(null);
   const [floorIdx, setFloorIdx] = useState(0);
   const [trapped, setTrapped] = useState(0);
   const [party, setParty] = useState(false);
@@ -229,6 +230,12 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
       setBubble({ who: "Elevator", text: ["Ground floor.", "Amenity floor. Smooth jazz included.", "Roof. Mind the pool."][i.floor] ?? "" });
     } else if (i.kind === "concierge") {
       setBubble({ who: "The concierge (through the mail slot)", text: "I'm fine! I have snacks. Don't open this until everyone's sorted." });
+    } else if (i.kind === "rope_top") {
+      setBubble({ who: "", text: i.floor === 2 ? "Up through the hole and onto the roof. The pool is very blue." : z ? "Up through the hole. Nobody followed you. Yet." : "Up through the hole. Very fire station. Very brave." });
+    } else if (i.kind === "rope_fell") {
+      setBubble({ who: "", text: z ? "Grabbed by the ankle! You let go of the rope." : "A sleepwalker hugged your ankles. You let go of the rope." });
+    } else if (i.kind === "out_of_foam") {
+      setBubble({ who: "", text: z ? "Out of foam. Grab a red extinguisher off the wall: lobby, gym or roof." : "Out of mist. Grab a refill off the wall: lobby, gym or roof." });
     }
   }, [talk]);
   const onInteractRef = useRef(onInteract);
@@ -254,6 +261,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
       onCharges: n => setCharges(n),
       onFloor: f => setFloorIdx(f),
       onBubble: b => setBubble(b),
+      onClimb: c => setClimbing(c === null ? null : Math.round(c * 20) / 20),
     })
       .then(h => {
         if (cancelled) {
@@ -458,6 +466,15 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
           <span>Shift to run</span>
           <span>F to {z ? "spray" : "mist"}</span>
           <span>E to talk</span>
+          <span>Ropes go up a floor</span>
+        </div>
+      ) : null}
+
+      {climbing !== null ? (
+        <div className={styles.climbMeter} role="status" data-testid="century-park-east-climb">
+          <b>{z ? "Climb! The zombie is right behind you." : "Climb! Keep pulling."}</b>
+          <div className={styles.climbBar}><span style={{ width: `${Math.round(climbing * 100)}%` }} /></div>
+          <small>Tap E, Space or the button fast. Stop and you slip. S lets go.</small>
         </div>
       ) : null}
 
