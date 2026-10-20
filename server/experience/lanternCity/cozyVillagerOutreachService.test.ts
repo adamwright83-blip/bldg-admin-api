@@ -51,7 +51,7 @@ vi.mock("../../strategy/personalOutreachWrite", () => ({
     };
   }),
   buildPersonalSuggestedMessage: (name: string, days: number) =>
-    `Hey ${name.split(" ")[0]}! It's Adam from Laundry Farm. It's been about ${days} days since your last pickup. Reply STOP if you don't want these texts.`,
+    `Hey ${name.split(" ")[0]}! It's Adam from Laundry Farm. It's been about ${days} days since your last pickup. We can take laundry off your plate when you want.`,
 }));
 
 vi.mock("../../strategy/winBackDossier", () => ({
