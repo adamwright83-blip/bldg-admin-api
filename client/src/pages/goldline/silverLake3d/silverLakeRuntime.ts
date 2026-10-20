@@ -50,6 +50,8 @@ export type SilverLakeHandle = {
   setPaused(paused: boolean): void;
   talkNearest(): void;
   focusVillager(key: string): void;
+  /** Holds a living overhead survey of the actual courtyard during Claire's discovery. */
+  setDiscoverySurvey(active: boolean): void;
   jump(): void;
   dispose(): void;
 };
@@ -781,6 +783,7 @@ export async function createSilverLake(
   const camLook = new THREE.Vector3();
   const intro = { t: 0, dur: reduceMotion ? 0 : 2.6 };
   let focus: { target: THREE.Vector3; until: number } | null = null;
+  let discoverySurvey = false;
   function blocked(x: number, z: number) {
     for (const poly of polys) {
       let inside = false;
@@ -939,6 +942,14 @@ export async function createSilverLake(
       camPos.y = damp(camPos.y, tmp.y, 4, dt);
       camPos.z = damp(camPos.z, tmp.z, 6, dt);
       camLook.lerp(proj, 1 - Math.exp(-10 * dt));
+    }
+    if (discoverySurvey) {
+      // The world remains live. This is the actual courtyard, not a cutscene plate.
+      // The small orbit keeps the village legible and avoids sudden camera motion.
+      const orbit = now * 0.000075;
+      const survey = tmp.set(Math.sin(orbit) * 12, 40, 34 + Math.cos(orbit) * 5);
+      camPos.lerp(survey, 1 - Math.exp(-2 * dt));
+      camLook.lerp(proj.set(0, 0, 0), 1 - Math.exp(-2.5 * dt));
     }
     camera.position.copy(camPos);
     camera.lookAt(camLook);
@@ -1164,6 +1175,10 @@ export async function createSilverLake(
     },
     talkNearest() {
       if (nearKey) talkTo(nearKey);
+    },
+    setDiscoverySurvey(active) {
+      discoverySurvey = active;
+      if (!active) intro.t = intro.dur;
     },
     focusVillager(key) {
       const v = villagers.get(key);
