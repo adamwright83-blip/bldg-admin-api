@@ -350,9 +350,9 @@ async function expectCleoLocked(page: Page) {
 
 test.describe("Silver Lake reunion quests", () => {
   test.beforeEach(async ({ page }) => {
-    // walking the courtyard under software WebGL on CI takes 1–2 minutes a test, and test 11 loads it twice;
-    // the suite default is 90s
-    test.setTimeout(300_000);
+    // walking the courtyard under software WebGL on CI takes 1–2 minutes a test, test 11 loads it twice, and Hazel's
+    // errand is five props long; the suite default is 90s
+    test.setTimeout(480_000);
     await resetGoldlineProofWorld(page.request);
   });
 
