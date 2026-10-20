@@ -3,6 +3,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { OutlineEffect } from "three/examples/jsm/effects/OutlineEffect.js";
 import { getAudioManager } from "@/game/audio/AudioManager";
 import { noOutline, stylizeObject } from "./stylize";
+import type { QuestItemKind, QuestSpot } from "./reunionQuests";
 
 /**
  * Silver Lake in 3D: a cozy floating courtyard you walk around as the adventurer.
@@ -24,19 +25,28 @@ export type VillagerView = {
   cropBottom?: number; // fraction of the image height to hide (some 2D sprites carry a painted name)
   ambient: boolean; // a fictional neighbour, not a customer
   done: boolean; // a verified or committed outcome already exists
+  offset?: number; // metres sideways from the spot, so a reunited customer can stand beside a quest giver
 };
+
+/** A reunion-quest prop waiting in the courtyard. The runtime only shows it and reports a pick; the quest is React's. */
+export type QuestItemView = { key: string; kind: QuestItemKind; spotId: string };
 
 export type RuntimeCallbacks = {
   onReady?: () => void;
   onProgress?: (fraction: number) => void;
   onNear?: (villagerKey: string | null) => void;
   onTalk?: (villagerKey: string) => void;
+  onNearItem?: (item: { key: string; hop: boolean } | null) => void;
+  onPickItem?: (itemKey: string) => void;
   onError?: (message: string) => void;
 };
 
 export type SilverLakeHandle = {
   setVillagers(list: VillagerView[]): void;
   setFeature(choice: string | null): void;
+  setQuestItems(items: QuestItemView[]): void;
+  questSpots(): QuestSpot[];
+  pickNearestItem(): void;
   setPaused(paused: boolean): void;
   talkNearest(): void;
   focusVillager(key: string): void;
@@ -52,6 +62,7 @@ type CourtyardMeta = {
   colliders: { circles: { x: number; y: number; r: number }[]; polys: [number, number][][]; segments?: [number, number, number, number][] };
   feature: { x: number; y: number };
   chimneys: [number, number, number][];
+  questSpots?: QuestSpot[];
 };
 
 const HERO_RADIUS = 0.45;
@@ -60,6 +71,8 @@ const RUN_SPEED = 7.4;
 const GRAVITY = 32;
 const JUMP_V = 10.5;
 const TALK_RANGE = 2.9;
+const PICK_RANGE = 1.6;
+const HOP_PICK_HEIGHT = 0.55; // a "hop" item is only reachable mid-jump
 
 const b2t = (x: number, y: number, z = 0) => new THREE.Vector3(x, z, -y);
 const headingFromBlender = (a: number) => Math.atan2(Math.cos(a), -Math.sin(a));
@@ -399,6 +412,11 @@ export async function createSilverLake(
     if (!spot) return null;
     const group = new THREE.Group();
     const base = b2t(spot.x, spot.y);
+    if (v.offset) {
+      const f = headingFromBlender(spot.face);
+      base.x += Math.cos(f) * v.offset;
+      base.z -= Math.sin(f) * v.offset;
+    }
     group.position.copy(base);
     const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, toneMapped: false });
     noOutline(mat);
@@ -510,6 +528,113 @@ export async function createSilverLake(
     featureObj = grp;
     circles.push({ x: grp.position.x, z: grp.position.z, r: choice === "tea_table" ? 0.85 : 1.1 });
   }
+
+  // ---------------------------------------------------------------- reunion-quest props (fiction only)
+  type QuestItem = { view: QuestItemView; group: THREE.Group; prop: THREE.Group; ring: THREE.Mesh; base: THREE.Vector3; hop: boolean; phase: number };
+  const questItems = new Map<string, QuestItem>();
+  const spotsById = new Map((meta.questSpots ?? []).map(sp => [sp.id, sp]));
+  const toon = (color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
+  function buildProp(kind: QuestItemKind): THREE.Group {
+    const grp = new THREE.Group();
+    if (kind === "flute") {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.95, 12), toon(0xb9824a));
+      body.rotation.z = Math.PI / 2.4;
+      grp.add(body);
+      for (let i = 0; i < 4; i++) {
+        const hole = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), toon(0x4a2c18));
+        const t = -0.18 + i * 0.13;
+        hole.position.set(-Math.sin(Math.PI / 2.4) * t, Math.cos(Math.PI / 2.4) * t, 0.06);
+        grp.add(hole);
+      }
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.02, 6, 14), toon(0x3d5a45));
+      band.rotation.y = Math.PI / 2;
+      band.rotation.z = Math.PI / 2.4;
+      band.position.set(Math.sin(Math.PI / 2.4) * 0.36, -Math.cos(Math.PI / 2.4) * 0.36, 0);
+      grp.add(band);
+    } else if (kind === "kite") {
+      const sail = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.04), toon(0xff8a73));
+      sail.rotation.z = Math.PI / 4;
+      sail.scale.set(0.8, 1.2, 1);
+      const spar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.05), toon(0x7a4b2a));
+      grp.add(sail, spar);
+      for (let i = 0; i < 4; i++) {
+        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.03), toon(i % 2 ? 0xffd25e : 0x8fc6ef));
+        bow.position.set(Math.sin(i) * 0.06, -0.5 - i * 0.14, 0);
+        grp.add(bow);
+      }
+    } else if (kind === "watering_can") {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.36, 16), toon(0x5fa8a0, { metalness: 0.2 }));
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 0.42, 8), toon(0x5fa8a0));
+      spout.position.set(0.28, 0.08, 0);
+      spout.rotation.z = -Math.PI / 3.2;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 16, Math.PI), toon(0x4a8a83));
+      handle.position.set(-0.05, 0.18, 0);
+      grp.add(body, spout, handle);
+    } else if (kind === "rubber_duck") {
+      const yellow = toon(0xffd84a);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), yellow);
+      body.scale.set(1.25, 0.85, 1);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), yellow);
+      head.position.set(0.14, 0.2, 0);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 10), toon(0xff9a3c));
+      beak.rotation.z = -Math.PI / 2;
+      beak.position.set(0.3, 0.19, 0);
+      grp.add(body, head, beak);
+    } else {
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.32, 16), toon(0xdcefee, { transparent: true, opacity: 0.85 }));
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.07, 16), toon(0xa46a3e));
+      lid.position.y = 0.19;
+      grp.add(jar, lid);
+      for (let i = 0; i < 3; i++) {
+        const acorn = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), toon(0x9a6232));
+        acorn.position.set(Math.cos(i * 2.1) * 0.08, -0.04 + i * 0.07, Math.sin(i * 2.1) * 0.08);
+        grp.add(acorn);
+      }
+    }
+    stylizeObject(grp);
+    return grp;
+  }
+  const glintMat = new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
+  noOutline(glintMat);
+  const glintGeo = new THREE.OctahedronGeometry(0.09, 0);
+  function addQuestItem(view: QuestItemView) {
+    const spot = spotsById.get(view.spotId);
+    if (!spot) return;
+    const group = new THREE.Group();
+    const base = b2t(spot.x, spot.y, spot.z);
+    group.position.copy(base);
+    const prop = buildProp(view.kind);
+    prop.scale.setScalar(1.8);
+    prop.position.y = 0.25;
+    prop.traverse(o => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = true) : null));
+    const glint = new THREE.Mesh(glintGeo, glintMat);
+    glint.position.y = 1.25;
+    glint.name = "glint";
+    group.add(prop, glint);
+    scene.add(group);
+    // a soft ring on the ground marks the spot, also under a prop that is up a tree
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.35, depthWrite: false });
+    noOutline(ringMat);
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.scale.setScalar(0.7);
+    ring.position.copy(b2t(spot.x, spot.y, 0.07));
+    scene.add(ring);
+    questItems.set(view.key, { view, group, prop, ring, base, hop: spot.reach === "hop", phase: Math.random() * 6 });
+  }
+  function removeQuestItem(item: QuestItem) {
+    scene.remove(item.group, item.ring);
+    item.group.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.geometry !== glintGeo) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+    });
+    (item.ring.material as THREE.Material).dispose();
+  }
+  disposers.push(() => questItems.forEach(removeQuestItem));
+  let nearItem: QuestItem | null = null;
 
   // ---------------------------------------------------------------- input
   const keys = new Set<string>();
@@ -816,9 +941,35 @@ export async function createSilverLake(
     // reconsume proj for the camera (it was used as scratch)
     cameraGoal(tmp, proj);
 
+    // quest props: bob and glint; a ground prop is picked with E, a "hop" prop by jumping into it
+    let bestItem: QuestItem | null = null;
+    let bestItemD = PICK_RANGE;
+    questItems.forEach(it => {
+      const d = Math.hypot(it.base.x - pos.x, it.base.z - pos.z);
+      if (d < bestItemD) {
+        bestItemD = d;
+        bestItem = it;
+      }
+      it.prop.position.y = 0.4 + (reduceMotion ? 0 : Math.sin(elapsed * 2 + it.phase) * 0.08);
+      it.prop.rotation.y = reduceMotion ? 0 : elapsed * 0.8 + it.phase;
+      const glint = it.group.getObjectByName("glint");
+      if (glint) {
+        glint.rotation.y = elapsed * 3;
+        glint.scale.setScalar(0.8 + Math.abs(Math.sin(elapsed * 3.2 + it.phase)) * 0.6);
+      }
+      (it.ring.material as THREE.MeshBasicMaterial).opacity = it === nearItem ? 0.85 : 0.3 + Math.sin(elapsed * 2.4 + it.phase) * 0.08;
+    });
+    const nextItem = intro.t >= intro.dur && !paused ? (bestItem as QuestItem | null) : null;
+    if (nextItem !== nearItem) {
+      nearItem = nextItem;
+      callbacks.onNearItem?.(nearItem ? { key: nearItem.view.key, hop: nearItem.hop } : null);
+    }
+    if (nearItem && nearItem.hop && !grounded && pos.y > HOP_PICK_HEIGHT) pickItem(nearItem);
+
     if (talkQueued) {
       talkQueued = false;
-      if (nearKey && !paused) talkTo(nearKey);
+      if (nearItem && !nearItem.hop && !paused) pickItem(nearItem);
+      else if (nearKey && !paused) talkTo(nearKey);
     }
 
     // ambience
@@ -852,6 +1003,21 @@ export async function createSilverLake(
     else outline.render(scene, camera);
   }
 
+  function pickItem(it: QuestItem) {
+    if (!questItems.has(it.view.key)) return;
+    questItems.delete(it.view.key);
+    removeQuestItem(it);
+    nearItem = null;
+    callbacks.onNearItem?.(null);
+    if (grounded) {
+      speed = 0;
+      play("PickUp", 0.12, true);
+      gesture = { name: "PickUp", until: performance.now() + 1100 };
+    }
+    audio.play("scout_discovery");
+    callbacks.onPickItem?.(it.view.key);
+  }
+
   function talkTo(key: string) {
     const v = villagers.get(key);
     if (!v) return;
@@ -872,6 +1038,20 @@ export async function createSilverLake(
   (window as unknown as { __silverLake3d?: unknown }).__silverLake3d = {
     ready: true,
     state: () => ({ x: pos.x, z: pos.z, y: pos.y, heading, speed, anim: currentName, near: nearKey, villagers: villagers.size, intro: intro.t >= intro.dur, clips: heroGltf.animations.map(a => a.name) }),
+    items: () => [...questItems.keys()],
+    nearItem: () => nearItem?.view.key ?? null,
+    /** stands the hero beside a quest prop (under it, for one up a tree) */
+    teleportToItem: (key: string) => {
+      const it = questItems.get(key);
+      if (!it) return false;
+      pos.set(it.base.x + 0.6, 0, it.base.z + 0.6);
+      return true;
+    },
+    /** Blender coordinates, like courtyard.json */
+    teleportTo: (x: number, y: number) => {
+      pos.copy(b2t(x, y));
+      return true;
+    },
     teleportNear: (key: string) => {
       const v = villagers.get(key);
       if (!v) return false;
@@ -893,7 +1073,7 @@ export async function createSilverLake(
       for (const view of list) {
         const existing = villagers.get(view.key);
         if (existing) {
-          const spriteChanged = existing.view.sprite !== view.sprite || existing.view.slot !== view.slot;
+          const spriteChanged = existing.view.sprite !== view.sprite || existing.view.slot !== view.slot || (existing.view.offset ?? 0) !== (view.offset ?? 0);
           if (spriteChanged) {
             removeVillager(existing);
             villagers.delete(view.key);
@@ -906,6 +1086,26 @@ export async function createSilverLake(
         const made = makeVillager(view);
         if (made) villagers.set(view.key, made);
       }
+    },
+    setQuestItems(list) {
+      const keep = new Set(list.map(i => i.key));
+      questItems.forEach((it, k) => {
+        if (!keep.has(k)) {
+          removeQuestItem(it);
+          questItems.delete(k);
+          if (nearItem === it) {
+            nearItem = null;
+            callbacks.onNearItem?.(null);
+          }
+        }
+      });
+      for (const view of list) if (!questItems.has(view.key)) addQuestItem(view);
+    },
+    questSpots() {
+      return meta.questSpots ?? [];
+    },
+    pickNearestItem() {
+      if (nearItem && !nearItem.hop && !paused) pickItem(nearItem);
     },
     setFeature(choice) {
       featureGrow = 0;
