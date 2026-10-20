@@ -7,6 +7,7 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
     userAgent:
       "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     viewport: { width: 390, height: 844 },
+    timezoneId: "America/Los_Angeles",
   });
   const page = await context.newPage();
   try {
