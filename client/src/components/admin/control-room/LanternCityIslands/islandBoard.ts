@@ -1662,9 +1662,11 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   function placeLabels(cd: number) {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const a = THREE.MathUtils.smoothstep(cd, 2200, 4200);
-    // islands with lanterns first, then the big ones; a label that would overlap one already
-    // placed stays hidden until you zoom in
-    const order = labels.slice().sort((p, q) => (islandCounts.get(q.island) ?? 0) - (islandCounts.get(p.island) ?? 0) || islands[q.island].area - islands[p.island].area);
+    // Silver Lake first (it is the place you walk into, and on a phone Koreatown's tag would otherwise sit on top
+    // of it and take the tap), then islands with lanterns, then the big ones; a label that would overlap one
+    // already placed stays hidden until you zoom in
+    const walkIn = (L: (typeof labels)[number]) => (islands[L.island].name === "Silver Lake" ? 1 : 0);
+    const order = labels.slice().sort((p, q) => walkIn(q) - walkIn(p) || (islandCounts.get(q.island) ?? 0) - (islandCounts.get(p.island) ?? 0) || islands[q.island].area - islands[p.island].area);
     const taken: [number, number, number, number][] = [];
     const v = new THREE.Vector3();
     for (const L of order) {
