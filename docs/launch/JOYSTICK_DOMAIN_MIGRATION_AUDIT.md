@@ -98,7 +98,7 @@ Customer host allows `/`, `/product`, `/play`, `/onboarding`, `/goldline/start`,
 | Unconfigured SaaS checkout | `getLegacyDayforgeBillingStripe()` throws when the secret is absent | PRESERVE fail-closed |
 | Marketplace charges | `marketplacePaymentsEnabled()` is false unless `MARKETPLACE_PAYMENTS_ENABLED=true`. Create/capture refuse without calling Stripe | PRESERVE |
 | Connect refresh/return | `server/routers.ts` uses `ENV.adminBaseUrl` | PRESERVE |
-| Gmail callback default | `server/integrations/cleancloud/browserSync/gmailVerification.ts` lines 15–16 `https://admin.bldg.chat/api/integrations/jawbreaker/gmail/callback` | PRESERVE. LATER if admin.gojoystick.com must receive it |
+| Gmail callback default | `server/integrations/cleancloud/browserSync/gmailVerification.ts` `https://admin.gojoystick.com/api/integrations/jawbreaker/gmail/callback` | MOVED 2026-10-20 (admin.bldg.chat retired); the Google OAuth client lists the gojoystick URI |
 | Calendar redirect default | `server/googleCalendar/googleCalendarService.ts` line 9 `https://driver.bldg.chat/` | PRESERVE. LATER if driver.gojoystick.com must complete Calendar OAuth |
 | Resident reply API | `server/residentFollowups.ts` line 140 defaults to `https://api.bldg.chat` | PRESERVE |
 | Resident web origin | `client/src/const.ts` `getResidentWebOrigin` defaults to `https://laundrybutler.bldg.chat` | PRESERVE |
@@ -168,7 +168,7 @@ Production values were not read.
 | `RESIDENT_API_URL` | fallback `https://api.bldg.chat` | No change |
 | `VITE_RESIDENT_WEB_ORIGIN` | fallback `https://laundrybutler.bldg.chat` | No change |
 | `JOYSTICK_DRIVER_PUBLIC_ACCESS` | off unless `"1"` | No change. Do not enable it for `driver.gojoystick.com` |
-| `JAWBREAKER_GMAIL_REDIRECT_URI` | fallback `https://admin.bldg.chat/api/integrations/jawbreaker/gmail/callback` | No change |
+| `JAWBREAKER_GMAIL_REDIRECT_URI` | fallback `https://admin.gojoystick.com/api/integrations/jawbreaker/gmail/callback` | Unset in Railway; the fallback applies |
 | `GOOGLE_CALENDAR_REDIRECT_URI` | fallback `https://driver.bldg.chat/` | No change |
 | Stripe secret, webhook secret, price, product | not modified | No new product, price, account, or charge |
 
