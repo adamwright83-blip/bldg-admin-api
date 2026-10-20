@@ -9,15 +9,16 @@ import { resetGoldlineProofWorld } from "./proofWorld";
 type Point = { x: number; y: number; visible: boolean };
 
 async function settledIsland(page: Page, name: string): Promise<Point> {
-  // Aim where a person would: the island's name tag when it is showing, otherwise the island itself.
+  // Aim where a person would: the island's name tag. Silver Lake's tag is placed before every other tag, so
+  // it must be showing at every viewport (on a phone, Koreatown's tag once hid it and took the tap).
   // Compare like with like across two reads, so a tag that flickers in and out never stalls the wait.
-  type Read = { tag: Point | null; centre: Point | null };
+  type Read = { tag: Point | null };
   const read = () =>
     page.evaluate(n => {
       const probe = (window as unknown as {
-        __lanternIslands?: { islandLabelScreen(n: string): Point | null; islandScreen(n: string): Point | null };
+        __lanternIslands?: { islandLabelScreen(n: string): Point | null };
       }).__lanternIslands;
-      return probe ? { tag: probe.islandLabelScreen(n), centre: probe.islandScreen(n) } : null;
+      return probe ? { tag: probe.islandLabelScreen(n) } : null;
     }, name) as Promise<Read | null>;
   const vw = page.viewportSize();
   const onScreen = (p: Point | null) => !!p && p.visible && (!vw || (p.x >= 0 && p.x <= vw.width && p.y >= 0 && p.y <= vw.height));
@@ -31,7 +32,6 @@ async function settledIsland(page: Page, name: string): Promise<Point> {
         const b = await read();
         if (!a || !b) return false;
         if (same(a.tag, b.tag) && onScreen(b.tag)) settled = b.tag;
-        else if (same(a.centre, b.centre) && onScreen(b.centre)) settled = b.centre;
         return settled !== null;
       },
       { timeout: 150_000, intervals: [1000] }
