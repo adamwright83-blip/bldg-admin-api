@@ -10,7 +10,7 @@ const googleRedirect = (query: Record<string, string>) =>
     method: "GET",
     query,
     headers: {
-      host: "admin.bldg.chat",
+      host: "admin.gojoystick.com",
       cookie: `${COOKIE_NAME}=session-jwt`,
       "sec-fetch-site": "cross-site",
       referer: "https://accounts.google.com/",
