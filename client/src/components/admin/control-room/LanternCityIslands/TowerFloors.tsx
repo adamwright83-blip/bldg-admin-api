@@ -17,7 +17,8 @@ import styles from "./tower-floors.module.css";
 const QUIET_DAYS = 45;
 const GAME_BUILDINGS = new Set(["century_park_east"]);
 
-type Row = Resident & { phone: string | null; days: number | null; spendCents: number; orders: number };
+/** spend and order counts are null when the atlas feed doesn't carry them: never shown as zero */
+type Row = Resident & { phone: string | null; days: number | null; spendCents: number | null; orders: number | null };
 
 const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString()}`;
 
@@ -61,8 +62,8 @@ export default function TowerFloors({
             phone: c.phone,
             days,
             quiet: days !== null && days >= QUIET_DAYS,
-            spendCents: c.totalSpendCents ?? 0,
-            orders: c.totalOrders ?? 0,
+            spendCents: typeof c.totalSpendCents === "number" ? c.totalSpendCents : null,
+            orders: typeof c.totalOrders === "number" ? c.totalOrders : null,
           };
         })
         .filter(r => r.address),
@@ -90,7 +91,8 @@ export default function TowerFloors({
   const unplaced = model.towers.flatMap(t => t.unplaced);
   const byKey = new Map(residents.map(r => [r.key, r]));
   const rows = here.map(r => byKey.get(r.key)!).filter(Boolean);
-  const lifetime = rows.reduce((n, r) => n + r.spendCents, 0);
+  const spendKnown = rows.filter(r => r.spendCents !== null);
+  const lifetime = spendKnown.reduce((n, r) => n + (r.spendCents ?? 0), 0);
   const active30 = rows.filter(r => r.days !== null && r.days <= 30).length;
   const quiet = rows.filter(r => r.quiet).length;
   const zombieNight = (() => {
@@ -108,7 +110,7 @@ export default function TowerFloors({
         <div>
           <h2>{spec.name}</h2>
           <p className={styles.stat} data-testid="tower-sales">
-            {money(lifetime)} lifetime from {rows.length} resident{rows.length === 1 ? "" : "s"} · {active30} ordered in the last 30 days · {quiet} quiet {QUIET_DAYS}+ days (dim windows)
+            {spendKnown.length ? `${money(lifetime)} lifetime from ${spendKnown.length} resident${spendKnown.length === 1 ? "" : "s"}` : `${rows.length} resident${rows.length === 1 ? "" : "s"}`} · {active30} ordered in the last 30 days · {quiet} quiet {QUIET_DAYS}+ days (dim windows)
           </p>
           <p className={styles.stat}>
             {lit} of {units} homes lit · {dark} of {floors} floors with no customer
@@ -189,7 +191,9 @@ export default function TowerFloors({
               <div key={r.key} className={styles.unitRow}>
                 <b>{r.name}</b>
                 <span>
-                  {r.days !== null ? `${r.days} days since last order` : "No order date on file"} · {r.orders} order{r.orders === 1 ? "" : "s"} · {money(r.spendCents)}
+                  {r.days !== null ? `${r.days} days since last order` : "No order date on file"}
+                  {r.orders !== null ? ` · ${r.orders} order${r.orders === 1 ? "" : "s"}` : ""}
+                  {r.spendCents !== null ? ` · ${money(r.spendCents)}` : ""}
                   {r.quiet ? " · quiet" : ""}
                 </span>
                 <div className={styles.unitActions}>
