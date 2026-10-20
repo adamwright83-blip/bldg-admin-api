@@ -5641,5 +5641,21 @@ await assertRequiredColumns("personal_outreach_replies", [
   ]);
 }
 
+// 0145: Silver Lake reunion quests, append-only (fiction progress and explicit passes; never an outreach state).
+{
+  const [reunionDdl] = await readSqlStatements("../drizzle/0145_silver_lake_reunion_events.sql");
+  await run(reunionDdl, "silver_lake_reunion_events table");
+  await assertRequiredColumns("silver_lake_reunion_events", [
+    "id",
+    "tenant_id",
+    "territory_id",
+    "customer_id",
+    "operator_id",
+    "template_id",
+    "event_kind",
+    "created_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

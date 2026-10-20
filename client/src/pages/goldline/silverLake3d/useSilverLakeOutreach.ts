@@ -11,6 +11,7 @@ import {
   type NeighborhoodMemoryState,
   type VillagerVariant,
 } from "@shared/playableVillagers";
+import { SILVER_LAKE_MESSAGE_LABELS } from "@shared/silverLakeOutreachStatus";
 
 /**
  * Silver Lake's business rails, for the walkable 3D courtyard. This is the same wiring the archived 2D encounter
@@ -203,6 +204,17 @@ export function useSilverLakeOutreach(territoryId: string) {
   };
 
   const handleDraftCompleted = async (customerId: string, customerName: string, variant: VillagerVariant, action: DraftAction) => {
+    // The synthetic preview has no server to project a phone hand-off, so it records it on the preview target itself
+    // (never a send). Reunion quests read this as the operator's decision on that neighbour.
+    if (isSyntheticPreview && (action === "compose_handoff_opened" || action === "operator_reported_sent")) {
+      setSyntheticTargets(prev =>
+        prev.map(t =>
+          t.customerId === customerId
+            ? { ...t, silverLakeStatus: { ...t.silverLakeStatus, message: action, label: SILVER_LAKE_MESSAGE_LABELS[action] } }
+            : t
+        )
+      );
+    }
     const currentCount = neighborhoodMemory.encounterCounts[variant] ?? 0;
     const updated: NeighborhoodMemoryState = {
       ...neighborhoodMemory,
