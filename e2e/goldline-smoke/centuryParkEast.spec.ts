@@ -10,13 +10,14 @@ import { resetGoldlineProofWorld } from "./proofWorld";
 
 type Hook = {
   ready: boolean;
-  state(): { floor: number; carried: number; saved: number; trapped: number; flat: number; prompt: string | null };
+  state(): { floor: number; carried: number; saved: number; trapped: number; flat: number; prompt: string | null; charges: number; climbing: number | null };
   teleport(f: number, x: number, z: number): void;
   calm(): void;
   bite(): void;
   errand(slot: number): { floor: number; x: number; z: number; itemFloor: number; itemX: number; itemZ: number };
   lureInto(closet: number): void;
   dogs: { floor: number; x: number; z: number }[];
+  ropes: { floor: number; x: number; z: number }[];
 };
 
 const call = <K extends keyof Hook>(page: Page, fn: K, ...args: unknown[]) =>
@@ -109,6 +110,55 @@ test.describe("Lantern City → Century Park East", () => {
     await expect(page.getByTestId("century-park-east-lives")).toContainText("paper");
 
     expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test("ropes: climb up through the fire-station hole, slip if you stop, slide back down; the spray works from the start", async ({ page }) => {
+    test.setTimeout(240_000);
+    const errors: string[] = [];
+    page.on("pageerror", e => errors.push(String(e)));
+    await page.goto("/growth/lantern-city?level=century-park-east&preview=synthetic");
+    const isReady = () => page.evaluate(() => !!(window as unknown as { __centuryParkEast?: Hook }).__centuryParkEast?.ready);
+    await expect
+      .poll(async () => (await isReady()) || (await page.locator('[data-testid="century-park-east-unavailable"]').count()) > 0, { timeout: 180_000, intervals: [1000] })
+      .toBe(true);
+    test.skip(!(await isReady()), "no WebGL on this runner");
+    await call(page, "calm");
+
+    // she arrives with sprays; one goes
+    await expect.poll(async () => (await call(page, "state")).charges).toBe(3);
+    await page.keyboard.press("KeyF");
+    await expect.poll(async () => (await call(page, "state")).charges).toBe(2);
+
+    // the rope up from the ground floor
+    const ropes = await call(page, "ropes");
+    await call(page, "teleport", ropes[0].floor, ropes[0].x + 0.6, ropes[0].z);
+    const prompt = page.getByTestId("century-park-east-prompt");
+    await expect(prompt).toHaveAttribute("data-prompt", "rope_up", { timeout: 15_000 });
+    await prompt.click();
+    await expect(page.getByTestId("century-park-east-climb")).toBeVisible();
+    // pulling climbs; stopping slips
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+    const high = (await call(page, "state")).climbing ?? 0;
+    expect(high).toBeGreaterThan(0.2);
+    await expect.poll(async () => (await call(page, "state")).climbing ?? 0, { timeout: 5_000 }).toBeLessThan(high);
+    // keep pulling all the way up
+    await expect
+      .poll(
+        async () => {
+          for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+          return (await call(page, "state")).floor;
+        },
+        { timeout: 30_000, intervals: [50] }
+      )
+      .toBe(1);
+    await expect(page.getByTestId("century-park-east-climb")).toHaveCount(0);
+
+    // and the slide back down
+    await call(page, "teleport", 1, ropes[0].x + 0.6, ropes[0].z);
+    await expect(prompt).toHaveAttribute("data-prompt", "rope_down", { timeout: 15_000 });
+    await prompt.click();
+    await expect.poll(async () => (await call(page, "state")).floor, { timeout: 10_000 }).toBe(0);
     expect(errors).toEqual([]);
   });
 });
