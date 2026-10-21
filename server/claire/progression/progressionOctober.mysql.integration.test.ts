@@ -21,6 +21,9 @@ const describeMysql = DATABASE_URL ? describe : describe.skip;
 const TENANT = "default";
 const OPERATOR = "adam-admin";
 const LEGACY_LOGIN = "driver-primary";
+// Retained storage-table literals behind a named legacy seam (docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md).
+const LEGACY_DAYFORGE_TENANTS_TABLE = "dayforge_saas_tenants";
+const LEGACY_DAYFORGE_MEMBERSHIPS_TABLE = "dayforge_saas_memberships";
 const at = (day: number, hour = 18) => new Date(Date.UTC(2026, 9, day, hour));
 
 function paidFirstOrder(id: number, phone: string, day: number): CustomerOrderTruthRecord {
@@ -67,10 +70,10 @@ describeMysql("Claire progression — October replay on disposable MySQL", () =>
     vi.useFakeTimers({ toFake: ["Date"] });
     sql = await mysql.createConnection(DATABASE_URL!);
     await sql.query(
-      "INSERT IGNORE INTO dayforge_saas_tenants (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status,strategyVerticalKey) VALUES (?,?,?,?,?,?,?,?,'active','laundry_fluff_fold')",
+      `INSERT IGNORE INTO ${LEGACY_DAYFORGE_TENANTS_TABLE} (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status,strategyVerticalKey) VALUES (?,?,?,?,?,?,?,?,'active','laundry_fluff_fold')`,
       [TENANT, TENANT, "Laundry Farm", "Laundry Farm", "#123456", "Adam", "acceptance@example.invalid", "America/Los_Angeles"]
     );
-    await sql.query("INSERT IGNORE INTO dayforge_saas_memberships (tenantId,userOpenId,role,active) VALUES (?,?,'owner',true)", [TENANT, OPERATOR]);
+    await sql.query(`INSERT IGNORE INTO ${LEGACY_DAYFORGE_MEMBERSHIPS_TABLE} (tenantId,userOpenId,role,active) VALUES (?,?,'owner',true)`, [TENANT, OPERATOR]);
     await sql.query("INSERT IGNORE INTO users (tenantId,openId,name,email,role,loginMethod) VALUES (?,?,?,?,'admin','password')", [TENANT, OPERATOR, "Adam", "acceptance@example.invalid"]);
     for (const table of ["claire_disclosure_entitlements", "claire_progression_evidence", "claire_progression_grants", "claire_relationship_events", "claire_relationship_state"]) {
       await sql.query(`DELETE FROM ${table} WHERE tenantId = ?`, [TENANT]);
