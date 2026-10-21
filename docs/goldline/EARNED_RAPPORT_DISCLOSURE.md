@@ -195,3 +195,9 @@ rung/band at the time. Build story state on top of it; do not add a second relat
 ## Question-history and moment stance are not currency
 `topicHistory` (ask/refusal counts derived from the ledger) and the moment-stance tone layer shape presentation only. Repeated
 asking earns no rapport, entitlement, rung, or canon. See `CLAIRE_TRUTH_PROVENANCE.md`.
+
+## Encouragement is a standing instruction, not a rapport reward
+"Encouragement on every call" (operator standing instruction, see `CLAIRE_STANDING_INSTRUCTIONS.md`) is defined in
+`policy.ts` as `ENCOURAGEMENT_POLICY`: one grounded sentence tying the next move to the goal, from facts true in the
+call. It earns no rapport, entitlement, rung or canon, it is not currency, and it never reuses an authored decline or
+thread-closer line. Band changes warmth of phrasing only.

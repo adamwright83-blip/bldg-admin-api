@@ -5657,5 +5657,19 @@ await assertRequiredColumns("personal_outreach_replies", [
   ]);
 }
 
+// 0146: Claire standing instructions and prepared items (promise ledger). Idempotent CREATE IF NOT EXISTS.
+{
+  const statements = await readSqlStatements("../drizzle/0146_claire_standing_instructions.sql");
+  for (const statement of statements) await runRequired(statement, "Claire standing instructions and prepared items");
+  await assertRequiredColumns("claire_operator_instructions", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "kind", "subjectKey", "version", "status",
+    "instructionText", "quote", "payloadJson", "fingerprint", "sourceConversationKey", "sourceTurnId", "createdAt",
+  ]);
+  await assertRequiredColumns("claire_prepared_items", [
+    "id", "tenantId", "canonicalOperatorId", "kind", "forBusinessDate", "promiseText", "payloadJson", "status",
+    "sourceConversationKey", "consumedConversationKey", "consumedAt", "createdAt",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

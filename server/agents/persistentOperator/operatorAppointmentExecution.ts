@@ -1,4 +1,5 @@
 import { requireCallableStrategicProposal } from "../../strategy/strategicStore";
+import { drizzlePreparedItemStore } from "./preparedItems";
 import { DAILY_CLAIRE_CALLS, dailyPurposeForKind, type DailyClairePurpose } from "../../../shared/dailyClaireCalls";
 import { buildShowrunnerBriefing, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
@@ -327,7 +328,7 @@ async function executeDailyClaireCall(input: {
       const briefing = await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
       const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
       if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");
-      return startClairePreDriveCall({
+      const started = await startClairePreDriveCall({
         tenantId: context.scope.tenantId,
         actorId: identity.communicationOperatorUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
@@ -350,6 +351,14 @@ async function executeDailyClaireCall(input: {
           clockOffsetMs: now.getTime() - Date.now(),
         },
       });
+      // The opening just spoke what Claire promised on an earlier call; that promise is now kept.
+      const promisedIds = (briefing.preparedItems ?? []).map(item => item.id);
+      if (promisedIds.length) {
+        await drizzlePreparedItemStore()
+          .markConsumed({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId }, promisedIds, `appointment:${context.jobId}`)
+          .catch(error => console.warn("[Claire] could not mark prepared items consumed", error instanceof Error ? error.message : error));
+      }
+      return started;
     },
   });
   if (!result.executed) return { skipped: result.reason };

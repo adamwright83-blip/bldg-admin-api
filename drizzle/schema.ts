@@ -10718,4 +10718,88 @@ export const silverLakeReunionEvents = mysqlTable(
 
 export type SilverLakeReunionEventRow = typeof silverLakeReunionEvents.$inferSelect;
 
+/**
+ * Durable, versioned operator rules about how Claire behaves on calls ("encouragement on every call",
+ * "ask about overdue follow-ups on the Sunday call"). One row per statement; the newest active version
+ * of a subjectKey is in force. Written only by server/agents/daphne/standingInstructions after a
+ * fresh read-back. See docs/goldline/CLAIRE_STANDING_INSTRUCTIONS.md.
+ */
+export const claireOperatorInstructions = mysqlTable(
+  "claire_operator_instructions",
+  {
+    id: varchar("id", { length: 64 }).notNull().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    subjectKey: varchar("subjectKey", { length: 96 }).notNull(),
+    version: int("version").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    instructionText: text("instructionText").notNull(),
+    quote: text("quote").notNull(),
+    payloadJson: json("payloadJson"),
+    fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+    sourceConversationKey: varchar("sourceConversationKey", { length: 191 }).notNull(),
+    sourceTurnId: varchar("sourceTurnId", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    fingerprintUnique: uniqueIndex("uq_claire_op_instr_fingerprint").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.fingerprint
+    ),
+    versionUnique: uniqueIndex("uq_claire_op_instr_version").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.subjectKey,
+      table.version
+    ),
+    activeIdx: index("idx_claire_op_instr_active").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.createdAt
+    ),
+  })
+);
 
+export type ClaireOperatorInstructionRow = typeof claireOperatorInstructions.$inferSelect;
+
+/**
+ * Something Claire told the operator she would have ready, prepared by the server so the next call can
+ * read it (promise ledger). A promise with no row here is never spoken.
+ */
+export const clairePreparedItems = mysqlTable(
+  "claire_prepared_items",
+  {
+    id: varchar("id", { length: 64 }).notNull().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    canonicalOperatorId: varchar("canonicalOperatorId", { length: 191 }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    forBusinessDate: varchar("forBusinessDate", { length: 10 }).notNull(),
+    promiseText: text("promiseText").notNull(),
+    payloadJson: json("payloadJson").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("prepared"),
+    sourceConversationKey: varchar("sourceConversationKey", { length: 191 }).notNull(),
+    consumedConversationKey: varchar("consumedConversationKey", { length: 191 }),
+    consumedAt: timestamp("consumedAt", { fsp: 3 }),
+    createdAt: timestamp("createdAt", { fsp: 3 }).notNull().defaultNow(),
+  },
+  table => ({
+    scopeUnique: uniqueIndex("uq_claire_prepared_scope").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.kind,
+      table.forBusinessDate
+    ),
+    openIdx: index("idx_claire_prepared_open").on(
+      table.tenantId,
+      table.canonicalOperatorId,
+      table.status,
+      table.forBusinessDate
+    ),
+  })
+);
+
+export type ClairePreparedItemRow = typeof clairePreparedItems.$inferSelect;

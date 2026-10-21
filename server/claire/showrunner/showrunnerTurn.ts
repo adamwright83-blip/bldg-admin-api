@@ -1,4 +1,5 @@
 import { cleanLedgerReply } from "../workLedger/workLedgerTurn";
+import { reconcileSpokenPromises } from "../promiseReconciler";
 import {
   answerClaireBusinessTurn,
   looksLikeWorkRequest,
@@ -252,6 +253,10 @@ export async function runShowrunnerTurn(input: {
   workLedger?: { section: string | null };
   /** Governed writers for closing the carried open item; injectable for tests. */
   openItem?: Partial<OpenItemDeps>;
+  /** OPERATOR STANDING INSTRUCTIONS as of this turn; overrides the section frozen into the briefing. */
+  standingInstructionsSection?: string | null;
+  /** Test seam for the promise ledger. */
+  promiseDeps?: import("../promiseReconciler").PromiseReconcileDeps;
 }): Promise<{ speak: string; end: boolean; state: ShowrunnerCallState; saved?: string[] }> {
   const state: ShowrunnerCallState = JSON.parse(JSON.stringify(input.state));
   state.turns += 1;
@@ -353,6 +358,8 @@ export async function runShowrunnerTurn(input: {
       return { speak: business.speak, end: false, state };
     }
   }
+  const standingSection = input.standingInstructionsSection ?? state.briefing.standing?.section ?? null;
+  const withStanding = (prompt: string) => (standingSection ? `${prompt} ${standingSection}` : prompt);
   let model: ModelTurn;
   try {
     const response = await (input.invoke ?? invokeLLM)({
@@ -364,8 +371,8 @@ export async function runShowrunnerTurn(input: {
         {
           role: "system",
           content: input.workLedger
-            ? `${systemPrompt(state)} WORK RECORDING: the server's work ledger records, changes and reads back Day Line work on its own turns. Never offer to add, save, put on the line or lock in work, and never claim you did. ${input.workLedger.section ?? ""}`.trim()
-            : systemPrompt(state),
+            ? withStanding(`${systemPrompt(state)} WORK RECORDING: the server's work ledger records, changes and reads back Day Line work on its own turns. Never offer to add, save, put on the line or lock in work, and never claim you did. ${input.workLedger.section ?? ""}`.trim())
+            : withStanding(systemPrompt(state)),
         },
         {
           role: "user",
@@ -443,6 +450,23 @@ export async function runShowrunnerTurn(input: {
   let speak = input.workLedger
     ? cleanLedgerReply(model.speak) || "Nothing new is confirmed saved."
     : model.speak.trim();
+  // Promise ledger: a sentence about a later call stays only when the server prepared what it promises.
+  const promiseChecked = await reconcileSpokenPromises(
+    speak,
+    {
+      scope: {
+        tenantId: state.tenantId,
+        canonicalOperatorId: state.canonicalOperatorId,
+        dayDirectorActorId: state.dayDirectorActorId,
+        dayDirectorActorIds: state.dayDirectorActorIds,
+      },
+      conversationKey: input.conversationKey,
+      now,
+      timeZone: state.timeZone,
+    },
+    input.promiseDeps
+  );
+  speak = promiseChecked.emptied ? "Understood." : promiseChecked.text;
   // No re-ask: a question already asked twice is dropped, whatever the model said.
   const guarded = dropRepeatedQuestions(speak, state.askedAgenda ?? []);
   speak = guarded.speak || "Noted.";
