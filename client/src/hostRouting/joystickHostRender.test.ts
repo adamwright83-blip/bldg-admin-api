@@ -59,7 +59,7 @@ describe("JOYSTICK host render contract", () => {
   it("renders the approved marketing page on the apex", () => {
     setLocation("https://gojoystick.com/");
     const html = renderToStaticMarkup(createElement(JoystickLanding));
-    expect(html).toContain("HOW JOYSTICK WORKS");
+    expect(html).toContain('data-testid="joystick-marketing"');
     expect(html).not.toContain("Admin Sign In");
     expect(html).not.toContain("Loading your Laundry Butler account");
   });
@@ -71,7 +71,7 @@ describe("JOYSTICK host render contract", () => {
     expect(html).toContain("JOYSTICK");
     expect(html).not.toContain("Admin Sign In");
     expect(html).not.toContain("Driver Sign In");
-    expect(html).not.toContain("HOW JOYSTICK WORKS");
+    expect(html).not.toContain('data-testid="joystick-marketing"');
   });
 
   it("renders player, Claire, and Lantern City entrances as customer sign-in, not the admin shell", () => {
@@ -105,7 +105,7 @@ describe("JOYSTICK host render contract", () => {
       createElement(TenantProvider, null, createElement(PreservedLaundryHost))
     );
     expect(butler).toContain("Laundry Butler");
-    expect(butler).not.toContain("HOW JOYSTICK WORKS");
+    expect(butler).not.toContain('data-testid="joystick-marketing"');
     expect(butler).not.toContain("Admin Sign In");
     expect(butler).not.toContain("does not serve the control room");
   });
@@ -113,12 +113,12 @@ describe("JOYSTICK host render contract", () => {
   it("names the API host as an API and redirects www without rendering marketing", () => {
     const api = renderToStaticMarkup(createElement(JoystickApiHostRefused));
     expect(api).toContain("JOYSTICK API");
-    expect(api).not.toContain("HOW JOYSTICK WORKS");
+    expect(api).not.toContain('data-testid="joystick-marketing"');
     expect(api).not.toContain("Admin Sign In");
 
     setLocation("https://www.gojoystick.com/play?x=1");
     const www = renderToStaticMarkup(createElement(WwwGojoystickRedirect));
     expect(www).toContain("Redirecting to gojoystick.com");
-    expect(www).not.toContain("HOW JOYSTICK WORKS");
+    expect(www).not.toContain('data-testid="joystick-marketing"');
   });
 });

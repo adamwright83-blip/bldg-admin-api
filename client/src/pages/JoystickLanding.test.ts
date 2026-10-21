@@ -19,23 +19,28 @@ describe("JOYSTICK public start", () => {
     expect(source).not.toContain("THE MONEY ISN");
   });
 
-  it("labels example missions as illustrations", () => {
-    expect(source).toContain("EXAMPLE MISSIONS. NOT OBSERVED RESULTS.");
-    expect(source).toContain('data-testid="landing-examples-illustration"');
+  it("labels the gameplay as sample data, and the example check-in as never sent", () => {
+    expect(source).toContain("Actual gameplay. Sample data. Your decisions.");
+    expect(source).toContain("Example game");
+    expect(source).toContain("Sample customer · Nothing is sent");
+    expect(source).toContain("Demo only. No message was sent.");
     expect(source).not.toContain("REAL MISSIONS. REAL REVENUE.");
     expect(source).not.toContain("<strong>Result:</strong>");
   });
 
   it("keeps the approved hero line", () => {
-    expect(source).toContain('aria-label="Joystick — Play the work you hate"');
-    expect(source).toContain("PLAY THE");
-    expect(source).toContain("WORK YOU HATE.");
+    expect(source).toContain('aria-label="Joystick — Your business. A game you can actually win."');
+    expect(source).toContain("Your business.<br />A game you can<br />actually win.");
+  });
+
+  it("never says the banned marketing lines", () => {
+    expect(source).not.toMatch(/save file/i);
+    expect(source).not.toMatch(/monsters are fake/i);
   });
 
   it("advertises $49/month with a seven-day trial and a card required at signup", () => {
     expect(source).toContain("7-day trial");
     expect(source).toContain("$49/month");
-    expect(source).toContain("7-Day Free Trial, Then $49/Month");
     expect(source).toContain("Card required at signup");
   });
 
@@ -62,6 +67,9 @@ describe("JOYSTICK public start", () => {
     expect(source).toContain("monthly_usd: 49");
     expect(source).toContain("trial_days: 7");
     expect(source).toContain("card_required_at_signup: true");
-    expect(source).not.toMatch(/captureProductEvent\([\s\S]*\b(message|body|answer)\b/);
+    // each event's own payload, not the page copy after it ("No message was sent" is fine)
+    const payloads = [...source.matchAll(/captureProductEvent\(([^)]*)\)/g)].map(m => m[1]);
+    expect(payloads.length).toBeGreaterThan(0);
+    for (const payload of payloads) expect(payload).not.toMatch(/\b(message|body|answer|draft)\b/);
   });
 });
