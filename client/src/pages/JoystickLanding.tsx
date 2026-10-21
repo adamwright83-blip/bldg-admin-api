@@ -8,6 +8,8 @@ import {
   ROTATION_PERIOD_MS,
   initialPersonaState,
   personaReducer,
+  type PersonaAction,
+  type PersonaState,
 } from "./joystickPersonaData";
 import "./joystick-landing.css";
 
@@ -548,7 +550,11 @@ function renderPanelFooter(key: string, accent: string) {
 
 export default function JoystickLanding() {
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [state, dispatch] = useReducer(personaReducer, initialPersonaState);
+  // React's reducer takes (state, action) only; the persona count stays at its default.
+  const [state, dispatch] = useReducer(
+    (current: PersonaState, action: PersonaAction) => personaReducer(current, action),
+    initialPersonaState
+  );
   const [isHoveringHero, setIsHoveringHero] = useState(false);
   const [timerResetKey, setTimerResetKey] = useState(0);
 
