@@ -474,7 +474,7 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
   if (named.length) {
     const details = named.map(({ item, kind }) => {
       const day = spokenDay(item.businessDate, today);
-      const type = executionTypePhrase(item.executionType);
+      const type = executionTypePhrase(item.executionType, item.quote);
       if (kind === "added" && type) return `Recorded as ${type}: ${item.title}, for ${day}.`;
       const verb = kind === "added" ? "Added" : kind === "done" ? "Marked done" : "Already saved";
       return `${verb} ${item.title}${type ? ` as ${type}` : ""} for ${day}.`;

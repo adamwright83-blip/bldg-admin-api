@@ -754,13 +754,28 @@ export async function scheduleCommercialFollowUp(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   let reusedExisting = false;
+  const moved: { current: { pipelineId: number; followUpId: string } | null } = { current: null };
   try {
     await db.transaction(async tx => {
       const pipeline = await readPipelineWith(tx, input);
       if (!pipeline) throw new Error("Commercial pipeline record not found");
-      // Idempotent on (account, follow-up kind): never a second open follow-up of the same kind for an account of this name.
-      if (await findOpenFollowUpOfKind(tx, { tenantId: input.tenantId, pipelineId: pipeline.id, note: input.note })) {
+      // Idempotent on (account, follow-up kind): never a second open follow-up of the same kind for an account of
+      // this name. This is the explicit admin mutation, so the date the operator asked for is honoured: the
+      // existing follow-up keeps its id and is moved to the requested dueAt, and the change is recorded.
+      const duplicate = await findOpenFollowUpOfKind(tx, { tenantId: input.tenantId, pipelineId: pipeline.id, note: input.note });
+      if (duplicate) {
         reusedExisting = true;
+        if (duplicate.dueAt.getTime() !== input.dueAt.getTime()) {
+          await rescheduleFollowUpWith(tx, {
+            tenantId: input.tenantId,
+            pipelineId: duplicate.pipelineId,
+            followUpId: duplicate.id,
+            actorId: input.actorId,
+            requestId: input.requestId,
+            dueAt: input.dueAt,
+          });
+          moved.current = { pipelineId: duplicate.pipelineId, followUpId: duplicate.id };
+        }
         return;
       }
       await tx.insert(commercialFollowUps).values({
@@ -804,7 +819,16 @@ export async function scheduleCommercialFollowUp(input: {
   }
   const detail = await getCommercialPipelineDetail(input);
   if (!detail) throw new Error("Commercial pipeline record not found");
-  if (reusedExisting) return detail;
+  if (reusedExisting) {
+    if (moved.current) {
+      const target = moved.current;
+      const after = await getCommercialPipelineDetail({ tenantId: input.tenantId, pipelineId: target.pipelineId });
+      const row = after?.followUps.find(item => item.id === target.followUpId);
+      if (!row || Date.parse(row.dueAt) !== input.dueAt.getTime())
+        throw new Error("Commercial follow-up reschedule was not persisted");
+    }
+    return detail;
+  }
   if (!detail.followUps.some(item => item.requestId === input.requestId))
     throw new Error("Commercial follow-up was not persisted for this request");
   // A real follow-up is itself an outcome worth reconciling against weapon
@@ -1010,6 +1034,45 @@ export async function completeCommercialFollowUp(input: {
   return detail;
 }
 
+/** Moves an OPEN follow-up to a new date inside the caller's transaction and records the change. */
+async function rescheduleFollowUpWith(
+  tx: Transaction,
+  input: {
+    tenantId: string;
+    pipelineId: number;
+    followUpId: string;
+    actorId: string;
+    requestId: string;
+    dueAt: Date;
+  }
+) {
+  const pipeline = await readPipelineWith(tx, input);
+  if (!pipeline) throw new Error("Commercial pipeline record not found");
+  const existing = await tx.select({ id: commercialPipelineEvents.id }).from(commercialPipelineEvents).where(and(
+    eq(commercialPipelineEvents.tenantId, input.tenantId),
+    eq(commercialPipelineEvents.idempotencyKey, `pipeline-follow-up-rescheduled:${input.requestId}`)
+  )).limit(1);
+  if (existing[0]) return;
+  const result = await tx.update(commercialFollowUps).set({ dueAt: input.dueAt }).where(and(
+    eq(commercialFollowUps.tenantId, input.tenantId),
+    eq(commercialFollowUps.pipelineId, input.pipelineId),
+    eq(commercialFollowUps.id, input.followUpId),
+    eq(commercialFollowUps.status, "open")
+  ));
+  if (affectedRows(result) !== 1) throw new Error("Open follow-up not found");
+  await tx.update(commercialPipelineRecords).set({ nextFollowUpAt: input.dueAt }).where(and(
+    eq(commercialPipelineRecords.tenantId, input.tenantId),
+    eq(commercialPipelineRecords.id, input.pipelineId)
+  ));
+  await tx.insert(commercialPipelineEvents).values({
+    tenantId: input.tenantId, pipelineId: input.pipelineId, missionId: pipeline.missionId,
+    fromStage: pipeline.stage, toStage: pipeline.stage, actorType: "operator",
+    actorId: input.actorId, idempotencyKey: `pipeline-follow-up-rescheduled:${input.requestId}`,
+    correlationId: input.requestId,
+    metadataJson: { followUpId: input.followUpId, dueAt: input.dueAt.toISOString() },
+  });
+}
+
 export async function rescheduleCommercialFollowUp(input: {
   tenantId: string;
   pipelineId: number;
@@ -1020,33 +1083,7 @@ export async function rescheduleCommercialFollowUp(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.transaction(async tx => {
-    const pipeline = await readPipelineWith(tx, input);
-    if (!pipeline) throw new Error("Commercial pipeline record not found");
-    const existing = await tx.select({ id: commercialPipelineEvents.id }).from(commercialPipelineEvents).where(and(
-      eq(commercialPipelineEvents.tenantId, input.tenantId),
-      eq(commercialPipelineEvents.idempotencyKey, `pipeline-follow-up-rescheduled:${input.requestId}`)
-    )).limit(1);
-    if (existing[0]) return;
-    const result = await tx.update(commercialFollowUps).set({ dueAt: input.dueAt }).where(and(
-      eq(commercialFollowUps.tenantId, input.tenantId),
-      eq(commercialFollowUps.pipelineId, input.pipelineId),
-      eq(commercialFollowUps.id, input.followUpId),
-      eq(commercialFollowUps.status, "open")
-    ));
-    if (affectedRows(result) !== 1) throw new Error("Open follow-up not found");
-    await tx.update(commercialPipelineRecords).set({ nextFollowUpAt: input.dueAt }).where(and(
-      eq(commercialPipelineRecords.tenantId, input.tenantId),
-      eq(commercialPipelineRecords.id, input.pipelineId)
-    ));
-    await tx.insert(commercialPipelineEvents).values({
-      tenantId: input.tenantId, pipelineId: input.pipelineId, missionId: pipeline.missionId,
-      fromStage: pipeline.stage, toStage: pipeline.stage, actorType: "operator",
-      actorId: input.actorId, idempotencyKey: `pipeline-follow-up-rescheduled:${input.requestId}`,
-      correlationId: input.requestId,
-      metadataJson: { followUpId: input.followUpId, dueAt: input.dueAt.toISOString() },
-    });
-  });
+  await db.transaction(async tx => rescheduleFollowUpWith(tx, input));
   const detail = await getCommercialPipelineDetail(input);
   if (!detail) throw new Error("Commercial pipeline record not found");
   return detail;

@@ -179,6 +179,24 @@ describe("2. readback names what was added this turn, with the credit kind the o
     expect((f.accept.mock.calls[0]![0] as any).proposal.executionType).toBe("challenge");
   });
 
+  it("does not call every challenge a marketing challenge or every mission a sales mission", async () => {
+    const f = ledgerFixture();
+    const result = await commitBriefing(
+      parsed([
+        item({ title: "Text the dormant customers", quote: "text the dormant customers", executionType: "challenge", businessDate: "2026-10-15" }),
+        item({ title: "Visit Greystar properties", quote: "visit the Greystar properties", executionType: "mission", businessDate: "2026-10-15" }),
+        item({ title: "Pitch Wilshire Grand", quote: "pitch Wilshire Grand as a sales mission", executionType: "mission", businessDate: "2026-10-15" }),
+      ]),
+      scope,
+      { ...f.ports, rewriteTitle: null }
+    );
+    const speech = speakBriefingCommit(result, "2026-10-15");
+    expect(speech).toContain("Recorded as a challenge: Text the dormant customers, for today.");
+    expect(speech).toContain("Recorded as a mission: Visit Greystar properties, for today.");
+    expect(speech).toContain("Recorded as a sales mission: Pitch Wilshire Grand, for today.");
+    expect(speech).not.toContain("marketing challenge");
+  });
+
   it("the work ledger carries the declared kind onto the one item being saved, even when the model forgot it", () => {
     const input: WorkLedgerPlanInput = {
       tenantId: "default",
