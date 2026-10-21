@@ -155,6 +155,13 @@ export type ClaireV2PrimaryInput = {
   rookContactResidues?: readonly ClaireRookContactResidueContext[];
 };
 
+import {
+  buildStandingInstructionsView,
+  type StandingInstructionCaptureResult,
+  type StandingInstructionRecord,
+} from "../../../agents/daphne/standingInstructions";
+import type { PromiseScope } from "../../promiseReconciler";
+
 type SpeakingOrgan = typeof answerClairePreDriveFollowUp;
 
 export type ClaireV2PrimaryDeps = {
@@ -174,6 +181,11 @@ export type ClaireV2PrimaryDeps = {
   ingestDaphne: (input: { utterance: string; turnId: string; completed: boolean }) => Promise<unknown>;
   capturePreference: (input: { utterance: string; turnId: string }) => Promise<DaphneExplicitPreferenceCaptureResult>;
   loadDaphneGuidance: () => Promise<DaphneClaireGuidance | null>;
+  /** Operator-stated rules about how Claire behaves on calls (standing instructions). Optional: absent in older harnesses. */
+  captureInstructions?: (input: { utterance: string; turnId: string; priorClaireTurn: string | null }) => Promise<StandingInstructionCaptureResult>;
+  loadStandingInstructions?: () => Promise<StandingInstructionRecord[]>;
+  /** Who a spoken promise is prepared for. Without it every promise about a later call is stripped. */
+  resolvePromiseScope?: () => Promise<PromiseScope | null>;
   commitPendingDisclosures: () => Promise<void>;
   /**
    * The scheduled-call conductor (morning readiness, evening debrief). V2 runs
@@ -185,6 +197,7 @@ export type ClaireV2PrimaryDeps = {
     history: Array<{ speaker: string; text: string }>;
     utterance: string;
     sourceEventId: string;
+    standingInstructionsSection?: string | null;
   }) => Promise<{ state: ShowrunnerCallState; end: boolean; speak: string }>;
   legacyShadow?: LegacyShadowDeps | null;
 };
@@ -548,6 +561,15 @@ export async function runClaireV2PrimaryTurn(
     ? await deps.capturePreference({ utterance, turnId }).catch(() => null)
     : null;
   const daphne = await deps.loadDaphneGuidance().catch(() => null);
+  // Standing instructions: captured and read back before this turn's prompt is built, so a rule stated
+  // now binds this very answer and every later call.
+  const priorClaireTurn = [...(state.history ?? [])].reverse().find(entry => entry.speaker === "claire")?.text ?? null;
+  const instruction = assembly.durable && deps.captureInstructions
+    ? await deps.captureInstructions({ utterance, turnId, priorClaireTurn }).catch(() => null)
+    : null;
+  const standingRecords = deps.loadStandingInstructions ? await deps.loadStandingInstructions().catch(() => []) : [];
+  const standing = buildStandingInstructionsView(standingRecords, { now: new Date(nowMs), timeZone: input.timeZone });
+  const promiseScope = deps.resolvePromiseScope ? await deps.resolvePromiseScope().catch(() => null) : null;
 
   remember(state, "operator", utterance, nowMs);
 
@@ -789,6 +811,11 @@ export async function runClaireV2PrimaryTurn(
       );
     }
 
+    // ── Standing instruction (no work in the same turn): spoken only from a read-back row ──
+    if (instruction?.speech && instruction.detected.length > 0 && instruction.status !== "disabled" && actionClasses.length === 0) {
+      return finish({ speak: instruction.speech, kind: "answered" }, "preference", decision);
+    }
+
     // ── Explicit preference correction (no work in the same turn) ──
     if (savedPreference && actionClasses.length === 0 && preference) {
       const detail = preference.corrections.find(correction => correction.preferenceKey === "response_detail");
@@ -884,6 +911,7 @@ export async function runClaireV2PrimaryTurn(
           history: recentForModel,
           utterance,
           sourceEventId: turnId,
+          standingInstructionsSection: standing.section,
         });
       } catch {
         conducted = {
@@ -944,6 +972,10 @@ export async function runClaireV2PrimaryTurn(
         .slice(-4)
         .map(receipt => `${receipt.claimType} (${receipt.answerPath}): ${receipt.answerText.slice(0, 160)}`),
       daphnePromptSection: daphne?.promptSection ?? null,
+      standingInstructionsSection: standing.section,
+      ...(promiseScope
+        ? { promiseContext: { scope: promiseScope, conversationKey: input.conversationKey, now: new Date(nowMs), timeZone: input.timeZone } }
+        : {}),
       rookContactResidueSection: claireRookContactResidueSection({
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
@@ -1082,17 +1114,37 @@ export function productionClaireV2PrimaryDeps(input: {
         turnId,
       });
     },
+    captureInstructions: async ({ utterance, turnId, priorClaireTurn }) => {
+      const { captureStandingInstructions } = await import("../../../agents/daphne/standingInstructions");
+      return captureStandingInstructions({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        utterance,
+        conversationId: input.conversationKey,
+        turnId,
+        priorClaireTurn,
+      });
+    },
+    loadStandingInstructions: async () => {
+      const { loadActiveStandingInstructions } = await import("../../../agents/daphne/standingInstructions");
+      return loadActiveStandingInstructions({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+    },
+    resolvePromiseScope: async () => {
+      const { resolvePromiseScope } = await import("../../promiseReconciler");
+      return resolvePromiseScope({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+    },
     loadDaphneGuidance: async () => {
       const { loadDaphneClaireGuidance } = await import("../../../agents/daphne/claireAdapter");
       return loadDaphneClaireGuidance({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
     },
-    showrunner: async ({ state, history, utterance, sourceEventId }) => {
+    showrunner: async ({ state, history, utterance, sourceEventId, standingInstructionsSection }) => {
       const { runShowrunnerTurn } = await import("../../showrunner/showrunnerTurn");
       return runShowrunnerTurn({
         state,
         history,
         utterance,
         sourceEventId,
+        standingInstructionsSection,
         conversationKey: input.conversationKey,
       });
     },

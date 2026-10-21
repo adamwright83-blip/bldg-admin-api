@@ -10,6 +10,14 @@ import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/mi
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
+import {
+  buildStandingInstructionsView,
+  loadActiveStandingInstructionsForOperator,
+  REVIEW_TOPIC_OVERDUE_FOLLOWUPS,
+  type StandingInstructionRecord,
+} from "../../agents/daphne/standingInstructions";
+import { drizzlePreparedItemStore, type PreparedItemRecord, type PreparedItemStore } from "../../agents/persistentOperator/preparedItems";
+import { getClaireCampaignSummary, type ClaireCampaignSummary } from "../campaignAwareness";
 import { readWinBackDossier, type WinBackDossier } from "../../strategy/winBackDossier";
 import type { CustomerTruthDisposition } from "../../analytics/sourceCoverage";
 import {
@@ -54,6 +62,16 @@ export type ShowrunnerBriefing = {
    * Morning and evening calls speak this, not a separate list.
    */
   driverDayLine?: DriverDayLineCallFacts | null;
+  /** The operator's saved rules for calls, resolved for this moment. The opening and the prompt obey it. */
+  standing?: {
+    section: string | null;
+    heldTopics: string[];
+    askNowTopics: string[];
+    encouragement: boolean;
+    roleObligation: boolean;
+  };
+  /** Things Claire promised on an earlier call that the server prepared for this one. */
+  preparedItems?: PreparedPropertyVisits[];
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -65,6 +83,50 @@ export type ShowrunnerBriefing = {
     lapsedCustomers: Array<{ name: string; lastOrderDate: string | null; paidOrders: number; lifetimeDollars: number; contactOnFile: boolean }>;
   };
 };
+
+export type PreparedPropertyVisits = {
+  id: string;
+  kind: "property_visit_choice";
+  forBusinessDate: string;
+  promiseText: string;
+  /** Re-read from the live campaign at call time: a visit completed since is not offered. */
+  targets: Array<{ name: string; address: string | null }>;
+  remainingCount: number;
+};
+
+/**
+ * Loads the prepared items due now and refreshes their targets from the live campaign, so the opening
+ * never offers a visit that has since been done. An item with nothing left to choose from is dropped.
+ */
+export async function loadPreparedItemsForCall(
+  input: { identity: CanonicalOperatorIdentity; businessDate: string },
+  deps: { store?: PreparedItemStore; loadCampaign?: () => Promise<ClaireCampaignSummary | null> } = {}
+): Promise<PreparedPropertyVisits[]> {
+  const scope = { tenantId: input.identity.tenantId, canonicalOperatorId: input.identity.canonicalOperatorId };
+  const due: PreparedItemRecord[] = await (deps.store ?? drizzlePreparedItemStore()).listDue(scope, input.businessDate).catch(() => []);
+  if (!due.length) return [];
+  const campaign = await (
+    deps.loadCampaign ??
+    (() =>
+      getClaireCampaignSummary({
+        tenantId: input.identity.tenantId,
+        actorId: input.identity.dayDirectorActorId,
+        actorIds: input.identity.dayDirectorActorIds,
+      }))
+  )().catch(() => null);
+  // Unknown campaign state means the prepared list cannot be verified, so it is not offered.
+  if (!campaign || !campaign.active) return [];
+  return due
+    .filter(item => item.kind === "property_visit_choice" && campaign.remainingTargets.length > 0)
+    .map(item => ({
+      id: item.id,
+      kind: "property_visit_choice" as const,
+      forBusinessDate: item.forBusinessDate,
+      promiseText: item.promiseText,
+      targets: campaign.remainingTargets,
+      remainingCount: campaign.remainingCount,
+    }));
+}
 
 const UNREADABLE_WIN_BACK = "Win-back dossier could not be read. That is not an empty customer list.";
 
@@ -139,6 +201,9 @@ export async function buildShowrunnerBriefing(input: {
   loadDriverDayLine?: typeof loadDriverDayLineForCall;
   /** Test seam. Production callers keep the live day-director read. */
   getDay?: typeof getDayDirectorState;
+  /** Test seams for the standing-instruction and promise ledgers. */
+  loadStandingInstructions?: () => Promise<StandingInstructionRecord[]>;
+  loadPreparedItems?: () => Promise<PreparedPropertyVisits[]>;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -285,7 +350,24 @@ export async function buildShowrunnerBriefing(input: {
           timeZone,
           pendingApproval,
         });
+  const standingRecords = await (
+    input.loadStandingInstructions ??
+    (() => loadActiveStandingInstructionsForOperator({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId }))
+  )().catch(() => []);
+  const standingView = buildStandingInstructionsView(standingRecords, { now, timeZone });
+  const preparedItems =
+    input.purpose === "desk_planning"
+      ? []
+      : await (input.loadPreparedItems ?? (() => loadPreparedItemsForCall({ identity, businessDate })))().catch(() => []);
   return {
+    standing: {
+      section: standingView.section,
+      heldTopics: standingView.heldTopics,
+      askNowTopics: standingView.askNowTopics,
+      encouragement: standingView.encouragement,
+      roleObligation: standingView.roleObligation,
+    },
+    preparedItems,
     analyticalEvidence,
     opportunity,
     driverDayLine,
@@ -314,28 +396,100 @@ export async function buildShowrunnerBriefing(input: {
 
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
+const OVERDUE_FOLLOW_UP = /\b(?:overdue|follow[- ]?up|circle back|check in with|reach out)\b/i;
+
+/** True for Day Line items the operator asked Claire to hold for a review window. */
+export function isHeldTopicItem(item: { title: string; timeLabel?: string | null }, heldTopics: readonly string[]): boolean {
+  if (heldTopics.includes(REVIEW_TOPIC_OVERDUE_FOLLOWUPS)) {
+    return OVERDUE_FOLLOW_UP.test(item.title) || /overdue/i.test(item.timeLabel ?? "");
+  }
+  return false;
+}
+
+/** The Day Line as Claire may speak it right now: items the operator asked her to hold for a later window are not raised. */
+export function dayLineWithoutHeldTopics(
+  line: DriverDayLineCallFacts | null | undefined,
+  heldTopics: readonly string[] | undefined
+): DriverDayLineCallFacts | null | undefined {
+  if (!line || !heldTopics?.length) return line;
+  return {
+    ...line,
+    stops: line.stops.filter(stop => !isHeldTopicItem(stop, heldTopics)),
+    fieldBlockers: line.fieldBlockers.filter(item => !isHeldTopicItem({ title: item.title }, heldTopics)),
+    pendingApproval: line.pendingApproval.filter(item => !isHeldTopicItem({ title: item.title }, heldTopics)),
+  };
+}
+
+/**
+ * The encouragement standing instruction, spoken from facts only: a count of work done with proof, or the
+ * first open move, tied to the week's goal. Null when there is nothing true to say. Policy:
+ * ENCOURAGEMENT_POLICY in server/claire/progression/policy.ts.
+ */
+export function openingEncouragement(b: ShowrunnerBriefing): string | null {
+  if (!b.standing?.encouragement || !b.objective) return null;
+  const line = dayLineWithoutHeldTopics(b.driverDayLine, b.standing.heldTopics);
+  if (b.purpose === "evening_debrief") {
+    const done = new Set(line?.stops.filter(stop => stop.completion === "completed_with_evidence").map(stop => stop.title) ?? []).size;
+    return done > 0 ? `${done} done with proof today, and that is the work that moves "${b.objective}".` : null;
+  }
+  const first = line?.stops.find(stop => stop.executable)?.title;
+  return first ? `${first} is the move that serves "${b.objective}".` : null;
+}
+
+function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
+  const item = b.preparedItems?.find(candidate => candidate.kind === "property_visit_choice");
+  if (!item || !item.targets.length) return null;
+  const names = item.targets.slice(0, 3).map(target => target.name);
+  const more = item.remainingCount > names.length ? ` (${item.remainingCount} open in all)` : "";
+  return `Last night I said I'd have the open property visits ready: ${list(names)}${more}. Which one do you want first?`;
+}
+
 /** The spoken opening, built only from briefing facts. */
 export function showrunnerOpening(b: ShowrunnerBriefing): string {
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
-    const line = speakDriverDayLineCall(b.driverDayLine, b.purpose);
+    const line = speakDriverDayLineCall(dayLineWithoutHeldTopics(b.driverDayLine, b.standing?.heldTopics), b.purpose);
+    const prepared = preparedVisitsLine(b);
+    const encouragement = openingEncouragement(b);
     if (b.purpose === "morning_readiness") {
       return [
         "Good morning, it's Claire.",
         b.objective ? `This week is about: ${b.objective}.` : "",
+        prepared ?? "",
         line,
+        encouragement ?? "",
         b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
-        "Are you ready to get going?",
+        prepared ? "" : "Are you ready to get going?",
       ]
         .filter(Boolean)
         .join(" ");
     }
-    return ["Hi, it's Claire for today's wrap.", line, "How did it go?"].join(" ");
+    // The operator told Claire to open with the goal and the plan: the evening wrap does too.
+    const plan = b.standing?.roleObligation
+      ? [
+          b.objective ? `This week is about: ${b.objective}.` : "",
+          b.tomorrow.filter(i => i.status === "open").length
+            ? `Tomorrow's plan: ${list([...new Set(b.tomorrow.filter(i => i.status === "open").map(i => i.title))])}.`
+            : "",
+        ]
+      : [];
+    return [
+      "Hi, it's Claire for today's wrap.",
+      ...plan,
+      prepared ?? "",
+      line,
+      encouragement ?? "",
+      prepared ? "" : "How did it go?",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
-  const open = b.today.filter(i => i.status === "open");
+  const held = b.standing?.heldTopics;
+  const today = held?.length ? b.today.filter(i => !isHeldTopicItem(i, held)) : b.today;
+  const open = today.filter(i => i.status === "open");
   return [
     `Hi, it's Claire for today's wrap.`,
-    open.length || b.today.length
-      ? `Today you had ${list(b.today.map(i => i.title))}.`
+    open.length || today.length
+      ? `Today you had ${list(today.map(i => i.title))}.`
       : "There wasn't anything on today's Day Line.",
     "How did it go?",
   ].join(" ");

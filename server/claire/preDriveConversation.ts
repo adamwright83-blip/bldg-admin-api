@@ -1,4 +1,6 @@
 import { invokeTextLLM } from "../_core/llm";
+import { lintAndStripUnbackedPromises } from "./promiseGuard";
+import { reconcileSpokenPromises, type PromiseScope } from "./promiseReconciler";
 import { ENV } from "../_core/env";
 import { claireModelId, claireModelRequest } from "./claireModel";
 import { compileClaireContextForOperator } from "./character/relationshipHistory";
@@ -332,6 +334,10 @@ export async function answerClairePreDriveFollowUp(
      * never business truth, Narrative OS authority, or Claire disclosure permission.
      */
     daphnePromptSection?: string | null;
+    /** Operator-authored standing instructions (OPERATOR STANDING INSTRUCTIONS). Binds this answer. */
+    standingInstructionsSection?: string | null;
+    /** Who a spoken promise is prepared for. Absent: every promise about a later call is removed. */
+    promiseContext?: { scope: PromiseScope; conversationKey: string; now: Date; timeZone: string };
     /** Claire's work ledger: verified work saved this conversation, held work, call facts. */
     workLedgerPromptSection?: string | null;
   },
@@ -508,6 +514,9 @@ export async function answerClairePreDriveFollowUp(
       ...(input.daphnePromptSection
         ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]
         : []),
+      ...(input.standingInstructionsSection
+        ? [{ label: "operator_standing_instructions", text: input.standingInstructionsSection }]
+        : []),
       ...(input.workLedgerPromptSection
         ? [{ label: "work_ledger", text: input.workLedgerPromptSection }]
         : []),
@@ -574,6 +583,14 @@ export async function answerClairePreDriveFollowUp(
     const trimmedToSentenceBoundary = trimmed !== text;
     failureStage = "state_claim_guard";
     assertPostGenerationStateVerbs(trimmed, inventory);
+    // Promise discipline: a sentence about a later call is kept only when the server prepared what it
+    // promises; otherwise it is removed before speech.
+    failureStage = "promise_guard";
+    const promiseChecked = input.promiseContext
+      ? await reconcileSpokenPromises(trimmed, input.promiseContext)
+      : lintAndStripUnbackedPromises(trimmed);
+    if (promiseChecked.emptied) throw new Error("Claire follow-up contained only an unbacked promise");
+    const promiseSafe = promiseChecked.text;
     failureStage = "identity_guard";
     const identityViolation = claireIdentityClaimViolation(
       trimmed,
@@ -585,7 +602,7 @@ export async function answerClairePreDriveFollowUp(
 
     failureStage = "character_guards";
     // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
-    let answer = trimmed;
+    let answer = promiseSafe;
     let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
     if (conversationalMode === "personal") {
       try {

@@ -58,6 +58,8 @@ JOYSTICK transforms daily enterprise operations into a coherent, high-velocity m
 | **CleanCloud Evidence** | CleanCloud Integration | `assimilateCustomerTruth.ts`, `cleancloudPaidEvidence.ts` | `cleancloudPaidOrders.ts` | Order correlation, External reconciliation | Native Payment, Native Orders |
 | **Tenant Identity** | Platform Tenancy | Explicit tenant resolver (`server/platform/tenancy/tenantIdentity.ts`) | `requireTenantId`, `getTenantScope` | All domain services | `COALESCE(..., 'default')` fallbacks |
 | **Operator Preferences** | Daphne | `explicitPreferenceCorrection.ts` | `claireAdapter.ts`, `operatorCard.ts` | Claire prompt assembler | Direct unconsented profile edits |
+| **Operator Standing Instructions** | Daphne | `server/agents/daphne/standingInstructions/capture.ts` (append-only, read back before any acknowledgement) | `loadActiveStandingInstructions`, `buildStandingInstructionsView` | Showrunner briefing and opening, Claire speaking organ, Claire Desk | Claire model prose claiming a rule is saved, hand-written SQL |
+| **Prepared Promises** | Claire (promise ledger) | `server/claire/promiseReconciler.ts` into `claire_prepared_items` | `loadPreparedItemsForCall` | Morning/evening opening, Claire Desk | Any spoken "I'll have X ready" with no row (`promiseGuard.ts` removes it) |
 | **Mission Ranking** | Mission Director | `missionDirectorService.ts`, `rankRankableWork` | `missionDirectorRouter.ts` | Day Line, Operator briefing | Persistent Operator, Claire, Experience |
 
 ---
