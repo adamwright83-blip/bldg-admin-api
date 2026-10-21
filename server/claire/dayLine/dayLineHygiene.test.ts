@@ -469,6 +469,8 @@ describe("5. test data never reaches a production briefing", () => {
     expect(isTestFixtureTitle("Pick up Jojo Test")).toBe(true);
     expect(isTestFixtureTitle("CODEX PROPERTY MISSION E2E 184fdf60 — SAFE TO ARCHIVE")).toBe(true);
     expect(isTestFixtureTitle("Call Dana")).toBe(false);
+    // Titles the Claire Desk acceptance spec uses are ordinary titles, not test data.
+    expect(isTestFixtureTitle("Desk fixture second mission")).toBe(false);
     expect(isTestFixtureTitle("Contest entry for Laundry Farm")).toBe(false);
   });
 

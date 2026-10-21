@@ -221,6 +221,28 @@ describe("work ledger execution — readback before speech", () => {
     );
   });
 
+  it("says 'a challenge' for any remote objective and echoes 'marketing challenge' only when the operator said it", async () => {
+    const run = async (operatorWords: string) => {
+      const dayLine = createFakeDayLine();
+      const plan = validateWorkLedgerPlan(
+        { ...EMPTY_RAW, held: [heldItem({ ref: "new-1", title: "Text the dormant customers", quote: "I need to text the dormant customers.", executionType: "challenge", timing: "", save: true })] },
+        planInput({ utterance: operatorWords, transcript: [{ speaker: "operator", text: "I need to text the dormant customers." }] }),
+        1
+      );
+      const applied = await applyWorkLedgerPlan({
+        plan,
+        dayLine: [],
+        target: { tenantId: "default", dayDirectorActorId: "1", operatorUserId: "adam-admin", conversationKey: "k" },
+        clock: { today: TODAY, minutesNow: 17 * 60 + 31 },
+        deps: dayLine.deps.apply,
+        operatorWords,
+      });
+      return speakVerifiedLedgerChanges(applied, TODAY);
+    };
+    expect(await run("Yes, text the dormant customers.")).toBe("On today's line: text the dormant customers as a challenge.");
+    expect(await run("Put that on the record as a marketing challenge.")).toBe("On today's line: text the dormant customers as a marketing challenge.");
+  });
+
   it("keeps the operator's own words for a time said without am/pm", async () => {
     const dayLine = createFakeDayLine();
     const plan = validateWorkLedgerPlan(
@@ -307,7 +329,7 @@ describe("work ledger execution — readback before speech", () => {
     expect(speech).toContain("Marked done: deliver Jim's towels to Opus.");
     expect(speech).toContain("Now it reads: pick up from KITH TREATS at 10, on today's line.");
     expect(speech).toContain("Moved call Louise about the contract to tomorrow's line.");
-    expect(speech).toContain("Create Laundry Farm landing page is on today's line as a marketing challenge.");
+    expect(speech).toContain("Create Laundry Farm landing page is on today's line as a challenge.");
     expect(speech).toContain(`Took "It for today" off the line.`);
     expect(applied.receipts.map(receipt => receipt.claimedState).sort()).toEqual(["completed", "removed", "updated", "updated", "updated"]);
   });
