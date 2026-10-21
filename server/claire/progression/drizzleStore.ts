@@ -196,8 +196,11 @@ export function createDrizzleProgressionStore(): ProgressionStore {
             // GREATEST at the database: even a racing or stale writer can never lower a grant.
             // The version columns follow the component only when it actually rose.
             set: {
-              rapportPolicyVersion: sql`IF(${merged.rapportBand} > rapportBand, ${merged.rapportPolicyVersion}, rapportPolicyVersion)`,
-              rungPolicyVersion: sql`IF(${merged.personalRung} > personalRung, ${merged.rungPolicyVersion}, rungPolicyVersion)`,
+              // Order-independent: Drizzle emits SET in column order, so rapportBand/personalRung may already
+              // hold the raised value when these run. The version follows when the component rises in this
+              // write (still lower) OR it was just raised to exactly this value without a version yet.
+              rapportPolicyVersion: sql`IF(rapportBand < ${merged.rapportBand} OR (rapportBand = ${merged.rapportBand} AND rapportPolicyVersion IS NULL), ${merged.rapportPolicyVersion}, rapportPolicyVersion)`,
+              rungPolicyVersion: sql`IF(personalRung < ${merged.personalRung} OR (personalRung = ${merged.personalRung} AND rungPolicyVersion IS NULL), ${merged.rungPolicyVersion}, rungPolicyVersion)`,
               rapportBand: sql`GREATEST(rapportBand, ${merged.rapportBand})`,
               personalRung: sql`GREATEST(personalRung, ${merged.personalRung})`,
               // The cursor is a compound (time|id) string; monotonicity is enforced by the merge above and

@@ -5,6 +5,7 @@ import {
   commercialMissionFieldChecklistItems,
   commercialMissionFieldStates,
   commercialMissionPhoneHandoffs,
+  commercialMissions,
   commercialProposals,
   commercialVisitOutcomes,
   tenantFieldChecklistTemplates,
@@ -852,6 +853,35 @@ export async function reconcileCommercialMissionVisitScore(input: {
   return state;
 }
 
+/**
+ * Read-only: persisted visit outcomes whose credit belongs to one of these operator ids (the mission's
+ * assignee, or the recorder when the mission has none), for Claire progression's backfill.
+ */
+export async function listCommercialVisitOutcomesCreditedTo(input: {
+  tenantId: string;
+  operatorIds: readonly string[];
+}): Promise<Array<{ missionId: number; outcome: string; recordedAt: Date }>> {
+  const db = await getDb();
+  if (!db || !input.operatorIds.length) return [];
+  const rows = await db
+    .select({
+      missionId: commercialVisitOutcomes.missionId,
+      outcome: commercialVisitOutcomes.outcome,
+      recordedAt: commercialVisitOutcomes.createdAt,
+      recordedBy: commercialVisitOutcomes.recordedBy,
+      assignedTo: commercialMissions.assignedTo,
+    })
+    .from(commercialVisitOutcomes)
+    .innerJoin(
+      commercialMissions,
+      and(eq(commercialMissions.tenantId, commercialVisitOutcomes.tenantId), eq(commercialMissions.id, commercialVisitOutcomes.missionId))
+    )
+    .where(eq(commercialVisitOutcomes.tenantId, input.tenantId));
+  return rows
+    .filter(row => input.operatorIds.includes(row.assignedTo ?? row.recordedBy))
+    .map(row => ({ missionId: row.missionId, outcome: row.outcome, recordedAt: row.recordedAt }));
+}
+
 export async function recordCommercialMissionVisitOutcome(input: {
   tenantId: string;
   missionId: number;
@@ -971,6 +1001,22 @@ export async function recordCommercialMissionVisitOutcome(input: {
     missionId: input.missionId,
   });
   if (!persisted?.visitOutcome) throw new Error("Visit outcome was not persisted");
+
+  // Claire progression: this is the ONE writer of a visit outcome (verified arrival required), so every
+  // caller (debrief call, mission-linked debrief, field UI) credits field effort here. Idempotent on the
+  // mission; never blocks or fails the write. Credit belongs to the assignee, like the visit score below.
+  const progressionOutcome = persisted.visitOutcome;
+  void import("../claire/progression/evidenceSources")
+    .then(({ creditCommercialVisitProgression }) =>
+      creditCommercialVisitProgression({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        operatorOpenId: persisted.mission.assignedTo ?? input.actorId,
+        outcome: progressionOutcome.outcome,
+        recordedAt: progressionOutcome.createdAt ? new Date(progressionOutcome.createdAt) : new Date(),
+      })
+    )
+    .catch(error => console.warn("[Claire progression] visit credit unavailable", error instanceof Error ? error.message : error));
 
   if (input.outcome === "won") {
     await reconcileCommercialMissionWonDownstream({

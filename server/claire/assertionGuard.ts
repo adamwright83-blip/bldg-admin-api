@@ -237,6 +237,8 @@ const FREE_FORM_MUTATION_SUCCESS_PATTERNS: Array<{ label: string; pattern: RegEx
   { label: "adding to the Day Line", pattern: /\badding to the day ?line\b/i },
   { label: "sent to", pattern: /^sent to\b/i },
   { label: "commit-renderer Done", pattern: /\bdone\.\s[^\n]*\bline\b/i },
+  { label: "commit-renderer Done (named items)", pattern: /^done\.\s+(?:added|recorded as|marked done|already saved)\b/i },
+  { label: "commit-renderer Recorded as", pattern: /^recorded as\b[^\n]*:/i },
   { label: "Added prefix", pattern: /^Added:\s/i },
   { label: "Updated prefix", pattern: /^Updated:\s/i },
   { label: "Changed prefix", pattern: /^Changed it to\b/i },
@@ -396,6 +398,10 @@ export function lintReceiptBackedCommitSpeech(
   if (/^Done\./i.test(text)) {
     if (!created.length && !completed.length) {
       violations.push("Done summary without mutation receipts");
+    }
+    const aside = /That's (\d+) new items? in all/i.exec(text);
+    if (aside && created.length + completed.length < Number(aside[1])) {
+      violations.push("Day Line count aside exceeds created receipts");
     }
     const lineCounts = [...text.matchAll(/(\d+)\s+on(?:\s+\w+'s)?\s+line/gi)];
     if (lineCounts.length) {

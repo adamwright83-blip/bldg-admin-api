@@ -16,6 +16,15 @@ export type DialogueActKind =
   | "greeting"
   | "leave_taking"
   | "attention_repair"
+  /** The operator asked Claire to say her previous turn again. Not a challenge to it. */
+  | "repeat_request"
+  /**
+   * A romantic or personal advance aimed at Claire ("I love you, Claire"). Not a
+   * biography probe: it opens no canon, and Claire deflects it.
+   */
+  | "romantic_or_personal_advance"
+  /** The operator asked for encouragement about their work. A work request, never a decline. */
+  | "encouragement_request"
   | "continue";
 
 /**
@@ -68,6 +77,15 @@ export type PerceivedEntity = {
 };
 
 export type CallControlSignal = "end" | "continue";
+
+/**
+ * Feedback about Claire's own role, as opposed to the operator's work.
+ *   dictated_example — the operator is showing Claire how she should speak to them
+ *                      ("tomorrow you're gonna hit 3 locations…"); not a commitment.
+ *   role_remark      — "you should already know them; that needs to be coded in you";
+ *                      not an attested intention and not a prior-claim challenge.
+ */
+export type ClaireRoleFeedbackKind = "none" | "dictated_example" | "role_remark";
 
 export type PerceivedTurn = {
   rawText: string;
@@ -127,4 +145,12 @@ export type PerceivedTurn = {
    * Null when the frame is open but the content has not been said.
    */
   declaredContentLabel: string | null;
+  /**
+   * The operator asked Claire for the next move ("What do you have for me
+   * tomorrow? What do you want me to do?"). Descriptive: Executive Function
+   * decides whether a plan is composed. `horizon` is the day asked about.
+   */
+  leadRequest: { horizon: "today" | "tomorrow" | null } | null;
+  /** Feedback about Claire's role rather than the operator's work. Never authority. */
+  claireRoleFeedback: ClaireRoleFeedbackKind;
 };

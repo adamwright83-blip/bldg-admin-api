@@ -63,11 +63,37 @@ function bounded(value: number): number {
   return value;
 }
 
-export function assertDaphnePersonDimension(dimension: string): void {
+/**
+ * The closed registry of motivational dimensions Daphne may hold about a person.
+ * At launch every value is explicit: the operator states it or picks it on Claire
+ * Desk. Nothing here is inferred from behaviour, and none of it is a trait claim.
+ */
+export const DAPHNE_PERSON_DIMENSIONS = [
+  "suspense",
+  "comfort",
+  "humor",
+  "exploration",
+  "competition",
+  "companionship",
+  "creative_production",
+  "tactical_problem_solving",
+] as const;
+export type DaphnePersonDimension = (typeof DAPHNE_PERSON_DIMENSIONS)[number];
+
+export function isDaphnePersonDimension(value: unknown): value is DaphnePersonDimension {
+  return typeof value === "string" && (DAPHNE_PERSON_DIMENSIONS as readonly string[]).includes(value);
+}
+
+export function assertDaphnePersonDimension(dimension: string): asserts dimension is DaphnePersonDimension {
   const value = required(dimension, "dimension");
   if (FORBIDDEN_DIMENSION_PATTERNS.some(pattern => pattern.test(value))) {
     throw new Error(
       "Daphne Person dimensions cannot encode unsupported clinical diagnoses"
+    );
+  }
+  if (!isDaphnePersonDimension(value)) {
+    throw new Error(
+      `Daphne Person dimension "${value}" is not in DAPHNE_PERSON_DIMENSIONS`
     );
   }
 }

@@ -1,4 +1,5 @@
 import { investigateForPreparation } from "../analytics/analysis/proactiveInvestigation";
+import { weeklyHeadlineObjective } from "../../shared/strategicHeadline";
 import type { WeeklyProductionPlan } from "../../shared/strategicIntelligence";
 import { loadMissionPresentations, presentationFor } from "../agents/daphne/missionFollowUp";
 import { createHash } from "node:crypto";
@@ -515,11 +516,12 @@ export function buildWeeklyProductionPlan(input: {
     // A remark from conversation shapes where the work happens; it is never
     // presented as the operator's objective in place of their confirmed goal.
     objective:
-      d.objective && d.objective.confirmation !== "inferred"
+      weeklyHeadlineObjective(d) ??
+      (d.objective && d.objective.confirmation !== "inferred"
         ? d.objective.statement
         : d.objective
           ? `${d.goal.statement} (starting in ${d.objective.area})`
-          : d.goal.statement,
+          : d.goal.statement),
     outcomes: [action?.leadingIndicator, ...d.successMeasures].filter((x): x is string => Boolean(x)).slice(0, 3),
     evidence: selected?.observedBasis ?? d.currentCondition,
     sequence: input.items.map(i => ({

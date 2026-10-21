@@ -6,6 +6,7 @@
  * read as `trpc.system.field.today`. This module does not keep a list of its own.
  * It does not award points, coins, or streaks, and it does not place a call.
  */
+import { dedupeSpokenTitles } from "../speech/dedupeSpokenTitles";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
@@ -27,6 +28,9 @@ import { getLatestPlan } from "../../planning/missionDirector/missionDirectorSer
 import { listDriverBuiltMissions } from "../../commercialMissions/commercialMissionBuilderService";
 import { readCurrentOpenChannelMission } from "../../openChannel/openChannelService";
 import type { OpenChannelMission } from "../../openChannel/openChannelTypes";
+import { dedupeStopsByBuilding } from "../dayLine/buildingDedupe";
+import { isTestFixtureTitle } from "../dayLine/testDataGuard";
+import { mayRaiseOverdueSalesFollowUp } from "../dayLine/weekendQuietRule";
 
 const APPROVAL_STATUSES = new Set([
   "draft",
@@ -59,6 +63,12 @@ export type DriverDayLineStopFact = {
     | "cancelled";
   needsApproval: boolean;
   evidence: string | null;
+  /** Where the stop came from. Only self-generated sources (living world, commitments, sales) are collapsed by building. */
+  source?: string;
+  address?: string | null;
+  physicalEntityId?: string | null;
+  /** An overdue sales follow-up on a weekend: kept on the line, not volunteered on the call. */
+  quietOnWeekend?: boolean;
 };
 
 export type DriverDayLineCallFacts = {
@@ -69,6 +79,8 @@ export type DriverDayLineCallFacts = {
   fieldBlockers: Array<{ id: string; title: string; reason: string }>;
   pendingApproval: Array<{ id: string; title: string }>;
   omissions: string[];
+  /** What was kept off the spoken line, so nothing silently disappears. */
+  withheld?: { testData: number; duplicates: number; weekendFollowUps: number };
 };
 
 export type DriverDayLineCaller = {
@@ -94,6 +106,8 @@ export type DriverDayLineProjectionInput = {
   missionPlan?: MissionPlanOutcome | null;
   pendingApproval?: Array<{ id: string; title: string }>;
   omissions?: string[];
+  /** The operator asked about sales follow-ups on this call, which lifts the weekend default. */
+  operatorAskedAboutSales?: boolean;
 };
 
 const join = (values: string[]) =>
@@ -161,7 +175,16 @@ export function projectDriverDayLineForCall(
   for (const item of input.field.timeline) {
     approvalByStop.set(`living-world-${item.id}`, APPROVAL_STATUSES.has(item.status));
   }
-  const stops = projection.stops.map((stop): DriverDayLineStopFact => {
+  const raiseOverdue = mayRaiseOverdueSalesFollowUp({
+    businessDate: input.businessDate,
+    operatorAsked: input.operatorAskedAboutSales,
+  });
+  const overdueFollowUps = new Set(
+    input.field.timeline
+      .filter(item => item.kind === "follow_up" && item.urgency === "overdue")
+      .map(item => `living-world-${item.id}`)
+  );
+  const mapped = projection.stops.map((stop): DriverDayLineStopFact => {
     const evidence = evidenceFor(stop, evidenceIds);
     return {
       id: stop.id,
@@ -172,8 +195,20 @@ export function projectDriverDayLineForCall(
       completion: completionFor(stop, evidence),
       needsApproval: approvalByStop.get(stop.id) ?? false,
       evidence,
+      source: stop.source,
+      address: stop.address,
+      physicalEntityId: stop.physicalEntityId ?? null,
+      ...(overdueFollowUps.has(stop.id) && !raiseOverdue ? { quietOnWeekend: true } : {}),
     };
   });
+  // Test fixtures never reach a call; self-generated duplicates (the same building twice) speak once.
+  const real = mapped.filter(stop => !isTestFixtureTitle(stop.title));
+  const stops = collapseSelfGeneratedDuplicates(real);
+  const withheld = {
+    testData: mapped.length - real.length,
+    duplicates: real.length - stops.length,
+    weekendFollowUps: stops.filter(stop => stop.quietOnWeekend).length,
+  };
   const stopIds = new Set(stops.map(stop => stop.id));
   const fieldBlockers = input.field.blockers
     .filter(item => !stopIds.has(item.id) && !stopIds.has(`living-world-${item.id}`))
@@ -196,7 +231,20 @@ export function projectDriverDayLineForCall(
     fieldBlockers,
     pendingApproval,
     omissions: input.omissions ?? [],
+    withheld,
   };
+}
+
+const SELF_GENERATED_SOURCES = new Set(["living_world", "user_commitment", "commercial_mission"]);
+
+/**
+ * Orders are separate people at one address and are never merged. Sales follow-ups, commitments and the
+ * living world can each describe the same building or the same task; those collapse to one stop.
+ */
+export function collapseSelfGeneratedDuplicates(stops: DriverDayLineStopFact[]): DriverDayLineStopFact[] {
+  const eligible = stops.filter(stop => stop.source && SELF_GENERATED_SOURCES.has(stop.source));
+  const kept = new Set(dedupeStopsByBuilding(eligible).map(stop => stop.id));
+  return stops.filter(stop => !(stop.source && SELF_GENERATED_SOURCES.has(stop.source)) || kept.has(stop.id));
 }
 
 function missingTable(error: unknown): boolean {
@@ -340,7 +388,7 @@ export function speakDriverDayLineCall(
   line: DriverDayLineCallFacts | null | undefined,
   purpose: "morning_readiness" | "evening_debrief"
 ): string {
-  const approvalTitles = (items: Array<{ title: string }>) => [...new Set(items.map(item => item.title))];
+  const approvalTitles = (items: Array<{ title: string }>) => dedupeSpokenTitles(items.map(item => item.title));
   if (!line || line.read !== "read") {
     const approval = approvalTitles(line?.pendingApproval ?? []);
     return [
@@ -350,17 +398,21 @@ export function speakDriverDayLineCall(
       .filter(Boolean)
       .join(" ");
   }
-  const titles = (stops: DriverDayLineStopFact[]) => [...new Set(stops.map(stop => stop.title))];
-  const executable = titles(line.stops.filter(stop => stop.executable));
-  const evidenced = titles(line.stops.filter(stop => stop.completion === "completed_with_evidence"));
-  const unmarked = titles(line.stops.filter(stop => stop.completion === "completed_without_evidence"));
+  const spoken = collapseSelfGeneratedDuplicates(
+    line.stops.filter(stop => !isTestFixtureTitle(stop.title) && !stop.quietOnWeekend)
+  );
+  // Two rows for one building are one thing to the operator; say it once.
+  const titles = (stops: DriverDayLineStopFact[]) => dedupeSpokenTitles(stops.map(stop => stop.title));
+  const executable = titles(spoken.filter(stop => stop.executable));
+  const evidenced = titles(spoken.filter(stop => stop.completion === "completed_with_evidence"));
+  const unmarked = titles(spoken.filter(stop => stop.completion === "completed_without_evidence"));
   const blocked = [
-    ...titles(line.stops.filter(stop => stop.completion === "blocked" || stop.completion === "deferred")),
-    ...line.fieldBlockers.map(item => item.title),
+    ...titles(spoken.filter(stop => stop.completion === "blocked" || stop.completion === "deferred")),
+    ...line.fieldBlockers.filter(item => !isTestFixtureTitle(item.title)).map(item => item.title),
   ];
   const approval = [
-    ...titles(line.stops.filter(stop => stop.needsApproval)),
-    ...line.pendingApproval.map(item => item.title),
+    ...titles(spoken.filter(stop => stop.needsApproval)),
+    ...line.pendingApproval.filter(item => !isTestFixtureTitle(item.title)).map(item => item.title),
   ];
   // Spoken to a person: say what is true and useful, and leave out the empty
   // categories ("Nothing is waiting for your approval.") a report would list.
@@ -381,8 +433,8 @@ export function speakDriverDayLineCall(
         : "Today's line is empty so far.",
     evidenced.length ? `Done and verified: ${join(evidenced)}.` : "",
     unmarked.length ? `Marked done, not yet verified: ${join(unmarked)}.` : "",
-    blocked.length ? `Blocked or deferred: ${join([...new Set(blocked)])}.` : "",
-    approval.length ? `Waiting on your approval: ${join([...new Set(approval)])}.` : "",
+    blocked.length ? `Blocked or deferred: ${join(dedupeSpokenTitles(blocked))}.` : "",
+    approval.length ? `Waiting on your approval: ${join(dedupeSpokenTitles(approval))}.` : "",
     omitted.length
       ? `I could not read ${join(omitted)}, so this is not the full Day Line.`
       : "",

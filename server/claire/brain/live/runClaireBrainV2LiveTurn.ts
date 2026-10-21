@@ -24,6 +24,11 @@ import {
   runClaireBrainTurn,
   type ClaireBrainTurnResult,
 } from "../shadow/runClaireBrainTurn";
+import {
+  BrainV2ExecutionFailedError,
+  BrainV2GrantNotExecutableError,
+  describeAttemptedGrant,
+} from "./grantBoundLegacyAdapter";
 
 export type ClaireBrainV2LiveInput = {
   rawText: string;
@@ -59,6 +64,8 @@ export type ClaireBrainV2LiveResult =
         | "error"
         | "execution_error"
         | "outside_live_scope";
+      /** Set with `execution_error`: what the adapter was attempting when it failed. */
+      attempted?: string;
     }
   | {
       active: true;
@@ -144,6 +151,7 @@ export async function runClaireBrainV2LiveTurn(
   let adapterResult: ClaireTurnResult | null = null;
   let adapterPromise: Promise<ClaireTurnResult> | null = null;
   let adapterExecutionStarted = false;
+  let attemptedGrant: ExecutiveActionGrant | null = null;
 
   const execute = async (
     grant: ExecutiveActionGrant
@@ -152,6 +160,7 @@ export async function runClaireBrainV2LiveTurn(
     // grant-bound adapter must still run at most once.
     if (!adapterPromise) {
       adapterExecutionStarted = true;
+      attemptedGrant = grant;
       adapterPromise = input.executeLegacyAdapter(grant);
     }
     const rawAdapterResult = await adapterPromise;
@@ -211,17 +220,26 @@ export async function runClaireBrainV2LiveTurn(
       handled: true,
     };
   } catch (error) {
+    // A grant the adapter refused BEFORE attempting any write is not a failed action.
+    // The turn falls back to the proven path and says nothing about a failed write.
+    const refusedBeforeWrite = error instanceof BrainV2GrantNotExecutableError;
     console.error("[ClaireBrainV2] live cutover turn failed", {
-      event: "claire_brain_v2_live_failed",
+      event: refusedBeforeWrite ? "claire_brain_v2_live_grant_not_executable" : "claire_brain_v2_live_failed",
       tenantId: input.tenantId,
       operatorUserId: input.operatorUserId,
       surface: input.surface,
       reason: error instanceof Error ? error.message : "unknown",
     });
-    return {
-      active: false,
-      reason: adapterExecutionStarted ? "execution_error" : "error",
-    };
+    if (refusedBeforeWrite || !adapterExecutionStarted) {
+      return { active: false, reason: "error" };
+    }
+    const attempted =
+      error instanceof BrainV2ExecutionFailedError
+        ? error.attempted
+        : attemptedGrant
+          ? describeAttemptedGrant(attemptedGrant as ExecutiveActionGrant, input.state)
+          : "that";
+    return { active: false, reason: "execution_error", attempted };
   }
 }
 

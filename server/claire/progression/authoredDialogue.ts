@@ -12,6 +12,9 @@
  *    impress; no therapy language, no gushing, no flirtation, no exclamation marks, no numbers, no
  *    biography. Rapport warms REGISTER (tone of a refusal), never what she will tell.
  *  - Categories in use: decline (per rapport band), thread_closer, business_pivot, call_exit.
+ *    `advance_decline` is the romantic / personal-advance deflection. It has NO lines yet: see
+ *    ADVANCE_DECLINE_AUTHORING_SLOTS. Until Adam fills a slot the advance falls back to the ordinary
+ *    decline lines for the band, followed by an authored business_pivot.
  *  - `recovery_after_failed_generation` deliberately has NO dedicated lines: a distinct recovery line
  *    would reveal that an answer existed. A lost reveal therefore uses the ordinary decline lines and
  *    is indistinguishable from a refusal. `boundary_reinforcement` is not used by any code path yet.
@@ -20,6 +23,7 @@
 
 export type DialogueCategory =
   | "decline" // refuse a personal question without leaking anything
+  | "advance_decline" // deflect a romantic or personal advance (slots only; Adam authors the text)
   | "thread_closer" // close the personal subject (not necessarily the call)
   | "business_pivot" // steer back to unresolved business
   | "call_exit" // actually end the call (only when business is complete)
@@ -88,4 +92,36 @@ export const AUTHORED_DIALOGUE: readonly DialogueLine[] = [
   line("exit_enough_drive_safe", "call_exit", "That's enough from me. Drive safe.", 0, 3),
   line("exit_leave_you_to_it", "call_exit", "I'll leave you to it.", 0, 3),
   line("exit_off_you_go", "call_exit", "Right. That's me done. Off you go.", 0, 3),
+];
+
+/**
+ * EMPTY SLOTS FOR ADAM. Each slot names a place in the registry for a deflection of a romantic or
+ * personal advance ("I love you, Claire"). No text is written here and no session may write it:
+ * authored Claire dialogue is human-only. To fill a slot, copy its id into AUTHORED_DIALOGUE as a
+ *   line("<id>", "advance_decline", "<your text>", <minRapport>, <maxRapport>)
+ * entry and delete it from this list. Until then selection falls back to the band's ordinary
+ * `decline` lines, always followed by an authored `business_pivot` line.
+ *
+ * Voice reminder for the author: Claire deflects a romantic advance at every band. Rapport warms
+ * the REGISTER of the deflection (r0 flat, r1 dry, r2-3 wry and familiar). It never accepts,
+ * reciprocates or encourages. No biography, no numbers, no progress talk.
+ */
+export type AuthoringSlot = {
+  id: string;
+  category: "advance_decline";
+  minRapport: 0 | 1 | 2 | 3;
+  maxRapport: 0 | 1 | 2 | 3;
+  brief: string;
+};
+
+export const ADVANCE_DECLINE_AUTHORING_SLOTS: readonly AuthoringSlot[] = [
+  { id: "decline_r0_advance_a", category: "advance_decline", minRapport: 0, maxRapport: 0, brief: "Band 0, flat and professional. Closes the subject in one short sentence." },
+  { id: "decline_r0_advance_b", category: "advance_decline", minRapport: 0, maxRapport: 0, brief: "Band 0, a second variant so it does not repeat on the next advance." },
+  { id: "decline_r0_advance_c", category: "advance_decline", minRapport: 0, maxRapport: 0, brief: "Band 0, a third variant." },
+  { id: "decline_r1_advance_a", category: "advance_decline", minRapport: 1, maxRapport: 1, brief: "Band 1, dry. Acknowledges the attempt without warming to it." },
+  { id: "decline_r1_advance_b", category: "advance_decline", minRapport: 1, maxRapport: 1, brief: "Band 1, a second variant." },
+  { id: "decline_r1_advance_c", category: "advance_decline", minRapport: 1, maxRapport: 1, brief: "Band 1, a third variant." },
+  { id: "decline_r2_advance_a", category: "advance_decline", minRapport: 2, maxRapport: 3, brief: "Bands 2-3, wry and familiar. Still a clear no." },
+  { id: "decline_r2_advance_b", category: "advance_decline", minRapport: 2, maxRapport: 3, brief: "Bands 2-3, a second variant." },
+  { id: "decline_r2_advance_c", category: "advance_decline", minRapport: 2, maxRapport: 3, brief: "Bands 2-3, a third variant." },
 ];

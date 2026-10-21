@@ -355,7 +355,7 @@ describe("Claire conversational-intelligence repair", () => {
     const saved = await fixture.say("Those people you just mentioned — put that work on today.");
     expect(fixture.commitMock).toHaveBeenCalledTimes(1);
     expect(fixture.committedReceipts.length).toBeGreaterThan(0);
-    expect(saved.receiptBackedCommit).toMatch(/Done\.\s+1 on today's line/i);
+    expect(saved.receiptBackedCommit).toMatch(/Done\.\s+(?:Added|Recorded as)/i);
     expect(saved.speak).not.toMatch(/tell me the items again/i);
     expect(fixture.committedItems[0]?.references).toEqual(pending.references);
 

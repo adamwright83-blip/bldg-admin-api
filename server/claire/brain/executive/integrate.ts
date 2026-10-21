@@ -32,9 +32,12 @@ import {
 import type { ResponseSegment } from "../contracts/responsePlan";
 import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate } from "../contracts/executiveDecision";
 import { buildJudgmentBrief, recommendOverEvidence, type JudgmentRecommender } from "./judgment";
+import { buildLeadPlan, type LeadPlan } from "./leadPlan";
+import { asksAboutGoal } from "./retrievalPlan";
+import { speakGoalProgress, type GoalProgress } from "../businessMemory/goalProgress";
 import { epistemicQualifier } from "./epistemicState";
 import type { ExecutiveControlState } from "../contracts/control";
-import { selectDialogueLine } from "../../progression/dialogueRegistry";
+import { selectAdvanceDeflection, selectDialogueLine } from "../../progression/dialogueRegistry";
 
 export type IntegrationContext = {
   timeZone: string;
@@ -75,6 +78,8 @@ export type IntegrationOutput = {
   orderedQueryUpdate?: OrderedQueryUpdate;
   /** Members presented while continuing an existing result. */
   continuationPresented?: OrderedQueryMember[];
+  /** Set when this turn composed a lead plan ("what do you want me to do?"). */
+  leadPlan?: LeadPlan;
 };
 
 /**
@@ -128,6 +133,8 @@ const BUSINESS_TRUTH_TYPES = new Set([
   "day_line_read",
   "field_today",
   "workday_command",
+  "game_state",
+  "goal_progress",
   "prior_claim_recheck",
 ]);
 
@@ -282,6 +289,60 @@ function integrateBusiness(input: {
   const authoritative = authoritativeBusiness(evidence);
   const recheck = recheckFrom(evidence);
 
+  /**
+   * Lead composition. The operator asked for the next move ("What do you have for
+   * me tomorrow? What do you want me to do?"), or told Claire she should be the
+   * one leading. The answer is a plan over goal + day work + game state, not a
+   * row read aloud and not a question back. Advisory: it asserts no new fact and
+   * carries no mutation authority; `decideTurn` separately mints the Day Line
+   * OFFER as a proposal the operator must approve.
+   */
+  if (perceived.leadRequest && perceived.businessIntent === "broad_briefing" && attention.priorClaim === "none") {
+    const plan = buildLeadPlan({
+      evidence,
+      horizon: perceived.leadRequest.horizon,
+      today: ctx.today,
+      goalAsked: asksAboutGoal(perceived.assembledText),
+    });
+    if (plan) {
+      const cited = evidence.filter(item => plan.evidenceIds.includes(item.id));
+      const grounds = cited.length ? cited : authoritative;
+      // With nothing retrieved the plan can only say what it lacks; that is
+      // conversation, not a judgment resting on evidence.
+      segments.push(
+        grounds.length
+          ? {
+              type: "BusinessJudgmentSegment",
+              text: plan.text,
+              evidence: refs(grounds),
+              accountId: null,
+              contactName: null,
+              mutationAuthority: false,
+            }
+          : { type: "ConversationalSegment", text: plan.text }
+      );
+      conclusions.push({
+        kind: "lead_plan",
+        detail: `plan composed over ${cited.map(item => item.type).join("+") || "no evidence"}; advisory, no save claimed`,
+        evidenceIds: cited.map(item => item.id),
+      });
+      return { segments, conclusions, inhibited, extraEvidence, leadPlan: plan };
+    }
+  }
+
+  // "What is my goal?" is answered from the macro goal reader, with the distance to it.
+  const goalItem = evidence.find(item => item.type === "goal_progress" && item.authoritativeFor.includes("current_business_truth"));
+  if (goalItem && attention.priorClaim === "none" && asksAboutGoal(perceived.assembledText)) {
+    segments.push({
+      type: "BusinessFactSegment",
+      text: speakGoalProgress(goalItem.payload as GoalProgress),
+      evidence: [{ evidenceId: goalItem.id }],
+      origin: "authoritative_reader",
+    });
+    conclusions.push({ kind: "business_fact", detail: "macro goal and its distance, from the goal progress reader", evidenceIds: [goalItem.id] });
+    return { segments, conclusions, inhibited, extraEvidence };
+  }
+
   // A correctness challenge that could not be freshly reread must not be answered
   // from the old receipt as though it were still true. Say the limitation explicitly:
   // silence here sounds like a transport failure, while receipt-only speech sounds verified.
@@ -415,6 +476,13 @@ function integrateBusiness(input: {
 }
 
 
+/** The operator's rapport band from self-memory evidence; band 0 when none was read. */
+export function advanceRapportBand(evidence: readonly EvidenceItem[]): 0 | 1 | 2 | 3 {
+  const relationship = evidence.find(item => item.type === "relationship_state");
+  const band = (relationship?.payload as { rapportBand?: number } | undefined)?.rapportBand ?? 0;
+  return (band >= 3 ? 3 : band >= 2 ? 2 : band >= 1 ? 1 : 0) as 0 | 1 | 2 | 3;
+}
+
 /**
  * Personal / narrative lane.
  *
@@ -438,6 +506,28 @@ function integratePersonal(input: {
 
   const personalLane = attention.lanes.includes("personal") || attention.lanes.includes("narrative");
   if (!personalLane) return { segments, conclusions, inhibited, extraEvidence: [] };
+
+  /**
+   * A romantic or personal advance is deflected, never answered and never rewarded. It must
+   * run BEFORE the entitlement check: an unused biography entitlement is no licence to
+   * answer a pass. The reply is two AUTHORED lines chosen deterministically for the
+   * operator's rapport band: a decline, then a pivot back to the work. The advance is
+   * recorded as durable game state by the live turn (kind advance_declined).
+   */
+  if (perceived.dialogueActs.includes("romantic_or_personal_advance")) {
+    const band = advanceRapportBand(evidence);
+    const { decline, pivot } = selectAdvanceDeflection({ rapportBand: band, seed: perceived.assembledText });
+    const text = [decline?.text, pivot?.text].filter(Boolean).join(" ");
+    segments.push({ type: "ConversationalSegment", text });
+    conclusions.push({
+      kind: "personal_advance_declined",
+      detail: text
+        ? `declined with authored lines ${[decline?.id, pivot?.id].filter(Boolean).join(" + ")}; nothing disclosed, nothing accepted`
+        : "no authored deflection available; said nothing",
+      evidenceIds: [],
+    });
+    return { segments, conclusions, inhibited, extraEvidence: [] };
+  }
 
   const entitlement = evidence.find(item => item.type === "disclosure_entitlement");
   if (entitlement) {
@@ -500,5 +590,6 @@ export function integrate(input: {
     extraEvidence: [...business.extraEvidence, ...personal.extraEvidence],
     orderedQueryUpdate: business.orderedQueryUpdate,
     continuationPresented: business.continuationPresented,
+    leadPlan: business.leadPlan,
   };
 }

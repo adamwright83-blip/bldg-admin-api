@@ -73,9 +73,15 @@ import type { BusinessQueryPlanner, LiveRetrievalDeps } from "../executive/decid
 import { readOnlyWorkingMemorySource } from "../shadow/v1Snapshot";
 import { periodMatches, requestedPeriod } from "../executive/requestedPeriod";
 import {
+  BrainV2ExecutionFailedError,
+  BrainV2GrantNotExecutableError,
   brainV2CallControlResult,
+  brainV2ExecutionFailureResult,
   executeGrantBoundLegacyAdapter,
 } from "./grantBoundLegacyAdapter";
+import { isMacroGoalQuestion } from "../perception/conversationalActs";
+import { advanceRapportBand } from "../executive/integrate";
+import { selectAdvanceDeflection } from "../../progression/dialogueRegistry";
 import { guardCommittedDayLineResult } from "./runClaireBrainV2LiveTurn";
 import {
   interpretSemanticPerception,
@@ -114,6 +120,8 @@ export type ClaireV2Composition =
   | "showrunner"
   | "deterministic"
   | "composed"
+  | "repeat"
+  | "execution_failed"
   | "recovery";
 
 /** Proof of origin carried on every primary result. */
@@ -155,6 +163,13 @@ export type ClaireV2PrimaryInput = {
   rookContactResidues?: readonly ClaireRookContactResidueContext[];
 };
 
+import {
+  buildStandingInstructionsView,
+  type StandingInstructionCaptureResult,
+  type StandingInstructionRecord,
+} from "../../../agents/daphne/standingInstructions";
+import type { PromiseScope } from "../../promiseReconciler";
+
 type SpeakingOrgan = typeof answerClairePreDriveFollowUp;
 
 export type ClaireV2PrimaryDeps = {
@@ -174,6 +189,11 @@ export type ClaireV2PrimaryDeps = {
   ingestDaphne: (input: { utterance: string; turnId: string; completed: boolean }) => Promise<unknown>;
   capturePreference: (input: { utterance: string; turnId: string }) => Promise<DaphneExplicitPreferenceCaptureResult>;
   loadDaphneGuidance: () => Promise<DaphneClaireGuidance | null>;
+  /** Operator-stated rules about how Claire behaves on calls (standing instructions). Optional: absent in older harnesses. */
+  captureInstructions?: (input: { utterance: string; turnId: string; priorClaireTurn: string | null }) => Promise<StandingInstructionCaptureResult>;
+  loadStandingInstructions?: () => Promise<StandingInstructionRecord[]>;
+  /** Who a spoken promise is prepared for. Without it every promise about a later call is stripped. */
+  resolvePromiseScope?: () => Promise<PromiseScope | null>;
   commitPendingDisclosures: () => Promise<void>;
   /**
    * The scheduled-call conductor (morning readiness, evening debrief). V2 runs
@@ -185,8 +205,20 @@ export type ClaireV2PrimaryDeps = {
     history: Array<{ speaker: string; text: string }>;
     utterance: string;
     sourceEventId: string;
+    standingInstructionsSection?: string | null;
   }) => Promise<{ state: ShowrunnerCallState; end: boolean; speak: string }>;
   legacyShadow?: LegacyShadowDeps | null;
+  /**
+   * Remember that a romantic or personal advance was deflected (claire_personal_ledger,
+   * kind advance_declined). Absent in tests that do not care; production wires the store.
+   */
+  recordAdvance?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    conversationId: string;
+    rapportBand: 0 | 1 | 2 | 3;
+    declineId: string | null;
+  }) => Promise<void>;
 };
 
 const HISTORY_LIMIT = 32;
@@ -208,10 +240,67 @@ const LEAVES_WEEKLY_INTERVIEW = new Set<SemanticReading["turnKind"]>([
   "challenge_prior_claim",
   "ask_source_of_prior_claim",
   "personal_question_to_claire",
+  "romantic_or_personal_advance",
+  "encouragement_request",
+  "repeat_request",
   "leave_taking",
 ]);
 
 export const V2_RECOVERY_SPEECH = "Sorry, I lost that thought. Say it once more?";
+export const V2_NOTHING_TO_REPEAT_SPEECH = "I haven't said anything yet. Go ahead.";
+export const V2_NO_GOAL_ON_RECORD_SPEECH = "I don't have a goal on record for you yet.";
+
+/**
+ * The operator's macro goal, from what V2 already holds this call: the assembled
+ * context first, then the scheduled-call briefing, then the spoken opening ("This week
+ * is about: …"). Nothing is generated; if none of these carries it, there is no goal to
+ * state.
+ */
+export function macroGoalStatement(input: {
+  context?: ClaireDriveContext | null;
+  state: ClaireV2PrimaryState;
+  brief?: string | null;
+}): string | null {
+  const fromContext = (input.context as { macroGoal?: { objective?: string | null } | null } | null | undefined)?.macroGoal?.objective;
+  if (fromContext?.trim()) return fromContext.trim();
+  const briefing = (input.state.showrunner as { briefing?: { objective?: string | null } | null } | null | undefined)?.briefing;
+  if (briefing?.objective?.trim()) return briefing.objective.trim();
+  const opening = /This week is about:\s*([^.\n]+)\./i.exec(input.brief ?? "") ?? /This week is about:\s*([^.\n]+)\./i.exec(
+    input.state.history?.find(entry => entry.speaker === "claire")?.text ?? ""
+  );
+  return opening?.[1]?.trim() || null;
+}
+
+/** When the whole plan was already said this call, one short line that it still stands. */
+const LEAD_STILL_STANDS = [
+  "That plan still stands.",
+  "Nothing in that plan has changed.",
+  "Same plan; I'm holding it ready for you.",
+  "That's still the move.",
+];
+
+function spokenSentences(text: string): string[] {
+  return text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map(part => part.trim()).filter(Boolean) ?? [];
+}
+
+function sentenceKey(sentence: string): string {
+  return sentence.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Drop every sentence Claire already said, verbatim, earlier in this call. */
+export function withoutRepeatedSentences(speech: string, alreadySaid: readonly string[]): string {
+  const said = new Set(alreadySaid.flatMap(spokenSentences).map(sentenceKey).filter(key => key.length > 12));
+  const seen = new Set<string>();
+  return spokenSentences(speech)
+    .filter(sentence => {
+      const key = sentenceKey(sentence);
+      if (key.length > 12 && (said.has(key) || seen.has(key))) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(" ")
+    .trim();
+}
 
 function remember(
   state: ClaireV2PrimaryState,
@@ -232,15 +321,48 @@ type Assembly =
   | { kind: "release"; utterance: string; completeness: "complete" | "forced_flush"; durable: boolean };
 
 /** Voice thought assembly — the same holding rules the phone has always used. */
+/** A phone fragment that continues the thought just released ("And for OPUS LA…"). */
+const CONTINUATION_OPENER = /^(?:and|on|so|also|plus)\b/i;
+export const FRAGMENT_FOLD_WINDOW_MS = 6_000;
+
 export function assembleV2Thought(input: {
   surface: "voice" | "text";
   utterance: string;
   state: ClaireV2PrimaryState;
   allowFragmentWait?: boolean;
   sourceConfirmed?: boolean;
+  /** Turn clock, for folding a continuation into the thought released just before it. */
+  nowMs?: number;
 }): Assembly {
   const { state } = input;
-  const incoming = input.utterance.trim();
+  let incoming = input.utterance.trim();
+  /**
+   * Fragment folding. On 2026-10-20 one spoken report reached Claire as three
+   * turns ("…for kids treats." / "And for OPUS LA…" / "On Instagram, so I am
+   * preparing that currently.") and each got a full reply that re-asked the same
+   * agenda question. A fragment that opens with And / On / So / Also / Plus and
+   * arrives within a few seconds of the previous released turn continues that
+   * thought: it is assembled WITH it, and gets one hold of its own to collect the
+   * rest, inside the existing CONTINUATION_MAX_HOLDS budget.
+   */
+  if (
+    input.surface === "voice" &&
+    incoming &&
+    !state.pendingFragment &&
+    CONTINUATION_OPENER.test(incoming) &&
+    input.nowMs !== undefined
+  ) {
+    const previous = state.history?.findLast(entry => entry.speaker === "operator");
+    if (previous && input.nowMs - previous.at >= 0 && input.nowMs - previous.at <= FRAGMENT_FOLD_WINDOW_MS) {
+      incoming = `${previous.text.trim()} ${incoming}`.trim();
+      if (input.allowFragmentWait !== false && (state.fragmentHolds ?? 0) < CONTINUATION_MAX_HOLDS) {
+        state.providerFragments = [...(state.providerFragments ?? []), input.utterance.trim()];
+        state.pendingFragment = incoming;
+        state.fragmentHolds = (state.fragmentHolds ?? 0) + 1;
+        return { kind: "hold", combined: incoming };
+      }
+    }
+  }
   if (input.surface !== "voice") {
     return { kind: "release", utterance: incoming, completeness: "complete", durable: input.sourceConfirmed !== false };
   }
@@ -300,11 +422,17 @@ function factSegments(segments: ResponseSegment[]): ResponseSegment[] {
 /** What V2's evidence says, labelled, for the speaking organ. History is never current truth. */
 export function evidenceForSpeech(decision: ExecutiveDecision): Array<{ source: string; text: string }> {
   const out: Array<{ source: string; text: string }> = [];
+  const leadPlan = decision.conclusions.some(conclusion => conclusion.kind === "lead_plan");
   for (const segment of decision.responsePlan.segments) {
     if (segment.type === "BusinessFactSegment" && segment.text.trim()) {
       out.push({ source: "brain_v2_business_fact", text: segment.text.trim() });
     } else if (segment.type === "BusinessJudgmentSegment" && segment.text.trim()) {
-      out.push({ source: "brain_v2_recommendation (advisory; not a new fact)", text: segment.text.trim() });
+      out.push({
+        source: leadPlan
+          ? "brain_v2_lead_plan (V2's decided plan: keep the goal, the first move, every named building and the open Kingdom targets; nothing is saved)"
+          : "brain_v2_recommendation (advisory; not a new fact)",
+        text: segment.text.trim(),
+      });
     }
   }
   for (const item of decision.evidence) {
@@ -330,7 +458,8 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
   const perceived = decision.perceivedTurn;
   const acts = perceived.dialogueActs;
   const grants = decision.actionGrants.map(grant => grant.actionClass);
-  const act = perceived.businessIntent === "judgment_question"
+  const leadPlan = decision.conclusions.some(conclusion => conclusion.kind === "lead_plan");
+  const act = perceived.businessIntent === "judgment_question" || leadPlan
     ? "advice_request"
     : acts.includes("leave_taking")
       ? "conversation_control"
@@ -371,6 +500,15 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
       decision.conclusions.some(conclusion => conclusion.kind === "action_unsupported" || conclusion.kind === "external_capability_unowned" || conclusion.kind === "mission_write_unavailable")
         ? "Nothing was written this turn; do not imply a save, send, or schedule."
         : "",
+      acts.includes("encouragement_request")
+        ? "The operator asked for encouragement about their work. This is a work request, not a question about you. Give one short, grounded line from today's verified record, then the next move. Do not decline it, do not speak about yourself."
+        : "",
+      decision.conclusions.some(conclusion => conclusion.kind === "lead_plan")
+        ? "Lead plan: you are running the operator. State the goal, the single first move, the named buildings and the open Kingdom targets exactly as the plan evidence gives them. Do not ask which buildings. Nothing is saved; the server asks for approval separately."
+        : "",
+      perceived.claireRoleFeedback !== "none"
+        ? "The operator was telling you how to lead, not reporting their own work. Take it as direction and lead; do not restate it as their intention."
+        : "",
       "Call the operator's work list the Day Line; never call it 'the board'.",
     ].filter(Boolean).join("; "),
   };
@@ -381,9 +519,14 @@ export function conversationalMode(
   decision: ExecutiveDecision,
   reading: SemanticReading | null
 ): "operational" | "casual" | "personal" | "post_action_review" | null {
+  // Encouragement is a work request: never the personal organ, never the decline registry.
+  if (decision.perceivedTurn.dialogueActs.includes("encouragement_request")) return "operational";
+  // A lead plan is operational whatever else the turn carried.
+  if (decision.conclusions.some(conclusion => conclusion.kind === "lead_plan")) return "operational";
   if (decision.attention.lanes.includes("personal") || decision.attention.lanes.includes("narrative")) return "personal";
   if (!reading) return null;
   if (reading.turnKind === "personal_question_to_claire") return "personal";
+  if (reading.turnKind === "encouragement_request") return "operational";
   if (reading.turnKind === "small_talk") return "casual";
   if (reading.turnKind === "report_or_narration") return "post_action_review";
   return "operational";
@@ -515,6 +658,7 @@ export async function runClaireV2PrimaryTurn(
     state,
     allowFragmentWait: input.allowFragmentWait,
     sourceConfirmed: input.sourceConfirmed,
+    nowMs,
   });
   if (assembly.kind === "hold") {
     return {
@@ -548,6 +692,15 @@ export async function runClaireV2PrimaryTurn(
     ? await deps.capturePreference({ utterance, turnId }).catch(() => null)
     : null;
   const daphne = await deps.loadDaphneGuidance().catch(() => null);
+  // Standing instructions: captured and read back before this turn's prompt is built, so a rule stated
+  // now binds this very answer and every later call.
+  const priorClaireTurn = [...(state.history ?? [])].reverse().find(entry => entry.speaker === "claire")?.text ?? null;
+  const instruction = assembly.durable && deps.captureInstructions
+    ? await deps.captureInstructions({ utterance, turnId, priorClaireTurn }).catch(() => null)
+    : null;
+  const standingRecords = deps.loadStandingInstructions ? await deps.loadStandingInstructions().catch(() => []) : [];
+  const standing = buildStandingInstructionsView(standingRecords, { now: new Date(nowMs), timeZone: input.timeZone });
+  const promiseScope = deps.resolvePromiseScope ? await deps.resolvePromiseScope().catch(() => null) : null;
 
   remember(state, "operator", utterance, nowMs);
 
@@ -687,12 +840,49 @@ export async function runClaireV2PrimaryTurn(
     // ── Perception → Executive Function, with live read-only retrieval ──
     let adapterResult: ClaireTurnResult | null = null;
     let adapterPromise: Promise<ClaireTurnResult> | null = null;
+    let grantRefusedBeforeWrite: string | null = null;
+    /** A lead plan's Day Line OFFER could not be held pending; the plan still speaks, without the ask. */
+    let leadOfferFailed = false;
     const execute = async (grant: ExecutiveActionGrant): Promise<ClaireTurnResult> => {
       if (isClaireRoleFeedback(grant.sourceTurnAssembledText)) {
         throw new Error("Claire role feedback cannot authorize Day Line mutation");
       }
+      if (grant.authorityBasis === "standing_goal_policy") {
+        // Claire's own offer. A failure to hold it pending must not turn the plan
+        // into the recovery line: the plan is the answer, the offer is extra.
+        try {
+          if (!adapterPromise) adapterPromise = deps.executeGrant(grant, state);
+          adapterResult = guardCommittedDayLineResult(grant, await adapterPromise);
+          return adapterResult;
+        } catch (error) {
+          leadOfferFailed = true;
+          console.warn("[ClaireBrainV2Primary] lead-plan offer could not be held pending", {
+            event: "claire_brain_v2_lead_offer_failed",
+            conversationKey: input.conversationKey,
+            reason: error instanceof Error ? error.message : "unknown",
+          });
+          return { speak: "", kind: "answered", actionIds: [] };
+        }
+      }
       if (!adapterPromise) adapterPromise = deps.executeGrant(grant, state);
-      adapterResult = guardCommittedDayLineResult(grant, await adapterPromise);
+      try {
+        adapterResult = guardCommittedDayLineResult(grant, await adapterPromise);
+      } catch (error) {
+        // The adapter refused the grant before attempting any write. That is not a
+        // failed action and not a lost thought: the turn simply has no action, and
+        // Claire answers the words themselves. The refusal is logged, never spoken.
+        if (error instanceof BrainV2GrantNotExecutableError) {
+          grantRefusedBeforeWrite = error.message;
+          console.warn("[ClaireBrainV2Primary] grant not executable; no write attempted", {
+            event: "claire_brain_v2_grant_not_executable",
+            conversationKey: input.conversationKey,
+            actionClass: error.actionClass,
+            reason: error.message,
+          });
+          return { speak: "", kind: "answered", assembledUtterance: utterance, thoughtCompleteness: "complete", actionIds: [] };
+        }
+        throw error;
+      }
       return adapterResult;
     };
     const retrieval: ShadowRetrievalContext = {
@@ -704,6 +894,7 @@ export async function runClaireV2PrimaryTurn(
       businessDate: input.businessDate,
       surface: input.surface,
       priorClaimReceipts: state.claimReceipts ?? [],
+      canonicalOperatorId: state.showrunner?.canonicalOperatorId ?? null,
     };
     const memory = state.brainV2Memory ?? null;
     const turn: ClaireBrainTurnResult = await runClaireBrainTurn({
@@ -728,25 +919,33 @@ export async function runClaireV2PrimaryTurn(
       },
       productionAuthority: true,
       actionExecutor: execute,
-      ...(deps.interpretPerception
-        ? {
-            refinePerception: async perceived => {
-              const refined = await refinePerception(
-                perceived,
-                {
-                  tenantId: input.tenantId,
-                  recentTurns: recentForModel.map(entry => ({ speaker: entry.speaker, text: entry.text })),
-                  hasPriorClaims: Boolean(state.claimReceipts?.length),
-                  holdingPending: Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp),
-                },
-                // Reuse the reading already taken for weekly routing; never ask twice.
-                earlyReading ? async () => earlyReading : deps.interpretPerception!
-              );
-              semanticReading = refined.reading;
-              return refined.perceived;
+      refinePerception: async perceived => {
+        let next = perceived;
+        if (deps.interpretPerception) {
+          const refined = await refinePerception(
+            perceived,
+            {
+              tenantId: input.tenantId,
+              recentTurns: recentForModel.map(entry => ({ speaker: entry.speaker, text: entry.text })),
+              hasPriorClaims: Boolean(state.claimReceipts?.length),
+              holdingPending: Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp),
             },
-          }
-        : {}),
+            // Reuse the reading already taken for weekly routing; never ask twice.
+            earlyReading ? async () => earlyReading : deps.interpretPerception
+          );
+          semanticReading = refined.reading;
+          next = refined.perceived;
+        }
+        // A lead request that names no day ("you should already know them") means
+        // tomorrow on an evening debrief and today everywhere else.
+        if (next.leadRequest && next.leadRequest.horizon === null) {
+          next = {
+            ...next,
+            leadRequest: { horizon: state.showrunner?.purpose === "evening_debrief" ? "tomorrow" : "today" },
+          };
+        }
+        return next;
+      },
     });
     if (!turn.productionAuthority) throw new Error("Brain V2 primary turn returned without production authority");
     const decision = turn.decision;
@@ -777,9 +976,38 @@ export async function runClaireV2PrimaryTurn(
       };
     }
 
+    // ── Repeat request: Claire's previous turn, verbatim, from this call's history ──
+    // Never a correctness challenge, never the adjudicator: the operator did not hear it.
+    if (decision.perceivedTurn.dialogueActs.includes("repeat_request")) {
+      const previous = state.history?.filter(entry => entry.speaker === "claire").at(-1)?.text?.trim();
+      return finish(
+        { speak: previous || V2_NOTHING_TO_REPEAT_SPEECH, kind: "answered", actionIds: [] },
+        "repeat",
+        decision,
+        []
+      );
+    }
+
+    // ── Lead composition: the operator asked for the next move, or told Claire to lead ──
+    // The plan is composed below from V2's evidence. If V2 also offered a Day Line
+    // move, the adapter has held it PENDING (never saved); the explicit approval ask
+    // is appended only when that pending item really exists.
+    const leadPlanned = decision.conclusions.some(conclusion => conclusion.kind === "lead_plan");
+    const leadOffer = decision.actionGrants.find(grant => grant.authorityBasis === "standing_goal_policy") ?? null;
+    const leadAsk = leadOffer
+      ? decision.responsePlan.segments.find(
+          (segment): segment is Extract<ResponseSegment, { type: "ActionProposalSegment" }> =>
+            segment.type === "ActionProposalSegment" && segment.grant === leadOffer
+        )?.text ?? null
+      : null;
+    const leadOfferHeld = Boolean(
+      leadOffer && !leadOfferFailed && adapterResult && (adapterResult as ClaireTurnResult).kind === "briefing_proposed" && state.pendingBriefing
+    );
+    if (leadPlanned && state.showrunner) state.showrunner.turns += 1;
+
     // ── Action lifecycle: V2's grant, executed once by the receipt-backed adapter ──
     const executed = adapterResult as ClaireTurnResult | null;
-    if (executed) {
+    if (executed && !leadPlanned) {
       if (state.showrunner) state.showrunner.turns += 1;
       return finish(
         { ...executed, endCall: executed.endCall || turn.candidateEndCall || undefined },
@@ -787,6 +1015,11 @@ export async function runClaireV2PrimaryTurn(
         decision,
         actionClasses
       );
+    }
+
+    // ── Standing instruction (no work in the same turn): spoken only from a read-back row ──
+    if (instruction?.speech && instruction.detected.length > 0 && instruction.status !== "disabled" && actionClasses.length === 0) {
+      return finish({ speak: instruction.speech, kind: "answered" }, "preference", decision);
     }
 
     // ── Explicit preference correction (no work in the same turn) ──
@@ -805,9 +1038,29 @@ export async function runClaireV2PrimaryTurn(
 
     const segments = decision.responsePlan.segments;
     const facts = factSegments(segments);
-    const deterministicText = turn.candidateSpeak.trim();
+    // The renderer phrased the approval ask with the plan; drop it when no pending item exists.
+    const deterministicText =
+      leadAsk && !leadOfferHeld ? turn.candidateSpeak.replace(leadAsk, "").replace(/\s{2,}/g, " ").trim() : turn.candidateSpeak.trim();
     const attention = decision.attention;
     const intent = decision.perceivedTurn.businessIntent;
+
+    // ── The operator's goal: business memory V2 already holds, stated verbatim ──
+    // Only a plain "what is my goal?". When the same turn asks Claire to lead or what to do
+    // ("What is my goal? Tell me what to do."), the lead plan / judgment answers it, goal first.
+    if (
+      isMacroGoalQuestion(utterance) &&
+      attention.priorClaim === "none" &&
+      !leadPlanned &&
+      intent !== "judgment_question"
+    ) {
+      const goal = macroGoalStatement({ context: input.context ?? null, state, brief: input.brief ?? null });
+      return finish(
+        { speak: goal ? `Your goal is: ${goal}.` : V2_NO_GOAL_ON_RECORD_SPEECH, kind: "answered", actionIds: [] },
+        "deterministic",
+        decision,
+        actionClasses
+      );
+    }
 
     // ── Call control ──
     if (turn.candidateEndCall) {
@@ -855,7 +1108,30 @@ export async function runClaireV2PrimaryTurn(
     }
 
     // ── Decisive V2 speech: facts, clarifications, refusals, prior-claim verdicts ──
+    // A deflected advance is two authored lines. The composer never sees it.
+    const advanceDeflected = decision.conclusions.some(conclusion => conclusion.kind === "personal_advance_declined");
+    if (advanceDeflected && deps.recordAdvance) {
+      const band = advanceRapportBand(decision.evidence);
+      const { decline } = selectAdvanceDeflection({ rapportBand: band, seed: decision.perceivedTurn.assembledText });
+      // Durable game state: the advance and the line that declined it are remembered.
+      await deps
+        .recordAdvance({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          conversationId: input.conversationKey,
+          rapportBand: band,
+          declineId: decline?.id ?? null,
+        })
+        .catch(error => {
+          console.warn("[ClaireBrainV2Primary] advance ledger write failed", {
+            event: "claire_brain_v2_advance_ledger_failed",
+            conversationKey: input.conversationKey,
+            reason: error instanceof Error ? error.message : "unknown",
+          });
+        });
+    }
     const decisive =
+      advanceDeflected ||
       decision.control.mode === "clarify" ||
       attention.pendingDisposition === "reject" ||
       attention.priorClaim !== "none" ||
@@ -874,9 +1150,26 @@ export async function runClaireV2PrimaryTurn(
     // ── Scheduled call: V2 decided this is not work; the agenda conductor speaks ──
     // Strategy and personal questions are answered by V2's composer even inside a
     // planning session; the conductor keeps the agenda, reports and approvals.
-    const composerKinds = new Set<SemanticReading["turnKind"]>(["business_judgment_or_strategy", "personal_question_to_claire"]);
+    // A lead plan ("what do you want me to do?", "you should be running me") is
+    // V2's own answer too: the conductor's analysis reader is for fact questions,
+    // and its report-collecting prompt asked "which three buildings?" three times
+    // on 2026-10-20 while the evidence already named them. Encouragement is a work
+    // request the composer answers; it never reaches the conductor's interview.
+    const composerKinds = new Set<SemanticReading["turnKind"]>([
+      "business_judgment_or_strategy",
+      "personal_question_to_claire",
+      "role_feedback_or_example",
+      "encouragement_request",
+    ]);
     const readingKind = (semanticReading as SemanticReading | null)?.turnKind ?? null;
-    if (state.showrunner && deps.showrunner && !(readingKind && composerKinds.has(readingKind))) {
+    const encouragement = decision.perceivedTurn.dialogueActs.includes("encouragement_request");
+    if (
+      state.showrunner &&
+      deps.showrunner &&
+      !leadPlanned &&
+      !encouragement &&
+      !(readingKind && composerKinds.has(readingKind))
+    ) {
       let conducted: { state: ShowrunnerCallState; end: boolean; speak: string };
       try {
         conducted = await deps.showrunner({
@@ -884,6 +1177,7 @@ export async function runClaireV2PrimaryTurn(
           history: recentForModel,
           utterance,
           sourceEventId: turnId,
+          standingInstructionsSection: standing.section,
         });
       } catch {
         conducted = {
@@ -911,6 +1205,9 @@ export async function runClaireV2PrimaryTurn(
     const v2Notes = segments
       .filter(segment => segment.type === "CognitiveAcknowledgementSegment" && segment.text.trim())
       .map(segment => segment.text.trim());
+    if (grantRefusedBeforeWrite) {
+      v2Notes.push("The operator's words did not resolve to a Day Line item; nothing was saved and no save was attempted.");
+    }
     const context = input.context ?? null;
     if (!context) {
       return finish(
@@ -944,6 +1241,10 @@ export async function runClaireV2PrimaryTurn(
         .slice(-4)
         .map(receipt => `${receipt.claimType} (${receipt.answerPath}): ${receipt.answerText.slice(0, 160)}`),
       daphnePromptSection: daphne?.promptSection ?? null,
+      standingInstructionsSection: standing.section,
+      ...(promiseScope
+        ? { promiseContext: { scope: promiseScope, conversationKey: input.conversationKey, now: new Date(nowMs), timeZone: input.timeZone } }
+        : {}),
       rookContactResidueSection: claireRookContactResidueSection({
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
@@ -989,6 +1290,21 @@ export async function runClaireV2PrimaryTurn(
       });
       speech = deterministicText || "I don't have a verified figure for that, so I won't guess.";
     }
+    if (leadPlanned) {
+      // Claire runs the operator; she does not recite. Sentences already spoken on
+      // this call are not said again, and an approval ask is asked once: the offer
+      // stays pending, so a later plain "yes" still binds to it.
+      const said = (state.history ?? [])
+        .slice(0, -1)
+        .filter(entry => entry.speaker === "claire")
+        .map(entry => entry.text);
+      speech = withoutRepeatedSentences(speech, said);
+      if (!speech) speech = LEAD_STILL_STANDS.find(line => !said.some(text => text.includes(line))) ?? LEAD_STILL_STANDS[0]!;
+      // The approval ask is spoken only while the offered move is actually held pending.
+      if (leadAsk && leadOfferHeld && !speech.includes(leadAsk) && !said.some(text => text.includes(leadAsk))) {
+        speech = `${speech.trim()} ${leadAsk}`.trim();
+      }
+    }
     return finish(
       { speak: speech, kind: "answered", ...(personalEnd ? { endCall: true, endCallReason: "personal_thread_closed" } : {}) },
       invented.length ? "deterministic" : "composed",
@@ -998,12 +1314,20 @@ export async function runClaireV2PrimaryTurn(
     );
   } catch (error) {
     console.error("[ClaireBrainV2Primary] turn failed", {
-      event: "claire_brain_v2_primary_failed",
+      event: error instanceof BrainV2ExecutionFailedError ? "claire_brain_v2_primary_execution_failed" : "claire_brain_v2_primary_failed",
       tenantId: input.tenantId,
       surface: input.surface,
       conversationKey: input.conversationKey,
       reason: error instanceof Error ? error.message : "unknown",
     });
+    // A write was attempted and did not complete: say what was attempted, nothing more.
+    if (error instanceof BrainV2ExecutionFailedError) {
+      return finish(
+        brainV2ExecutionFailureResult({ assembledUtterance: utterance, attempted: error.attempted }),
+        "execution_failed",
+        null
+      );
+    }
     return finish({ speak: V2_RECOVERY_SPEECH, kind: "answered", actionIds: [] }, "recovery", null);
   }
 }
@@ -1082,18 +1406,60 @@ export function productionClaireV2PrimaryDeps(input: {
         turnId,
       });
     },
+    captureInstructions: async ({ utterance, turnId, priorClaireTurn }) => {
+      const { captureStandingInstructions } = await import("../../../agents/daphne/standingInstructions");
+      return captureStandingInstructions({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        utterance,
+        conversationId: input.conversationKey,
+        turnId,
+        priorClaireTurn,
+      });
+    },
+    loadStandingInstructions: async () => {
+      const { loadActiveStandingInstructions } = await import("../../../agents/daphne/standingInstructions");
+      return loadActiveStandingInstructions({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+    },
+    resolvePromiseScope: async () => {
+      const { resolvePromiseScope } = await import("../../promiseReconciler");
+      return resolvePromiseScope({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+    },
     loadDaphneGuidance: async () => {
       const { loadDaphneClaireGuidance } = await import("../../../agents/daphne/claireAdapter");
       return loadDaphneClaireGuidance({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
     },
-    showrunner: async ({ state, history, utterance, sourceEventId }) => {
+    showrunner: async ({ state, history, utterance, sourceEventId, standingInstructionsSection }) => {
       const { runShowrunnerTurn } = await import("../../showrunner/showrunnerTurn");
       return runShowrunnerTurn({
         state,
         history,
         utterance,
         sourceEventId,
+        standingInstructionsSection,
         conversationKey: input.conversationKey,
+      });
+    },
+    recordAdvance: async advance => {
+      const [{ isClaireProgressionEnabled }, { getProgressionStore }] = await Promise.all([
+        import("../../progression/progressionFlag"),
+        import("../../progression/drizzleStore"),
+      ]);
+      if (!isClaireProgressionEnabled(advance.tenantId)) return;
+      await getProgressionStore().appendLedger({
+        tenantId: advance.tenantId,
+        operatorUserId: advance.operatorUserId,
+        conversationId: advance.conversationId,
+        kind: "advance_declined",
+        topic: "romantic_advance",
+        fragmentId: null,
+        entitlementId: null,
+        rungAtTime: 0,
+        rapportBandAtTime: advance.rapportBand,
+        declineId: advance.declineId,
+        failureReason: null,
+        hadUnusedEntitlement: null,
+        failurePhase: null,
       });
     },
     commitPendingDisclosures: async () => {

@@ -19,6 +19,8 @@ export type BusinessRetrievalKind =
   | "day_line_read"
   | "field_today"
   | "workday_command"
+  | "game_state"
+  | "goal_progress"
   | "contact_account_resolution";
 
 export type BusinessRetrievalRequest = {
@@ -26,6 +28,11 @@ export type BusinessRetrievalRequest = {
   kind: BusinessRetrievalKind;
   /** Opaque query object passed through to the existing authoritative reader. */
   query?: unknown;
+  /**
+   * Days after the call's business date an operations / workday read is for
+   * ("what do you have for me tomorrow" → 1). Absent means the business date itself.
+   */
+  dayOffset?: number;
   accountId?: number | null;
   /** Raw mentions from Perception. Business Memory decides what they are. */
   mentions?: string[];

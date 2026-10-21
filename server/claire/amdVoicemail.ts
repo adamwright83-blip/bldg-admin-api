@@ -302,3 +302,73 @@ export async function amdDetectionTwiml(input: {
   }
   return { status: 200, twiml: stored.state.interactiveTwiml };
 }
+
+/**
+ * In-conversation voicemail recognition.
+ *
+ * Twilio AMD is a pre-connect hint. It can be off, can answer "human"/"unknown", and a
+ * greeting that is long enough can still be transcribed as an operator turn. Production
+ * call 2026-10-19 07:30 PT (session 453795a2) spoke eight more times to voicemail prompts
+ * across 19 turns. The words themselves settle it: a greeting or menu from a mailbox is
+ * not the operator, and Claire must not talk to it a second time.
+ *
+ * Only strong phrases count. A bare "voicemail" or "message" does not: a human saying
+ * "did you get my voicemail?" must not hang the call up.
+ */
+const VOICEMAIL_PROMPT_PATTERNS: readonly RegExp[] = [
+  /\byou(?:'ve|\s+have)\s+reached\b(?!\s+(?:me|us|the\s+(?:limit|point|end|cap)))/i,
+  /\bleave\s+(?:me\s+)?(?:a|your)\s+(?:brief\s+)?message\b(?!\s+(?:for|with|to)\b)/i,
+  /\b(?:at|after)\s+the\s+(?:tone|beep)\b/i,
+  /\bpress\s+(?:\d|(?:one|two|three|pound|star)\b(?!\s+(?:more|time|thing|button|key)))/i,
+  /\b(?:maximum|max)\s+(?:time|length)\b[^.?!]{0,40}\b(?:permitted|allowed|recording)\b/i,
+  /\byour\s+message\s+has\s+been\s+(?:sent|recorded|saved|delivered)\b/i,
+  /\bto\s+(?:listen\s+to|review|hear)\s+your\s+message\b/i,
+  /\berase\s+and\s+re-?record\b/i,
+  /\bif\s+you(?:'re|\s+are)\s+satisfied\s+with\s+(?:the|your)\s+message\b/i,
+  /\b(?:is\s+not|isn'?t|is\s+unable\s+to)\s+(?:available\s+to\s+)?(?:take\s+your\s+call|come\s+to\s+the\s+phone|answer\s+(?:your\s+call|the\s+phone))\b/i,
+  /\brecord\s+your\s+message\b/i,
+  /\bthe\s+(?:person|party|subscriber|number)\s+you(?:'re|\s+are|\s+have)\s+(?:trying\s+to\s+reach|calling|dialed)\b/i,
+  /\bmailbox\s+(?:is\s+)?(?:full|not\s+set\s+up)\b/i,
+];
+
+export function looksLikeVoicemailPrompt(text: string): boolean {
+  const value = text.trim();
+  if (!value) return false;
+  return VOICEMAIL_PROMPT_PATTERNS.some(pattern => pattern.test(value));
+}
+
+export const VOICEMAIL_DETECTED_REASON = "voicemail_detected";
+
+export type VoicemailTurnDecision =
+  | { action: "none" }
+  /** First recognition on an outbound call: speak the one bounded line, then end. */
+  | { action: "leave_message"; speak: string; reason: typeof VOICEMAIL_DETECTED_REASON }
+  /** Recognised before and the line is already spent: say nothing and end. */
+  | { action: "hang_up_silently"; reason: typeof VOICEMAIL_DETECTED_REASON };
+
+export function voicemailTurnDecision(input: {
+  utterance: string;
+  /** Claire placed this call. An inbound caller cannot be a mailbox. */
+  outbound: boolean;
+  alreadyDetected: boolean;
+}): VoicemailTurnDecision {
+  if (!input.outbound) return { action: "none" };
+  if (input.alreadyDetected) return { action: "hang_up_silently", reason: VOICEMAIL_DETECTED_REASON };
+  if (!looksLikeVoicemailPrompt(input.utterance)) return { action: "none" };
+  return { action: "leave_message", speak: boundedVoicemailText(), reason: VOICEMAIL_DETECTED_REASON };
+}
+
+/** What the AMD webhook decided, for the log. No transcript, no number. */
+export function amdDecisionLog(input: {
+  callSid?: string | null;
+  answeredBy: unknown;
+}): { event: "claire_amd_decision"; callSid: string | null; answeredBy: AmdAnsweredBy | "unparsed"; path: AmdCallPath; raw: string } {
+  const parsed = parseAmdAnsweredBy(input.answeredBy);
+  return {
+    event: "claire_amd_decision",
+    callSid: input.callSid?.trim() || null,
+    answeredBy: parsed ?? "unparsed",
+    path: amdCallPath(parsed),
+    raw: String(input.answeredBy ?? "").slice(0, 32),
+  };
+}

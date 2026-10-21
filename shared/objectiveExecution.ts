@@ -268,3 +268,19 @@ function hasRemoteMessage(text: string): boolean {
   if (/\b(?:send|sent|sending)\s+(?:a\s+|the\s+|an\s+)?messages?\b/i.test(text)) return true;
   return /\bmessages?\s+(?:sent|send|sending)\b/i.test(text);
 }
+
+/**
+ * How a stored execution type is spoken back. A challenge is any remote Objective and a mission is any field
+ * Objective (docs/JOYSTICK_SYSTEM_MAP.md), so the generic phrase is "a challenge" / "a mission". When the
+ * operator's own words named the kind ("marketing challenge", "sales mission") their phrase is echoed.
+ */
+export function executionTypePhrase(
+  type: ObjectiveExecutionType | null | undefined,
+  operatorWords?: string | null
+): string | null {
+  const said = operatorWords ?? "";
+  if (type === "challenge") return /\bmarketing\s+challenge\b/i.test(said) ? "a marketing challenge" : "a challenge";
+  if (type === "mission") return /\bsales\s+mission\b/i.test(said) ? "a sales mission" : "a mission";
+  if (type === "hybrid_objective") return "a hybrid objective";
+  return null;
+}

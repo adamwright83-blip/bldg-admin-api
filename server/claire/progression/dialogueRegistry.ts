@@ -29,6 +29,7 @@ export type SelectDialogueInput = {
 
 const DECLINE_SHAPED: ReadonlySet<DialogueCategory> = new Set([
   "decline",
+  "advance_decline",
   "thread_closer",
   "boundary_reinforcement",
   "recovery_after_failed_generation",
@@ -60,4 +61,40 @@ export function selectDialogueLine(input: SelectDialogueInput): DialogueLine | n
   // All used recently: choose the least recently used.
   const lastUse = (line: DialogueLine) => recent.lastIndexOf(line.id);
   return [...pool].sort((a, b) => lastUse(a) - lastUse(b))[0];
+}
+
+/**
+ * The deflection of a romantic or personal advance: the band's authored advance_decline line (or,
+ * while those slots are empty, its ordinary decline line) followed by an authored business_pivot
+ * line. The choice is DETERMINISTIC in `seed`, so the same turn always yields the same pair and a
+ * replay is reproducible. Nothing here is written by this file; it only selects.
+ */
+export function selectAdvanceDeflection(input: {
+  rapportBand: 0 | 1 | 2 | 3;
+  seed: string;
+  /** Line ids already used on this operator's recent advances; avoided while others remain. */
+  recentlyUsedIds?: readonly string[];
+  registry?: readonly DialogueLine[];
+}): { decline: DialogueLine | null; pivot: DialogueLine | null } {
+  let hash = 2166136261;
+  for (let i = 0; i < input.seed.length; i++) {
+    hash ^= input.seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const unit = (offset: number) => (((hash >>> 0) + offset * 2654435761) % 1_000_003) / 1_000_003;
+  const decline = selectDialogueLine({
+    category: "advance_decline",
+    rapportBand: input.rapportBand,
+    recentlyUsedIds: input.recentlyUsedIds,
+    registry: input.registry,
+    random: () => unit(1),
+  });
+  const pivot = selectDialogueLine({
+    category: "business_pivot",
+    rapportBand: input.rapportBand,
+    registry: input.registry,
+    random: () => unit(2),
+    fallbackToDeclineFloor: false,
+  });
+  return { decline, pivot };
 }

@@ -26,9 +26,23 @@ export type GoalRecommendation = {
   rationale: string | null;
 };
 
+/**
+ * The operator's standing macro goal (operator_macro_goals), e.g. "Get to 50
+ * active customers". Advisory like every goal: it frames a plan, it is not a fact.
+ */
+export type MacroGoalRecommendation = GoalRecommendation & {
+  kind: "macro_goal";
+  metricKey: string;
+  targetValue: number;
+  unit: string;
+  targetDate: string | null;
+};
+
 export type GoalsDeps = {
   /** Injected; nothing here reaches the database by default. */
   loadBoardInputs: (ctx: GoalsContext) => Promise<GoalRecommendation[]>;
+  /** The active macro goal, read only. Absent means not consulted. */
+  loadMacroGoal?: (ctx: GoalsContext) => Promise<MacroGoalRecommendation | null>;
 };
 
 export const noGoals: GoalsDeps = {
@@ -50,24 +64,51 @@ export const readOnlyGoalsDeps: GoalsDeps = {
       .filter(obligation => live.has(obligation.status))
       .map(obligation => ({ id: obligation.id, title: obligation.title, rationale: obligation.why }));
   },
+  // `getActiveMacroGoal` is a SELECT on operator_macro_goals; it writes nothing.
+  loadMacroGoal: async ctx => {
+    const { getActiveMacroGoal } = await import("../../../planning/macroGoalStore");
+    const goal = await getActiveMacroGoal({ tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId });
+    if (!goal) return null;
+    return {
+      kind: "macro_goal",
+      id: goal.id,
+      title: goal.objective,
+      rationale: goal.urgencyText ?? null,
+      metricKey: goal.metricKey,
+      targetValue: goal.targetValue,
+      unit: goal.unit,
+      targetDate: goal.targetDate ?? null,
+    };
+  },
 };
 
 export function evidenceFromRecommendation(
-  recommendation: GoalRecommendation,
+  recommendation: GoalRecommendation | MacroGoalRecommendation,
   observedAtIso: string
 ): EvidenceItem {
+  const macro = "kind" in recommendation && recommendation.kind === "macro_goal";
   return {
-    id: `goal_recommendation:${recommendation.id}`,
+    id: `goal_recommendation:${macro ? "macro_goal:" : ""}${recommendation.id}`,
     type: "goal_recommendation",
-    source: "boardService",
-    provenance: { reader: "boardService" },
+    source: macro ? "macroGoalStore" : "boardService",
+    provenance: { reader: macro ? "macroGoalStore" : "boardService" },
     observedAt: observedAtIso,
     asOf: observedAtIso,
     freshness: null,
     coverage: null,
     // Advice, not truth. This stamp is what keeps a goal out of a factual claim.
     authoritativeFor: ["goal_recommendation"],
-    payload: { title: recommendation.title, rationale: recommendation.rationale },
+    payload: macro
+      ? {
+          kind: "macro_goal",
+          title: recommendation.title,
+          rationale: recommendation.rationale,
+          metricKey: (recommendation as MacroGoalRecommendation).metricKey,
+          targetValue: (recommendation as MacroGoalRecommendation).targetValue,
+          unit: (recommendation as MacroGoalRecommendation).unit,
+          targetDate: (recommendation as MacroGoalRecommendation).targetDate,
+        }
+      : { title: recommendation.title, rationale: recommendation.rationale },
     operatorVisible: true,
   };
 }
@@ -79,6 +120,11 @@ export async function retrieveGoalEvidence(
 ): Promise<EvidenceItem[]> {
   // A scoped turn never sees the global board. This is the Dana guarantee.
   if (request.scoped) return [];
+  if (request.kind === "macro_goal") {
+    if (!deps.loadMacroGoal) return [];
+    const goal = await deps.loadMacroGoal(ctx);
+    return goal ? [evidenceFromRecommendation(goal, ctx.nowIso)] : [];
+  }
   const recommendations = await deps.loadBoardInputs(ctx);
   return recommendations.map(recommendation => evidenceFromRecommendation(recommendation, ctx.nowIso));
 }

@@ -245,6 +245,20 @@ export function createDrizzleClaireConversationStore(): ClaireConversationStore 
       }, null);
     },
 
+    async listInProgressSessions(limit = 200) {
+      const db = await getDb();
+      if (!db) return [];
+      return failClosed(async () => {
+        const rows = await db
+          .select()
+          .from(claireConversationSessions)
+          .where(eq(claireConversationSessions.status, "in_progress"))
+          .orderBy(claireConversationSessions.startedAt)
+          .limit(limit);
+        return rows.map(toSession);
+      }, []);
+    },
+
     async appendTurn(turn) {
       const db = await getDb();
       if (!db) return { ...turn, id: 0 };

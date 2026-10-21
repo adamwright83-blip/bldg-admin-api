@@ -61,3 +61,49 @@ export const PROGRESSION_POLICY: ProgressionPolicy = {
   progressEpoch: "2026-09-19T00:00:00.000Z",
   entitlementReservationTtlMs: 10 * 60 * 1000,
 };
+
+/**
+ * "Encouragement on every call" — what it means in Claire's voice.
+ *
+ * This is an operator-authored standing instruction (kind `encouragement_every_call`), not a rapport
+ * reward. It earns no rapport, entitlement, rung or canon, and it never reads call volume. Claire may
+ * say it at any rapport band because it carries no biography; the band only changes warmth of phrasing.
+ *
+ * The shape is ONE grounded sentence that ties the operator's next move to the goal, built only from
+ * facts that are true in this call (a verified figure, the operator's own stated goal, verified
+ * progress this week). Example of the shape: "Fifty is attainable if you count buildings." It is
+ * never praise for nothing, never a pep talk, never a question, and never one of the authored
+ * decline/closer lines in dialogueRegistry (those are refusals; reusing one as warmth would tell the
+ * operator "no" in the voice of "good job").
+ */
+export const ENCOURAGEMENT_POLICY_VERSION = "encouragement-2026-10-21.1";
+
+export const ENCOURAGEMENT_POLICY = {
+  version: ENCOURAGEMENT_POLICY_VERSION,
+  sentencesPerCall: 1,
+  evidence: ["verified_business_figure", "operator_stated_goal", "verified_progress_this_week"],
+  mustTieTo: "the operator's next move and the goal",
+  /** Rapport band -> phrasing warmth. Content rules are identical at every band. */
+  warmth: { 0: "plain", 1: "plain", 2: "warm", 3: "warm" } as Record<RapportBand, "plain" | "warm">,
+  usesAuthoredDialogueLines: false,
+  forbidden: [
+    "praise with no fact behind it",
+    "exclamation marks",
+    "a question",
+    "a promise about a later call",
+    "personal biography",
+    "any figure that is not in the verified fact inventory or the operator's own words",
+  ],
+  exampleShape: "Fifty is attainable if you count buildings.",
+} as const;
+
+export function encouragementGuidance(band: RapportBand = 0): string {
+  const tone = ENCOURAGEMENT_POLICY.warmth[band] === "warm" ? "Warm, still brief." : "Plain and brief.";
+  return (
+    "ENCOURAGEMENT (operator standing instruction, every call): say exactly one sentence that ties the operator's next move to the goal, " +
+    "using only facts already verified in this call or the operator's own words. " +
+    `Shape, not wording to repeat: "${ENCOURAGEMENT_POLICY.exampleShape}" ${tone} ` +
+    "No praise without a fact behind it, no exclamation marks, no question, no promise about a later call, no biography, " +
+    "and never reuse a refusal or closing line from the authored dialogue for it."
+  );
+}

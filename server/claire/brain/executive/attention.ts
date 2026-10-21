@@ -98,8 +98,10 @@ export function planAttention(input: {
 
   // ── Lanes ─────────────────────────────────────────────────────────────────
   const lanes: AttentionPlan["lanes"] = [];
+  const advance = perceived.dialogueActs.includes("romantic_or_personal_advance");
   if (perceived.callControl === "end") lanes.push("call_control");
-  if (perceived.personalProbe) lanes.push("personal");
+  // An advance rides the personal lane only to be deflected; it is not a biography probe.
+  if (perceived.personalProbe || advance) lanes.push("personal");
   if (perceived.narrativeProbe) lanes.push("narrative");
   if (
     pendingDisposition === "confirm" ||
@@ -117,7 +119,7 @@ export function planAttention(input: {
   // ── Compartments ──────────────────────────────────────────────────────────
   if (businessLane) retrieve.push("businessMemory");
 
-  if (perceived.personalProbe || perceived.narrativeProbe) retrieve.push("selfMemory");
+  if (perceived.personalProbe || perceived.narrativeProbe || advance) retrieve.push("selfMemory");
   else doNotRetrieve.push("selfMemory");
 
   // History is consulted for judgment and for continuing a thread — not routinely.

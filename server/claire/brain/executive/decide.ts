@@ -44,6 +44,8 @@ import { allocateControl, anotherRoundIsWorthwhile, terminalReason } from "./con
 import { integrate, type IntegrationContext } from "./integrate";
 import { applyInhibition } from "./inhibition";
 import { mintActionGrant, mintCallControlGrant } from "./grants";
+import { leadPlanApprovalAsk } from "./leadPlan";
+import { isClaireRoleFeedback } from "../../../../shared/claireRoleFeedback";
 import { proposalText, proposedWorkTitle, proposedWorkTitles } from "./proposal";
 import { dayLineCandidate } from "./dayLineAuthority";
 import { nextStrategicFrame } from "./strategicFrame";
@@ -393,6 +395,39 @@ export async function decideTurn(
       });
       actionGrants.push(grant);
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
+    }
+
+    /**
+     * A lead plan may OFFER a Day Line move. The authority is the standing goal
+     * policy (the move serves the operator's macro goal), the scope is exactly the
+     * move the plan named, and the grant only proposes: the adapter holds it as a
+     * pending briefing until the operator's own "yes" mints `commit_briefing`.
+     */
+    const leadMove = integration.leadPlan?.dayLineMove ?? null;
+    // Responsibility feedback and dictated examples get the plan, never a grant (Oct 13 rule).
+    const roleFeedbackTurn = perceived.claireRoleFeedback !== "none" || isClaireRoleFeedback(perceived.assembledText);
+    if (
+      leadMove &&
+      !roleFeedbackTurn &&
+      !actionGrants.length &&
+      attention.pendingDisposition !== "reject" &&
+      attention.pendingDisposition !== "confirm" &&
+      perceived.classifierStatus === "classified"
+    ) {
+      control.actionRisk = "proposal_only";
+      const grant = mintActionGrant({
+        actionClass: "propose_day_line",
+        scope: { titles: [leadMove.title], businessDate: leadMove.businessDate },
+        authorityBasis: "standing_goal_policy",
+        sourceTurnAssembledText: perceived.assembledText,
+        expiresAtMs: nowMs + 15 * 60_000,
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
+      });
+      actionGrants.push(grant);
+      segments.push({ type: "ActionProposalSegment", text: leadPlanApprovalAsk(leadMove, deps.ctx.today), grant });
     }
 
     if (attention.pendingDisposition === "confirm" && memory.pendingBriefing?.identity === "pending-briefing") {
