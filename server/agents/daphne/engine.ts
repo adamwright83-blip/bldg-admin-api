@@ -1,4 +1,4 @@
-import { listDaphneObservations } from "./observationStore";
+import { getDaphneObservationsByIds, listDaphneObservations } from "./observationStore";
 import { listDaphneEpistemicClaims, type DaphneEpistemicClaimRecord } from "./epistemicStore";
 import { deriveDaphneFastState } from "./stateModel";
 import { deriveDaphneContext } from "./contextModel";
@@ -53,9 +53,12 @@ export async function buildDaphneV2OperatorCard(input:{
  const responseModel=buildDaphneResponseModel({
   interventions:interventions.filter(i=>i.agentId===input.agentId),outcomes,successMeasureKey:"started",burdenMeasureKey:"burden"
  });
+ // The words behind each active preference and goal, read by exact id so an old source is never lost.
+ const sourceIds=[...Object.values(metaPreferences).filter(p=>p?.status==="active").map(p=>p!.sourceObservationId),...goals.map(g=>g.sourceObservationId)];
+ const sourceObservations=await getDaphneObservationsByIds({tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,observationIds:sourceIds}).catch(()=>[]);
  const card=compileDaphneOperatorCard({
   tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,generatedAt:asOf,
-  person,state,context,goals,relationship,metaPreferences,hypotheses,responseModel
+  person,state,context,goals,relationship,metaPreferences,hypotheses,responseModel,sourceObservations
  });
  await recordDaphneMetricEvent({
    tenantId:input.tenantId,canonicalOperatorId:input.canonicalOperatorId,agentId:input.agentId,eventName:"card_compiled",

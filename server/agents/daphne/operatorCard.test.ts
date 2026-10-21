@@ -58,4 +58,27 @@ describe("Daphne V2 Operator Card", () => {
     expect(card.person).toEqual([]);
     expect(card.guardrails.personalityInferenceEnabled).toBe(false);
   });
+
+  it("shows each active preference and goal with the operator's words that set it", () => {
+    const obs = (id: string, sourceType: string, payload: Record<string, unknown>) => ({
+      id, tenantId: "t", canonicalOperatorId: "o", operatorUserId: "adam-admin", sessionId: null, actorType: "user" as const,
+      actorId: "adam-admin", agentId: "claire", observationKind: "preference_declaration" as const, evidenceChannel: "stated" as const,
+      verificationStatus: "attested" as const, sourceType, sourceReference: "turn:1", occurredAt: "2026-10-09T00:00:00Z",
+      context: null, payload, metadata: null, idempotencyKey: id, createdAt: "2026-10-09T00:00:00Z",
+    });
+    const card = compileDaphneOperatorCard({
+      tenantId: "t", canonicalOperatorId: "o", agentId: "claire", generatedAt: new Date("2026-10-21T00:00:00Z"),
+      person: [], state: null, context: null, relationship: null, hypotheses: [], responseModel: [],
+      goals: [{ id: "g1", tenantId: "t", canonicalOperatorId: "o", goalKey: "operator_declared_goal", horizon: "near", statement: "maximize sales in Silver Lake",
+        priority: 0, constraints: null, status: "active", sourceObservationId: "o2", supersedesGoalId: null, createdAt: "2026-10-10T00:00:00Z", closedAt: null }],
+      metaPreferences: { response_detail: { ...pref("response_detail", 0.2), sourceObservationId: "o1" } },
+      sourceObservations: [
+        obs("o1", "claire_explicit_preference_correction", { preferenceKey: "response_detail", value: 0.2, evidenceText: "Keep your answers shorter." }),
+        obs("o2", "claire_conversation_ingestion", { items: [{ kind: "goal", key: "operator_declared_goal", statement: "maximize sales in Silver Lake" }] }),
+      ],
+    });
+    expect(card.activePreferences).toEqual([{ key: "response_detail", value: 0.2, version: 1, since: "2026-10-07T00:00:00Z",
+      sourceObservationId: "o1", sourceType: "claire_explicit_preference_correction", sourceUtterance: "Keep your answers shorter." }]);
+    expect(card.goalSources[0]).toMatchObject({ statement: "maximize sales in Silver Lake", sourceUtterance: "maximize sales in Silver Lake" });
+  });
 });
