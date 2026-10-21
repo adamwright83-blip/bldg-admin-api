@@ -11,7 +11,7 @@ const API = (process.env.MITCH_PRODUCER_BASE_URL || "").replace(/\/$/, "");
 const ROLE = process.env.MITCH_AGENT_ROLE;
 const REPO = process.env.MITCH_GITHUB_REPO || "adamwright83-blip/bldg-admin-api";
 const ISSUE = Number(process.env.MITCH_GITHUB_ISSUE_NUMBER || "370");
-const MODEL = process.env.MITCH_CLAUDE_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.MITCH_CLAUDE_MODEL || "claude-sonnet-5-5";
 const EXECUTOR_ACTOR = "github-producer-bus:claude";
 const REVIEWER_ACTOR = "claude_independent_review";
 
@@ -247,7 +247,7 @@ async function claude(prompt: string, readonly: boolean): Promise<string> {
 
   const args = [
     "-y",
-    "@anthropic-ai/claude-code@2.1.114",
+    "@anthropic-ai/claude-code@2.1.306",
     "--print",
     "--output-format",
     "json",
@@ -272,6 +272,10 @@ async function claude(prompt: string, readonly: boolean): Promise<string> {
     ANTHROPIC_API_KEY: "mitch-github-oidc-proxy",
     CLAUDE_CONFIG_DIR: claudeDir,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    // The Mitch model gateway (mitchGithubAgentRoutes.ts) rejects max_tokens > 20_000
+    // with a 400. Claude Code defaults to 32_000 (128_000 on current builds), which made
+    // every executor run exit 1 with an empty stderr. Keep this under the gateway cap.
+    CLAUDE_CODE_MAX_OUTPUT_TOKENS: "16000",
   };
   try {
     const result = await runCommand(
@@ -281,7 +285,9 @@ async function claude(prompt: string, readonly: boolean): Promise<string> {
     );
     if (result.exitCode !== 0)
       throw new Error(
-        `Claude Code exited ${result.exitCode}: ${result.stderr.slice(-1500)}`
+        `Claude Code exited ${result.exitCode}: stderr=${JSON.stringify(
+          result.stderr.slice(-1500)
+        )} stdout=${JSON.stringify(result.stdout.slice(-1500))}`
       );
     const parsed = JSON.parse(result.stdout) as { is_error?: boolean; result?: unknown };
     if (parsed.is_error) throw new Error(String(parsed.result).slice(0, 1500));
