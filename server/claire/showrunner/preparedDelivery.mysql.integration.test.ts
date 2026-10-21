@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical storage table literals only (disposable-database tenant tables); canonical product is JOYSTICK. */
 /**
  * A promise is consumed only when it is delivered (disposable MySQL).
  *
