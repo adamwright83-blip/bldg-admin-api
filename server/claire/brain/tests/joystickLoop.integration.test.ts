@@ -336,24 +336,19 @@ describeMysql("JOYSTICK loop — two operators get different presentations of Ki
         expect(sentences().at(-1)).toMatch(/\?$/);
       });
 
-      // KNOWN GAP (W5 feature, not the merge): the promise ledger reads the Day 1 campaign by
-      // Day Director (numeric user) ids, but the driver app keys Day 1 missions by openId
-      // (day1TenDoorsRouter: driverId = ctx.user.openId; W1's game-state reader uses the openId).
-      // So the evening promise is stripped ("promise guard removed unbacked promise") and the
-      // morning loader finds no live campaign. Flip to `it` when the ledger reads by openId.
-      it.fails("opening honours last night's prepared promise (property visits)", () => {
+      // Fixed in integration: both promise-ledger campaign reads include the operator openId
+      // (the driver app keys Day 1 missions by it, not by the Day Director id).
+      it("opening honours last night's prepared promise (property visits)", () => {
         expect(r.prepared).toHaveLength(1);
         expect(r.opening).toMatch(/Last night I said I'd have the open property visits ready: .*Which one do you want first\?/);
       });
 
-      // KNOWN GAP (W5 feature, not the merge): openingEncouragement requires briefing.objective,
-      // which only a weekly strategic proposal supplies. With the macro goal on record and no
-      // proposal this week the standing rule is loaded (asserted) but no line is spoken.
+      // Fixed in integration: encouragement uses the verified macro goal when no weekly proposal exists.
       it("the encouragement standing instruction is loaded for the call", () => {
         expect(r.briefing.standing?.encouragement).toBe(true);
         expect(r.briefing.standing?.section ?? "").toMatch(/encourag/i);
       });
-      it.fails("opening includes the encouragement line", () => {
+      it("opening includes the encouragement line", () => {
         expect(r.opening).toMatch(/is the move that serves "Get to 50 active customers"/);
       });
 
@@ -385,14 +380,23 @@ describeMysql("JOYSTICK loop — two operators get different presentations of Ki
         expect(Number(again[0]!.n)).toBe(1);
       });
 
-      // KNOWN GAP (W6 feature, not the merge): no decision point reads the motivational dimension.
-      // decisionPoints.ts chooses among framings (plain / implementation intention / choice of two)
-      // from consent and the response model only; the explicit `suspense`/`comfort` fact written by
-      // conversation ingestion is read by nothing. Until a presentation registry keyed by dimension
-      // exists, A and B get the same presentation. Flip to `it` when the row carries the dimension.
-      it.fails("Daphne's decision reflects the operator's explicit motivational dimension", () => {
+      // Fixed in integration: the decision point reads the operator-stated dimension (adaptation consent only,
+      // no experimentation consent) and records it as the framing tone.
+      it("Daphne's decision reflects the operator's explicit motivational dimension", () => {
         const receipt = JSON.stringify(r.intervention.policyReceiptJson ?? "") + JSON.stringify(r.intervention.acceptableActionsJson ?? "");
         expect(receipt).toContain(op.dimension);
+        expect(r.decision?.tone).toBe(op.dimension);
+      });
+
+      it("Claire's opening carries that tone; the targets and the facts are the same", async () => {
+        const { showrunnerOpening } = await import("../../showrunner/showrunnerBriefing");
+        const toned = showrunnerOpening(r.briefing, { tone: r.decision?.tone ?? null });
+        r.tonedOpening = toned;
+        expect(toned).toMatch(/Wilshire Vermont/);
+        expect(toned).toMatch(/The Chadwick/);
+        if (op.dimension === "suspense") expect(toned).toMatch(/between you and Clockhead/);
+        if (op.dimension === "comfort") expect(toned).toMatch(/No rush on the Colosseum/);
+        expect(toned).not.toMatch(CAUSAL_CLAIM);
       });
 
       it("the scheduled call opens through the production path without dialing", async () => {
@@ -512,12 +516,9 @@ describeMysql("JOYSTICK loop — two operators get different presentations of Ki
     });
   }
 
-  // KNOWN GAP (production, not the merge): Brain V2 primary answers only operators on
-  // CLAIRE_BRAIN_V2_OPERATOR_IDS (else OWNER_OPEN_ID + historical ids). Any other operator's
-  // scheduled call falls to the legacy conductor (runScheduledClaireTurn → runShowrunnerTurn),
-  // whose W3 open-item reply reader runs first on turn 1 and reads "tomorrow" in a QUESTION
-  // as "snooze the carried item": it moves Call Dana to tomorrow and cancels the older copies.
-  it.fails("an operator outside the V2 allowlist asking what to do tomorrow never moves the carried item", async () => {
+  // Fixed in integration: a question is never the answer to the carried item's yes/no, on the V2
+  // path or the legacy conductor, so "What do you want me to do tomorrow?" moves nothing.
+  it("an operator outside the V2 allowlist asking what to do tomorrow never moves the carried item", async () => {
     const b = results.get("B") as Record<string, any>;
     const { clearClaireOperatorAuthorityCache } = await import("../live/operatorAuthority");
     const saved = process.env.CLAIRE_BRAIN_V2_OPERATOR_IDS;
@@ -564,5 +565,9 @@ describeMysql("JOYSTICK loop — two operators get different presentations of Ki
     expect(a.briefing.gameState.activeKingdom?.kingdomId).toBe("kingdom-1-colosseum");
     expect(b.briefing.gameState.activeKingdom?.kingdomId).toBe("kingdom-1-colosseum");
     expect(legacyCalls).toEqual([]);
+    // The one measurable personalization: same goal, same targets, different words.
+    expect(a.tonedOpening).toBeTruthy();
+    expect(b.tonedOpening).toBeTruthy();
+    expect(a.tonedOpening).not.toBe(b.tonedOpening);
   });
 }, 120_000);

@@ -34,7 +34,8 @@ import { addDaysYmd } from "../../analytics/businessPeriods";
 import { daphneAdaptationAllowed, loadDaphneMetaPreferences, type DaphneMetaPreferenceKey, type DaphneMetaPreferenceRecord } from "./goalsPreferences";
 import { listDaphneInterventions, recordDaphneIntervention, type DaphneInterventionRecord } from "./interventionLedger";
 import { listDaphneOutcomes, recordDaphneOutcome, type DaphneOutcomeRecord } from "./outcomeLedger";
-import { recordDaphneObservation } from "./observationStore";
+import { listDaphneObservations, recordDaphneObservation } from "./observationStore";
+import { isDaphnePersonDimension, type DaphnePersonDimension } from "./personModel";
 import { buildDaphneResponseModel, type DaphneResponseEstimate } from "./responseModel";
 import { loadMissionPresentations } from "./missionFollowUp";
 
@@ -264,7 +265,46 @@ export type DaphneCallDecision = {
   framing: DaphneFraming;
   target: DaphneDecisionTarget;
   second: DaphneDecisionTarget | null;
+  /**
+   * The motivational dimension the operator explicitly stated (never inferred), honoured as the
+   * TONE of the framing when adaptation is allowed. It needs no experimentation consent: it is
+   * ordinary, authorized personalization, not an assignment. Null when nothing was stated.
+   */
+  tone?: DaphnePersonDimension | null;
 };
+
+/** How each stated dimension colours the framing. Style only: no new work, facts or stakes. */
+export const DAPHNE_TONE_GUIDANCE: Record<DaphnePersonDimension, string> = {
+  suspense: "Give it stakes and momentum: what is left, what is closing in, what the next door unlocks.",
+  comfort: "Keep it calm and unhurried: one easy step, no pressure, the next door whenever they are ready.",
+  humor: "Keep it light and a little wry, without undercutting the work.",
+  exploration: "Frame it as something to find out: what is behind the next door.",
+  competition: "Frame it as a score to beat: where they stand and what the next one adds.",
+  companionship: "Frame it as doing it together: you are with them on it.",
+  creative_production: "Frame it as making something: what they get to make next.",
+  tactical_problem_solving: "Frame it as a puzzle with a best order: the move that sets up the rest.",
+};
+
+/** The operator's most recent explicitly stated motivational dimension, with its source observation. */
+export async function loadStatedMotivation(scope: {
+  tenantId: string;
+  canonicalOperatorId: string;
+}): Promise<{ dimension: DaphnePersonDimension; sourceRef: string } | null> {
+  const observations = await listDaphneObservations({ ...scope, limit: 500 });
+  let best: { dimension: DaphnePersonDimension; sourceRef: string; at: string } | null = null;
+  for (const observation of observations) {
+    if (observation.evidenceChannel !== "stated") continue;
+    const items = (observation.payload as { items?: Array<{ kind?: string; key?: string }> } | null)?.items ?? [];
+    for (const item of items) {
+      if (item.kind !== "fact" || typeof item.key !== "string" || !item.key.startsWith("motivational_dimension:")) continue;
+      const dimension = item.key.slice("motivational_dimension:".length);
+      if (!isDaphnePersonDimension(dimension)) continue;
+      if (!best || observation.occurredAt > best.at)
+        best = { dimension, sourceRef: `daphne_observations:${observation.id}`, at: observation.occurredAt };
+    }
+  }
+  return best ? { dimension: best.dimension, sourceRef: best.sourceRef } : null;
+}
 
 /** One line for the showrunner system prompt. Style only; it never adds work or facts. */
 export function daphneDecisionPromptLine(decision: DaphneCallDecision | null | undefined): string {
@@ -275,8 +315,11 @@ export function daphneDecisionPromptLine(decision: DaphneCallDecision | null | u
     decision.framing === "choice_of_two" && decision.second
       ? ` The two items: "${decision.target.title}" or "${decision.second.title}".`
       : ` The item: "${decision.target.title}".`;
+  const tone = decision.tone
+    ? ` The operator told you they want it to feel like ${decision.tone.replace(/_/g, " ")}: ${DAPHNE_TONE_GUIDANCE[decision.tone]}`
+    : "";
   return (
-    `FRAMING FOR ${subject.toUpperCase()} (recorded decision ${decision.decisionPointId}): when you name ${subject}, ${def.guidance}${items}` +
+    `FRAMING FOR ${subject.toUpperCase()} (recorded decision ${decision.decisionPointId}): when you name ${subject}, ${def.guidance}${items}${tone}` +
     " Say it once, in your own words. If the operator has already chosen something else, follow the operator."
   );
 }
@@ -300,6 +343,8 @@ export type DaphneDecisionPorts = {
   recordIntervention: typeof recordDaphneIntervention;
   recordOutcome: typeof recordDaphneOutcome;
   random: () => number;
+  /** The operator's explicitly stated motivational dimension; optional so existing test ports keep working. */
+  loadStatedMotivation?: typeof loadStatedMotivation;
 };
 
 async function declaredPlainSourceRef(scope: { tenantId: string; canonicalOperatorId: string }): Promise<string | null> {
@@ -319,6 +364,7 @@ export const defaultDaphneDecisionPorts: DaphneDecisionPorts = {
   recordIntervention: recordDaphneIntervention,
   recordOutcome: recordDaphneOutcome,
   random: Math.random,
+  loadStatedMotivation,
 };
 
 export type DaphneDecisionOperator = {
@@ -351,6 +397,11 @@ export async function openDaphneDecisionPoint(
   const consent = daphneDecisionConsent(preferences, plainRef);
   // Adaptation off means Daphne does not personalize or remember: no decision, no row.
   if (!consent.adaptationAllowed) return null;
+  // Explicit preference, honoured as tone under adaptation consent alone (no experiment, no draw).
+  const stated = await (ports.loadStatedMotivation?.(scope) ?? Promise.resolve(null)).catch(() => null);
+  const statedMotivation = stated
+    ? { dimension: stated.dimension, sourceRef: stated.sourceRef, use: "framing_tone", basis: "operator_stated_preference" as const }
+    : null;
 
   const decisionPointId = daphneDecisionPointId({ kind, ...scope, businessDate: input.briefing.businessDate });
   const { primary, second } = daphneDecisionTargets(kind, input.briefing);
@@ -382,6 +433,7 @@ export async function openDaphneDecisionPoint(
         experimentationAllowed: consent.experimentationAllowed,
         explicitPlainPreference: consent.declaredPlainSourceRef,
       },
+      statedMotivation,
     },
     idempotencyKey: `decision_point:${decisionPointId}`,
   });
@@ -418,6 +470,8 @@ export async function openDaphneDecisionPoint(
       target: primary,
       second,
       purpose: input.purpose,
+      // Recorded as what the operator said, applied as tone; never a claim that it works.
+      statedMotivation,
       deliveryProven: false,
       outcomeRule:
         "started = 1 when the target's Day Line stop shows completion evidence inside the window; 0 when the window closes without it. Operator statements on calls are never evidence.",
@@ -434,6 +488,7 @@ export async function openDaphneDecisionPoint(
     framing: row.chosenAction as DaphneFraming,
     target: primary,
     second,
+    tone: statedMotivation?.dimension ?? null,
   };
 }
 

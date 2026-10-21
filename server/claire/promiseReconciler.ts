@@ -22,6 +22,8 @@ export type PromiseScope = {
   canonicalOperatorId: string;
   dayDirectorActorId: string;
   dayDirectorActorIds: string[];
+  /** The operator's openId: the driver app keys Day 1 missions by it, not by the Day Director id. */
+  driverOpenId?: string | null;
 };
 
 export type PromiseReconcileDeps = {
@@ -53,7 +55,12 @@ export async function preparePropertyVisitChoice(
   const loadCampaign =
     deps.loadCampaign ??
     ((scope: PromiseScope) =>
-      getClaireCampaignSummary({ tenantId: scope.tenantId, actorId: scope.dayDirectorActorId, actorIds: scope.dayDirectorActorIds }));
+      getClaireCampaignSummary({
+        tenantId: scope.tenantId,
+        actorId: scope.dayDirectorActorId,
+        // The driver app keys Day 1 missions by openId; Day Director ids alone never find them.
+        actorIds: [...(scope.dayDirectorActorIds ?? []), ...(scope.driverOpenId ? [scope.driverOpenId] : [])],
+      }));
   const campaign = await loadCampaign(input.scope).catch(() => null);
   if (!campaign || !campaign.active || campaign.remainingTargets.length === 0) return null;
   return (deps.store ?? drizzlePreparedItemStore()).upsert({
@@ -114,5 +121,6 @@ export async function resolvePromiseScope(input: { tenantId: string; operatorUse
     canonicalOperatorId: resolution.identity.canonicalOperatorId,
     dayDirectorActorId: resolution.identity.dayDirectorActorId,
     dayDirectorActorIds: resolution.identity.dayDirectorActorIds,
+    driverOpenId: resolution.identity.canonicalOpenId,
   };
 }

@@ -145,7 +145,8 @@ export async function loadPreparedItemsForCall(
       getClaireCampaignSummary({
         tenantId: input.identity.tenantId,
         actorId: input.identity.dayDirectorActorId,
-        actorIds: input.identity.dayDirectorActorIds,
+        // The driver app keys Day 1 missions by openId; Day Director ids alone never find them.
+        actorIds: [...(input.identity.dayDirectorActorIds ?? []), input.identity.canonicalOpenId].filter(Boolean),
       }))
   )().catch(() => null);
   // Unknown campaign state means the prepared list cannot be verified, so it is not offered.
@@ -535,13 +536,20 @@ export function showrunnerGoalLine(b: Pick<ShowrunnerBriefing, "goal" | "objecti
   return focus ? `This week is about: ${focus}.` : "I don't have your goal on record yet.";
 }
 
-/** The next game move, from the game master view, or "" when there is none. */
-function gameMoveLine(b: ShowrunnerBriefing): string {
+/** How the opening is coloured. `tone` is Daphne's recorded, operator-stated motivational dimension. */
+export type ShowrunnerOpeningOptions = { tone?: string | null };
+
+/** The next game move, from the game master view, or "" when there is none. Same targets for every tone. */
+function gameMoveLine(b: ShowrunnerBriefing, tone: string | null = null): string {
   const view = b.gameState;
   if (!view || isNoRecord(view.colosseum) || view.colosseum.satisfied || !view.colosseum.remaining.length) return "";
   const names = view.colosseum.remaining.map(target => target.name);
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
-  return `The game move is ${who}: ${view.colosseum.remaining.length === 1 ? "one" : view.colosseum.remaining.length === 2 ? "two" : view.colosseum.remaining.length} left for the Colosseum.`;
+  const n = view.colosseum.remaining.length;
+  const count = n === 1 ? "one" : n === 2 ? "two" : String(n);
+  if (tone === "suspense") return `Only ${count} left between you and Clockhead: ${who}.`;
+  if (tone === "comfort") return `No rush on the Colosseum: ${who}, ${count} left, whenever you're ready.`;
+  return `The game move is ${who}: ${count} left for the Colosseum.`;
 }
 
 const OVERDUE_FOLLOW_UP = /\b(?:overdue|follow[- ]?up|circle back|check in with|reach out)\b/i;
@@ -574,14 +582,18 @@ export function dayLineWithoutHeldTopics(
  * ENCOURAGEMENT_POLICY in server/claire/progression/policy.ts.
  */
 export function openingEncouragement(b: ShowrunnerBriefing): string | null {
-  if (!b.standing?.encouragement || !b.objective) return null;
+  // The verified macro goal when it is on record; the week's objective only without one. A week with
+  // no strategic proposal still has a goal, and the standing rule still applies.
+  const headline = b.goal?.objective?.trim() || b.objective?.trim() || null;
+  if (!b.standing?.encouragement || !headline) return null;
   const line = dayLineWithoutHeldTopics(b.driverDayLine, b.standing.heldTopics);
   if (b.purpose === "evening_debrief") {
     const done = new Set(line?.stops.filter(stop => stop.completion === "completed_with_evidence").map(stop => stop.title) ?? []).size;
-    return done > 0 ? `${done} done with proof today, and that is the work that moves "${b.objective}".` : null;
+    return done > 0 ? `${done} done with proof today, and that is the work that moves "${headline}".` : null;
   }
   const first = line?.stops.find(stop => stop.executable)?.title;
-  return first ? `${first} is the move that serves "${b.objective}".` : null;
+  // The Day Line line already named it; say which one without saying it twice.
+  return first ? `The first one is the move that serves "${headline}".` : null;
 }
 
 function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
@@ -592,8 +604,19 @@ function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
   return `Last night I said I'd have the open property visits ready: ${list(names)}${more}. Which one do you want first?`;
 }
 
+/**
+ * The carried open item the opening ASKS about on this call, or null. Shared by the opening and the
+ * call's reply reader so a reply is only read as that item's answer when its question was asked.
+ */
+export function carriedItemAsked(b: Pick<ShowrunnerBriefing, "carriedOpen" | "standing" | "preparedItems">) {
+  if (b.preparedItems?.some(item => item.kind === "property_visit_choice" && item.targets.length)) return null;
+  const held = b.standing?.heldTopics ?? [];
+  return b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+}
+
 /** The spoken opening, built only from briefing facts. Goal first, then the one move. */
-export function showrunnerOpening(b: ShowrunnerBriefing): string {
+export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions = {}): string {
+  const tone = options.tone ?? null;
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
     const held = b.standing?.heldTopics ?? [];
     const line = speakDriverDayLineCall(dayLineWithoutHeldTopics(b.driverDayLine, held), b.purpose);
@@ -602,19 +625,22 @@ export function showrunnerOpening(b: ShowrunnerBriefing): string {
     // One carried item, asked as a yes/no the operator can answer in a word, unless the operator
     // asked Claire to hold that kind of item for a review window.
     const carried = b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
-    const carriedLine = carried
-      ? `${carried.title} has been open ${carried.ageDays} ${carried.ageDays === 1 ? "day" : "days"}${carried.ids.length > 1 ? ` across ${carried.ids.length} entries` : ""}.`
+    // Exactly one question, and it closes the opening: last night's promised choice first, then the
+    // carried yes/no, then the plain closer. A carried item is only mentioned on a call where it IS
+    // the question; otherwise it would dangle without its yes/no.
+    const askCarried = !prepared && carried ? carried : null;
+    const carriedLine = askCarried
+      ? `${askCarried.title} has been open ${askCarried.ageDays} ${askCarried.ageDays === 1 ? "day" : "days"}${askCarried.ids.length > 1 ? ` across ${askCarried.ids.length} entries` : ""}.`
       : "";
-    // Exactly one question closes the opening: a promised choice first, then the carried yes/no.
-    const closer = (fallback: string) => (prepared ? "" : carried ? carried.question : fallback);
+    const closer = (fallback: string) => prepared ?? (askCarried ? askCarried.question : fallback);
     if (b.purpose === "morning_readiness") {
       return [
         "Good morning, it's Claire.",
         showrunnerGoalLine(b),
-        prepared ?? "",
         line,
-        gameMoveLine(b),
+        // Right after the Day Line it refers to, so "the first one" can only mean its first stop.
         encouragement ?? "",
+        gameMoveLine(b, tone),
         b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
         carriedLine,
         closer("Are you ready to get going?"),
@@ -633,11 +659,10 @@ export function showrunnerOpening(b: ShowrunnerBriefing): string {
       showrunnerGoalLine(b),
       tomorrowPlan,
       "Tonight I need two things from you: what got done, and what's in the way of tomorrow.",
-      prepared ?? "",
       line,
-      carriedLine,
-      gameMoveLine(b),
       encouragement ?? "",
+      carriedLine,
+      gameMoveLine(b, tone),
       closer("How did it go?"),
     ]
       .filter(Boolean)

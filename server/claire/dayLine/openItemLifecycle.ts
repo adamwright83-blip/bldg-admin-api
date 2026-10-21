@@ -126,9 +126,22 @@ const DONE =
   /^(?:yes|yeah|yep|yup|sure|done|did it|all done|finished|handled|already)\b|\b(?:i (?:already |just )?(?:called|did|sent|emailed|texted|spoke|talked|handled|took care|reached|met|visited)|it'?s (?:done|handled|taken care of)|took care of (?:it|that)|i got (?:to|hold of) (?:him|her|them))\b/i;
 
 /** Reads the operator's answer to an agenda question. "Not this week" moves it; "never again" closes it. */
+/**
+ * A question is never the answer to Claire's yes/no. "What do you want me to do tomorrow?" names a
+ * day but disposes of nothing; reading it as "snooze" moved Call Dana and cancelled its older copies
+ * on a turn that only asked for the plan (W9, 2026-10-21). No disposition means no write.
+ */
+const QUESTION_OPENER =
+  /^(?:and |so |okay |ok |well |hey |but )?(?:what|what's|whats|when|where|who|why|how|which|tell me|(?:do|does|did) (?:i|you|we|they|he|she)|(?:should|shall|can|could|would|will|is|are|was|were|have|has) (?:i|you|we|they|he|she|it|that|this|there))\b/i;
+
+export function isQuestion(text: string): boolean {
+  return /\?/.test(text) || QUESTION_OPENER.test(text.trim());
+}
+
 export function interpretOpenItemReply(utterance: string, today: string): OpenItemDecision {
   const text = utterance.trim();
   if (!text) return { kind: "unclear" };
+  if (isQuestion(text)) return { kind: "unclear" };
   if (DROP.test(text)) return { kind: "drop" };
   if (/\bnot this week\b/i.test(text) || /\b(?:next week|after the weekend|this weekend)\b/i.test(text)) {
     return { kind: "snooze", until: nextWeekdayAfter(today, "monday") };

@@ -10,7 +10,7 @@ import { claireModelRequest } from "../claireModel";
 import { parseStrategicProposalControl } from "../../../shared/strategicProposalControl";
 import { parseSalesHoldInstruction } from "../../../shared/claireProactive";
 import { recordOperatorSalesHoldInstruction } from "../../agents/persistentOperator/salesHoldInstruction";
-import type { ShowrunnerBriefing } from "./showrunnerBriefing";
+import { carriedItemAsked, type ShowrunnerBriefing } from "./showrunnerBriefing";
 import { daphneDecisionPromptLine, type DaphneCallDecision } from "../../agents/daphne/decisionPoints";
 import { driverDayLineStopIds } from "./driverDayLineCall";
 import { applyOpenItemDecision, interpretOpenItemReply, type OpenItemDeps } from "../dayLine/openItemLifecycle";
@@ -287,7 +287,7 @@ export async function runShowrunnerTurn(input: {
   // The opening asked one yes/no about the item that has been open across several days. Its answer
   // ("done", "drop it", "not this week", "never talk about it again") goes through the governed writers,
   // is read back, and only then spoken. A bare yes/no counts only as the reply to that question.
-  const carried = state.purpose === "desk_planning" ? null : (state.briefing.carriedOpen?.[0] ?? null);
+  const carried = state.purpose === "desk_planning" ? null : carriedItemAsked(state.briefing);
   if (carried && !state.openItemHandled) {
     const decision = interpretOpenItemReply(input.utterance, state.businessDate);
     const actionable = decision.kind === "drop" || ((decision.kind === "done" || decision.kind === "snooze") && state.turns <= 1);
@@ -465,6 +465,7 @@ export async function runShowrunnerTurn(input: {
         canonicalOperatorId: state.canonicalOperatorId,
         dayDirectorActorId: state.dayDirectorActorId,
         dayDirectorActorIds: state.dayDirectorActorIds,
+        driverOpenId: state.operatorUserId,
       },
       conversationKey: input.conversationKey,
       now,

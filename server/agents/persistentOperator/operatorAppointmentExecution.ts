@@ -337,7 +337,7 @@ async function executeDailyClaireCall(input: {
         actorId: identity.communicationOperatorUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
         timeZone: step.timeZone,
-        openingOverride: showrunnerOpening(briefing),
+        openingOverride: showrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null }),
         sessionKindOverride: purpose,
         showrunner: {
           purpose,
