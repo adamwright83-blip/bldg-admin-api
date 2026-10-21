@@ -6,6 +6,7 @@ import {
   fanOutAtlasCollisions,
   isLiveLanternCustomer,
   lanternDensityClass,
+  lanternMappingState,
   mergeClusters,
   streetIdentity,
   type GeographicCustomer,
@@ -161,5 +162,24 @@ describe("canonical live Lantern City truth", () => {
       },
     };
     expect(canonicalLanternTerritory(hollywood)?.id).toBe("hollywood");
+  });
+});
+
+describe("lanternMappingState", () => {
+  const at = { location: { latitude: 1, longitude: 1, x: 0, y: 0, outOfBounds: false, canonicalAddress: null } };
+  const no = { location: null };
+  it("is loading or error before any count, never zero", () => {
+    expect(lanternMappingState({ loading: true, error: false, customers: [] }).kind).toBe("loading");
+    expect(lanternMappingState({ loading: false, error: true, customers: [] }).kind).toBe("error");
+  });
+  it("distinguishes genuine zero from N customers with 0 located", () => {
+    expect(lanternMappingState({ loading: false, error: false, customers: [] }).kind).toBe("no_customers");
+    expect(lanternMappingState({ loading: false, error: false, customers: [no, no], statusCounts: { pending: 1, provider_failure: 1 } }))
+      .toEqual({ kind: "unmapped", total: 2, pending: 1, failed: 1 });
+  });
+  it("reports partial and fully mapped", () => {
+    expect(lanternMappingState({ loading: false, error: false, customers: [at, no] }))
+      .toEqual({ kind: "partial", total: 2, located: 1, unlocated: 1, failed: 0 });
+    expect(lanternMappingState({ loading: false, error: false, customers: [at, at] }).kind).toBe("mapped");
   });
 });

@@ -312,3 +312,40 @@ export function fanOutAtlasCollisions(
     return { cluster, fanSlot: used % ATLAS_FAN_SLOTS };
   });
 }
+
+export type LanternMappingState =
+  | { kind: "loading" }
+  | { kind: "error" }
+  /** The business genuinely has no customers on record. Zero is true here. */
+  | { kind: "no_customers" }
+  /** Customers exist but none has a location yet: a data gap, never "zero customers". */
+  | { kind: "unmapped"; total: number; pending: number; failed: number }
+  /** Some customers are on the map, some are not. */
+  | { kind: "partial"; total: number; located: number; unlocated: number; failed: number }
+  | { kind: "mapped"; total: number; located: number };
+
+/**
+ * What the map may honestly say about the business. The atlas only draws customers with coordinates, so
+ * the located count is never the customer count. Loading and failed reads are not counts at all.
+ */
+export function lanternMappingState(input: {
+  loading: boolean;
+  error: boolean;
+  customers: ReadonlyArray<Pick<GeographicCustomer, "location">>;
+  statusCounts?: Record<string, number> | null;
+}): LanternMappingState {
+  if (input.error) return { kind: "error" };
+  if (input.loading) return { kind: "loading" };
+  const total = input.customers.length;
+  if (total === 0) return { kind: "no_customers" };
+  const located = input.customers.filter(c => c.location).length;
+  const failed =
+    (input.statusCounts?.provider_failure ?? 0) +
+    (input.statusCounts?.transient_failure ?? 0) +
+    (input.statusCounts?.ambiguous ?? 0);
+  if (located === 0) {
+    return { kind: "unmapped", total, pending: input.statusCounts?.pending ?? 0, failed };
+  }
+  if (located < total) return { kind: "partial", total, located, unlocated: total - located, failed };
+  return { kind: "mapped", total, located };
+}
