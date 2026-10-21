@@ -148,6 +148,7 @@ export async function hasTenantEntitlement(input: {
       now: input.now,
       graceEndsAt: subscription.graceEndsAt,
       accessEndsAt: subscription.accessEndsAt,
+      trialEnd: subscription.trialEnd,
     })
   ) {
     return false;

@@ -83,6 +83,7 @@ export type SaasSubscriptionAccessInput = {
   now?: Date;
   graceEndsAt?: Date | null;
   accessEndsAt?: Date | null;
+  trialEnd?: Date | null;
 };
 
 export function normalizeSaasTenantSlug(value: string): string {
@@ -102,7 +103,12 @@ export function subscriptionAllowsLegacyDayforgeAccess(
   input: SaasSubscriptionStatus | SaasSubscriptionAccessInput
 ): boolean {
   const status = typeof input === "string" ? input : input.status;
-  if (status === "trialing" || status === "active") return true;
+  if (status === "active") return true;
+  if (status === "trialing") {
+    if (typeof input === "string") return true;
+    const now = (input.now ?? new Date()).getTime();
+    return !!input.trialEnd && input.trialEnd.getTime() > now;
+  }
   if (typeof input === "string") return false;
 
   const now = (input.now ?? new Date()).getTime();
