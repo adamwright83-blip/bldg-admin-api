@@ -22,6 +22,7 @@ import {
   isLaundryFarmCompanyViewRequest,
   LAUNDRY_FARM_COMPANY_READER,
   readLaundryFarmCompanyView,
+  requestedTenantIdsFor,
   type CompanyViewEvidencePayload,
 } from "../../../analytics/laundryFarmCompanyView";
 import {
@@ -436,11 +437,15 @@ export async function retrieveBusinessEvidence(
           operatorUserId: ctx.operatorUserId,
           now: new Date(ctx.nowIso),
           period: query.period,
+          requestedTenantIds: requestedTenantIdsFor(query),
+          requireAllRequested: query.scope !== "clarify",
         });
         const payload: CompanyViewEvidencePayload = {
           companyView: true,
           aspect: query.aspect,
           questionPeriod: query.period,
+          scope: query.scope,
+          building: query.building,
           view,
         };
         const item: EvidenceItem = {
@@ -452,8 +457,15 @@ export async function retrieveBusinessEvidence(
           asOf: view.period.end,
           freshness: null,
           coverage: {
-            complete: view.mayStateCompanyTotal,
-            gaps: view.mayStateCompanyTotal ? [] : ["company_total_not_authorized_or_incomplete"],
+            complete: query.scope === "both" ? view.mayStateCompanyTotal : view.bookComplete,
+            gaps:
+              query.scope === "both"
+                ? view.mayStateCompanyTotal
+                  ? []
+                  : ["cross_business_total_not_authorized_or_incomplete"]
+                : view.bookComplete
+                  ? []
+                  : ["business_ledger_not_authorized_or_incomplete"],
           },
           authoritativeFor: ["current_business_truth"],
           payload,

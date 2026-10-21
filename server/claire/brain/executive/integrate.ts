@@ -169,7 +169,7 @@ function speakResult(
   if (isCompanyViewEvidencePayload(item.payload)) {
     try {
       const speech = new Speech(ctx.surface, LAUNDRY_FARM_COMPANY_TIME_ZONE, ctx.today);
-      speakLaundryFarmCompanyView(item.payload.view, item.payload.aspect, speech);
+      speakLaundryFarmCompanyView(item.payload.view, item.payload, speech);
       return { text: speech.text(), presentedMemberIds: [] };
     } catch {
       return { text: "", presentedMemberIds: [] };
@@ -369,7 +369,12 @@ function integrateBusiness(input: {
     // Remember the whole result and the part actually spoken, so a later
     // "the other four" walks this same result instead of re-querying.
     if (isCompanyViewEvidencePayload(item.payload) && !orderedQueryUpdate) {
-      const request = companyViewRequest({ aspect: item.payload.aspect, period: item.payload.questionPeriod });
+      const request = companyViewRequest({
+        aspect: item.payload.aspect,
+        period: item.payload.questionPeriod,
+        scope: item.payload.scope,
+        building: item.payload.building,
+      });
       orderedQueryUpdate = {
         queryFingerprint: `company_view:${request.aspect}:${item.payload.view.period.start}`,
         parameters: request,

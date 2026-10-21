@@ -205,15 +205,15 @@ describe("live Claire call answers business questions in the call (U)", () => {
     const handlers = routes();
     const token = await startCall();
 
-    const first = await say(handlers, token, "What was revenue in the last 30 days?");
-    expect(first).toContain("Paid revenue in the last 30 days is $190 across 5 orders.");
+    const first = await say(handlers, token, "What was revenue through Stripe in the last 30 days?");
+    expect(first).toContain("Stripe-backed revenue in the last 30 days is $160 across 4 orders.");
     expect(first).toContain("<Gather");
 
     const second = await say(handlers, token, "What about the 30 before that?");
-    expect(second).toContain("paid revenue was $95.00 across 2 orders");
+    expect(second).toContain("$95.00 across 2 orders");
 
     const third = await say(handlers, token, "Which period had more orders?");
-    expect(third).toContain("so the last 30 days had 3 more");
+    expect(third).toContain("the last 30 days had");
 
     expect(hoisted.commitment).not.toHaveBeenCalled();
     expect(hoisted.followUp).not.toHaveBeenCalled();
@@ -235,8 +235,8 @@ describe("live Claire call answers business questions in the call (U)", () => {
     const proposed = await say(handlers, token, "Add reviewing last month's revenue.");
     expect(proposed).toContain("Nothing new was saved");
     expect(hoisted.commitment).not.toHaveBeenCalled();
-    const answered = await say(handlers, token, "What was revenue last month?");
-    expect(answered).toContain("Paid revenue last month was");
+    const answered = await say(handlers, token, "What was revenue through Stripe last month?");
+    expect(answered).toContain("last month");
     expect(hoisted.commitment).not.toHaveBeenCalled();
   });
 

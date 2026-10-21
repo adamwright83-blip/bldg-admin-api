@@ -46,7 +46,6 @@ import {
 import { detectConversationControl } from "../../turn/interpretTurn";
 import { explicitTrackingRequest } from "../../briefing/titleContract";
 import { answerClairePreDriveFollowUp, conservativeClaireFollowUp } from "../../preDriveConversation";
-import type { PeriodSpec } from "../../../analytics/businessPeriods";
 import {
   assembleGuardedClaireSpeak,
   buildClaireVerifiedFactInventory,
@@ -830,11 +829,12 @@ export async function runClaireV2PrimaryTurn(
       const queries = decision.evidence.filter(
         item => item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
       );
-      // A ledger query carries `query.period`; the Laundry Farm company view carries `questionPeriod`.
-      const executed = queries.map(item => {
-        const payload = item.payload as { query?: { period?: PeriodSpec }; questionPeriod?: PeriodSpec };
-        return payload.query?.period ?? payload.questionPeriod;
-      });
+      // A ledger query carries `query.period`; a business read carries `questionPeriod`.
+      const executed = queries.map(item =>
+        isCompanyViewEvidencePayload(item.payload)
+          ? item.payload.questionPeriod
+          : (item.payload as BusinessQueryResult).query?.period
+      );
       if (queries.length && !executed.some(period => periodMatches(asked, period))) {
         console.warn("[ClaireBrainV2Primary] requested period not verified", {
           event: "claire_brain_v2_period_mismatch",
@@ -855,7 +855,11 @@ export async function runClaireV2PrimaryTurn(
     }
 
     // ── Decisive V2 speech: facts, clarifications, refusals, prior-claim verdicts ──
+    const companyAnswer =
+      facts.length > 0 &&
+      decision.evidence.some(item => isCompanyViewEvidencePayload(item.payload));
     const decisive =
+      companyAnswer ||
       decision.control.mode === "clarify" ||
       attention.pendingDisposition === "reject" ||
       attention.priorClaim !== "none" ||

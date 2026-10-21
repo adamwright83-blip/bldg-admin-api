@@ -93,7 +93,7 @@ const ZERO_CLAIM = /\$0\.00|\b0 orders\b|\bno paid (?:orders|revenue)\b|\bzero (
 describe("zero requires positive proof", () => {
   it("REPRODUCTION: the empty tenant that told Adam '$0.00 across 0 orders' can no longer say it", async () => {
     // Exactly the production shape: both loaders succeed, no rows, so completeness is "complete".
-    const turn = await ask("What was revenue in the last 30 days?", unbound);
+    const turn = await ask("What was revenue from OPUS in the last 30 days?", unbound);
     expect(turn.handled).toBe(true);
     const speak = turn.handled ? turn.speak : "";
     expect(speak).not.toMatch(ZERO_CLAIM);
@@ -102,33 +102,33 @@ describe("zero requires positive proof", () => {
   });
 
   it("a genuinely empty period on a connected business still speaks a real zero", async () => {
-    const turn = await ask("What was revenue in the last 30 days?", bound);
+    const turn = await ask("What was revenue from OPUS in the last 30 days?", bound);
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(ZERO_CLAIM);
   });
 
   it("A REAL BUT PARTIAL TOTAL cannot pass as the whole business", async () => {
     // The $0 bug's quieter twin: a true number from one source, reported as if it were everything.
-    const turn = await ask("What was revenue this year?", ev({ state: "absent" }), fixtureLoaders());
+    const turn = await ask("How does revenue this year compare with last year?", ev({ state: "absent" }), fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(/\$/); // the verified figure is still spoken
     expect(speak).toMatch(/partial|not the whole business/i); // but its scope is stated
   });
 
   it("a fully covered non-empty total carries no caveat", async () => {
-    const turn = await ask("What was revenue this year?", bound, fixtureLoaders());
+    const turn = await ask("What was revenue from OPUS this year?", bound, fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).not.toMatch(/partial|not the whole business/i);
   });
 
   it("bindings that cannot be established do not license a zero either", async () => {
-    const speak = (await ask("What was revenue in the last 30 days?", unknown)) as { speak?: string };
+    const speak = (await ask("What was revenue from OPUS in the last 30 days?", unknown)) as { speak?: string };
     expect(speak.speak ?? "").not.toMatch(ZERO_CLAIM);
     expect(speak.speak ?? "").toMatch(/can't confirm/i);
   });
 
   it("applies to order counts and customer counts, not just revenue", async () => {
-    for (const question of ["How many orders were there in the last 30 days?", "How many active customers are there?"]) {
+    for (const question of ["How many orders were there at OPUS in the last 30 days?", "How many active customers are there?"]) {
       const turn = await ask(question, unbound);
       const speak = turn.handled ? turn.speak : "";
       expect(speak).not.toMatch(ZERO_CLAIM);
@@ -380,7 +380,7 @@ describe("source health and exact range coverage", () => {
       state: "bound",
       coverageRanges: [fullRange("orders_created", "2026-01-01", "2026-09-19")],
     });
-    const turn = await ask("What was revenue this year?", evidence, fixtureLoaders());
+    const turn = await ask("How does revenue this year compare with last year?", evidence, fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(/\$/);
     expect(speak).toMatch(/order date|payment events|exhaustive whole-business coverage/i);

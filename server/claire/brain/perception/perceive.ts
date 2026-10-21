@@ -3,6 +3,7 @@
  */
 
 import { interpretTurn } from "../../turn/interpretTurn";
+import { matchLaundryFarmCompanyQuestion } from "../../../analytics/laundryFarmCompanyView";
 import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../../topicDetection";
 import { operatorAskedOntology } from "../../progression/ontologyGuard";
 import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTurn } from "../contracts/perceivedTurn";
@@ -207,12 +208,15 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   if (classification.status === "unknown") ambiguities.push("work_frame_unknown");
   if (classification.status === "failed") ambiguities.push("work_frame_failed");
 
+  const companyRead = matchLaundryFarmCompanyQuestion(assembledText) != null;
+  if (companyRead && !dialogueActs.includes("question")) dialogueActs.push("question");
+
   return {
     rawText: input.rawText,
     assembledText,
     completeness: input.completeness,
     dialogueActs,
-    businessIntent: intentFromAssembled(assembledText, turn),
+    businessIntent: companyRead ? "fact_question" : intentFromAssembled(assembledText, turn),
     entities,
     temporalReferences: turn.temporal,
     cardinality: turn.cardinality,
@@ -231,7 +235,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     callControl,
     ambiguities,
     mayProposeWorkHint: turn.mayProposeWork,
-    hasBusinessQuestion: turn.hasBusinessQuestion,
+    hasBusinessQuestion: turn.hasBusinessQuestion || companyRead,
     listRequest: turn.listRequest,
     broadBriefingRequest: turn.broadBriefingRequest,
     aboutClaireCapability: turn.aboutClaireCapability,

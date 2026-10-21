@@ -56,6 +56,7 @@ import {
 import {
   matchLaundryFarmCompanyQuestion,
   readLaundryFarmCompanyView,
+  requestedTenantIdsFor,
   type LaundryFarmCompanyQuestion,
 } from "../analytics/laundryFarmCompanyView";
 import type { ServiceType } from "../analytics/paidOrderLedger";
@@ -1160,7 +1161,11 @@ export async function answerClaireBusinessTurn(
   const goalTurn = await settleBusinessGoal(input, deps, now, timeZone);
   if (goalTurn) return goalTurn;
   let reader: ClaireBusinessReader = "query";
-  const companyQuestion = matchLaundryFarmCompanyQuestion(input.utterance, input.state.companyQuestion ?? null);
+  const companyQuestion = matchLaundryFarmCompanyQuestion(
+    input.utterance,
+    input.state.companyQuestion ?? null,
+    input.tenantId
+  );
   input.state.companyQuestion = companyQuestion;
   if (companyQuestion) {
     reader = "company_view";
@@ -1170,9 +1175,11 @@ export async function answerClaireBusinessTurn(
         operatorUserId: input.operatorUserId ?? "",
         now,
         period: companyQuestion.period,
+        requestedTenantIds: requestedTenantIdsFor(companyQuestion),
+        requireAllRequested: companyQuestion.scope !== "clarify",
       });
       const speech = new Speech(input.surface, "America/Los_Angeles", companyToday);
-      speakLaundryFarmCompanyView(view, companyQuestion.aspect, speech);
+      speakLaundryFarmCompanyView(view, companyQuestion, speech);
       return guardedTurn({
         handled: true,
         speak: speech.text(),
