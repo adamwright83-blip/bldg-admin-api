@@ -1045,7 +1045,14 @@ export async function runClaireV2PrimaryTurn(
     const intent = decision.perceivedTurn.businessIntent;
 
     // ── The operator's goal: business memory V2 already holds, stated verbatim ──
-    if (isMacroGoalQuestion(utterance) && attention.priorClaim === "none") {
+    // Only a plain "what is my goal?". When the same turn asks Claire to lead or what to do
+    // ("What is my goal? Tell me what to do."), the lead plan / judgment answers it, goal first.
+    if (
+      isMacroGoalQuestion(utterance) &&
+      attention.priorClaim === "none" &&
+      !leadPlanned &&
+      intent !== "judgment_question"
+    ) {
       const goal = macroGoalStatement({ context: input.context ?? null, state, brief: input.brief ?? null });
       return finish(
         { speak: goal ? `Your goal is: ${goal}.` : V2_NO_GOAL_ON_RECORD_SPEECH, kind: "answered", actionIds: [] },

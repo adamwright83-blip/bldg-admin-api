@@ -324,7 +324,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   }
 
   /** The operator's macro goal is business memory, however it is phrased at Claire. */
-  if (!repeatRequest && isMacroGoalQuestion(assembledText)) {
+  if (!repeatRequest && !leadBriefing && isMacroGoalQuestion(assembledText)) {
     personalProbe = false;
     if (businessIntent === "none") businessIntent = "fact_question";
     hasBusinessQuestion = true;

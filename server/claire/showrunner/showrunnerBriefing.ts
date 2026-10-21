@@ -528,7 +528,9 @@ export function showrunnerGoalLine(b: Pick<ShowrunnerBriefing, "goal" | "objecti
     const sameAsGoal = focus && focus.toLowerCase() === b.goal.objective.trim().replace(/[.!]+$/, "").toLowerCase();
     return [speakGoalProgress(b.goal), focus && !sameAsGoal ? `This week's focus inside that is ${focus}.` : ""].filter(Boolean).join(" ");
   }
-  return focus ? `I don't have your goal on record; this week's focus is ${focus}.` : "I don't have your goal on record yet.";
+  // No macro-goal read on this briefing (older proposal paths carry the headline as the week's
+  // objective, already resolved from the leading macro goal): say it as the week's headline.
+  return focus ? `This week is about: ${focus}.` : "I don't have your goal on record yet.";
 }
 
 /** The next game move, from the game master view, or "" when there is none. */
