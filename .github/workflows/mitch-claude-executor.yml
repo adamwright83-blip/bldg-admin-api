@@ -58,7 +58,7 @@ jobs:
           MITCH_GITHUB_REPO: adamwright83-blip/bldg-admin-api
           MITCH_GITHUB_ISSUE_NUMBER: "370"
           MITCH_PRODUCER_BASE_URL: ${{ fromJSON(inputs.wake).controlPlaneBaseUrl }}
-          MITCH_CLAUDE_MODEL: claude-sonnet-4-6
+          MITCH_CLAUDE_MODEL: claude-sonnet-5-5
           MITCH_GAME_SKILLS_DIR: ${{ runner.temp }}/mitch-gamedev-skills
           MITCH_GAME_SKILLS_PIN: d4b0e35550c55ae70bdfcab4ef5a0e94610438a9
         run: pnpm exec tsx scripts/mitch-github-agent.ts

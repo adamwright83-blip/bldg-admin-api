@@ -1,0 +1,363 @@
+<title>Joystick Landing Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600&family=Caveat:wght@500&display=swap">
+<style>
+  /* Layout: one idea per screen. Each section holds one headline, one short paragraph, one object.
+     Palette and faces are the live gojoystick.com brand (Fraunces / Inter / Caveat, warm paper, ink).
+     Single-theme by choice: this is a mockup of a branded page. */
+  :root {
+    --paper: #fbfaf6;
+    --ink: #111111;
+    --meta: #777777;
+    --muted: #444444;
+    --rule: rgba(17, 17, 17, 0.12);
+    --sticky: #fdf0a6;
+    --marker: #e39b00;
+    --display: "Fraunces", Georgia, "Times New Roman", serif;
+    --body: "Inter", system-ui, -apple-system, sans-serif;
+    --hand: "Caveat", "Bradley Hand", cursive;
+    --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+    --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+    --wrap: 1180px;
+    --band: clamp(96px, 14vw, 180px);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  .wrap {
+    max-width: var(--wrap);
+    margin-inline: auto;
+    padding-left: var(--gutter-l);
+    padding-right: var(--gutter-r);
+  }
+
+  /* ---------- nav ---------- */
+  .nav { padding-block: 28px 0; }
+  .nav .wrap { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 14px; text-decoration: none; color: inherit; }
+  .brand-name { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: -0.01em; }
+  .brand-tag { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--meta); }
+  .links { display: flex; gap: 28px; font-size: 14px; }
+  .links a { color: var(--ink); text-decoration: none; }
+  .links a:hover, .links a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+
+  /* ---------- shared section grammar ---------- */
+  .band { padding-block: var(--band); }
+  .band + .band { border-top: 1px solid var(--rule); }
+  .lede {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 40px clamp(40px, 8vw, 120px);
+    align-items: end;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--meta);
+    margin: 0 0 28px;
+  }
+  h1, h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; margin: 0; }
+  h2 { font-size: clamp(40px, 5.6vw, 76px); line-height: 0.98; }
+  .lede p { font-size: 18px; line-height: 1.6; color: var(--muted); max-width: 30em; margin: 0; }
+  .object { margin-top: clamp(56px, 8vw, 110px); }
+
+  /* ---------- hero ---------- */
+  .hero { padding-block: clamp(72px, 10vw, 150px) var(--band); }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 440px);
+    gap: 48px clamp(48px, 7vw, 110px);
+    align-items: start;
+  }
+  h1 { font-size: clamp(56px, 8vw, 112px); line-height: 0.92; }
+  .hero-top { padding-top: clamp(8px, 2vw, 32px); }
+  .hero-bottom {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.45fr);
+    gap: 32px clamp(48px, 7vw, 110px);
+    align-items: end;
+    margin-top: clamp(40px, 6vw, 96px);
+  }
+  .hero-bottom h1 { text-align: right; max-width: 12ch; margin-left: auto; }
+  .underline { position: relative; display: inline-block; white-space: nowrap; }
+  .underline::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -0.06em;
+    height: 0.09em;
+    background: var(--marker);
+    border-radius: 999px;
+    transform: rotate(-0.6deg);
+  }
+  .cta { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+  .button {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--ink); color: #fff;
+    font: 600 15px/1 var(--body);
+    padding: 16px 22px; border-radius: 10px;
+    text-decoration: none; border: 0; cursor: pointer;
+  }
+  .button:hover, .button:focus-visible { background: #000; outline: 2px solid var(--marker); outline-offset: 3px; }
+  .micro { font-size: 13px; color: var(--meta); max-width: 26em; }
+
+  /* ---------- sticky note ---------- */
+  .sticky {
+    position: relative;
+    background: var(--sticky);
+    padding: 22px 22px 18px;
+    box-shadow: 0 14px 30px rgba(60, 40, 0, 0.10), 0 2px 4px rgba(0,0,0,0.05);
+    transform: rotate(-1.4deg);
+    border-radius: 2px;
+  }
+  .sticky::before {
+    content: "";
+    position: absolute; top: -12px; left: 50%;
+    width: 92px; height: 26px;
+    background: rgba(255,255,255,0.55);
+    transform: translateX(-50%) rotate(-2deg);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.06);
+  }
+  .sticky svg { display: block; width: 100%; height: auto; }
+  .sticky .hint { font-family: var(--hand); font-size: 18px; color: rgba(0,0,0,0.45); text-align: right; margin-top: 6px; }
+  .caption { font-family: var(--hand); font-size: clamp(26px, 2.6vw, 32px); line-height: 1.15; color: #222; margin: 28px 0 0; }
+
+  /* ---------- Claire call card ---------- */
+  .call {
+    max-width: 720px;
+    margin-inline: auto;
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    border-radius: 14px;
+    padding: 30px 34px 26px 30px;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px 18px;
+    box-shadow: 0 18px 40px rgba(17,17,17,0.06);
+  }
+  .call .q { font-family: Georgia, serif; font-size: 44px; line-height: 0.8; color: var(--marker); }
+  .call .who { font-size: 13px; color: var(--ink); font-weight: 600; }
+  .call .who span { color: var(--meta); font-weight: 400; }
+  .call .who time { color: var(--marker); font-weight: 600; }
+  .call .line { font-size: clamp(19px, 2vw, 24px); line-height: 1.4; margin: 6px 0 0; font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; }
+  .call .foot { grid-column: 2; font-size: 13px; color: var(--meta); margin-top: 10px; }
+  .margin-mascot { position: relative; }
+  .margin-mascot svg { position: absolute; left: calc(50% + 372px); bottom: -8px; width: 112px; height: auto; }
+
+  /* ---------- companions ---------- */
+  .party {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(20px, 3vw, 40px);
+    align-items: start;
+  }
+  .card { padding: 18px 16px 14px; transform: rotate(var(--tilt, -1deg)); }
+  .card:nth-child(2) { --tilt: 1.1deg; } .card:nth-child(3) { --tilt: -0.7deg; } .card:nth-child(4) { --tilt: 1.4deg; }
+  .card svg { width: 72%; margin-inline: auto; }
+  .card .name { font-family: var(--hand); font-size: 34px; line-height: 1; margin: 10px 0 6px; }
+  .card .truth { font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .card .flaw { font-size: 14px; color: #555; line-height: 1.35; margin-top: 2px; }
+  .card .for { font-size: 12px; color: var(--meta); margin-top: 12px; }
+
+  /* ---------- captures ---------- */
+  figure { margin: 0; }
+  .shot { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(17,17,17,0.08); }
+  figcaption { font-family: var(--hand); font-size: 26px; color: #222; margin-top: 18px; }
+  figcaption small { display: block; font-family: var(--body); font-size: 13px; color: var(--meta); margin-top: 2px; }
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(24px, 4vw, 48px); margin-top: clamp(48px, 6vw, 80px); }
+
+  /* ---------- pricing ---------- */
+  .price .lede p { max-width: 24em; }
+  .terms { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 14px; color: var(--muted); margin: 0 0 32px; padding: 0; list-style: none; }
+  .terms li::before { content: "&middot;"; color: var(--marker); margin-right: 10px; font-weight: 700; }
+  .fine { font-size: 12px; color: var(--meta); margin-top: 40px; }
+
+  footer { padding-block: 40px 56px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--meta); }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* ---------- narrow ---------- */
+  @media (max-width: 900px) {
+    .hero-grid, .hero-bottom, .lede { grid-template-columns: minmax(0, 1fr); }
+    .hero-bottom h1 { text-align: left; }
+    .hero-sticky { max-width: 360px; }
+    .party { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pair { grid-template-columns: minmax(0, 1fr); }
+    .margin-mascot svg { display: none; }
+    .links { gap: 18px; }
+  }
+  @media (max-width: 480px) {
+    .party { grid-template-columns: minmax(0, 1fr); max-width: 320px; }
+    .call { grid-template-columns: minmax(0, 1fr); padding: 24px 22px; }
+    .call .q { display: none; }
+    .call .foot { grid-column: 1; }
+  }
+</style>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="brand-name">Joystick</span><span class="brand-tag">Real work. Playable.</span></a>
+    <nav class="links" aria-label="Page">
+      <a href="#games">The games</a><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#pricing">Sign in</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO: one sentence, one object -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-top">
+        <h1>Knows your <span class="underline">business,</span></h1>
+      </div>
+      <div class="hero-sticky">
+        <div class="sticky" aria-label="Adam, stand-in for a real flash photo at a lobby desk">
+          <svg viewBox="0 0 240 300" width="420" height="525" role="img" aria-label="Adam, sketched in ink" style="display:block"><g fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M70 300 C 70 240, 90 215, 118 210 C 150 205, 172 232, 172 300"></path><path d="M118 210 C 90 200, 72 170, 76 132 C 80 90, 110 66, 138 70 C 168 74, 182 104, 176 140 C 172 176, 150 204, 128 210"></path><path d="M80 118 C 96 96, 120 84, 150 88 C 168 90, 178 100, 180 112"></path><path d="M100 140 q8 -6 16 0 M138 140 q8 -6 16 0"></path><path d="M120 150 c 4 10, 2 18, -6 20"></path><path d="M106 176 q18 12 36 0"></path></g></svg>
+          <div class="hint">hover to meet the real one &rarr;</div>
+        </div>
+        <p class="caption">Adam loved Tomb Raider. Shies away from lobbies.</p>
+      </div>
+      <div class="hero-bottom">
+        <div class="cta">
+          <a class="button" href="#pricing">Preview my first game &rarr;</a>
+          <p class="micro">3 questions. A game built for your business. No account required.</p>
+        </div>
+        <h1>then makes your next move a game.</h1>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1. Claire reads your books -->
+  <section class="band" id="how">
+    <div class="wrap">
+      <div class="lede">
+        <div>
+          <p class="label">How Joystick works</p>
+          <h2>Claire reads your books.</h2>
+        </div>
+        <p>Orders, customers, payments, routes. Every number she says has a receipt. She calls you with the next move already prepared.</p>
+      </div>
+      <div class="object margin-mascot">
+        <svg viewBox="0 0 180 200" width="200" height="222" role="img" aria-label="Sable, sketched, holding her ledger"><g fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M90 22 C 70 22, 60 40, 66 58 C 70 70, 82 76, 90 76 C 100 76, 112 68, 114 54 C 116 36, 106 22, 90 22 Z" fill="#e0457b"></path><path d="M84 48 q4 -4 8 0 M98 48 q4 -4 8 0 M88 62 q6 4 12 0"></path><path d="M90 76 C 76 90, 70 110, 70 140 L 70 196 M90 76 C 108 90, 116 110, 116 140 L 116 196"></path><path d="M70 100 C 50 104, 40 118, 38 134 M116 100 C 136 104, 146 118, 148 134"></path><path d="M34 124 L 92 124 L 92 170 L 34 170 Z" fill="#fbfaf6"></path><path d="M44 138 h38 M44 150 h38 M44 162 h22"></path><path d="M60 196 h20 M106 196 h20"></path></g></svg>
+        <div class="call" role="group" aria-label="Claire's evening call">
+          <div class="q" aria-hidden="true">&ldquo;</div>
+          <div>
+            <div class="who">Claire <span>&middot; runs your day &middot;</span> <time>9:42 PM</time></div>
+            <p class="line">Eight regulars went quiet. Sable has the dates. Maya first; she's the easiest yes.</p>
+          </div>
+          <div class="foot">She calls. You don't type.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. You get the one you're missing -->
+  <section class="band">
+    <div class="wrap">
+      <div class="lede">
+        <div>
+          <h2>You get the one you're missing.</h2>
+        </div>
+        <p>Each one has the thing you don't, and a flaw of their own. You earn them by doing the work.</p>
+      </div>
+      <div class="object party">
+        <div class="sticky card" style="background:#f1e6cf">
+          <svg viewBox="0 0 180 200" width="200" height="222" role="img" aria-label="Rook, sketched: a messenger bird in a bucket hat"><g fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M56 54 C 56 36, 76 26, 96 28 C 118 30, 132 42, 132 56 L 48 60 Z" fill="#e39b00"></path><path d="M48 60 C 70 56, 110 56, 136 60"></path><circle cx="84" cy="72" r="9"></circle><circle cx="106" cy="72" r="9"></circle><path d="M93 72 h4"></path><path d="M70 80 C 66 100, 74 112, 92 114 C 110 112, 118 100, 114 80"></path><path d="M114 88 L 150 96 L 116 102"></path><path d="M92 114 C 70 122, 58 142, 60 168 C 62 184, 78 192, 92 192 C 108 192, 122 184, 124 168 C 126 142, 114 122, 92 114 Z"></path><path d="M60 150 C 42 146, 36 160, 46 170"></path><path d="M72 136 L 112 132 L 114 156 L 74 160 Z" fill="#fbfaf6"></path><path d="M82 192 L 80 200 M104 192 L 106 200 M70 200 h16 M98 200 h16"></path></g></svg>
+          <div class="name">Rook</div>
+          <div class="truth">Socially fearless at any front desk.</div>
+          <div class="flaw">Exaggerates hilariously.</div>
+          <div class="for">For the one who shies away from lobbies.</div>
+        </div>
+        <div class="sticky card" style="background:#f3dde3">
+          <svg viewBox="0 0 180 200" width="200" height="222" role="img" aria-label="Sable, sketched, holding her ledger"><g fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M90 22 C 70 22, 60 40, 66 58 C 70 70, 82 76, 90 76 C 100 76, 112 68, 114 54 C 116 36, 106 22, 90 22 Z" fill="#e0457b"></path><path d="M84 48 q4 -4 8 0 M98 48 q4 -4 8 0 M88 62 q6 4 12 0"></path><path d="M90 76 C 76 90, 70 110, 70 140 L 70 196 M90 76 C 108 90, 116 110, 116 140 L 116 196"></path><path d="M70 100 C 50 104, 40 118, 38 134 M116 100 C 136 104, 146 118, 148 134"></path><path d="M34 124 L 92 124 L 92 170 L 34 170 Z" fill="#fbfaf6"></path><path d="M44 138 h38 M44 150 h38 M44 162 h22"></path><path d="M60 196 h20 M106 196 h20"></path></g></svg>
+          <div class="name">Sable</div>
+          <div class="truth">Remembers every customer.</div>
+          <div class="flaw">Remembers every excuse, too.</div>
+          <div class="for">For the one who forgets to follow up.</div>
+        </div>
+        <div class="sticky card" style="background:#d9ebe8">
+          <svg viewBox="0 0 180 200" width="200" height="222" role="img" aria-label="Luma, sketched, holding a frame"><g fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M90 20 C 68 20, 58 42, 66 60 C 72 72, 82 76, 90 76 C 100 76, 110 70, 114 56 C 118 38, 108 20, 90 20 Z" fill="#13a39a"></path><path d="M78 22 C 72 10, 84 4, 92 10 C 100 4, 112 12, 104 22"></path><path d="M84 48 q4 -4 8 0 M98 48 q4 -4 8 0 M88 62 q6 4 12 0"></path><path d="M90 76 C 76 90, 70 110, 70 140 L 70 196 M90 76 C 108 90, 116 110, 116 140 L 116 196"></path><path d="M116 96 L 160 92 L 160 150 L 116 152" fill="#fbfaf6"></path><path d="M126 112 C 134 104, 148 110, 150 120 C 152 130, 140 138, 132 132"></path><path d="M70 100 C 52 108, 46 128, 50 144"></path><path d="M60 196 h20 M106 196 h20"></path></g></svg>
+          <div class="name">Luma</div>
+          <div class="truth">Makes the ad in an hour.</div>
+          <div class="flaw">Changes it eleven times.</div>
+          <div class="for">For the one who never starts the ad.</div>
+        </div>
+        <div class="sticky card" style="background:#eadfd3">
+          <svg viewBox="0 0 180 200" width="200" height="222" role="img" aria-label="Orren, sketched, beside a signpost"><g fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M78 24 C 58 24, 48 44, 56 62 C 62 74, 72 78, 80 78 C 92 78, 102 70, 104 56 C 106 38, 96 24, 78 24 Z" fill="#e8472a"></path><path d="M72 50 q4 -4 8 0 M86 50 q4 -4 8 0 M76 64 q6 4 12 0"></path><path d="M80 78 C 66 92, 60 112, 60 142 L 60 196 M80 78 C 98 92, 106 112, 106 142 L 106 196"></path><path d="M106 104 C 120 100, 130 104, 136 112"></path><path d="M146 40 L 146 196"></path><path d="M146 60 L 176 60 L 168 72 L 146 72 Z M146 86 L 118 86 L 126 98 L 146 98 Z" fill="#fbfaf6"></path><path d="M50 196 h20 M96 196 h20 M136 196 h20"></path></g></svg>
+          <div class="name">Orren</div>
+          <div class="truth">Never wastes a step.</div>
+          <div class="flaw">Never admits a wrong turn.</div>
+          <div class="for">For the one who starts at the wrong end of the block.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Your next move becomes a game -->
+  <section class="band" id="games">
+    <div class="wrap">
+      <div class="lede">
+        <div>
+          <p class="label">The games</p>
+          <h2>Your next move becomes a game.</h2>
+        </div>
+        <p>The work you avoid becomes the game you'd pick anyway. Real evidence moves the world; nothing fake does.</p>
+      </div>
+      <figure class="object">
+        <img class="shot" src="img/channel-382.jpg" width="1800" height="1125" alt="CHANNEL 382: a clay TV studio with a Laundry Farm set, a call sheet of three hooks, and Bertrand the presenter" loading="eager">
+        <figcaption>CHANNEL 382. The commercial you film is a real Laundry Farm ad.<small>Real gameplay capture. Every word is approved before it airs.</small></figcaption>
+      </figure>
+      <div class="pair">
+        <figure>
+          <img class="shot" src="img/silver-lake.jpg" width="1800" height="1125" alt="Silver Lake: a courtyard of neighbours with a fountain, each neighbour's letter status listed on the left" loading="lazy">
+          <figcaption>Silver Lake. Eight regulars went quiet. Walk over and say hi.<small>Real gameplay capture. Nothing here is sent without you.</small></figcaption>
+        </figure>
+        <figure>
+          <img class="shot" src="img/beverly-hills.jpg" width="1800" height="1012" alt="Beverly Hills: a plaza with a fountain, string lights and a velvet rope with two prospects behind it" loading="lazy">
+          <figcaption>Beverly Hills. Two real prospects behind the rope.<small>Real gameplay capture. Cold outreach, never sent for you.</small></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="band price" id="pricing">
+    <div class="wrap">
+      <div class="lede">
+        <div>
+          <p class="label">Pricing</p>
+          <h2>Seven days free, then $49 a month.</h2>
+        </div>
+        <div>
+          <ul class="terms">
+            <li>7-day trial</li><li>Card required at signup</li><li>Cancel anytime</li>
+          </ul>
+          <div class="cta">
+            <a class="button" href="#top">Preview my first game &rarr;</a>
+            <p class="micro">Checkout is not open. This does not charge a card.</p>
+          </div>
+        </div>
+      </div>
+      <p class="fine">All customer references on this page are illustrations.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Joystick &middot; Real work. Playable.</span>
+    <span>Mockup for comparison against gojoystick.com &middot; 2026-10-21</span>
+  </div>
+</footer>

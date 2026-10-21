@@ -344,8 +344,14 @@ describe("landing release safety", () => {
     expect(landingSource).toContain("}, [state.fading, state.pendingIndex]);");
     expect(landingSource).not.toContain("swapTimeoutRef");
   });
-  it("keeps the tablet portrait and companion in the same viewport flow", () => {
+  it("stacks the hero and the companion row to one column on narrow screens", () => {
     expect(cssSource).toContain(".jl-hero-row {\n    flex-direction: column;");
-    expect(cssSource).toContain("left: min(400px, calc(100% - 220px));");
+    expect(cssSource).toContain(".jl-party {\n    grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(cssSource).toContain(".jl-party {\n    grid-template-columns: minmax(0, 1fr);");
+  });
+  it("shows real gameplay captures instead of bracketed placeholders", () => {
+    expect(landingSource).not.toContain("[Real gameplay video:");
+    expect(landingSource).toContain("/joystick/gameplay/silver-lake.mp4");
+    expect(landingSource).toContain("/joystick/gameplay/channel-382.jpg");
   });
 });
