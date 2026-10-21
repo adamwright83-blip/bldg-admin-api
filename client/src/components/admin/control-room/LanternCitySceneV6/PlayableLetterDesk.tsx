@@ -16,6 +16,7 @@ import {
   type SmsComposeUriResult,
 } from "../../../../../../server/experience/lanternCity/personalNumber/smsComposeHandoff";
 import styles from "./playable-letter-desk.module.css";
+import { describePacificWallTime, nextPacificSlot } from "./letterDeskSchedule";
 
 interface PlayableLetterDeskProps {
   target: CozyProjectedTarget;
@@ -34,7 +35,7 @@ interface PlayableLetterDeskProps {
     editedText: string,
     scheduledForIso: string,
     idempotencyKey?: string
-  ) => void;
+  ) => void | Promise<boolean | void>;
   onClose: () => void;
   onSelectIndex: (index: number) => void;
   onDraftCompleted?: (
@@ -97,28 +98,12 @@ export function PlayableLetterDesk({
   );
 
   // Pacific Time schedule generators
-  const getPacificScheduleIso = (hour: number, minute: number = 0) => {
-    const now = new Date();
-    const laDateStr = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-    const [year, month, day] = laDateStr.split("-").map(Number);
-    const tomorrowUtc = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
-    const tomorrowStr = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(tomorrowUtc);
-    const hh = String(hour).padStart(2, "0");
-    const mm = String(minute).padStart(2, "0");
-    return `${tomorrowStr}T${hh}:${mm}`;
-  };
+  // the next Pacific 10 AM / 2 PM: after midnight, "10:00 AM" is this morning
+  const getPacificScheduleIso = (hour: number, minute: number = 0) => nextPacificSlot(hour, minute).value;
 
   const [scheduleDateTime, setScheduleDateTime] = useState(() => getPacificScheduleIso(10, 0));
+  /** set once the server has accepted a schedule from this desk: the green confirmation names the exact time */
+  const [scheduledLabel, setScheduledLabel] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
   const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
@@ -159,6 +144,7 @@ export function PlayableLetterDesk({
     setHandoffReveal(null);
     setSelectedScheduleSlot("morning");
     setScheduleDateTime(getPacificScheduleIso(10, 0));
+    setScheduledLabel(null);
   }, [target.customerId, target.preparedMessage, target.suggestedMessage, tenantId]);
 
   // Dynamic dialogue & gesture calculation
@@ -171,10 +157,9 @@ export function PlayableLetterDesk({
   const preferredApproach = villagerMemory?.preferredApproach ?? null;
   const isFirstVisit = (neighborhoodMemory?.visitCount ?? encounterCount) <= 1;
   const isReturnVisitTomorrowOrLater = neighborhoodMemory?.isReturnVisitTomorrowOrLater ?? false;
+  // An unfinished note is this customer's; another neighbour's desk does not talk about it.
   const unfinishedDraftCustomer =
-    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId
-      ? target.displayName
-      : neighborhoodMemory?.unfinishedActivity?.customerName ?? null;
+    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId ? target.displayName : null;
   const customerReplied =
     target.reply?.status !== "unavailable" && (target.reply as any)?.direction === "inbound";
   const paidReorderVerified = target.paidOrder?.status === "verified";
@@ -289,10 +274,13 @@ export function PlayableLetterDesk({
     );
   };
 
-  // Schedule action
-  const handleCommitSchedule = () => {
+  // Schedule action: a time card (or the custom time's button) schedules for that exact Pacific time
+  const handleCommitSchedule = async (when: string = scheduleDateTime) => {
     if (!message.trim() || isSending || !target.hasConsent) return;
-    onScheduleSend(target, message.trim(), scheduleDateTime, recoveryKey);
+    setScheduleDateTime(when);
+    const accepted = await onScheduleSend(target, message.trim(), when, recoveryKey);
+    if (accepted === false) return;
+    setScheduledLabel(describePacificWallTime(when));
     onDraftCompleted?.(
       target.customerId,
       target.displayName,
@@ -433,6 +421,15 @@ export function PlayableLetterDesk({
   const isConsentBlocked = state === "consent_blocked" || commState === "consent_blocked" || !target.hasConsent;
   const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
   const canSend = !isConsentBlocked && message.trim().length > 0 && !isSending && !isActionCommitted;
+  // the time this letter is scheduled for: just now from this desk, or a saved schedule that is still ahead
+  // (a "send now" hand-off also records a time, which is now; that is not a schedule)
+  const savedFor = target.scheduledDraft?.scheduledFor ?? null;
+  const savedIsAhead = (() => {
+    if (!savedFor) return false;
+    const at = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(savedFor) ? savedFor : `${savedFor}:00-07:00`);
+    return Number.isFinite(at) && at - Date.now() > 2 * 60_000;
+  })();
+  const scheduledWhen = scheduledLabel ?? (savedFor && savedIsAhead ? describePacificWallTime(savedFor) : null);
 
   return (
     <aside
@@ -664,46 +661,37 @@ export function PlayableLetterDesk({
         </div>
       </section>
 
-      {/* Physical Dispatch & Scheduling Shelf */}
+      {/* Physical Dispatch & Scheduling Shelf: each time card schedules the letter for that exact time */}
       <section className={styles.dispatchShelfSection}>
         <div className={styles.sectionHeader}>
           <span>⏰</span>
-          <span>Dispatch Timing & Shelf</span>
+          <span>Schedule it — tap a time</span>
         </div>
         <div className={styles.dispatchCards}>
-          {/* Dawn Dispatch */}
-          <button
-            type="button"
-            className={`${styles.dispatchCard} ${
-              selectedScheduleSlot === "morning" ? styles.dispatchCardActive : ""
-            }`}
-            onClick={() => {
-              setSelectedScheduleSlot("morning");
-              setScheduleDateTime(getPacificScheduleIso(10, 0));
-            }}
-            disabled={isActionCommitted}
-            data-testid="schedule-slot-morning"
-          >
-            <div className={styles.dispatchCardTime}>🌅 Tomorrow 10:00 AM</div>
-            <div className={styles.dispatchCardLabel}>Dawn Pacific Carrier</div>
-          </button>
-
-          {/* Midday Dispatch */}
-          <button
-            type="button"
-            className={`${styles.dispatchCard} ${
-              selectedScheduleSlot === "afternoon" ? styles.dispatchCardActive : ""
-            }`}
-            onClick={() => {
-              setSelectedScheduleSlot("afternoon");
-              setScheduleDateTime(getPacificScheduleIso(14, 0));
-            }}
-            disabled={isActionCommitted}
-            data-testid="schedule-slot-afternoon"
-          >
-            <div className={styles.dispatchCardTime}>☀️ Tomorrow 2:00 PM</div>
-            <div className={styles.dispatchCardLabel}>Afternoon Carrier</div>
-          </button>
+          {([
+            { slot: "morning" as const, icon: "🌅", time: nextPacificSlot(10, 0) },
+            { slot: "afternoon" as const, icon: "☀️", time: nextPacificSlot(14, 0) },
+          ]).map(({ slot, icon, time }) => (
+            <button
+              key={slot}
+              type="button"
+              className={`${styles.dispatchCard} ${styles.dispatchCardCta} ${
+                selectedScheduleSlot === slot ? styles.dispatchCardActive : ""
+              }`}
+              onClick={() => {
+                setSelectedScheduleSlot(slot);
+                void handleCommitSchedule(time.value);
+              }}
+              disabled={!canSend}
+              aria-label={`Schedule for ${time.label}`}
+              data-testid={`schedule-slot-${slot}`}
+            >
+              <div className={styles.dispatchCardTime}>
+                {icon} {time.dayWord} {time.label.split(" · ")[1]}
+              </div>
+              <div className={styles.dispatchCardLabel}>{time.label.split(" · ")[0]} · tap to schedule</div>
+            </button>
+          ))}
 
           {/* Custom Window */}
           <button
@@ -729,6 +717,15 @@ export function PlayableLetterDesk({
               onChange={(e) => setScheduleDateTime(e.target.value)}
               data-testid="custom-datetime-input"
             />
+            <button
+              type="button"
+              className={styles.scheduleCommitButton}
+              onClick={() => void handleCommitSchedule(scheduleDateTime)}
+              disabled={!canSend || !scheduleDateTime}
+              data-testid="custom-schedule-button"
+            >
+              ✓ Schedule for {describePacificWallTime(scheduleDateTime)}
+            </button>
           </div>
         )}
       </section>
@@ -752,17 +749,27 @@ export function PlayableLetterDesk({
         </div>
       ) : null}
 
-      {isScheduled && (
-        <div className={`${styles.stateBanner} ${styles.stateBannerScheduled}`} data-testid="banner-scheduled">
-          <span>⏰</span>
+      {scheduledWhen && (isScheduled || isAwaitingSender) && (
+        <div className={`${styles.stateBanner} ${styles.stateBannerConfirmed}`} data-testid="banner-scheduled" role="status">
+          <span className={styles.confirmedCheck}>✓</span>
           <div>
-            <strong>Scheduled — not sent</strong>
-            <div>Waiting for Pacific window {new Date(scheduleDateTime).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. A scheduled letter is not a sent message.</div>
+            <strong>Scheduled for {scheduledWhen}</strong>
+            <div>Scheduled — not sent. At that time it will be waiting for you to send from your own phone.</div>
           </div>
         </div>
       )}
 
-      {isAwaitingSender && (
+      {isScheduled && !scheduledWhen && (
+        <div className={`${styles.stateBanner} ${styles.stateBannerScheduled}`} data-testid="banner-scheduled">
+          <span>⏰</span>
+          <div>
+            <strong>Scheduled — not sent</strong>
+            <div>A scheduled letter is not a sent message.</div>
+          </div>
+        </div>
+      )}
+
+      {isAwaitingSender && !scheduledWhen && (
         <div className={`${styles.stateBanner} ${styles.stateBannerAwaiting}`} data-testid="banner-awaiting-sender">
           <span>📱</span>
           <div>
@@ -931,29 +938,6 @@ export function PlayableLetterDesk({
         <button
           type="button"
           className={styles.scheduleCommitButton}
-          onClick={() => {
-            setSelectedScheduleSlot("morning");
-            setScheduleDateTime(getPacificScheduleIso(10, 0));
-          }}
-          disabled={isActionCommitted || isSending}
-          data-testid="schedule-button"
-        >
-          <span>⏰</span> SCHEDULE
-        </button>
-
-        <button
-          type="button"
-          className={styles.scheduleCommitButton}
-          onClick={handleCommitSchedule}
-          disabled={!canSend}
-          data-testid="commit-schedule-button"
-        >
-          <span>✓</span> COMMIT
-        </button>
-
-        <button
-          type="button"
-          className={styles.scheduleCommitButton}
           onClick={() => void handleOpenSms()}
           disabled={!textApproved || !target.phone || !target.hasConsent || isSending}
           data-testid="open-in-sms-button"
@@ -963,7 +947,7 @@ export function PlayableLetterDesk({
 
         <button
           type="button"
-          className={styles.sendNowButton}
+          className={styles.sendNowSecondary}
           onClick={handleSendNow}
           disabled={!canSend}
           data-testid="send-now-button"
@@ -974,7 +958,7 @@ export function PlayableLetterDesk({
             "✓ COMMITTED"
           ) : (
             <>
-              <span>✈</span> SEND NOW
+              <span>✈</span> Send now instead
             </>
           )}
         </button>

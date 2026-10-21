@@ -10694,4 +10694,28 @@ export const lanternNeighborhoodMemories = mysqlTable(
 export type LanternNeighborhoodMemoryRow = typeof lanternNeighborhoodMemories.$inferSelect;
 export type InsertLanternNeighborhoodMemory = typeof lanternNeighborhoodMemories.$inferInsert;
 
+/**
+ * Silver Lake reunion quests: append-only fiction progress and the operator's explicit pass on a customer.
+ * Never an outreach state: a row here never means a message was sent, scheduled or handed off.
+ * See docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md.
+ */
+export const silverLakeReunionEvents = mysqlTable(
+  "silver_lake_reunion_events",
+  {
+    id: varchar("id", { length: 64 }).notNull().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    territoryId: varchar("territory_id", { length: 64 }).notNull(),
+    customerId: varchar("customer_id", { length: 191 }).notNull(),
+    operatorId: varchar("operator_id", { length: 191 }).notNull(),
+    templateId: varchar("template_id", { length: 64 }).notNull(),
+    eventKind: varchar("event_kind", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeIdx: index("idx_slre_scope").on(table.tenantId, table.territoryId, table.createdAt),
+  })
+);
+
+export type SilverLakeReunionEventRow = typeof silverLakeReunionEvents.$inferSelect;
+
 

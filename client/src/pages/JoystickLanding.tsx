@@ -551,9 +551,6 @@ export default function JoystickLanding() {
   const [state, dispatch] = useReducer(personaReducer, initialPersonaState);
   const [isHoveringHero, setIsHoveringHero] = useState(false);
   const [timerResetKey, setTimerResetKey] = useState(0);
-  const swapTimeoutRef = useRef<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   useEffect(() => {
     captureProductEvent("landing_page_visited", {
@@ -584,53 +581,27 @@ export default function JoystickLanding() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Persona selection never loses its fade-completion timer when rotation pauses.
+  useEffect(() => {
+    if (!state.fading) return;
+    const timeout = window.setTimeout(() => {
+      dispatch({ type: "COMPLETE_SWAP" });
+    }, FADE_DURATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [state.fading, state.pendingIndex]);
+
   useEffect(() => {
     if (reducedMotion || isHoveringHero) return;
-
     const timer = window.setInterval(() => {
       dispatch({ type: "TICK_FADE" });
-      swapTimeoutRef.current = window.setTimeout(() => {
-        dispatch({ type: "COMPLETE_SWAP" });
-      }, FADE_DURATION_MS);
     }, ROTATION_PERIOD_MS);
-
-    return () => {
-      window.clearInterval(timer);
-      if (swapTimeoutRef.current) {
-        window.clearTimeout(swapTimeoutRef.current);
-      }
-    };
+    return () => window.clearInterval(timer);
   }, [reducedMotion, isHoveringHero, state.index, timerResetKey]);
 
   const handleDotClick = (index: number) => {
-    if (index === state.index) return;
-    if (swapTimeoutRef.current) {
-      window.clearTimeout(swapTimeoutRef.current);
-    }
+    if (index === state.index && !state.fading) return;
     dispatch({ type: "START_FADE", nextIndex: index });
-    swapTimeoutRef.current = window.setTimeout(() => {
-      dispatch({ type: "COMPLETE_SWAP" });
-    }, FADE_DURATION_MS);
     setTimerResetKey((prev) => prev + 1);
-  };
-
-  const handlePlayCall = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (isPlayingAudio) {
-      audio.pause();
-      setIsPlayingAudio(false);
-    } else {
-      audio.src = `/joystick/claire/${currentPersona.key}.mp3`;
-      audio
-        .play()
-        .then(() => {
-          setIsPlayingAudio(true);
-        })
-        .catch(() => {
-          setIsPlayingAudio(false);
-        });
-    }
   };
 
   const currentPersona = PERSONAS[state.index];
@@ -645,12 +616,6 @@ export default function JoystickLanding() {
       data-testid="joystick-marketing"
       aria-label="Joystick — Knows your business, then makes your next move a game."
     >
-      <audio
-        ref={audioRef}
-        onEnded={() => setIsPlayingAudio(false)}
-        onError={() => setIsPlayingAudio(false)}
-        style={{ display: "none" }}
-      />
       <div className="jl-container">
         {/* 1. NAV (88px tall, flex, space-between) */}
         <nav className="jl-nav" aria-label="Main navigation">
@@ -903,22 +868,13 @@ export default function JoystickLanding() {
                 className="jl-call-card"
                 style={{ opacity: fadeOpacity }}
               >
-                <button
-                  type="button"
+                <div
                   className="jl-call-play-btn"
-                  aria-label="Play Claire's call"
+                  aria-hidden="true"
                   style={{ background: currentPersona.accent }}
-                  onClick={handlePlayCall}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    aria-hidden="true"
-                  >
-                    <path d="M4 2.5v11l9-5.5z" fill="#111" />
-                  </svg>
-                </button>
+                  <span style={{ fontFamily: "Georgia, serif", fontSize: 28, lineHeight: 1 }}>&ldquo;</span>
+                </div>
                 <div className="jl-call-text">
                   <div className="jl-call-header">
                     Claire{" "}

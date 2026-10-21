@@ -55,7 +55,7 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
   },
 ];
 
-export type Resident = { key: string; name: string; address: string; unit: string | null };
+export type Resident = { key: string; name: string; address: string; unit: string | null; /** quiet 45+ days: the room is lit, but dimly */ quiet?: boolean };
 /** where a unit string lands: floor 1..floors, slot 1..unitsPerFloor (null when the floor is known but the door isn't) */
 export type UnitSpot = { floor: number; slot: number | null };
 

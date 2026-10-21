@@ -333,3 +333,19 @@ describe("persona rotation reducer & flip state", () => {
     expect(state.index).toBe(1);
   });
 });
+
+// Regression checks for production-only failures identified in PR #688 review.
+describe("landing release safety", () => {
+  it("does not advertise playable call audio until the recordings exist", () => {
+    expect(landingSource).not.toContain("/joystick/claire/");
+    expect(landingSource).not.toContain('aria-label="Play Claire\'s call"');
+  });
+  it("completes persona swaps independently of rotation interval cleanup", () => {
+    expect(landingSource).toContain("}, [state.fading, state.pendingIndex]);");
+    expect(landingSource).not.toContain("swapTimeoutRef");
+  });
+  it("keeps the tablet portrait and companion in the same viewport flow", () => {
+    expect(cssSource).toContain(".jl-hero-row {\n    flex-direction: column;");
+    expect(cssSource).toContain("left: min(400px, calc(100% - 220px));");
+  });
+});

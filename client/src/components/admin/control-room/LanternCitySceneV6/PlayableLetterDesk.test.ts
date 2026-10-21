@@ -43,7 +43,8 @@ describe("PlayableLetterDesk and CozyNeighborhoodEncounter integration", () => {
     expect(desk).toContain("parchmentLetter");
     expect(desk).toContain("dispatchShelfSection");
     expect(desk).toContain("talk-to-text-button");
-    expect(desk).toContain("commit-schedule-button");
+    expect(desk).toContain("data-testid={`schedule-slot-${slot}`}");
+    expect(desk).toContain("custom-schedule-button");
     expect(desk).toContain("open-in-sms-button");
     expect(desk).toContain("send-now-button");
     expect(desk).toContain("getVillagerPersonality");

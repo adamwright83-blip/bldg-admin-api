@@ -1,3 +1,8 @@
+/**
+ * ARCHIVED (2026-10-19). The painted 2D Silver Lake encounter is no longer mounted anywhere: every Silver Lake entry
+ * opens the walkable 3D courtyard (pages/goldline/silverLake3d). Kept for reference only. Its business wiring lives on,
+ * unchanged, in pages/goldline/silverLake3d/useSilverLakeOutreach.ts. Do not re-mount this component.
+ */
 import { useEffect, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {

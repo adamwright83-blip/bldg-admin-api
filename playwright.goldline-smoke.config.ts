@@ -21,6 +21,9 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL,
+    // The business runs on Pacific time: Day Line, Home and the proof seed all use America/Los_Angeles dates.
+    // A UTC browser on CI disagreed with them every evening after 5pm Pacific.
+    timezoneId: "America/Los_Angeles",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

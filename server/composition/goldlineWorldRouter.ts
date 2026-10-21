@@ -46,6 +46,7 @@ import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationCons
 import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
+import { silverLakeOperatorId } from "../experience/lanternCity/silverLakeScope";
 import {
   PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -69,15 +70,48 @@ export const goldlineWorldRouter = router({
         })
         .optional()
     )
-    .query(({ ctx, input }) =>
+    .query(async ({ ctx, input }) =>
       loadCozyRecoverySurfaces({
         tenantId: ctx.tenantId,
-        canonicalOperatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
+        operatorId: ctx.user.openId,
         territoryId: input?.territoryId,
         requestedCustomerId: input?.requestedCustomerId,
         limit: input?.limit,
       }).then(surfaces => surfaces.mission)
     ),
+  /** Reunion quests: fiction progress and explicit passes for the selected business. Never an outreach state. */
+  reunionQuestEvents: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake") }).optional())
+    .query(async ({ ctx, input }) => {
+      const { listReunionEvents } = await import("../experience/lanternCity/reunionQuestEvents");
+      return { events: await listReunionEvents({ tenantId: ctx.tenantId, territoryId: input?.territoryId ?? "silver-lake" }) };
+    }),
+  recordReunionQuestEvent: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        customerId: z.string().min(1).max(191),
+        templateId: z.string().min(3).max(64),
+        kind: z.enum(["item_found", "reunited", "passed"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordReunionEvent } = await import("../experience/lanternCity/reunionQuestEvents");
+      return recordReunionEvent({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        operatorId: ctx.user.openId,
+        customerId: input.customerId,
+        templateId: input.templateId,
+        kind: input.kind,
+      });
+    }),
+  /** Lantern City's Beverly Hills level: the selected business's real commercial prospects there (read-only). */
+  beverlyHillsProspects: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const { loadBeverlyHillsProspects } = await import("../experience/lanternCity/beverlyHillsProspects");
+    return loadBeverlyHillsProspects(ctx.tenantId);
+  }),
   getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
     .input(
       z
@@ -197,10 +231,11 @@ export const goldlineWorldRouter = router({
         draftBody: input.draftBody,
       });
     }),
-  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) =>
     loadCozyRecoverySurfaces({
       tenantId: ctx.tenantId,
-      canonicalOperatorId: ctx.user.openId,
+      canonicalOperatorId: await silverLakeOperatorId(ctx),
+      operatorId: ctx.user.openId,
     }).then(surfaces => surfaces.dayLineCard)
   ),
   sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
@@ -223,10 +258,11 @@ export const goldlineWorldRouter = router({
         idempotencyKey: z.string().optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
+    .mutation(async ({ ctx, input }) =>
       sendCozyOutreachNow({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         expectedPhone: input.expectedPhone,
@@ -256,6 +292,7 @@ export const goldlineWorldRouter = router({
       return await commitPersonalOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
@@ -368,6 +405,7 @@ export const goldlineWorldRouter = router({
       return await approveDurablePersonalOutreach({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         messageId: input.messageId,
         expectedRevisionCount: input.expectedRevisionCount,
         confirmation: input.confirmation,

@@ -47,7 +47,10 @@ export function outreachEvidenceFromRow(row: ScheduledOutreachMessageRow): CozyO
 
 export async function loadCozyRecoverySurfaces(input: {
   tenantId: string;
+  /** The operator's canonical identity: their objective, mission and presentations are filed under it. */
   canonicalOperatorId: string;
+  /** The signed-in operator as outreach drafts, replies and hand-offs name them. Defaults to `canonicalOperatorId`. */
+  operatorId?: string;
   territoryId?: string;
   requestedCustomerId?: string;
   limit?: number;
@@ -68,16 +71,16 @@ export async function loadCozyRecoverySurfaces(input: {
     }),
     listScheduledOutreachMessages({
       tenantId: input.tenantId,
-      operatorId: input.canonicalOperatorId,
+      operatorId: input.operatorId ?? input.canonicalOperatorId,
       limit: 100,
     }).catch(() => []),
     listPersonalOutreachReplies({
       tenantId: input.tenantId,
-      operatorId: input.canonicalOperatorId,
+      operatorId: input.operatorId ?? input.canonicalOperatorId,
     }).catch(() => []),
     smsComposeHandoffEventsForOperator({
       tenantId: input.tenantId,
-      operatorId: input.canonicalOperatorId,
+      operatorId: input.operatorId ?? input.canonicalOperatorId,
     }).catch(() => []),
     readObjectiveArea({
       tenantId: input.tenantId,
@@ -98,7 +101,7 @@ export async function loadCozyRecoverySurfaces(input: {
     : null;
   return projectCozyRecoverySurfaces({
     tenantId: input.tenantId,
-    operatorId: input.canonicalOperatorId,
+    operatorId: input.operatorId ?? input.canonicalOperatorId,
     mission,
     messages: messages.map(outreachEvidenceFromRow),
     replies,

@@ -3,6 +3,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { OutlineEffect } from "three/examples/jsm/effects/OutlineEffect.js";
 import { getAudioManager } from "@/game/audio/AudioManager";
 import { noOutline, stylizeObject } from "./stylize";
+import type { QuestItemKind, QuestSpot } from "./reunionQuests";
 
 /**
  * Silver Lake in 3D: a cozy floating courtyard you walk around as the adventurer.
@@ -24,22 +25,36 @@ export type VillagerView = {
   cropBottom?: number; // fraction of the image height to hide (some 2D sprites carry a painted name)
   ambient: boolean; // a fictional neighbour, not a customer
   done: boolean; // a verified or committed outcome already exists
+  offset?: number; // metres sideways from the spot, so a reunited customer can stand beside a quest giver
 };
+
+/** A reunion-quest prop waiting in the courtyard. The runtime only shows it and reports a pick; the quest is React's. */
+/** `station`: stays in the world when used (Pip the porcupine, the ink well) and wobbles instead of vanishing */
+export type QuestItemView = { key: string; kind: QuestItemKind; spotId: string; station?: boolean };
 
 export type RuntimeCallbacks = {
   onReady?: () => void;
   onProgress?: (fraction: number) => void;
   onNear?: (villagerKey: string | null) => void;
   onTalk?: (villagerKey: string) => void;
+  onNearItem?: (item: { key: string; hop: boolean } | null) => void;
+  onPickItem?: (itemKey: string) => void;
   onError?: (message: string) => void;
 };
 
 export type SilverLakeHandle = {
   setVillagers(list: VillagerView[]): void;
   setFeature(choice: string | null): void;
+  setQuestItems(items: QuestItemView[]): void;
+  questSpots(): QuestSpot[];
+  pickNearestItem(): void;
   setPaused(paused: boolean): void;
   talkNearest(): void;
   focusVillager(key: string): void;
+  /** her makeshift glove: a knitted tea cosy on her right hand */
+  setHeroGlove(on: boolean): void;
+  /** Holds a living overhead survey of the actual courtyard during Claire's discovery. */
+  setDiscoverySurvey(active: boolean): void;
   jump(): void;
   dispose(): void;
 };
@@ -52,6 +67,7 @@ type CourtyardMeta = {
   colliders: { circles: { x: number; y: number; r: number }[]; polys: [number, number][][]; segments?: [number, number, number, number][] };
   feature: { x: number; y: number };
   chimneys: [number, number, number][];
+  questSpots?: QuestSpot[];
 };
 
 const HERO_RADIUS = 0.45;
@@ -60,6 +76,8 @@ const RUN_SPEED = 7.4;
 const GRAVITY = 32;
 const JUMP_V = 10.5;
 const TALK_RANGE = 2.9;
+const PICK_RANGE = 1.6;
+const HOP_PICK_HEIGHT = 0.55; // a "hop" item is only reachable mid-jump
 
 const b2t = (x: number, y: number, z = 0) => new THREE.Vector3(x, z, -y);
 const headingFromBlender = (a: number) => Math.atan2(Math.cos(a), -Math.sin(a));
@@ -87,6 +105,22 @@ export async function createSilverLake(
   renderer.domElement.className = "sl3d-canvas";
   renderer.domElement.setAttribute("data-testid", "silver-lake-3d-canvas");
   container.appendChild(renderer.domElement);
+  // Software rendering (no GPU: some Android phones, locked-down PCs, CI) gets a lighter frame so the page,
+  // and the Letter Desk on top of it, stays responsive.
+  const softwareGl = (() => {
+    try {
+      const gl = renderer.getContext();
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      return /swiftshader|llvmpipe|software|basic render/i.test(name);
+    } catch {
+      return false;
+    }
+  })();
+  if (softwareGl) {
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = false;
+  }
   const outline = new OutlineEffect(renderer, { defaultThickness: 0.0042, defaultColor: [0.16, 0.1, 0.07], defaultAlpha: 1, defaultKeepAlive: true });
   disposers.push(() => {
     renderer.setAnimationLoop(null);
@@ -383,6 +417,11 @@ export async function createSilverLake(
     if (!spot) return null;
     const group = new THREE.Group();
     const base = b2t(spot.x, spot.y);
+    if (v.offset) {
+      const f = headingFromBlender(spot.face);
+      base.x += Math.cos(f) * v.offset;
+      base.z -= Math.sin(f) * v.offset;
+    }
     group.position.copy(base);
     const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, toneMapped: false });
     noOutline(mat);
@@ -458,7 +497,15 @@ export async function createSilverLake(
     if (!choice) return;
     const wood = new THREE.MeshStandardMaterial({ name: "bench", color: 0xa46a3e, roughness: 0.8 });
     const grp = new THREE.Group();
-    if (choice === "tea_table") {
+    if (choice === "lantern_post") {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.4, 10), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      post.position.y = 1.2;
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.5, 12), new THREE.MeshStandardMaterial({ name: "lamp_glow", color: 0xffcf73, emissive: 0xffcf73, emissiveIntensity: 2.5 }));
+      lamp.position.y = 2.6;
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.35, 12), new THREE.MeshStandardMaterial({ name: "timber", color: 0x3d5a45 }));
+      hat.position.y = 3.0;
+      grp.add(post, lamp, hat);
+    } else if (choice === "tea_table") {
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.12, 24), wood);
       top.position.y = 0.9;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 0.9, 10), wood);
@@ -486,6 +533,208 @@ export async function createSilverLake(
     featureObj = grp;
     circles.push({ x: grp.position.x, z: grp.position.z, r: choice === "tea_table" ? 0.85 : 1.1 });
   }
+
+  // ---------------------------------------------------------------- reunion-quest props (fiction only)
+  type QuestItem = { view: QuestItemView; group: THREE.Group; prop: THREE.Group; ring: THREE.Mesh; base: THREE.Vector3; hop: boolean; phase: number; shakeUntil: number };
+  const questItems = new Map<string, QuestItem>();
+  const spotsById = new Map((meta.questSpots ?? []).map(sp => [sp.id, sp]));
+  const toon = (color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
+  /** a knitted tea cosy: a striped dome with a pom-pom. On the bench it keeps nothing warm; on a hand it's a glove. */
+  function teaCosyMesh(): THREE.Group {
+    const g = new THREE.Group();
+    const stripes = [0xe46f6a, 0xf6e7c8, 0x7fb8a4, 0xf6e7c8, 0xe46f6a];
+    for (let i = 0; i < stripes.length; i++) {
+      const r0 = 0.24 - i * 0.025;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(r0 - 0.03, r0, 0.07, 18), toon(stripes[i]));
+      band.position.y = i * 0.065;
+      g.add(band);
+    }
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xe46f6a));
+    top.position.y = stripes.length * 0.065 - 0.03;
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), toon(0xfff4e0));
+    pom.position.y = top.position.y + 0.13;
+    g.add(top, pom);
+    return g;
+  }
+  function buildProp(kind: QuestItemKind): THREE.Group {
+    const grp = new THREE.Group();
+    if (kind === "garden_hose") {
+      // a length of old garden hose, loosely curled, with a brass nozzle: Cleo's "flute"
+      const path = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-0.42, 0.02, 0.1),
+        new THREE.Vector3(-0.2, 0.06, -0.14),
+        new THREE.Vector3(0.08, 0.02, -0.12),
+        new THREE.Vector3(0.22, 0.05, 0.1),
+        new THREE.Vector3(0.02, 0.1, 0.24),
+        new THREE.Vector3(-0.14, 0.16, 0.06),
+        new THREE.Vector3(0.12, 0.2, -0.04),
+        new THREE.Vector3(0.42, 0.18, 0.02),
+      ]);
+      const hose = new THREE.Mesh(new THREE.TubeGeometry(path, 48, 0.045, 10, false), toon(0x5aa04a));
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.055, 0.14, 10), toon(0xc9a24a, { metalness: 0.4 }));
+      nozzle.position.set(0.48, 0.18, 0.02);
+      nozzle.rotation.z = Math.PI / 2;
+      grp.add(hose, nozzle);
+    } else if (kind === "kite") {
+      const sail = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.04), toon(0xff8a73));
+      sail.rotation.z = Math.PI / 4;
+      sail.scale.set(0.8, 1.2, 1);
+      const spar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.05), toon(0x7a4b2a));
+      grp.add(sail, spar);
+      for (let i = 0; i < 4; i++) {
+        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.03), toon(i % 2 ? 0xffd25e : 0x8fc6ef));
+        bow.position.set(Math.sin(i) * 0.06, -0.5 - i * 0.14, 0);
+        grp.add(bow);
+      }
+    } else if (kind === "watering_can") {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.36, 16), toon(0x5fa8a0, { metalness: 0.2 }));
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 0.42, 8), toon(0x5fa8a0));
+      spout.position.set(0.28, 0.08, 0);
+      spout.rotation.z = -Math.PI / 3.2;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 16, Math.PI), toon(0x4a8a83));
+      handle.position.set(-0.05, 0.18, 0);
+      grp.add(body, spout, handle);
+    } else if (kind === "rubber_duck") {
+      const yellow = toon(0xffd84a);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), yellow);
+      body.scale.set(1.25, 0.85, 1);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), yellow);
+      head.position.set(0.14, 0.2, 0);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 10), toon(0xff9a3c));
+      beak.rotation.z = -Math.PI / 2;
+      beak.position.set(0.3, 0.19, 0);
+      grp.add(body, head, beak);
+    } else if (kind === "scarf") {
+      const red = toon(0xd9534f);
+      const cream = toon(0xfbf6ec);
+      for (let i = 0; i < 6; i++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.05, 0.16), i % 2 ? cream : red);
+        band.position.set(-0.3 + i * 0.11, Math.sin(i * 0.9) * 0.05, 0);
+        band.rotation.z = Math.sin(i * 0.9) * 0.3;
+        grp.add(band);
+      }
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, 0.04), red);
+      tail.position.set(0.32, -0.16, 0);
+      grp.add(tail);
+    } else if (kind === "spectacles") {
+      const rim = toon(0x3b2a1e);
+      for (const x of [-0.12, 0.12]) {
+        const lens = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.018, 8, 20), rim);
+        lens.position.x = x;
+        const glass = new THREE.Mesh(new THREE.CircleGeometry(0.085, 20), toon(0xcfe7fa, { transparent: true, opacity: 0.6 }));
+        glass.position.x = x;
+        grp.add(lens, glass);
+      }
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.02, 0.02), rim);
+      grp.add(bridge);
+      for (const x of [-0.21, 0.21]) {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.24), rim);
+        arm.position.set(x, 0, -0.12);
+        grp.add(arm);
+      }
+    } else if (kind === "teacup") {
+      const china = toon(0xfbf6ec);
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.16, 18), china);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.135, 0.03, 18), toon(0x8fc6ef));
+      band.position.y = 0.05;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), china);
+      handle.position.set(0.15, 0.01, 0);
+      const saucer = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.025, 20), china);
+      saucer.position.y = -0.09;
+      grp.add(cup, band, handle, saucer);
+    } else if (kind === "tea_cosy") {
+      const cosy = teaCosyMesh();
+      cosy.scale.setScalar(0.5);
+      grp.add(cosy);
+    } else if (kind === "porcupine") {
+      // Pip, napping: a painted card like every other villager, standing in the pumpkins
+      const tex = new THREE.TextureLoader().load("/assets/goldline/silver-lake-3d/cards/porcupine.png");
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const card = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.05 }));
+      card.scale.set(0.82, 0.82, 1);
+      card.position.y = 0.22;
+      card.name = "card";
+      grp.add(card);
+    } else if (kind === "quill") {
+      // a porcupine quill: cream with a dark tip, long and a little curved
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 0.62, 8), toon(0xf3e6c8));
+      shaft.rotation.z = Math.PI / 2.6;
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.12, 8), toon(0x2e2219));
+      tip.position.set(0.3, -0.12, 0);
+      tip.rotation.z = Math.PI / 2.6 + Math.PI;
+      for (let i = 0; i < 4; i++) {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.03, 8), toon(0x3b2a1e));
+        band.position.set(-0.18 + i * 0.09, 0.08 - i * 0.035, 0);
+        band.rotation.z = Math.PI / 2.6;
+        grp.add(band);
+      }
+      grp.add(shaft, tip);
+    } else if (kind === "inkwell") {
+      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.18, 14), toon(0x2a3550, { transparent: true, opacity: 0.85 }));
+      const ink = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.02, 14), new THREE.MeshBasicMaterial({ color: 0x0b0f2a }));
+      ink.position.y = 0.08;
+      const neck = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 8, 16), toon(0xc9a24a, { metalness: 0.5 }));
+      neck.rotation.x = Math.PI / 2;
+      neck.position.y = 0.1;
+      const blot = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), new THREE.MeshBasicMaterial({ color: 0x1b2340, transparent: true, opacity: 0.5 }));
+      blot.rotation.x = -Math.PI / 2;
+      blot.position.y = -0.09;
+      grp.add(glass, ink, neck, blot);
+    } else {
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.32, 16), toon(0xdcefee, { transparent: true, opacity: 0.85 }));
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.07, 16), toon(0xa46a3e));
+      lid.position.y = 0.19;
+      grp.add(jar, lid);
+      for (let i = 0; i < 3; i++) {
+        const acorn = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), toon(0x9a6232));
+        acorn.position.set(Math.cos(i * 2.1) * 0.08, -0.04 + i * 0.07, Math.sin(i * 2.1) * 0.08);
+        grp.add(acorn);
+      }
+    }
+    stylizeObject(grp);
+    return grp;
+  }
+  const glintMat = new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
+  noOutline(glintMat);
+  const glintGeo = new THREE.OctahedronGeometry(0.09, 0);
+  function addQuestItem(view: QuestItemView) {
+    const spot = spotsById.get(view.spotId);
+    if (!spot) return;
+    const group = new THREE.Group();
+    const base = b2t(spot.x, spot.y, spot.z);
+    group.position.copy(base);
+    const prop = buildProp(view.kind);
+    prop.scale.setScalar(1.8);
+    prop.position.y = 0.25;
+    prop.traverse(o => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = true) : null));
+    const glint = new THREE.Mesh(glintGeo, glintMat);
+    glint.position.y = 1.25;
+    glint.name = "glint";
+    group.add(prop, glint);
+    scene.add(group);
+    // a soft ring on the ground marks the spot, also under a prop that is up a tree
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.35, depthWrite: false });
+    noOutline(ringMat);
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.scale.setScalar(0.7);
+    ring.position.copy(b2t(spot.x, spot.y, 0.07));
+    scene.add(ring);
+    questItems.set(view.key, { view, group, prop, ring, base, hop: spot.reach === "hop", phase: Math.random() * 6, shakeUntil: 0 });
+  }
+  function removeQuestItem(item: QuestItem) {
+    scene.remove(item.group, item.ring);
+    item.group.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.geometry !== glintGeo) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+    });
+    (item.ring.material as THREE.Material).dispose();
+  }
+  disposers.push(() => questItems.forEach(removeQuestItem));
+  let nearItem: QuestItem | null = null;
 
   // ---------------------------------------------------------------- input
   const keys = new Set<string>();
@@ -591,7 +840,8 @@ export async function createSilverLake(
   const camPos = new THREE.Vector3();
   const camLook = new THREE.Vector3();
   const intro = { t: 0, dur: reduceMotion ? 0 : 2.6 };
-  let focus: { target: THREE.Vector3; until: number } | null = null;
+  let focus: { target: THREE.Vector3; until: number; look?: THREE.Vector3 } | null = null;
+  let discoverySurvey = false;
   function blocked(x: number, z: number) {
     for (const poly of polys) {
       let inside = false;
@@ -647,7 +897,16 @@ export async function createSilverLake(
   const proj = new THREE.Vector3();
   let elapsed = 0;
 
+  let pausedAt = 0;
+  let skipFrame = false;
   function frame() {
+    // A conversation is open: the courtyard stays alive behind the desk (neighbours keep swaying), drawn at half rate
+    // once the camera has settled so the desk stays snappy. Never stop drawing outright: a resize clears the canvas,
+    // and nothing would repaint it (it read as an empty sky).
+    if (paused && pausedAt && performance.now() - pausedAt > 1600) {
+      skipFrame = !skipFrame;
+      if (skipFrame) return;
+    }
     const dt = Math.min(0.05, clock.getDelta());
     elapsed += dt;
     const now = performance.now();
@@ -734,13 +993,21 @@ export async function createSilverLake(
       camPos.x = damp(camPos.x, focus.target.x, 3, dt);
       camPos.y = damp(camPos.y, focus.target.y, 3, dt);
       camPos.z = damp(camPos.z, focus.target.z, 3, dt);
-      camLook.lerp(proj, 1 - Math.exp(-4 * dt));
+      camLook.lerp(focus.look ?? proj, 1 - Math.exp(-4 * dt));
     } else {
       focus = null;
       camPos.x = damp(camPos.x, tmp.x, 6, dt);
       camPos.y = damp(camPos.y, tmp.y, 4, dt);
       camPos.z = damp(camPos.z, tmp.z, 6, dt);
       camLook.lerp(proj, 1 - Math.exp(-10 * dt));
+    }
+    if (discoverySurvey) {
+      // The world remains live. This is the actual courtyard, not a cutscene plate.
+      // The small orbit keeps the village legible and avoids sudden camera motion.
+      const orbit = now * 0.000075;
+      const survey = tmp.set(Math.sin(orbit) * 12, 40, 34 + Math.cos(orbit) * 5);
+      camPos.lerp(survey, 1 - Math.exp(-2 * dt));
+      camLook.lerp(proj.set(0, 0, 0), 1 - Math.exp(-2.5 * dt));
     }
     camera.position.copy(camPos);
     camera.lookAt(camLook);
@@ -769,6 +1036,8 @@ export async function createSilverLake(
       v.card.rotation.y = yawToCam - v.group.rotation.y;
       const bob = reduceMotion ? 0 : Math.abs(Math.sin(elapsed * (near ? 6 : 2.2) + v.phase)) * (near ? 0.22 : 0.07);
       v.card.position.y = v.card.scale.y / 2 + bob;
+      // a slow, lulling side-to-side sway, each neighbour on its own beat
+      v.card.rotation.z = reduceMotion ? 0 : Math.sin(elapsed * 1.3 + v.phase * 1.7) * 0.055;
       const sq = reduceMotion ? 1 : 1 + Math.sin(elapsed * 2.2 + v.phase) * 0.025;
       v.card.scale.x = Math.abs(v.card.scale.x) * 1;
       v.card.scale.y = (v.card.scale.y / (v.card.userData.sq ?? 1)) * sq;
@@ -786,9 +1055,45 @@ export async function createSilverLake(
     // reconsume proj for the camera (it was used as scratch)
     cameraGoal(tmp, proj);
 
+    // quest props: bob and glint; a ground prop is picked with E, a "hop" prop by jumping into it
+    let bestItem: QuestItem | null = null;
+    let bestItemD = PICK_RANGE;
+    questItems.forEach(it => {
+      const d = Math.hypot(it.base.x - pos.x, it.base.z - pos.z);
+      if (d < bestItemD) {
+        bestItemD = d;
+        bestItem = it;
+      }
+      if (it.view.station) {
+        // a station stands still; used, it wobbles (Pip shivering like a wet dog)
+        const shaking = performance.now() < it.shakeUntil;
+        it.prop.position.y = 0.25;
+        it.prop.position.x = shaking ? Math.sin(elapsed * 46) * 0.07 : 0;
+        it.prop.rotation.z = shaking ? Math.sin(elapsed * 38) * 0.12 : 0;
+        const card = it.prop.getObjectByName("card") as THREE.Sprite | undefined;
+        if (card) card.material.rotation = shaking ? Math.sin(elapsed * 40) * 0.18 : Math.sin(elapsed * 1.6 + it.phase) * 0.03;
+      } else {
+        it.prop.position.y = 0.4 + (reduceMotion ? 0 : Math.sin(elapsed * 2 + it.phase) * 0.08);
+        it.prop.rotation.y = reduceMotion ? 0 : elapsed * 0.8 + it.phase;
+      }
+      const glint = it.group.getObjectByName("glint");
+      if (glint) {
+        glint.rotation.y = elapsed * 3;
+        glint.scale.setScalar(0.8 + Math.abs(Math.sin(elapsed * 3.2 + it.phase)) * 0.6);
+      }
+      (it.ring.material as THREE.MeshBasicMaterial).opacity = it === nearItem ? 0.85 : 0.3 + Math.sin(elapsed * 2.4 + it.phase) * 0.08;
+    });
+    const nextItem = intro.t >= intro.dur && !paused ? (bestItem as QuestItem | null) : null;
+    if (nextItem !== nearItem) {
+      nearItem = nextItem;
+      callbacks.onNearItem?.(nearItem ? { key: nearItem.view.key, hop: nearItem.hop } : null);
+    }
+    if (nearItem && nearItem.hop && !grounded && pos.y > HOP_PICK_HEIGHT) pickItem(nearItem);
+
     if (talkQueued) {
       talkQueued = false;
-      if (nearKey && !paused) talkTo(nearKey);
+      if (nearItem && !nearItem.hop && !paused) pickItem(nearItem);
+      else if (nearKey && !paused) talkTo(nearKey);
     }
 
     // ambience
@@ -818,7 +1123,36 @@ export async function createSilverLake(
       featureObj.scale.setScalar(Math.max(0.01, featureGrow) * k);
     }
 
-    outline.render(scene, camera);
+    if (softwareGl) renderer.render(scene, camera);
+    else outline.render(scene, camera);
+  }
+
+  function pickItem(it: QuestItem) {
+    if (!questItems.has(it.view.key)) return;
+    if (it.view.station) {
+      // used, not taken: it stays where it is and wobbles; the page decides what that did
+      it.shakeUntil = performance.now() + 900;
+      heading = Math.atan2(it.base.x - pos.x, it.base.z - pos.z);
+      if (grounded) {
+        speed = 0;
+        play("PickUp", 0.12, true);
+        gesture = { name: "PickUp", until: performance.now() + 900 };
+      }
+      audio.play("ui_tap");
+      callbacks.onPickItem?.(it.view.key);
+      return;
+    }
+    questItems.delete(it.view.key);
+    removeQuestItem(it);
+    nearItem = null;
+    callbacks.onNearItem?.(null);
+    if (grounded) {
+      speed = 0;
+      play("PickUp", 0.12, true);
+      gesture = { name: "PickUp", until: performance.now() + 1100 };
+    }
+    audio.play("scout_discovery");
+    callbacks.onPickItem?.(it.view.key);
   }
 
   function talkTo(key: string) {
@@ -836,11 +1170,67 @@ export async function createSilverLake(
     callbacks.onTalk?.(key);
   }
 
+  // her makeshift glove: the tea cosy, worn on the right hand
+  const glove = teaCosyMesh();
+  // pulled over the hand like a big knitted oven mitt, pom-pom at the fingertips
+  glove.scale.setScalar(1.9);
+  glove.rotation.x = Math.PI / 2;
+  glove.position.set(0, 0, 0);
+  glove.visible = false;
+  stylizeObject(glove);
+  // GLTFLoader strips dots from node names: the model's "handslot.r" arrives as "handslotr"
+  const handBone = ["handslotr", "handr", "handslot.r", "hand.r"].map(n => hero.getObjectByName(n)).find(Boolean);
+  (handBone ?? hero).add(glove);
+
   renderer.setAnimationLoop(frame);
   callbacks.onReady?.();
   (window as unknown as { __silverLake3d?: unknown }).__silverLake3d = {
     ready: true,
     state: () => ({ x: pos.x, z: pos.z, y: pos.y, heading, speed, anim: currentName, near: nearKey, villagers: villagers.size, intro: intro.t >= intro.dur, clips: heroGltf.animations.map(a => a.name) }),
+    items: () => [...questItems.keys()],
+    nearItem: () => nearItem?.view.key ?? null,
+    /** stands the hero beside a quest prop (under it, for one up a tree) */
+    teleportToItem: (key: string) => {
+      const it = questItems.get(key);
+      if (!it) return false;
+      pos.set(it.base.x + 0.6, 0, it.base.z + 0.6);
+      return true;
+    },
+    /** dev: fit the worn tea cosy to her hand */
+    gloveTune: (scale: number, x: number, y: number, z: number, rx: number, ry: number, rz: number) => {
+      glove.scale.setScalar(scale);
+      glove.position.set(x, y, z);
+      glove.rotation.set(rx, ry, rz);
+      glove.visible = true;
+      return true;
+    },
+    /** Blender coordinates, like courtyard.json */
+    teleportTo: (x: number, y: number) => {
+      pos.copy(b2t(x, y));
+      return true;
+    },
+    /**
+     * capture: stand her `dist` from a prop or villager at angle `from` (radians, around it), facing it, and hold a
+     * side-on two-shot of both for `ms`. Used to film the landing page's gameplay, never by the game itself.
+     */
+    twoShot: (key: string, opts: { from?: number; dist?: number; side?: number; camDist?: number; camHeight?: number; ms?: number } = {}) => {
+      const it = questItems.get(key);
+      const v = villagers.get(key);
+      const at = it?.base ?? v?.base;
+      if (!at) return false;
+      const from = opts.from ?? 0;
+      const dist = opts.dist ?? 1.3;
+      pos.set(at.x + Math.sin(from) * dist, 0, at.z + Math.cos(from) * dist);
+      heading = Math.atan2(at.x - pos.x, at.z - pos.z);
+      speed = 0;
+      const mid = new THREE.Vector3((at.x + pos.x) / 2, 0, (at.z + pos.z) / 2);
+      const sideDir = new THREE.Vector3(at.z - pos.z, 0, -(at.x - pos.x)).normalize().multiplyScalar(opts.side ?? 1);
+      const camAt = mid.clone().add(sideDir.multiplyScalar(opts.camDist ?? 4.2)).add(new THREE.Vector3(0, opts.camHeight ?? 1.9, 0));
+      focus = { target: camAt, look: mid.clone().add(new THREE.Vector3(0, 0.75, 0)), until: performance.now() + (opts.ms ?? 4000) };
+      camPos.copy(camAt);
+      camLook.copy(focus.look!);
+      return true;
+    },
     teleportNear: (key: string) => {
       const v = villagers.get(key);
       if (!v) return false;
@@ -862,7 +1252,7 @@ export async function createSilverLake(
       for (const view of list) {
         const existing = villagers.get(view.key);
         if (existing) {
-          const spriteChanged = existing.view.sprite !== view.sprite || existing.view.slot !== view.slot;
+          const spriteChanged = existing.view.sprite !== view.sprite || existing.view.slot !== view.slot || (existing.view.offset ?? 0) !== (view.offset ?? 0);
           if (spriteChanged) {
             removeVillager(existing);
             villagers.delete(view.key);
@@ -876,16 +1266,45 @@ export async function createSilverLake(
         if (made) villagers.set(view.key, made);
       }
     },
+    setHeroGlove(on) {
+      glove.visible = on;
+    },
+    setQuestItems(list) {
+      const keep = new Set(list.map(i => i.key));
+      questItems.forEach((it, k) => {
+        if (!keep.has(k)) {
+          removeQuestItem(it);
+          questItems.delete(k);
+          if (nearItem === it) {
+            nearItem = null;
+            callbacks.onNearItem?.(null);
+          }
+        }
+      });
+      for (const view of list) if (!questItems.has(view.key)) addQuestItem(view);
+    },
+    questSpots() {
+      return meta.questSpots ?? [];
+    },
+    pickNearestItem() {
+      if (nearItem && !nearItem.hop && !paused) pickItem(nearItem);
+    },
     setFeature(choice) {
       featureGrow = 0;
       buildFeature(choice);
     },
     setPaused(p) {
       paused = p;
+      pausedAt = p ? performance.now() : 0;
       if (p) keys.clear();
+      else clock.getDelta();
     },
     talkNearest() {
       if (nearKey) talkTo(nearKey);
+    },
+    setDiscoverySurvey(active) {
+      discoverySurvey = active;
+      if (!active) intro.t = intro.dur;
     },
     focusVillager(key) {
       const v = villagers.get(key);

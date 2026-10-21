@@ -2,8 +2,9 @@
 
 Status (2026-10-19): first playable slice SHIPPED at the Silver Lake link (`/growth/lantern-city?cozy=1&territory=silver-lake`).
 Code: `client/src/pages/goldline/silverLake3d/`; assets: `scripts/assets/silver-lake/` -> `client/public/assets/goldline/silver-lake-3d/`.
-The painted encounter is dormant, not deleted: `?walk=0`, `?scene=v6`, or localStorage `goldline.silverLake.legacy=1`.
-Once #654 / #656 merge, fold their memory service and desk changes into SilverLake3D.tsx (it currently mirrors main's wiring).
+Every Silver Lake entry (Home, the golden messenger from #654, territory rooms, deep links) opens the 3D courtyard.
+The painted 2D encounter is ARCHIVED and has no route. Its business wiring, including Phase 4 server memory (#656),
+lives in `client/src/pages/goldline/silverLake3d/useSilverLakeOutreach.ts`.
 
 ## Art direction (binding)
 

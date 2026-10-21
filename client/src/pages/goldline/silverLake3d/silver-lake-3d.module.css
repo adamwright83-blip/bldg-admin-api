@@ -148,6 +148,14 @@
   font-size: 16px;
 }
 
+.hudLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
 .hudRight {
   display: flex;
   gap: 10px;
@@ -283,6 +291,7 @@
 .bubbleWrap {
   position: absolute;
   inset: 0;
+  z-index: 100;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -332,14 +341,9 @@
 .deskWrap {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
+  z-index: 100;
+  pointer-events: none;
   background: linear-gradient(90deg, rgba(59, 42, 30, 0) 0%, rgba(59, 42, 30, 0.28) 60%);
-}
-
-.deskWrap > * {
-  position: relative !important;
 }
 
 .featureWrap {
@@ -477,5 +481,461 @@
   }
   .stage :global(.sl3d-label span) {
     font-size: 10px;
+  }
+}
+
+.failNote {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.modeSelector {
+  display: flex;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  overflow: hidden;
+  box-shadow: 0 4px 0 #5a3a24;
+}
+
+.modeSelector button {
+  padding: 8px 12px;
+  border: 0;
+  background: #fffaf0;
+  font: inherit;
+  font-weight: 800;
+  font-size: 12px;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.modeSelector button[aria-pressed="true"] {
+  background: #ffc74d;
+}
+
+.roster {
+  position: absolute;
+  left: 16px;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  max-height: calc(100% - 180px);
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.9);
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 4px 0 #5a3a24;
+}
+
+.rosterTitle {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a6448;
+}
+
+.rosterEmpty {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.focusChoice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.focusButton {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 2px solid #5a3a24;
+  background: #ffd36b;
+  box-shadow: 0 3px 0 #5a3a24;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.focusButton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.rosterItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 2px solid rgba(90, 58, 36, 0.35);
+  background: #fffaf0;
+  font: inherit;
+  text-align: left;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.rosterItem:hover,
+.rosterItemActive {
+  background: #ffe39a;
+  border-color: #5a3a24;
+}
+
+.rosterItem img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex: none;
+}
+
+.rosterItem span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rosterItem b {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rosterItem small {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6448;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.courtyardWidget {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.courtyardWidget > * {
+  pointer-events: auto;
+}
+
+.deskWrap > * {
+  pointer-events: auto;
+}
+
+/* the shared courtyard component positions its spot for the painted plate; pin it to a corner here */
+.courtyardWidget [data-testid="neighborhood-courtyard-spot"] {
+  left: auto !important;
+  top: auto !important;
+  right: 20px;
+  bottom: 120px;
+  transform: none !important;
+}
+
+@media (max-width: 640px) {
+  .roster {
+    top: auto;
+    left: 10px;
+    right: 10px;
+    bottom: 104px;
+    width: auto;
+    max-height: none;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+  }
+  .rosterTitle {
+    display: none;
+  }
+  .rosterItem {
+    flex: none;
+    max-width: 170px;
+  }
+  .courtyardWidget [data-testid="neighborhood-courtyard-spot"] {
+    right: 8px;
+    bottom: 176px;
+  }
+  .previewBadge {
+    bottom: 168px;
+  }
+}
+
+/* ---------------------------------------------------------------- reunion quests (fiction only) */
+
+.questNote {
+  position: absolute;
+  z-index: 120;
+  left: 50%;
+  top: 126px;
+  transform: translateX(-50%);
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 3px 0 #5a3a24;
+  font-size: 14px;
+  font-weight: 800;
+  color: #3b2a1e;
+  text-align: center;
+  pointer-events: none;
+}
+
+.talkPrompt kbd.kbdWide {
+  width: auto;
+  padding: 0 8px;
+}
+
+.questButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.questButtons button {
+  min-height: 40px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 2.5px solid #5a3a24;
+  background: #ffc74d;
+  font: inherit;
+  font-weight: 800;
+  color: #3b2a1e;
+  cursor: pointer;
+}
+
+.questButtons button.questQuiet {
+  background: #fffaf0;
+}
+
+.reunionWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(59, 42, 30, 0.28);
+}
+
+.reunion {
+  width: min(560px, 100%);
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 18px 20px 14px;
+  border-radius: 24px;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+  box-shadow: 0 7px 0 #5a3a24;
+  color: #3b2a1e;
+}
+
+.reunionStage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+  padding: 10px 0 6px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #cfe7fa 0%, #ffe2c2 70%, #f4d29b 100%);
+}
+
+.reunionStage figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: transform 700ms cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 500ms ease;
+}
+
+.reunionStage img {
+  width: 104px;
+  height: 104px;
+  object-fit: contain;
+}
+
+.reunionStage figcaption {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fffaf0;
+  border: 2px solid #5a3a24;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reunionArriving {
+  opacity: 0;
+  transform: translateX(60px);
+}
+
+.reunionArrived {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.reunionNotes {
+  align-self: center;
+  font-size: 20px;
+  font-weight: 900;
+  color: #b7653a;
+  animation: sl3dNotes 1.6s ease-in-out infinite;
+}
+
+@keyframes sl3dNotes {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(6deg);
+  }
+}
+
+.reunionBeats {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.reunionNarration {
+  font-style: italic;
+  font-weight: 600;
+  color: #6b4a33;
+}
+
+.reunionFootnote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7a5a40;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talkPrompt {
+    animation: none;
+  }
+  .reunionStage figure {
+    transition: none;
+  }
+  .reunionNotes {
+    animation: none;
+  }
+}
+
+/* a linked-step errand's numbered tasks (Hazel's HOA letter): a little paper card, like a note pinned to a door */
+.questTasks {
+  position: absolute;
+  z-index: 110;
+  right: 16px;
+  top: 84px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px 14px 12px;
+  border-radius: 14px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 4px 0 #5a3a24;
+  color: #3b2a1e;
+  transform: rotate(0.6deg);
+  /* a note to read, never in the way of a tap */
+  pointer-events: none;
+}
+
+.questTasksTitle {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a5a3a;
+  margin-bottom: 6px;
+}
+
+.questTasks ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.questTasks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.questTasks li[data-done="true"] {
+  color: #9b8a78;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.questTaskNum {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid #5a3a24;
+  background: #ffd36b;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.questTasks li[data-done="true"] .questTaskNum {
+  background: #a8d8a0;
+}
+
+.questTasksNote {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #8a5a3a;
+}
+
+@media (max-width: 640px) {
+  .questTasks {
+    top: 118px;
+    right: auto;
+    left: 10px;
+    width: min(230px, calc(100vw - 20px));
+    padding: 9px 11px;
+  }
+  .questTasks li {
+    font-size: 13px;
   }
 }

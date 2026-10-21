@@ -390,5 +390,103 @@
    8.362,
    7.049
   ]
+ ],
+ "questSpots": [
+  {
+   "id": "tree_hollow",
+   "hint": "tucked in the roots of the crooked tree by the pumpkins",
+   "x": 6.74,
+   "y": 12.56,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "tree_branch",
+   "hint": "up in the branches of the big tree, north-west",
+   "x": -7.19,
+   "y": 12.99,
+   "z": 2.3,
+   "reach": "hop"
+  },
+  {
+   "id": "behind_crate",
+   "hint": "behind the old crate by the lilac cottage",
+   "x": -8.21,
+   "y": -7.93,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "fountain_rim",
+   "hint": "bobbing at the edge of the fountain",
+   "x": 1.75,
+   "y": -1.75,
+   "z": 0.55,
+   "reach": "ground"
+  },
+  {
+   "id": "pumpkin_patch",
+   "hint": "somewhere in the pumpkin patch",
+   "x": 7.9,
+   "y": 7.0,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "washing_line",
+   "hint": "tangled on the washing line by the orange cottage",
+   "x": -14.36,
+   "y": 2.52,
+   "z": 1.9,
+   "reach": "hop"
+  },
+  {
+   "id": "mailbox",
+   "hint": "on top of the mailbox by the blue cottage",
+   "x": -1.4,
+   "y": 8.55,
+   "z": 1.25,
+   "reach": "ground"
+  },
+  {
+   "id": "under_bench",
+   "hint": "under the bench by the fountain",
+   "x": 3.51,
+   "y": 1.92,
+   "z": 0.05,
+   "reach": "ground"
+  },
+  {
+   "id": "west_bench",
+   "hint": "on the west bench by the fountain, keeping nothing warm",
+   "x": -3.62,
+   "y": -1.72,
+   "z": 0.45,
+   "reach": "ground"
+  },
+  {
+   "id": "pumpkin_nap",
+   "hint": "napping in the pumpkins",
+   "x": 8.2,
+   "y": 8.0,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "pumpkin_quill",
+   "hint": "where it rolled, just past the pumpkins",
+   "x": 6.1,
+   "y": 10.2,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "east_bench_ink",
+   "hint": "on the east bench by the fountain",
+   "x": 4.32,
+   "y": 1.72,
+   "z": 0.45,
+   "reach": "ground"
+  }
  ]
 }

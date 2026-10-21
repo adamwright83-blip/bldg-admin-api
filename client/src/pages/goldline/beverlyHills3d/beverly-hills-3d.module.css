@@ -1,0 +1,636 @@
+/* Beverly Hills: cream cards, gold rules, a boutique-hotel serif. Uptown cozy, not corporate. */
+.root {
+  --ink: #241a14;
+  --cream: #fbf5ea;
+  --gold: #c9973f;
+  --gold-soft: #e7c47a;
+  --serif: "Didot", "Bodoni 72", "Playfair Display", Georgia, serif;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #f2c9a8;
+  color: var(--ink);
+  font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.stage :global(.bh3d-canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.stage :global(.bh3d-stick) {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 2px solid rgba(251, 245, 234, 0.7);
+  background: rgba(36, 26, 20, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+
+.stage :global(.bh3d-stick.is-on) {
+  opacity: 1;
+}
+
+.stage :global(.bh3d-stick-knob) {
+  position: absolute;
+  left: 34px;
+  top: 34px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: linear-gradient(180deg, #f6d9bd 0%, #f0b996 60%, #d9867a 100%);
+  z-index: 5;
+  text-align: center;
+  padding: 24px;
+}
+
+.loadingTitle {
+  font-family: var(--serif);
+  font-size: clamp(34px, 6vw, 64px);
+  letter-spacing: 0.04em;
+}
+
+.loadingBar {
+  width: min(320px, 70vw);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(36, 26, 20, 0.15);
+  overflow: hidden;
+}
+
+.loadingBar span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 200ms;
+}
+
+.loadingNote {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.card {
+  pointer-events: auto;
+  max-width: 340px;
+  padding: 14px 18px 16px;
+  border-radius: 14px;
+  background: rgba(251, 245, 234, 0.94);
+  border: 1px solid rgba(201, 151, 63, 0.55);
+  box-shadow: 0 10px 30px rgba(60, 30, 10, 0.18);
+}
+
+.cardKicker {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #8a6a3e;
+}
+
+.cardTitle {
+  font-family: var(--serif);
+  font-size: 30px;
+  line-height: 1.05;
+  margin-top: 2px;
+}
+
+.cardSub {
+  font-size: 12px;
+  color: #6b5442;
+  margin-top: 4px;
+}
+
+.goals {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(201, 151, 63, 0.35);
+  display: grid;
+  gap: 8px;
+}
+
+.goals li {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.goals li em {
+  display: block;
+  font-style: normal;
+  font-size: 11.5px;
+  color: #7a6352;
+  margin-top: 2px;
+}
+
+.goalTick {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.goalDone {
+  opacity: 0.6;
+}
+
+.goalDone .goalTick {
+  background: var(--gold);
+  color: #fff;
+}
+
+.goalDone strong {
+  text-decoration: line-through;
+}
+
+.hudRight {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.hudButton {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(36, 26, 20, 0.85);
+  background: var(--cream);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(36, 26, 20, 0.85);
+}
+
+.hudButton:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(36, 26, 20, 0.85);
+}
+
+.hudGold {
+  background: linear-gradient(180deg, #f3d28b, #d9a548);
+}
+
+.prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 24px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: var(--cream);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: 0 4px 0 var(--ink), 0 14px 30px rgba(60, 30, 10, 0.25);
+  cursor: pointer;
+  animation: promptIn 260ms ease-out;
+}
+
+.prompt kbd {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+@keyframes promptIn {
+  from { transform: translate(-50%, 8px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.touchButtons {
+  position: absolute;
+  right: 18px;
+  bottom: 24px;
+  display: none;
+  gap: 10px;
+  z-index: 3;
+}
+
+.touchButtons button {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--ink);
+  background: var(--cream);
+  font: inherit;
+  font-weight: 700;
+  box-shadow: 0 4px 0 var(--ink);
+  touch-action: none;
+}
+
+.controlsHint {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.controlsHint span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(251, 245, 234, 0.85);
+  border: 1px solid rgba(36, 26, 20, 0.3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.touchHint {
+  position: absolute;
+  left: 12px;
+  bottom: 22px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.touchHint span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 245, 234, 0.5);
+  background: rgba(40, 24, 14, 0.35);
+  color: var(--cream);
+  font-size: 12px;
+}
+
+@media (pointer: coarse) {
+  .touchButtons {
+    display: flex;
+  }
+  .controlsHint {
+    display: none;
+  }
+  .touchHint {
+    display: flex;
+  }
+}
+
+.bubble {
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: 16px;
+  background: var(--cream);
+  border: 1px solid rgba(201, 151, 63, 0.7);
+  box-shadow: 0 10px 28px rgba(60, 30, 10, 0.22);
+  font-size: 15px;
+  line-height: 1.4;
+  animation: promptIn 220ms ease-out;
+}
+
+.bubble strong {
+  font-family: var(--serif);
+  margin-right: 6px;
+}
+
+.dialogue {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: min(680px, calc(100vw - 32px));
+  padding: 18px 22px 16px;
+  border-radius: 18px;
+  background: var(--cream);
+  border: 1px solid var(--gold);
+  box-shadow: 0 16px 40px rgba(40, 20, 10, 0.3);
+}
+
+.dialogueSpeaker {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: #8a5f22;
+}
+
+.dialogueText {
+  margin: 6px 0 12px;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.dialogueNext {
+  float: right;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--cream);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.claire {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: min(560px, calc(100vw - 32px));
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: #1c1714;
+  color: var(--cream);
+  border: 1px solid var(--gold);
+  box-shadow: 0 18px 44px rgba(20, 10, 5, 0.45);
+}
+
+.claireName {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--gold-soft);
+}
+
+.claire p {
+  margin: 6px 0 14px;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.claireActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* the outreach desk */
+.desk {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 100vw);
+  z-index: 7;
+  overflow-y: auto;
+  padding: 22px 24px 28px;
+  background: var(--cream);
+  border-left: 1px solid var(--gold);
+  box-shadow: -18px 0 40px rgba(40, 20, 10, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.deskHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.deskKicker {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #8a6a3e;
+}
+
+.deskTitle {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.deskClose {
+  border: 1px solid var(--ink);
+  background: transparent;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.deskEmpty {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #5c4636;
+}
+
+.deskTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.deskTab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(36, 26, 20, 0.35);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.deskTabOn {
+  background: var(--ink);
+  color: var(--cream);
+}
+
+.deskFacts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(201, 151, 63, 0.1);
+  font-size: 13.5px;
+}
+
+.deskFacts dt {
+  color: #8a6a3e;
+  font-weight: 600;
+}
+
+.deskFacts dd {
+  margin: 0;
+}
+
+.deskLabel {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b5442;
+}
+
+.deskInput,
+.deskText {
+  font: inherit;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(36, 26, 20, 0.3);
+  background: #fffdf8;
+}
+
+.deskText {
+  resize: vertical;
+  line-height: 1.5;
+  font-family: Georgia, serif;
+}
+
+.deskActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deskPrimary,
+.deskSecondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.deskPrimary {
+  background: linear-gradient(180deg, #f3d28b, #d9a548);
+  border: 1px solid #8a5f22;
+  color: var(--ink);
+  box-shadow: 0 3px 0 #8a5f22;
+}
+
+.deskSecondary {
+  background: transparent;
+  border: 1px solid rgba(36, 26, 20, 0.55);
+  color: inherit;
+}
+
+.claire .deskSecondary {
+  border-color: rgba(251, 245, 234, 0.5);
+  color: var(--cream);
+}
+
+.deskTruth {
+  margin: 0;
+  font-size: 12.5px;
+  color: #6b5442;
+}
+
+@media (max-width: 640px) {
+  .hud {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    flex-direction: column;
+  }
+  .card {
+    max-width: none;
+    width: 100%;
+    padding: 10px 14px 12px;
+  }
+  .cardTitle {
+    font-size: 22px;
+  }
+  .cardSub {
+    font-size: 11px;
+  }
+  .goals {
+    margin-top: 8px;
+    padding-top: 6px;
+    gap: 4px;
+  }
+  .goals li em {
+    display: none;
+  }
+  .hudRight {
+    justify-content: flex-start;
+  }
+  .hudButton {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+  .prompt {
+    bottom: 112px;
+    font-size: 14px;
+    padding: 11px 18px;
+  }
+  .bubble {
+    top: auto;
+    bottom: 190px;
+    font-size: 14px;
+  }
+}

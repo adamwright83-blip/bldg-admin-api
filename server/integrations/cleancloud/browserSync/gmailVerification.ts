@@ -12,8 +12,9 @@ import { getDb } from "../../../db";
  */
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+// JOYSTICK's admin front door. Vercel forwards /api to the Railway server, and Google's OAuth client lists this URI.
 export const DEFAULT_JAWBREAKER_GMAIL_REDIRECT_URI =
-  "https://admin.bldg.chat/api/integrations/jawbreaker/gmail/callback";
+  "https://admin.gojoystick.com/api/integrations/jawbreaker/gmail/callback";
 const STATE_TTL_SECONDS = 10 * 60;
 const STATE_PURPOSE = "jawbreaker_gmail_connect";
 

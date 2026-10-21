@@ -1,12 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
-// Silver Lake now opens as the walkable 3D courtyard. These specs cover the painted encounter, which
-// stays in the code dormant; they opt into it explicitly.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("goldline.silverLake.legacy", "1"));
-});
-
 test.describe("Home city clicks stay on separate destinations", () => {
   test.beforeEach(async ({ page }) => {
     await resetGoldlineProofWorld(page.request);
@@ -52,9 +46,9 @@ test.describe("Home city clicks stay on separate destinations", () => {
     await expect(page).toHaveURL(/territory=silver-lake/);
     await expect(page).toHaveURL(/customer=phone%3A3105550141/);
     await expect(page).not.toHaveURL(/tower-wars/);
-    const encounter = page.locator('[data-testid="cozy-neighborhood-encounter"]');
+    const encounter = page.locator('[data-testid="silver-lake-3d"]');
     await expect(encounter).toBeVisible({ timeout: 20_000 });
-    const villager = page.locator('div[role="button"][aria-label^="Select "]');
+    const villager = page.getByTestId("silver-lake-villager");
     await expect(villager).toHaveCount(1, { timeout: 15_000 });
     await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
     await expect(page.locator('aside[aria-label="Customer Outreach Composer"]')).toHaveAttribute(

@@ -673,6 +673,13 @@ body {
   .jl-container {
     padding: 0 32px 64px;
   }
+  .jl-hero-row {
+    flex-direction: column;
+  }
+  .jl-headline-block {
+    flex: none;
+    width: 100%;
+  }
 
   .jl-headline-block {
     font-size: 88px;
@@ -688,9 +695,10 @@ body {
   }
 
   .jl-photo-col {
-    width: 360px;
-    flex: 0 0 360px;
-    margin-left: -50px;
+    width: 100%;
+    flex: none;
+    margin-left: 0;
+    margin-top: 30px;
   }
 
   .jl-human-card {
@@ -709,7 +717,7 @@ body {
   }
 
   .jl-companion-col {
-    left: 400px;
+    left: min(400px, calc(100% - 220px));
     top: 120px;
   }
 

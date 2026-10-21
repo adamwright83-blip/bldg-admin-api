@@ -580,3 +580,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* buildings still rising: a quiet note that never blocks the board */
+.building {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(26, 22, 43, 0.82);
+  color: #fdf3d8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  white-space: nowrap;
+}

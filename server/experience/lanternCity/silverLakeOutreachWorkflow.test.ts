@@ -461,7 +461,6 @@ describe("Silver Lake overnight outreach", () => {
       permissionReadable: true,
       lastOutreachOn: null,
       today: "2026-10-20",
-      approvedMessage: BODY,
     }).eligible).toBe(false);
   });
 });
