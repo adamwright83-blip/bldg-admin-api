@@ -15,7 +15,8 @@ export type EvidenceCategory = "growth_action" | "business_progress";
  * Model/chat text can never create any of these.
  *
  * Growth actions (effort):
- *  - confirmed_field_visit: a debrief-confirmed, persisted commercial-mission visit outcome.
+ *  - confirmed_field_visit: a persisted field outcome: a commercial-mission visit outcome (verified arrival)
+ *    or a Day 1 Ten Doors outcome tap (fieldEvidence.ts says exactly which taps count).
  *  - follow_up_done: a `commercial_follow_ups` row with status "completed", completedAt and completedBy.
  * Deliberately NOT live (no persisted completion proof exists yet, so validation rejects them):
  *  committed sales call, approved outreach sent, door hangers, returned-after-no, other field actions.

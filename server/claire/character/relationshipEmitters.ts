@@ -122,19 +122,29 @@ export async function recordQualifyingClaireInteraction(input: {
   tenantId: string;
   operatorUserId: string | null | undefined;
   conversationId: string;
-  reason: "closing_phrase" | "turn_cap_reached";
+  /**
+   * closing_phrase / turn_cap_reached: the legacy pre-drive gather loop.
+   * conversation_complete: the authoritative voice turn (Brain V2 and scheduled calls) ended the call
+   * on its own conversational logic; `completion` carries that turn's end reason.
+   */
+  reason: "closing_phrase" | "turn_cap_reached" | "conversation_complete";
+  completion?: string;
   /** Test-only: the real call flow always uses "now". Never passed from production code. */
   occurredAt?: Date;
 }): Promise<ClaireRelationshipState | null> {
+  // Relationship telemetry only. call_completed is NEVER progression evidence (progression/evidence.ts).
+  const authoritative = input.reason === "conversation_complete";
   return appendAndRecompute({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
     eventType: "call_completed",
-    summary: "Completed a pre-drive Claire call.",
-    provenance: "pre_drive_call",
+    summary: authoritative ? "Completed a Claire call." : "Completed a pre-drive Claire call.",
+    provenance: authoritative ? "claire_call" : "pre_drive_call",
     relatedEntityType: "claire_conversation",
     relatedEntityId: input.conversationId,
-    evidenceSource: `twilio_pre_drive_${input.reason}`,
+    evidenceSource: authoritative
+      ? `twilio_conversation_complete:${(input.completion ?? "unspecified").replace(/[^a-z0-9_]/gi, "_").slice(0, 64)}`
+      : `twilio_pre_drive_${input.reason}`,
     occurredAt: input.occurredAt,
   });
 }

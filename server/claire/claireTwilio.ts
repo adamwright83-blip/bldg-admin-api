@@ -1460,6 +1460,18 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           claireConversationId: conversationId,
           reason: result.endCallReason ?? "personal_thread_closed",
         });
+        // The call ran its course on Claire's own conversational logic (V2 leave-taking, scheduled call
+        // complete, personal thread closed): the same relationship event the legacy gather loop records.
+        // Relationship telemetry only; never rapport/rung evidence.
+        await safeRecordRelationshipEvent(() =>
+          recordQualifyingClaireInteraction({
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            conversationId,
+            reason: "conversation_complete",
+            completion: result.endCallReason ?? "personal_thread_closed",
+          })
+        );
         return { speak: result.speak, endCall: true, listenOnly: false, gatherTwiml };
       }
       return voiceTurnDocument({
