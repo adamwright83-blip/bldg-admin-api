@@ -273,7 +273,6 @@ function companyQuestionBlocked(text: string): boolean {
     /\bgross\b/.test(text) ||
     /\b(?:do you think|should i|should we|focus on|to grow|recommend)\b/.test(text) ||
     /\b(?:last|latest|recent|most recent|first|biggest|largest)\s+(?:\d+\s+|[a-z]+\s+)?(?:sales?|orders?)\b/.test(text) ||
-    /\b(?:sales?|orders?)\s+last\s+(?:week|month|year)\b/.test(text) ||
     namedCustomerAsk(text)
   );
 }

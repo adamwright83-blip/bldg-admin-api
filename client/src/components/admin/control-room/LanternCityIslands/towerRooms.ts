@@ -18,6 +18,8 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { darkFloors, type BuildingModel, type Resident, type TowerModel } from "./towerStack";
 
 export type RoomHover = { residents: Resident[]; label: string; x: number; y: number } | null;
+/** a tower's lobby on screen (CSS px inside the host), so the page can put something in it */
+export type LobbyRect = { id: string; x: number; y: number; w: number; h: number };
 
 // one unit, metres
 const UW = 3.6, UH = 3.0, UD = 4.0, SLAB = 0.5, FR = 0.9, GAP = 14, LOBBY = 5;
@@ -180,7 +182,10 @@ function buildRoom(k: Kit, seed: number, on: boolean) {
 }
 
 // ----------------------------------------------------------------- the view
-export function createTowerRooms(host: HTMLElement, events: { onHover?: (h: RoomHover) => void } = {}) {
+export function createTowerRooms(
+  host: HTMLElement,
+  events: { onHover?: (h: RoomHover) => void; onPick?: (h: NonNullable<RoomHover>) => void; onLobbies?: (l: LobbyRect[]) => void } = {}
+) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: new URLSearchParams(location.search).has("capture") });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.NeutralToneMapping;
@@ -295,9 +300,11 @@ export function createTowerRooms(host: HTMLElement, events: { onHover?: (h: Room
         for (let u = 0; u < s.unitsPerFloor; u++) {
           const who = t.floors[f - 1][u];
           const on = who.length > 0;
-          rooms.ox = x + FR + u * UW; rooms.oy = y0 + SLAB; rooms.lit = on ? 1 : 0;
+          // a resident who has gone quiet (45+ days) keeps a lamp on, low
+          const glow = on ? (who.every(r => r.quiet) ? 0.34 : 1) : 0;
+          rooms.ox = x + FR + u * UW; rooms.oy = y0 + SLAB; rooms.lit = glow;
           buildRoom(rooms, f * 131 + u * 17 + s.floors * 7 + x, on);
-          glass.ox = x + FR + u * UW; glass.oy = y0 + SLAB; glass.lit = on ? 1 : 0;
+          glass.ox = x + FR + u * UW; glass.oy = y0 + SLAB; glass.lit = glow;
           glass.box(0.04, UW - 0.04, 0.02, UH - 0.02, 0.1, 0.12, [0, 0, 0]);
           // mullion
           shell.ox = x + FR + u * UW; shell.oy = y0 + SLAB;
@@ -397,6 +404,12 @@ export function createTowerRooms(host: HTMLElement, events: { onHover?: (h: Room
     applyView();
     composer.render();
     drawLabels();
+    if (events.onLobbies) {
+      events.onLobbies(towers.map(t => {
+        const [x0, y0] = toScreen(t.x, LOBBY), [x1, y1] = toScreen(t.x + t.w, 0);
+        return { id: t.t.spec.id, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }));
+    }
   }
   function resize() {
     const w = host.clientWidth || 1, h = host.clientHeight || 1;
@@ -444,6 +457,8 @@ export function createTowerRooms(host: HTMLElement, events: { onHover?: (h: Room
     if (wasDrag) return;
     const hit = unitAt(e.clientX, e.clientY);
     if (!hit) return;
+    const who = hit.tw.t.floors[hit.f - 1][hit.u];
+    if (who.length) events.onPick?.({ residents: who, label: `${hit.tw.t.spec.label} · floor ${hit.f} · unit ${[...new Set(who.map(r => r.unit))].join(", ")}`, x: e.clientX, y: e.clientY });
     // click a window: fly in until the room fills a third of the screen
     const h = host.clientHeight || 1;
     target = { cx: hit.wx, cy: hit.wy, zoom: Math.max(view.zoom, (h / 3) / (UH * view.fit)), fit: view.fit };

@@ -7,6 +7,7 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
     userAgent:
       "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     viewport: { width: 390, height: 844 },
+    timezoneId: "America/Los_Angeles",
   });
   const page = await context.newPage();
   try {
@@ -50,7 +51,7 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
   await expect(page).toHaveURL(/territory=silver-lake/);
   await expect(page).toHaveURL(/customer=phone%3A3105550141/);
 
-  const villager = page.locator('div[role="button"][aria-label^="Select "]');
+  const villager = page.getByTestId("silver-lake-villager");
   await expect(villager).toHaveCount(1, { timeout: 15_000 });
   await expect(villager).toHaveAttribute("data-customer-id", "phone:3105550141");
   const drawer = page.locator('aside[aria-label="Customer Outreach Composer"]');
@@ -59,7 +60,8 @@ test("Silver Lake handoff leaves Home and Driver on the same Day Line", async ({
 
   const textarea = drawer.getByTestId("cozy-message-draft-textarea");
   const suggested = await textarea.inputValue();
-  expect(suggested).toMatch(/Reply STOP/i);
+  // a personal text from the operator's own phone: no business opt-out boilerplate is added for them
+  expect(suggested).not.toMatch(/Reply STOP/i);
   const approved = suggested.includes("this week")
     ? suggested
     : suggested.replace(

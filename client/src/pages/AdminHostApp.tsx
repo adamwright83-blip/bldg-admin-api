@@ -40,6 +40,10 @@ import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6
 // three.js stays out of the main bundle: Lantern City loads when it is opened
 const LanternCityV7 = lazy(() => import("@/components/admin/control-room/LanternCityV7/LanternCityV7"));
 const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
+const SilverLake3D = lazy(() => import("./goldline/silverLake3d/SilverLake3D"));
+const BeverlyHills3D = lazy(() => import("./goldline/beverlyHills3d/BeverlyHills3D"));
+const CenturyParkEast3D = lazy(() => import("./goldline/centuryParkEast3d/CenturyParkEast3D"));
+const Channel382 = lazy(() => import("./goldline/channel382/Channel382"));
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import { OpusLaInspection } from "@/components/admin/control-room/OpusLaInspection";
@@ -428,6 +432,25 @@ export default function AdminHostApp() {
           ) : lanternScene === "map" ? (
             <Suspense fallback={<div className="cr-route-loading">Lifting the fog…</div>}>
               <LanternCityV7 onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+            </Suspense>
+          ) : lanternScene === "silverLake3d" ? (
+            <Suspense fallback={<div className="cr-route-loading">Walking into Silver Lake…</div>}>
+              <SilverLake3D
+                territoryId={new URLSearchParams(window.location.search).get("territory") ?? "silver-lake"}
+                onExit={() => window.location.assign("/growth/lantern-city")}
+              />
+            </Suspense>
+          ) : lanternScene === "beverlyHills3d" ? (
+            <Suspense fallback={<div className="cr-route-loading">Rolling out the red carpet…</div>}>
+              <BeverlyHills3D onExit={() => window.location.assign("/growth/lantern-city")} />
+            </Suspense>
+          ) : lanternScene === "channel382" ? (
+            <Suspense fallback={<div className="cr-route-loading">Warming up the cameras…</div>}>
+              <Channel382 onExit={() => window.location.assign("/growth/lantern-city")} />
+            </Suspense>
+          ) : lanternScene === "centuryParkEast3d" ? (
+            <Suspense fallback={<div className="cr-route-loading">Checking the locks…</div>}>
+              <CenturyParkEast3D onExit={() => window.location.assign("/growth/lantern-city?tower=century_park_east")} />
             </Suspense>
           ) : lanternScene === "v6" ? (
             <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />

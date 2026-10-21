@@ -1,3 +1,8 @@
+/**
+ * ARCHIVED (2026-10-19). The painted 2D Silver Lake encounter is no longer mounted anywhere: every Silver Lake entry
+ * opens the walkable 3D courtyard (pages/goldline/silverLake3d). Kept for reference only. Its business wiring lives on,
+ * unchanged, in pages/goldline/silverLake3d/useSilverLakeOutreach.ts. Do not re-mount this component.
+ */
 import { useEffect, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -14,7 +19,10 @@ import {
   SYNTHETIC_SILVER_LAKE_TARGETS,
   loadNeighborhoodMemory,
   saveNeighborhoodMemory,
+  type LetterApproachId,
   type NeighborhoodFeatureChoice,
+  type NeighborhoodMemoryState,
+  type VillagerVariant,
 } from "@shared/playableVillagers";
 import { CozyMessageComposer } from "./CozyMessageComposer";
 import { PlayableLetterDesk } from "./PlayableLetterDesk";
@@ -86,11 +94,27 @@ export function CozyNeighborhoodEncounter({
   ]);
 
   // Persistent Neighborhood Memory & Consequences (tenant scoped to prevent leakage)
-  const [neighborhoodMemory, setNeighborhoodMemory] = useState(() =>
+  const [neighborhoodMemory, setNeighborhoodMemory] = useState<NeighborhoodMemoryState>(() =>
     loadNeighborhoodMemory(tenantId)
   );
 
   const utils = trpc.useUtils();
+
+  const memoryQuery = trpc.system.goldlineWorld.getNeighborhoodMemory.useQuery(
+    { territoryId },
+    { staleTime: 5000, refetchOnWindowFocus: true }
+  );
+
+  const saveFeatureMutation = trpc.system.goldlineWorld.saveNeighborhoodFeature.useMutation();
+  const recordInteractionMutation = trpc.system.goldlineWorld.recordVillagerInteraction.useMutation();
+  const saveDraftMutation = trpc.system.goldlineWorld.saveUnfinishedLetterDraft.useMutation();
+
+  useEffect(() => {
+    if (memoryQuery.data) {
+      setNeighborhoodMemory(memoryQuery.data as NeighborhoodMemoryState);
+      saveNeighborhoodMemory(memoryQuery.data as NeighborhoodMemoryState, tenantId);
+    }
+  }, [memoryQuery.data, tenantId]);
 
   const missionQuery = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
     { territoryId, requestedCustomerId: requestedId ?? undefined, limit: 8 },
@@ -243,25 +267,42 @@ export function CozyNeighborhoodEncounter({
   };
 
   // Neighborhood Consequence: Courtyard Feature Placement
-  const handleChooseCourtyardFeature = (choice: NeighborhoodFeatureChoice) => {
-    const updated = {
+  const handleChooseCourtyardFeature = async (choice: NeighborhoodFeatureChoice) => {
+    const updated: NeighborhoodMemoryState = {
       ...neighborhoodMemory,
       featureChoice: choice,
+      courtyardPlacedAt: new Date().toISOString(),
       lastVisitedAt: new Date().toISOString(),
     };
     setNeighborhoodMemory(updated);
     saveNeighborhoodMemory(updated, tenantId);
+    if (!isSyntheticPreview) {
+      try {
+        await saveFeatureMutation.mutateAsync({
+          territoryId,
+          featureChoice: choice,
+        });
+        await memoryQuery.refetch();
+      } catch (err) {
+        console.warn("Could not persist courtyard feature to server:", err);
+      }
+    }
   };
 
   // Memory update when an outreach draft is completed
-  const handleDraftCompleted = (
+  const handleDraftCompleted = async (
     customerId: string,
     customerName: string,
     variant: any,
-    action: "send" | "schedule" | "sms_opened"
+    action:
+      | "draft_prepared"
+      | "scheduled"
+      | "compose_handoff_opened"
+      | "operator_reported_sent"
+      | "independently_verified_sent"
   ) => {
     const currentCount = neighborhoodMemory.encounterCounts[variant] ?? 0;
-    const updated = {
+    const updated: NeighborhoodMemoryState = {
       ...neighborhoodMemory,
       encounterCounts: {
         ...neighborhoodMemory.encounterCounts,
@@ -274,20 +315,78 @@ export function CozyNeighborhoodEncounter({
         completedAt: new Date().toISOString(),
         actionType: action,
       },
+      unfinishedActivity: null,
     };
     setNeighborhoodMemory(updated);
     saveNeighborhoodMemory(updated, tenantId);
+    if (!isSyntheticPreview) {
+      try {
+        await recordInteractionMutation.mutateAsync({
+          territoryId,
+          villagerVariant: variant,
+          customerId,
+          customerName,
+          actionType: action,
+        });
+        await memoryQuery.refetch();
+      } catch (err) {
+        console.warn("Could not persist villager interaction to server:", err);
+      }
+    }
+  };
+
+  // Memory update when in-progress letter is edited
+  const handleSaveUnfinishedDraft = async (draft: {
+    customerId: string;
+    customerName: string;
+    villagerVariant: VillagerVariant;
+    letterApproach: LetterApproachId;
+    draftBody: string;
+  }) => {
+    const updated: NeighborhoodMemoryState = {
+      ...neighborhoodMemory,
+      unfinishedActivity: {
+        customerId: draft.customerId,
+        customerName: draft.customerName,
+        villagerVariant: draft.villagerVariant,
+        selectedApproach: draft.letterApproach,
+        draftBody: draft.draftBody,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    setNeighborhoodMemory(updated);
+    saveNeighborhoodMemory(updated, tenantId);
+    if (!isSyntheticPreview) {
+      try {
+        await saveDraftMutation.mutateAsync({
+          territoryId,
+          customerId: draft.customerId,
+          customerName: draft.customerName,
+          villagerVariant: draft.villagerVariant,
+          selectedApproach: draft.letterApproach,
+          draftBody: draft.draftBody,
+        });
+      } catch (err) {
+        console.warn("Could not persist unfinished draft to server:", err);
+      }
+    }
   };
 
   // Memory note generation for repeat interactions
   const memoryNote = useMemo(() => {
     if (!neighborhoodMemory.lastDraftedCustomer) return null;
     const { customerName, actionType } = neighborhoodMemory.lastDraftedCustomer;
-    if (actionType === "schedule") {
+    if (actionType === "scheduled") {
       return `${customerName}'s letter is resting safely on the morning dispatch shelf.`;
     }
-    if (actionType === "send") {
-      return `We dispatched ${customerName}'s letter earlier!`;
+    if (actionType === "independently_verified_sent") {
+      return `We verified ${customerName}'s letter was delivered!`;
+    }
+    if (actionType === "operator_reported_sent") {
+      return `You reported sending ${customerName}'s note from your phone.`;
+    }
+    if (actionType === "compose_handoff_opened") {
+      return `We opened ${customerName}'s note in Google Messages on your handset.`;
     }
     return `We prepared ${customerName}'s note for your phone.`;
   }, [neighborhoodMemory.lastDraftedCustomer]);
@@ -614,12 +713,14 @@ export function CozyNeighborhoodEncounter({
             isSynthetic={isSyntheticPreview}
             encounterCount={neighborhoodMemory.encounterCounts[selectedTarget.villagerVariant] ?? 1}
             memoryNote={memoryNote}
+            neighborhoodMemory={neighborhoodMemory}
             tenantId={tenantId}
             onSendNow={handleSendNow}
             onScheduleSend={handleScheduleSend}
             onClose={() => setSelectedSlotId(null)}
             onSelectIndex={handleSelectIndex}
             onDraftCompleted={handleDraftCompleted}
+            onSaveUnfinishedDraft={handleSaveUnfinishedDraft}
           />
         )}
 

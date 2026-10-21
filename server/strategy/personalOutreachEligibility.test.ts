@@ -26,7 +26,6 @@ function personal(overrides: Partial<Parameters<typeof evaluatePersonalOutreach>
     permissionReadable: true,
     lastOutreachOn: null,
     today: TODAY,
-    approvedMessage: STOP,
     ...overrides,
   });
 }
@@ -98,11 +97,10 @@ describe("personal outreach versus the marketing SMS gate", () => {
     expect(unreadable.explanation).toMatch(/not proof that nobody is inactive/i);
   });
 
-  it("requires the approved text to offer a way not to receive further texts", () => {
+  it("never blocks a personal text on its wording; a recorded opt-out still blocks", () => {
     expect(messageOffersStopOption(STOP)).toBe(true);
-    expect(personal({ approvedMessage: "Hey Mei, we can pick up laundry this week." }).blocks).toContain(
-      "stop_option_missing"
-    );
-    expect(personal({ approvedMessage: undefined }).eligible).toBe(true);
+    expect(messageOffersStopOption("Hey Mei, we can pick up laundry this week.")).toBe(false);
+    expect(personal({}).eligible).toBe(true);
+    expect(personal({ optedOut: true }).blocks).toContain("opted_out");
   });
 });

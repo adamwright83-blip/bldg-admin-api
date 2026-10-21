@@ -5,6 +5,7 @@ import {
   LETTER_APPROACHES,
   getVillagerPersonality,
   type LetterApproachId,
+  type NeighborhoodMemoryState,
 } from "@shared/playableVillagers";
 import { trpc } from "@/lib/trpc";
 import {
@@ -15,6 +16,7 @@ import {
   type SmsComposeUriResult,
 } from "../../../../../../server/experience/lanternCity/personalNumber/smsComposeHandoff";
 import styles from "./playable-letter-desk.module.css";
+import { describePacificWallTime, nextPacificSlot } from "./letterDeskSchedule";
 
 interface PlayableLetterDeskProps {
   target: CozyProjectedTarget;
@@ -25,6 +27,7 @@ interface PlayableLetterDeskProps {
   isSynthetic?: boolean;
   encounterCount?: number;
   memoryNote?: string | null;
+  neighborhoodMemory?: NeighborhoodMemoryState | null;
   tenantId?: string;
   onSendNow: (target: CozyProjectedTarget, editedText: string, idempotencyKey: string) => void;
   onScheduleSend: (
@@ -32,15 +35,27 @@ interface PlayableLetterDeskProps {
     editedText: string,
     scheduledForIso: string,
     idempotencyKey?: string
-  ) => void;
+  ) => void | Promise<boolean | void>;
   onClose: () => void;
   onSelectIndex: (index: number) => void;
   onDraftCompleted?: (
     customerId: string,
     customerName: string,
     variant: VillagerVariant,
-    action: "send" | "schedule" | "sms_opened"
+    action:
+      | "draft_prepared"
+      | "scheduled"
+      | "compose_handoff_opened"
+      | "operator_reported_sent"
+      | "independently_verified_sent"
   ) => void;
+  onSaveUnfinishedDraft?: (draft: {
+    customerId: string;
+    customerName: string;
+    villagerVariant: VillagerVariant;
+    letterApproach: LetterApproachId;
+    draftBody: string;
+  }) => void;
 }
 
 export function PlayableLetterDesk({
@@ -52,12 +67,14 @@ export function PlayableLetterDesk({
   isSynthetic = false,
   encounterCount = 1,
   memoryNote = null,
+  neighborhoodMemory = null,
   tenantId = "laundry_farm",
   onSendNow,
   onScheduleSend,
   onClose,
   onSelectIndex,
   onDraftCompleted,
+  onSaveUnfinishedDraft,
 }: PlayableLetterDeskProps) {
   const personality = getVillagerPersonality(target.villagerVariant);
 
@@ -66,6 +83,7 @@ export function PlayableLetterDesk({
   const [message, setMessage] = useState(() =>
     LETTER_APPROACHES.helpful_detailed.generateText(target)
   );
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [approvedBody, setApprovedBody] = useState<string | null>(null);
   const [approvalRevision, setApprovalRevision] = useState(1);
@@ -80,59 +98,86 @@ export function PlayableLetterDesk({
   );
 
   // Pacific Time schedule generators
-  const getPacificScheduleIso = (hour: number, minute: number = 0) => {
-    const now = new Date();
-    const laDateStr = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-    const [year, month, day] = laDateStr.split("-").map(Number);
-    const tomorrowUtc = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
-    const tomorrowStr = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(tomorrowUtc);
-    const hh = String(hour).padStart(2, "0");
-    const mm = String(minute).padStart(2, "0");
-    return `${tomorrowStr}T${hh}:${mm}`;
-  };
+  // the next Pacific 10 AM / 2 PM: after midnight, "10:00 AM" is this morning
+  const getPacificScheduleIso = (hour: number, minute: number = 0) => nextPacificSlot(hour, minute).value;
 
   const [scheduleDateTime, setScheduleDateTime] = useState(() => getPacificScheduleIso(10, 0));
+  /** set once the server has accepted a schedule from this desk: the green confirmation names the exact time */
+  const [scheduledLabel, setScheduledLabel] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
   const openHandoff = trpc.system.goldlineWorld.openSmsComposeHandoff.useMutation();
   const reportSent = trpc.system.goldlineWorld.reportSmsComposeOperatorSent.useMutation();
   const ensureDraft = trpc.system.goldlineWorld.scheduleCozyOutreach.useMutation();
 
-  // Reset state when switching between customers
+  // Reset state when switching between customers or restoring unfinished draft
+  const currentCustomerIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const defaultApproach: LetterApproachId = "helpful_detailed";
-    setSelectedApproach(defaultApproach);
+    if (currentCustomerIdRef.current === target.customerId) {
+      return;
+    }
+    currentCustomerIdRef.current = target.customerId;
+
+    const unfinished =
+      neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId
+        ? neighborhoodMemory.unfinishedActivity
+        : null;
+
+    if (unfinished) {
+      setSelectedApproach(unfinished.selectedApproach);
+      setMessage(unfinished.draftBody);
+      setRestoredDraft(true);
+    } else {
+      const defaultApproach: LetterApproachId = "helpful_detailed";
+      setSelectedApproach(defaultApproach);
+      setMessage(
+        target.preparedMessage ||
+          target.suggestedMessage ||
+          LETTER_APPROACHES[defaultApproach].generateText(target, tenantId)
+      );
+      setRestoredDraft(false);
+    }
     setInteractedApproach(null);
-    setMessage(
-      target.preparedMessage ||
-        target.suggestedMessage ||
-        LETTER_APPROACHES[defaultApproach].generateText(target, tenantId)
-    );
     setApprovedBody(null);
     setApprovalRevision(1);
     setHandoffError(null);
     setHandoffReveal(null);
     setSelectedScheduleSlot("morning");
     setScheduleDateTime(getPacificScheduleIso(10, 0));
+    setScheduledLabel(null);
   }, [target.customerId, target.preparedMessage, target.suggestedMessage, tenantId]);
 
   // Dynamic dialogue & gesture calculation
   const reaction = interactedApproach
     ? personality.reactionToApproach(interactedApproach, message)
     : null;
-  const isFirstEncounter = encounterCount <= 1;
 
-  const greetingDialogue = isFirstEncounter
+  const villagerMemory = neighborhoodMemory?.villagerMemories?.[target.villagerVariant];
+  const relationshipTier = villagerMemory?.relationshipTier ?? "new_acquaintance";
+  const preferredApproach = villagerMemory?.preferredApproach ?? null;
+  const isFirstVisit = (neighborhoodMemory?.visitCount ?? encounterCount) <= 1;
+  const isReturnVisitTomorrowOrLater = neighborhoodMemory?.isReturnVisitTomorrowOrLater ?? false;
+  // An unfinished note is this customer's; another neighbour's desk does not talk about it.
+  const unfinishedDraftCustomer =
+    neighborhoodMemory?.unfinishedActivity?.customerId === target.customerId ? target.displayName : null;
+  const customerReplied =
+    target.reply?.status !== "unavailable" && (target.reply as any)?.direction === "inbound";
+  const paidReorderVerified = target.paidOrder?.status === "verified";
+
+  const greetingDialogue = personality.contextualGreeting
+    ? personality.contextualGreeting({
+        customerName: target.displayName,
+        isFirstVisit,
+        isReturnVisitTomorrowOrLater,
+        visitCount: neighborhoodMemory?.visitCount ?? encounterCount,
+        unfinishedDraftCustomer,
+        preferredApproach,
+        relationshipTier,
+        customerReplied,
+        paidReorderVerified,
+        memoryNote,
+      })
+    : isFirstVisit
     ? personality.firstEncounterGreeting(target.displayName)
     : personality.repeatEncounterGreeting(target.displayName, memoryNote);
 
@@ -143,10 +188,18 @@ export function PlayableLetterDesk({
   const handleSelectApproach = (approachId: LetterApproachId) => {
     setSelectedApproach(approachId);
     setInteractedApproach(approachId);
+    let newMsg = message;
     if (approachId !== "custom") {
-      const generated = LETTER_APPROACHES[approachId].generateText(target, tenantId);
-      setMessage(generated);
+      newMsg = LETTER_APPROACHES[approachId].generateText(target, tenantId);
+      setMessage(newMsg);
     }
+    onSaveUnfinishedDraft?.({
+      customerId: target.customerId,
+      customerName: target.displayName,
+      villagerVariant: target.villagerVariant,
+      letterApproach: approachId,
+      draftBody: newMsg,
+    });
   };
 
   // Web speech recognition (Talk to Text)
@@ -209,23 +262,30 @@ export function PlayableLetterDesk({
   const handleSendNow = () => {
     if (!message.trim() || isSending || !target.hasConsent) return;
     onSendNow(target, message.trim(), recoveryKey);
+    const action =
+      target.silverLakeStatus?.message === "independently_verified_sent"
+        ? "independently_verified_sent"
+        : "operator_reported_sent";
     onDraftCompleted?.(
       target.customerId,
       target.displayName,
       target.villagerVariant,
-      "send"
+      action
     );
   };
 
-  // Schedule action
-  const handleCommitSchedule = () => {
+  // Schedule action: a time card (or the custom time's button) schedules for that exact Pacific time
+  const handleCommitSchedule = async (when: string = scheduleDateTime) => {
     if (!message.trim() || isSending || !target.hasConsent) return;
-    onScheduleSend(target, message.trim(), scheduleDateTime, recoveryKey);
+    setScheduleDateTime(when);
+    const accepted = await onScheduleSend(target, message.trim(), when, recoveryKey);
+    if (accepted === false) return;
+    setScheduledLabel(describePacificWallTime(when));
     onDraftCompleted?.(
       target.customerId,
       target.displayName,
       target.villagerVariant,
-      "schedule"
+      "scheduled"
     );
   };
 
@@ -256,7 +316,7 @@ export function PlayableLetterDesk({
         target.customerId,
         target.displayName,
         target.villagerVariant,
-        "sms_opened"
+        "compose_handoff_opened"
       );
       return;
     }
@@ -289,7 +349,7 @@ export function PlayableLetterDesk({
         target.customerId,
         target.displayName,
         target.villagerVariant,
-        "sms_opened"
+        "compose_handoff_opened"
       );
     } catch (err: unknown) {
       setHandoffError(err instanceof Error ? err.message : "The SMS app was not opened.");
@@ -311,6 +371,12 @@ export function PlayableLetterDesk({
               prefillClaim: "not_prefilled",
             }
           : curr
+      );
+      onDraftCompleted?.(
+        target.customerId,
+        target.displayName,
+        target.villagerVariant,
+        "operator_reported_sent"
       );
       return;
     }
@@ -335,6 +401,12 @@ export function PlayableLetterDesk({
             }
           : current
       );
+      onDraftCompleted?.(
+        target.customerId,
+        target.displayName,
+        target.villagerVariant,
+        "operator_reported_sent"
+      );
     } catch (err: unknown) {
       setHandoffError(err instanceof Error ? err.message : "The report was not recorded.");
     }
@@ -349,6 +421,15 @@ export function PlayableLetterDesk({
   const isConsentBlocked = state === "consent_blocked" || commState === "consent_blocked" || !target.hasConsent;
   const isActionCommitted = isDispatched || isScheduled || isAwaitingSender;
   const canSend = !isConsentBlocked && message.trim().length > 0 && !isSending && !isActionCommitted;
+  // the time this letter is scheduled for: just now from this desk, or a saved schedule that is still ahead
+  // (a "send now" hand-off also records a time, which is now; that is not a schedule)
+  const savedFor = target.scheduledDraft?.scheduledFor ?? null;
+  const savedIsAhead = (() => {
+    if (!savedFor) return false;
+    const at = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(savedFor) ? savedFor : `${savedFor}:00-07:00`);
+    return Number.isFinite(at) && at - Date.now() > 2 * 60_000;
+  })();
+  const scheduledWhen = scheduledLabel ?? (savedFor && savedIsAhead ? describePacificWallTime(savedFor) : null);
 
   return (
     <aside
@@ -400,6 +481,34 @@ export function PlayableLetterDesk({
           <div className={styles.speakerLabel}>
             <span>{personality.canonicalName}</span>
             <span className={styles.styleTag}>{personality.style}</span>
+            <span
+              className={styles.styleTag}
+              style={{
+                background:
+                  relationshipTier === "cherished_partner"
+                    ? "rgba(247, 183, 51, 0.25)"
+                    : relationshipTier === "familiar_friend"
+                    ? "rgba(100, 180, 246, 0.2)"
+                    : "rgba(255, 255, 255, 0.08)",
+                color:
+                  relationshipTier === "cherished_partner"
+                    ? "#f7b733"
+                    : relationshipTier === "familiar_friend"
+                    ? "#90caf9"
+                    : "#d9be9e",
+                border:
+                  relationshipTier === "cherished_partner"
+                    ? "1px solid rgba(247, 183, 51, 0.4)"
+                    : "none",
+              }}
+              data-testid="villager-relationship-tier"
+            >
+              {relationshipTier === "cherished_partner"
+                ? "🌟 Cherished Partner"
+                : relationshipTier === "familiar_friend"
+                ? "🤝 Familiar Friend"
+                : "🌱 New Acquaintance"}
+            </span>
           </div>
           <p className={styles.dialogueText} data-testid="villager-dialogue">
             {activeDialogue}
@@ -426,6 +535,28 @@ export function PlayableLetterDesk({
           </span>
         </div>
       </div>
+
+      {/* Restored In-Progress Draft Banner */}
+      {restoredDraft && (
+        <div
+          style={{
+            background: "rgba(247, 183, 51, 0.12)",
+            border: "1px solid rgba(247, 183, 51, 0.4)",
+            borderRadius: 8,
+            padding: "6px 12px",
+            fontSize: 11.5,
+            color: "#fcecd7",
+            margin: "0 16px 12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+          data-testid="restored-draft-banner"
+        >
+          <span>✨</span>
+          <span>Restored unfinished letter draft from your previous session.</span>
+        </div>
+      )}
 
       {/* Collaborative Approach Selector (How should we phrase this?) */}
       <section className={styles.approachSelectorSection}>
@@ -492,8 +623,19 @@ export function PlayableLetterDesk({
             className={styles.inkTextArea}
             value={message}
             onChange={(e) => {
-              setMessage(e.target.value);
+              const val = e.target.value;
+              setMessage(val);
               setSelectedApproach("custom");
+              if (val !== approvedBody) {
+                setApprovedBody(null);
+              }
+              onSaveUnfinishedDraft?.({
+                customerId: target.customerId,
+                customerName: target.displayName,
+                villagerVariant: target.villagerVariant,
+                letterApproach: "custom",
+                draftBody: val,
+              });
             }}
             placeholder="Write your outreach letter with your villager companion..."
             disabled={isActionCommitted}
@@ -519,46 +661,37 @@ export function PlayableLetterDesk({
         </div>
       </section>
 
-      {/* Physical Dispatch & Scheduling Shelf */}
+      {/* Physical Dispatch & Scheduling Shelf: each time card schedules the letter for that exact time */}
       <section className={styles.dispatchShelfSection}>
         <div className={styles.sectionHeader}>
           <span>⏰</span>
-          <span>Dispatch Timing & Shelf</span>
+          <span>Schedule it — tap a time</span>
         </div>
         <div className={styles.dispatchCards}>
-          {/* Dawn Dispatch */}
-          <button
-            type="button"
-            className={`${styles.dispatchCard} ${
-              selectedScheduleSlot === "morning" ? styles.dispatchCardActive : ""
-            }`}
-            onClick={() => {
-              setSelectedScheduleSlot("morning");
-              setScheduleDateTime(getPacificScheduleIso(10, 0));
-            }}
-            disabled={isActionCommitted}
-            data-testid="schedule-slot-morning"
-          >
-            <div className={styles.dispatchCardTime}>🌅 Tomorrow 10:00 AM</div>
-            <div className={styles.dispatchCardLabel}>Dawn Pacific Carrier</div>
-          </button>
-
-          {/* Midday Dispatch */}
-          <button
-            type="button"
-            className={`${styles.dispatchCard} ${
-              selectedScheduleSlot === "afternoon" ? styles.dispatchCardActive : ""
-            }`}
-            onClick={() => {
-              setSelectedScheduleSlot("afternoon");
-              setScheduleDateTime(getPacificScheduleIso(14, 0));
-            }}
-            disabled={isActionCommitted}
-            data-testid="schedule-slot-afternoon"
-          >
-            <div className={styles.dispatchCardTime}>☀️ Tomorrow 2:00 PM</div>
-            <div className={styles.dispatchCardLabel}>Afternoon Carrier</div>
-          </button>
+          {([
+            { slot: "morning" as const, icon: "🌅", time: nextPacificSlot(10, 0) },
+            { slot: "afternoon" as const, icon: "☀️", time: nextPacificSlot(14, 0) },
+          ]).map(({ slot, icon, time }) => (
+            <button
+              key={slot}
+              type="button"
+              className={`${styles.dispatchCard} ${styles.dispatchCardCta} ${
+                selectedScheduleSlot === slot ? styles.dispatchCardActive : ""
+              }`}
+              onClick={() => {
+                setSelectedScheduleSlot(slot);
+                void handleCommitSchedule(time.value);
+              }}
+              disabled={!canSend}
+              aria-label={`Schedule for ${time.label}`}
+              data-testid={`schedule-slot-${slot}`}
+            >
+              <div className={styles.dispatchCardTime}>
+                {icon} {time.dayWord} {time.label.split(" · ")[1]}
+              </div>
+              <div className={styles.dispatchCardLabel}>{time.label.split(" · ")[0]} · tap to schedule</div>
+            </button>
+          ))}
 
           {/* Custom Window */}
           <button
@@ -584,6 +717,15 @@ export function PlayableLetterDesk({
               onChange={(e) => setScheduleDateTime(e.target.value)}
               data-testid="custom-datetime-input"
             />
+            <button
+              type="button"
+              className={styles.scheduleCommitButton}
+              onClick={() => void handleCommitSchedule(scheduleDateTime)}
+              disabled={!canSend || !scheduleDateTime}
+              data-testid="custom-schedule-button"
+            >
+              ✓ Schedule for {describePacificWallTime(scheduleDateTime)}
+            </button>
           </div>
         )}
       </section>
@@ -607,17 +749,27 @@ export function PlayableLetterDesk({
         </div>
       ) : null}
 
-      {isScheduled && (
-        <div className={`${styles.stateBanner} ${styles.stateBannerScheduled}`} data-testid="banner-scheduled">
-          <span>⏰</span>
+      {scheduledWhen && (isScheduled || isAwaitingSender) && (
+        <div className={`${styles.stateBanner} ${styles.stateBannerConfirmed}`} data-testid="banner-scheduled" role="status">
+          <span className={styles.confirmedCheck}>✓</span>
           <div>
-            <strong>Scheduled — not sent</strong>
-            <div>Waiting for Pacific window {new Date(scheduleDateTime).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}. A scheduled letter is not a sent message.</div>
+            <strong>Scheduled for {scheduledWhen}</strong>
+            <div>Scheduled — not sent. At that time it will be waiting for you to send from your own phone.</div>
           </div>
         </div>
       )}
 
-      {isAwaitingSender && (
+      {isScheduled && !scheduledWhen && (
+        <div className={`${styles.stateBanner} ${styles.stateBannerScheduled}`} data-testid="banner-scheduled">
+          <span>⏰</span>
+          <div>
+            <strong>Scheduled — not sent</strong>
+            <div>A scheduled letter is not a sent message.</div>
+          </div>
+        </div>
+      )}
+
+      {isAwaitingSender && !scheduledWhen && (
         <div className={`${styles.stateBanner} ${styles.stateBannerAwaiting}`} data-testid="banner-awaiting-sender">
           <span>📱</span>
           <div>
@@ -753,6 +905,12 @@ export function PlayableLetterDesk({
         </div>
       )}
 
+      {handoffError && (
+        <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4, padding: "4px 8px", background: "#fef2f2", borderRadius: 4 }}>
+          {handoffError}
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className={styles.actionRow}>
         <button
@@ -780,29 +938,6 @@ export function PlayableLetterDesk({
         <button
           type="button"
           className={styles.scheduleCommitButton}
-          onClick={() => {
-            setSelectedScheduleSlot("morning");
-            setScheduleDateTime(getPacificScheduleIso(10, 0));
-          }}
-          disabled={isActionCommitted || isSending}
-          data-testid="schedule-button"
-        >
-          <span>⏰</span> SCHEDULE
-        </button>
-
-        <button
-          type="button"
-          className={styles.scheduleCommitButton}
-          onClick={handleCommitSchedule}
-          disabled={!canSend}
-          data-testid="commit-schedule-button"
-        >
-          <span>✓</span> COMMIT
-        </button>
-
-        <button
-          type="button"
-          className={styles.scheduleCommitButton}
           onClick={() => void handleOpenSms()}
           disabled={!textApproved || !target.phone || !target.hasConsent || isSending}
           data-testid="open-in-sms-button"
@@ -812,7 +947,7 @@ export function PlayableLetterDesk({
 
         <button
           type="button"
-          className={styles.sendNowButton}
+          className={styles.sendNowSecondary}
           onClick={handleSendNow}
           disabled={!canSend}
           data-testid="send-now-button"
@@ -823,7 +958,7 @@ export function PlayableLetterDesk({
             "✓ COMMITTED"
           ) : (
             <>
-              <span>✈</span> SEND NOW
+              <span>✈</span> Send now instead
             </>
           )}
         </button>

@@ -1,0 +1,285 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildSyntheticSilverLakeTargets } from "@shared/playableVillagers";
+import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import { VILLAGER_VARIANTS } from "@shared/cozyVillagerOutreach";
+import { projectReunionProgress, REUNION_PASS_HOLDS_DAYS } from "@shared/silverLakeReunionEvents";
+import {
+  REUNION_QUEST_TEMPLATES,
+  assignReunionQuests,
+  fillLine,
+  hasRealDecision,
+  questPhases,
+  questSlotsFor,
+  questTaskList,
+  reunionBeats,
+  stepIdFromItemKey,
+  stepItemKey,
+  stepItems,
+  applyStepItem,
+  type QuestSpot,
+} from "./reunionQuests";
+
+const targets = () => buildSyntheticSilverLakeTargets("laundry_farm");
+const byId = (list: CozyProjectedTarget[]) => new Map(list.map(t => [t.customerId, t]));
+const MEI = "synthetic:customer:mei_lin";
+const SARAH = "synthetic:customer:sarah_jenkins";
+const MARCUS = "synthetic:customer:marcus_vance";
+const CHLOE = "synthetic:customer:chloe_bennett";
+const GRACE = "synthetic:customer:grace_holloway";
+const none = { found: new Set<string>(), reunited: new Set<string>() };
+const decide = (list: CozyProjectedTarget[], id: string, patch: Partial<CozyProjectedTarget>) =>
+  list.map(t => (t.customerId === id ? { ...t, ...patch } : t));
+const withMessage = (t: CozyProjectedTarget, message: string) =>
+  ({ ...t, silverLakeStatus: { ...t.silverLakeStatus, message } }) as CozyProjectedTarget;
+
+const spots: QuestSpot[] = JSON.parse(
+  readFileSync(resolve(__dirname, "../../../../public/assets/goldline/silver-lake-3d/courtyard.json"), "utf8")
+).questSpots;
+
+describe("reunion quests: who gets one", () => {
+  it("gives every reachable, undecided customer an errand, in slot order, never with a giver of the same animal", () => {
+    const chain = assignReunionQuests(targets());
+    // David (scheduled) and Elena (send observed) are decided; Lucas is consent-blocked and can never be written to
+    expect(chain.map(q => [q.customerId, q.template.id])).toEqual([
+      [MEI, "squirrel_hoa_letter"],
+      [SARAH, "cat_hose_flute"],
+      [MARCUS, "bunny_kite"],
+      [CHLOE, "bear_watering_can"],
+      [GRACE, "otter_duck"],
+    ]);
+    const list = byId(targets());
+    for (const q of chain) expect(q.template.giver.variant).not.toBe(list.get(q.customerId)!.villagerVariant);
+  });
+
+  it("every template's hiding spot exists in courtyard.json, and no two templates share one", () => {
+    const ids = new Set(spots.map(s => s.id));
+    for (const t of REUNION_QUEST_TEMPLATES) expect(ids.has(t.spotId)).toBe(true);
+    expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.spotId)).size).toBe(REUNION_QUEST_TEMPLATES.length);
+  });
+
+  it("opens with Hazel's HOA letter", () => {
+    expect(REUNION_QUEST_TEMPLATES[0].id).toBe("squirrel_hoa_letter");
+    expect(assignReunionQuests(targets())[0].template.id).toBe("squirrel_hoa_letter");
+  });
+
+  it("has an authored template for every villager animal, so all eight doorsteps can host an errand", () => {
+    expect(new Set(REUNION_QUEST_TEMPLATES.map(t => t.giver.variant))).toEqual(new Set(VILLAGER_VARIANTS));
+    const everyone = targets().map(t => ({ ...t, communicationState: "draft_prepared", status: "draft_ready", hasConsent: true, silverLakeStatus: { ...t.silverLakeStatus, message: "draft_prepared" } }) as CozyProjectedTarget);
+    expect(assignReunionQuests(everyone)).toHaveLength(8);
+  });
+
+  it("Cleo's flute is a found object, never a real instrument", () => {
+    const cat = REUNION_QUEST_TEMPLATES.find(t => t.id === "cat_hose_flute")!;
+    expect(cat.giver.variant).toBe("cat");
+    expect(cat.item.name).toBe("old garden hose");
+    expect(cat.item.name).not.toMatch(/flute|whistle|recorder|pipe|horn|trumpet|instrument/i);
+  });
+
+  it("a customer with saved progress keeps the same errand on a later visit", () => {
+    const kept = new Map([[MARCUS, "cat_hose_flute"]]);
+    const chain = assignReunionQuests(targets(), new Set(), undefined, kept);
+    expect(chain.find(q => q.customerId === MARCUS)!.template.id).toBe("cat_hose_flute");
+    expect(chain.find(q => q.customerId === MEI)!.template.id).not.toBe("cat_hose_flute");
+  });
+
+  it("a decided customer with saved progress keeps their giver, who just says thanks", () => {
+    const kept = new Map([[MEI, "cat_hose_flute"]]);
+    const chain = assignReunionQuests(targets(), new Set([MEI]), undefined, kept);
+    expect(chain[0]).toMatchObject({ customerId: MEI, template: { id: "cat_hose_flute" } });
+    const phases = questPhases(chain, byId(targets()), new Set([MEI]), none);
+    expect(phases.get(MEI)).toBe("done");
+    expect(phases.get(SARAH)).toBe("need");
+  });
+
+  it("never gives a consent-blocked customer an errand", () => {
+    expect(assignReunionQuests(targets()).some(q => q.customerId === "synthetic:customer:lucas_morales")).toBe(false);
+  });
+});
+
+describe("reunion quests: the unlock rule", () => {
+  it("only the first undecided quest talks; the next giver stays on a one-liner", () => {
+    const list = targets();
+    const chain = assignReunionQuests(list);
+    const phases = questPhases(chain, byId(list), new Set(), none);
+    expect(phases.get(MEI)).toBe("need");
+    expect(phases.get(SARAH)).toBe("locked");
+    expect(phases.get(MARCUS)).toBe("locked");
+  });
+
+  it("solving the puzzle and watching the reunion does not unlock the next villager", () => {
+    const list = targets();
+    const chain = assignReunionQuests(list);
+    const progress = { found: new Set([MEI]), reunited: new Set([MEI]) };
+    const phases = questPhases(chain, byId(list), new Set(), progress);
+    expect(phases.get(MEI)).toBe("waiting");
+    expect(phases.get(SARAH)).toBe("locked");
+  });
+
+  it("opening the desk, editing, saving or approving the text does not count as a decision", () => {
+    const mei = targets().find(t => t.customerId === MEI)!;
+    for (const message of ["draft_prepared", "draft_edited_unsaved", "saved_draft", "explicitly_approved", "failed", "cancelled"]) {
+      expect(hasRealDecision(withMessage(mei, message), new Set())).toBe(false);
+    }
+  });
+
+  it.each([
+    ["scheduled", { status: "scheduled", communicationState: "scheduled" }],
+    ["handed off to the phone", { silverLakeStatus: { message: "compose_handoff_opened" } }],
+    ["reported sent", { silverLakeStatus: { message: "operator_reported_sent" } }],
+    ["send observed", { communicationState: "send_observed" }],
+  ] as const)("a real decision (%s) completes the quest and unlocks the next giver", (_label, patch) => {
+    const before = targets();
+    const chain = assignReunionQuests(before);
+    const mei = before.find(t => t.customerId === MEI)!;
+    const changed = "silverLakeStatus" in patch ? withMessage(mei, patch.silverLakeStatus.message) : { ...mei, ...patch };
+    const after = before.map(t => (t.customerId === MEI ? (changed as CozyProjectedTarget) : t));
+    const phases = questPhases(chain, byId(after), new Set(), none);
+    expect(phases.get(MEI)).toBe("done");
+    expect(phases.get(SARAH)).toBe("need");
+    expect(phases.get(MARCUS)).toBe("locked");
+  });
+
+  it("an explicit pass is a real decision", () => {
+    const list = targets();
+    const chain = assignReunionQuests(list);
+    const phases = questPhases(chain, byId(list), new Set([MEI]), none);
+    expect(phases.get(MEI)).toBe("done");
+    expect(phases.get(SARAH)).toBe("need");
+  });
+
+  it("writing to a later customer directly completes that quest without skipping the active one", () => {
+    const list = decide(targets(), MARCUS, { status: "scheduled", communicationState: "scheduled" });
+    const chain = assignReunionQuests(targets());
+    const phases = questPhases(chain, byId(list), new Set(), none);
+    expect(phases.get(MEI)).toBe("need");
+    expect(phases.get(SARAH)).toBe("locked");
+    expect(phases.get(MARCUS)).toBe("done");
+  });
+});
+
+describe("reunion quests: never invent facts about the real customer", () => {
+  it("fills the reunion with the customer's real numbers", () => {
+    const [q] = assignReunionQuests(targets());
+    const mei = targets().find(t => t.customerId === MEI)!;
+    const text = reunionBeats(q.template, questSlotsFor(q.template, spots[0], mei)).map(b => b.text).join(" ");
+    expect(text).toContain("You write the letter in your best quill handwriting");
+    expect(text).toContain("Mei Lin is there");
+    expect(text).toContain("42 days since the last pickup");
+    expect(text).toContain("5 orders, then nothing");
+    expect(text).toContain("You should write to Mei.");
+  });
+
+  it("drops a beat whose real number is missing instead of guessing", () => {
+    const [q] = assignReunionQuests(targets());
+    const mei = { ...targets().find(t => t.customerId === MEI)!, daysSinceLastOrder: null, paidOrders: undefined } as unknown as CozyProjectedTarget;
+    const text = reunionBeats(q.template, questSlotsFor(q.template, spots[0], mei)).map(b => b.text).join(" ");
+    expect(text).not.toMatch(/days|orders?, then|orders? with us|undefined|null|NaN/);
+    expect(text).toContain("You should write to Mei.");
+  });
+
+  it("uses the singular for one order", () => {
+    const slots = { giver: "Cleo", item: "flute", hint: "", customerName: "A B", customerFirst: "A", daysSinceLastOrder: 3, paidOrders: 1 };
+    expect(fillLine("{paidOrders} {orderWord}", slots)).toBe("1 order");
+  });
+
+  it("every authored line uses only known slots and fills for every synthetic customer", () => {
+    for (const tpl of REUNION_QUEST_TEMPLATES) {
+      for (const t of targets()) {
+        const slots = questSlotsFor(tpl, spots.find(s => s.id === tpl.spotId) ?? null, t);
+        for (const line of Object.values(tpl.lines)) expect(fillLine(line, slots)).not.toBeNull();
+        expect(reunionBeats(tpl, slots).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("the customer never speaks and is never given a pronoun", () => {
+    for (const tpl of REUNION_QUEST_TEMPLATES) {
+      const lines = [...Object.values(tpl.lines), ...tpl.reunion.map(b => b.text)];
+      for (const line of lines) expect(line).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
+      for (const b of tpl.reunion) expect(["giver", "narrator"]).toContain(b.speaker);
+    }
+  });
+});
+
+describe("reunion quests: progress saved on the server", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const at = (daysAgo: number) => new Date(now.getTime() - daysAgo * 86_400_000).toISOString();
+
+  it("a pass holds for a week, then the customer waits on a decision again", () => {
+    const fresh = projectReunionProgress([{ customerId: MEI, templateId: "cat_hose_flute", kind: "passed", createdAt: at(2) }], now);
+    expect(fresh.passes.has(MEI)).toBe(true);
+    const stale = projectReunionProgress(
+      [{ customerId: MEI, templateId: "cat_hose_flute", kind: "passed", createdAt: at(REUNION_PASS_HOLDS_DAYS + 1) }],
+      now
+    );
+    expect(stale.passes.has(MEI)).toBe(false);
+  });
+
+  it("a reunion implies the item was found, and remembers the errand", () => {
+    const p = projectReunionProgress([{ customerId: MEI, templateId: "cat_hose_flute", kind: "reunited", createdAt: at(1) }], now);
+    expect(p.found.has(MEI)).toBe(true);
+    expect(p.reunited.has(MEI)).toBe(true);
+    expect(p.templateByCustomer.get(MEI)).toBe("cat_hose_flute");
+  });
+});
+
+describe("reunion quests: Hazel's HOA letter is a chain of linked steps", () => {
+  const hoa = REUNION_QUEST_TEMPLATES.find(t => t.id === "squirrel_hoa_letter")!;
+  const steps = hoa.steps!;
+
+  it("shows Adam's three tasks, in order; the glove is the puzzle, not a task", () => {
+    expect(hoa.tasks).toEqual([
+      "Shake the porcupine",
+      "Dip its shed quill in the ink well",
+      "Write a letter to the squirrel to appease its HOA complaint",
+    ]);
+    expect(steps.map(st => st.id)).toEqual(["glove", "shake", "quill", "dip"]);
+  });
+
+  it("every step's prop sits on a spot that exists", () => {
+    const ids = new Set(spots.map(sp => sp.id));
+    for (const st of steps) expect(ids.has(st.spotId)).toBe(true);
+  });
+
+  it("Pip can't be shaken bare-handed: the glove comes first", () => {
+    const early = applyStepItem(hoa, 0, "shake");
+    expect(early.ok).toBe(false);
+    expect(early.line).toMatch(/OW/);
+    expect(early.next).toBe(0);
+    const glove = applyStepItem(hoa, 0, "glove");
+    expect(glove).toMatchObject({ ok: true, next: 1 });
+    expect(glove.line).toMatch(/tea cosy/i);
+    expect(applyStepItem(hoa, 1, "shake")).toMatchObject({ ok: true, next: 2 });
+    expect(applyStepItem(hoa, 3, "shake").ok).toBe(false);
+  });
+
+  it("the ink well needs the quill; dipping it is the last step", () => {
+    expect(applyStepItem(hoa, 1, "dip").ok).toBe(false);
+    expect(applyStepItem(hoa, 2, "quill")).toMatchObject({ ok: true, next: 3 });
+    expect(applyStepItem(hoa, 3, "dip")).toMatchObject({ ok: true, next: 4 });
+    expect(stepItems(hoa, 4)).toEqual([]);
+  });
+
+  it("pick-ups appear only at their own step; Pip and the ink well stay all along", () => {
+    expect(stepItems(hoa, 0).map(i => i.stepId)).toEqual(["glove", "shake", "dip"]);
+    expect(stepItems(hoa, 1).map(i => i.stepId)).toEqual(["shake", "dip"]);
+    expect(stepItems(hoa, 2).map(i => i.stepId)).toEqual(["shake", "quill", "dip"]);
+    expect(stepItems(hoa, 3).map(i => i.stepId)).toEqual(["shake", "dip"]);
+  });
+
+  it("ticks the tasks as the steps land, and the letter on the hand-over", () => {
+    expect(questTaskList(hoa, 0, "need").map(t => t.done)).toEqual([false, false, false]);
+    expect(questTaskList(hoa, 2, "need").map(t => t.done)).toEqual([true, false, false]);
+    expect(questTaskList(hoa, 4, "carrying").map(t => t.done)).toEqual([true, true, false]);
+    expect(questTaskList(hoa, 4, "waiting").map(t => t.done)).toEqual([true, true, true]);
+  });
+
+  it("a step prop's key reads back its customer and step, even with colons in the customer id", () => {
+    const key = stepItemKey("cleancloud:42", "shake");
+    expect(key).toBe("item:cleancloud:42#shake");
+    expect(stepIdFromItemKey(key)).toBe("shake");
+    expect(stepIdFromItemKey("item:cleancloud:42")).toBeNull();
+  });
+});

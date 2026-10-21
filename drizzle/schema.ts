@@ -10659,4 +10659,63 @@ export const personalOutreachReplies = mysqlTable(
 export type PersonalOutreachReplyRow = typeof personalOutreachReplies.$inferSelect;
 export type InsertPersonalOutreachReply = typeof personalOutreachReplies.$inferInsert;
 
+/**
+ * Phase 4: Durable world memory for Lantern City neighborhoods.
+ * Replaces browser localStorage with server-backed, tenant-scoped persistence.
+ * Tracks courtyard features, character relationships, visit history, and unfinished activities.
+ */
+export const lanternNeighborhoodMemories = mysqlTable(
+  "lantern_neighborhood_memories",
+  {
+    id: varchar("id", { length: 128 }).notNull(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    territoryId: varchar("territory_id", { length: 64 }).notNull(),
+    courtyardFeature: varchar("courtyard_feature", { length: 64 }),
+    courtyardPlacedAt: timestamp("courtyard_placed_at"),
+    lastVisitedAt: timestamp("last_visited_at").notNull().defaultNow(),
+    visitCount: int("visit_count").notNull().default(1),
+    encounterHistoryJson: json("encounter_history_json"),
+    villagerRelationshipsJson: json("villager_relationships_json"),
+    unfinishedActivitiesJson: json("unfinished_activities_json"),
+    celebratedEventsJson: json("celebrated_events_json"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.tenantId, table.territoryId] }),
+    scopeIdx: index("idx_lnm_scope").on(
+      table.tenantId,
+      table.territoryId,
+      table.lastVisitedAt
+    ),
+  })
+);
+
+export type LanternNeighborhoodMemoryRow = typeof lanternNeighborhoodMemories.$inferSelect;
+export type InsertLanternNeighborhoodMemory = typeof lanternNeighborhoodMemories.$inferInsert;
+
+/**
+ * Silver Lake reunion quests: append-only fiction progress and the operator's explicit pass on a customer.
+ * Never an outreach state: a row here never means a message was sent, scheduled or handed off.
+ * See docs/goldline/silver-lake-3d-slice/REUNION_QUESTS.md.
+ */
+export const silverLakeReunionEvents = mysqlTable(
+  "silver_lake_reunion_events",
+  {
+    id: varchar("id", { length: 64 }).notNull().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    territoryId: varchar("territory_id", { length: 64 }).notNull(),
+    customerId: varchar("customer_id", { length: 191 }).notNull(),
+    operatorId: varchar("operator_id", { length: 191 }).notNull(),
+    templateId: varchar("template_id", { length: 64 }).notNull(),
+    eventKind: varchar("event_kind", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeIdx: index("idx_slre_scope").on(table.tenantId, table.territoryId, table.createdAt),
+  })
+);
+
+export type SilverLakeReunionEventRow = typeof silverLakeReunionEvents.$inferSelect;
+
 

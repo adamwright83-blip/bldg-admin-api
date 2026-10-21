@@ -58,20 +58,21 @@ export function isAdminCommandCenterPath(path: string): boolean {
   return path === "/" || path === "/home" || path.startsWith("/home/");
 }
 
-export type LanternScene = "islands" | "map" | "v6" | "atlas" | null;
+export type LanternScene = "islands" | "map" | "v6" | "atlas" | "silverLake3d" | "beverlyHills3d" | "centuryParkEast3d" | "channel382" | null;
 /**
- * Which Lantern City a path shows. The island board is the one Lantern City: the returning-user
- * home and /growth/lantern-city both mount it. The street map (V7) and the older scenes survive
- * only behind explicit QA parameters (?scene=map, or ?scene=v7; ?scene=v6; ?scene=atlas, and
- * ?scene=v5 its old name). Anywhere else no world is mounted, so no 3D scene runs hidden behind
- * another page.
+ * Which Lantern City a path shows. Silver Lake (any `cozy` or `encounter` link, including old deep links)
+ * always opens the walkable 3D courtyard; the painted 2D encounter is archived and has no route.
  */
 export function lanternSceneFor(path: string, search: string): LanternScene {
   if (!isAdminCommandCenterPath(path) && path !== "/growth/lantern-city") return null;
-  const scene = new URLSearchParams(search).get("scene");
-  if (scene === "map" || scene === "v7") return "map";
   const params = new URLSearchParams(search);
-  if (scene === "v6" || params.get("cozy") === "1" || params.get("encounter") === "1") return "v6";
+  if (params.get("cozy") === "1" || params.get("encounter") === "1") return "silverLake3d";
+  if (params.get("level") === "beverly-hills") return "beverlyHills3d";
+  if (params.get("level") === "century-park-east") return "centuryParkEast3d";
+  if (params.get("level") === "channel-382") return "channel382";
+  const scene = params.get("scene");
+  if (scene === "map" || scene === "v7") return "map";
+  if (scene === "v6") return "v6";
   if (scene === "atlas" || scene === "v5") return "atlas";
   return "islands";
 }

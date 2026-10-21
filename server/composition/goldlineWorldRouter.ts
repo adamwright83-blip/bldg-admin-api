@@ -46,6 +46,7 @@ import { PRESENTATION_CONSENT_TEXT, readPresentationConsent, setPresentationCons
 import { loadPresentationExperimentReport } from "../behavioralExperiment/presentationOutcomes";
 import { sendCozyOutreachNow } from "../experience/lanternCity/cozyVillagerOutreachService";
 import { loadCozyRecoverySurfaces } from "../experience/lanternCity/cozyRecoverySurfaces";
+import { silverLakeOperatorId } from "../experience/lanternCity/silverLakeScope";
 import {
   PERSONAL_OUTREACH_SCHEDULE_APPROVAL,
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
@@ -69,19 +70,172 @@ export const goldlineWorldRouter = router({
         })
         .optional()
     )
-    .query(({ ctx, input }) =>
+    .query(async ({ ctx, input }) =>
       loadCozyRecoverySurfaces({
         tenantId: ctx.tenantId,
-        canonicalOperatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
+        operatorId: ctx.user.openId,
         territoryId: input?.territoryId,
         requestedCustomerId: input?.requestedCustomerId,
         limit: input?.limit,
       }).then(surfaces => surfaces.mission)
     ),
-  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  /** Reunion quests: fiction progress and explicit passes for the selected business. Never an outreach state. */
+  reunionQuestEvents: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake") }).optional())
+    .query(async ({ ctx, input }) => {
+      const { listReunionEvents } = await import("../experience/lanternCity/reunionQuestEvents");
+      return { events: await listReunionEvents({ tenantId: ctx.tenantId, territoryId: input?.territoryId ?? "silver-lake" }) };
+    }),
+  recordReunionQuestEvent: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        customerId: z.string().min(1).max(191),
+        templateId: z.string().min(3).max(64),
+        kind: z.enum(["item_found", "reunited", "passed"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordReunionEvent } = await import("../experience/lanternCity/reunionQuestEvents");
+      return recordReunionEvent({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        operatorId: ctx.user.openId,
+        customerId: input.customerId,
+        templateId: input.templateId,
+        kind: input.kind,
+      });
+    }),
+  /** Lantern City's Beverly Hills level: the selected business's real commercial prospects there (read-only). */
+  beverlyHillsProspects: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const { loadBeverlyHillsProspects } = await import("../experience/lanternCity/beverlyHillsProspects");
+    return loadBeverlyHillsProspects(ctx.tenantId);
+  }),
+  getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z
+        .object({
+          territoryId: z.string().default("silver-lake"),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const { loadNeighborhoodWorldMemory } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await loadNeighborhoodWorldMemory({
+        tenantId: ctx.tenantId,
+        territoryId: input?.territoryId,
+      });
+    }),
+  saveNeighborhoodFeature: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        featureChoice: z.enum(["tea_table", "reading_bench", "lantern_post"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { saveNeighborhoodFeature } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await saveNeighborhoodFeature({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        featureChoice: input.featureChoice,
+      });
+    }),
+  recordVillagerInteraction: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        villagerVariant: z.enum([
+          "fox",
+          "badger",
+          "bunny",
+          "bear",
+          "otter",
+          "hedgehog",
+          "squirrel",
+          "cat",
+        ]),
+        customerId: z.string().optional(),
+        customerName: z.string().optional(),
+        approach: z
+          .enum(["warm_brief", "helpful_detailed", "cozy_care_perk", "custom"])
+          .optional(),
+        draftBody: z.string().optional(),
+        actionType: z
+          .enum([
+            "draft_prepared",
+            "scheduled",
+            "compose_handoff_opened",
+            "operator_reported_sent",
+            "independently_verified_sent",
+          ])
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { recordVillagerInteraction } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await recordVillagerInteraction({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        villagerVariant: input.villagerVariant as any,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        approach: input.approach as any,
+        draftBody: input.draftBody,
+        actionType: input.actionType,
+      });
+    }),
+  saveUnfinishedLetterDraft: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        territoryId: z.string().default("silver-lake"),
+        customerId: z.string().min(1),
+        customerName: z.string().min(1),
+        villagerVariant: z.enum([
+          "fox",
+          "badger",
+          "bunny",
+          "bear",
+          "otter",
+          "hedgehog",
+          "squirrel",
+          "cat",
+        ]),
+        selectedApproach: z.enum([
+          "warm_brief",
+          "helpful_detailed",
+          "cozy_care_perk",
+          "custom",
+        ]),
+        draftBody: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { saveUnfinishedLetterDraft } = await import(
+        "../experience/lanternCity/neighborhoodMemoryService"
+      );
+      return await saveUnfinishedLetterDraft({
+        tenantId: ctx.tenantId,
+        territoryId: input.territoryId,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        villagerVariant: input.villagerVariant as any,
+        selectedApproach: input.selectedApproach as any,
+        draftBody: input.draftBody,
+      });
+    }),
+  cozyRecoveryDayLineCard: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) =>
     loadCozyRecoverySurfaces({
       tenantId: ctx.tenantId,
-      canonicalOperatorId: ctx.user.openId,
+      canonicalOperatorId: await silverLakeOperatorId(ctx),
+      operatorId: ctx.user.openId,
     }).then(surfaces => surfaces.dayLineCard)
   ),
   sendCozyOutreachNow: legacyDayforgeTenantOperatorProcedure
@@ -104,10 +258,11 @@ export const goldlineWorldRouter = router({
         idempotencyKey: z.string().optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
+    .mutation(async ({ ctx, input }) =>
       sendCozyOutreachNow({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         expectedPhone: input.expectedPhone,
@@ -137,6 +292,7 @@ export const goldlineWorldRouter = router({
       return await commitPersonalOutreachDraft({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         customerId: input.customerId,
         messageBody: input.messageBody,
         scheduledFor: input.scheduledFor,
@@ -249,6 +405,7 @@ export const goldlineWorldRouter = router({
       return await approveDurablePersonalOutreach({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        canonicalOperatorId: await silverLakeOperatorId(ctx),
         messageId: input.messageId,
         expectedRevisionCount: input.expectedRevisionCount,
         confirmation: input.confirmation,

@@ -45,7 +45,7 @@ import {
 } from "../../turn/claireTurn";
 import { detectConversationControl } from "../../turn/interpretTurn";
 import { explicitTrackingRequest } from "../../briefing/titleContract";
-import { answerClairePreDriveFollowUp } from "../../preDriveConversation";
+import { answerClairePreDriveFollowUp, conservativeClaireFollowUp } from "../../preDriveConversation";
 import {
   assembleGuardedClaireSpeak,
   buildClaireVerifiedFactInventory,
@@ -829,6 +829,7 @@ export async function runClaireV2PrimaryTurn(
       const queries = decision.evidence.filter(
         item => item.type === "business_query" && item.authoritativeFor.includes("current_business_truth")
       );
+      // A ledger query carries `query.period`; a business read carries `questionPeriod`.
       const executed = queries.map(item =>
         isCompanyViewEvidencePayload(item.payload)
           ? item.payload.questionPeriod
@@ -924,7 +925,7 @@ export async function runClaireV2PrimaryTurn(
       );
     }
     let personalEnd = false;
-    const composed = await deps.speak({
+    const organInput: Parameters<SpeakingOrgan>[0] = {
       tenantId: input.tenantId,
       utterance,
       brief: input.brief ?? null,
@@ -956,7 +957,23 @@ export async function runClaireV2PrimaryTurn(
       onPersonalTurn: personal => {
         if (personal.endCall) personalEnd = true;
       },
-    });
+    };
+    let composed = await deps.speak(organInput);
+    // The organ's generic "couldn't finish" line means generation failed or a
+    // safety guard discarded the draft. V2 asks once more before speaking it.
+    let organFallback: string | null = null;
+    try {
+      organFallback = conservativeClaireFollowUp({ utterance, brief: input.brief ?? null, context });
+    } catch {
+      organFallback = null;
+    }
+    if (organFallback && composed.trim() === organFallback.trim()) {
+      console.warn("[ClaireBrainV2Primary] speaking organ returned its fallback; retrying once", {
+        event: "claire_brain_v2_organ_retry",
+        conversationKey: input.conversationKey,
+      });
+      composed = await deps.speak(organInput).catch(() => composed);
+    }
 
     const licensedText = [
       ...evidence.map(item => item.text),

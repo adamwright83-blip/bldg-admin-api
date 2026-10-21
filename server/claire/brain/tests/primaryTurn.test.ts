@@ -129,6 +129,8 @@ const business: BusinessMemoryDeps = {
 const context = {
   businessDate: "2026-10-19",
   actorId: "adam-admin",
+  macroGoalKnown: true,
+  relevantTimeline: [],
   blockers: [],
   nextFixedCommitment: null,
   clock: { localTime: "9:05 AM", tomorrowBusinessDate: "2026-10-20" },
@@ -428,7 +430,8 @@ describe("Brain V2 primary — a named period is never substituted", () => {
     const h = harness();
     const runQuery = vi.mocked(business.runQuery);
     runQuery.mockClear();
-    const result = await runClaireV2PrimaryTurn(turnInput({}, "What were my sales last week?"), { ...h.deps, planBusinessQuery: lastWeekPlanner });
+    // Phrased so it stays on the tenant ledger reader rather than the company view.
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "Show me the latest sales from last week."), { ...h.deps, planBusinessQuery: lastWeekPlanner });
     expect(runQuery.mock.calls.some(call => (call[1] as { period: { kind: string } }).period.kind === "last_week")).toBe(true);
     expect(result.speak).not.toMatch(/can't verify last week/);
     expect(result.brainV2.composition).toBe("deterministic");
@@ -440,9 +443,22 @@ describe("Brain V2 primary — a named period is never substituted", () => {
       metric: "latest_sales", limit: 5, customerName: null, rank: null, filters: null, serviceType: null,
       listMembers: true, period: { kind: "trailing_days", days: 30 }, comparison: null, minOrders: 1, groupBy: null,
     }) as never;
-    const result = await runClaireV2PrimaryTurn(turnInput({}, "What were my sales last week?"), { ...h.deps, planBusinessQuery: thirtyDays });
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "Show me the latest sales from last week."), { ...h.deps, planBusinessQuery: thirtyDays });
     expect(result.speak).toBe("I can't verify last week from what I have right now, so I won't give you a different period instead.");
     expect(result.speak).not.toMatch(/Thomas|30 days/);
+  });
+
+  it("asks the speaking organ once more when it returns its generic fallback", async () => {
+    const h = harness();
+    const { conservativeClaireFollowUp } = await import("../../preDriveConversation");
+    h.speak.mockResolvedValueOnce(conservativeClaireFollowUp({
+      utterance: "What do you think I should focus on this week to grow revenue?",
+      brief: "Morning. Two pickups today.",
+      context,
+    }));
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "What do you think I should focus on this week to grow revenue?"), h.deps);
+    expect(h.speak).toHaveBeenCalledTimes(2);
+    expect(result.speak).toMatch(/^Composed reply/);
   });
 
   it("does not refuse a strategy question that mentions a period", async () => {

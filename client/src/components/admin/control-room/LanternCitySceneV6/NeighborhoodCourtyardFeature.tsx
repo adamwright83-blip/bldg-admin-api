@@ -257,6 +257,43 @@ export function NeighborhoodCourtyardFeature({
                   </div>
                 </div>
               </button>
+              {/* Option C: Lantern Post */}
+              <button
+                type="button"
+                style={{
+                  background:
+                    chosenFeature === "lantern_post"
+                      ? "rgba(247, 183, 51, 0.2)"
+                      : "rgba(255, 255, 255, 0.05)",
+                  border:
+                    chosenFeature === "lantern_post"
+                      ? "2px solid #f7b733"
+                      : "1.5px solid rgba(220, 185, 145, 0.3)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  color: "#fcecd7",
+                }}
+                onClick={() => {
+                  onChooseFeature("lantern_post");
+                  setIsDialogOpen(false);
+                }}
+                data-testid="choose-lantern-post"
+              >
+                <span style={{ fontSize: 28 }}>🏮</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: "#f7b733" }}>
+                    {NEIGHBORHOOD_FEATURES.lantern_post.name}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#cbb297", marginTop: 2 }}>
+                    {NEIGHBORHOOD_FEATURES.lantern_post.description}
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
         </div>

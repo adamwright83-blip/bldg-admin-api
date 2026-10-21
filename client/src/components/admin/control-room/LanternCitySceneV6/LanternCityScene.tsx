@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
-import { territoryByName, territoryCenter } from "@shared/lanternTerritories";
+import {
+  classifyTerritory,
+  territoryByName,
+  territoryCenter,
+} from "@shared/lanternTerritories";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 import type { GeographicCustomer } from "../customerGeography";
 import { WorldEntityInspector } from "../WorldEntityInspector";
@@ -24,7 +28,8 @@ import {
   type SceneObject,
   type TerritoryTruth,
 } from "./sceneTypes";
-import { CozyNeighborhoodEncounter } from "./CozyNeighborhoodEncounter";
+import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
+import { openSilverLake3D } from "@/pages/goldline/silverLake3d/silverLakeEntry";
 import styles from "./lantern-city-v6.module.css";
 
 function Room({
@@ -171,11 +176,6 @@ export default function LanternCityScene({
   );
   const [rekindle, setRekindle] = useState(false);
   const [search, setSearch] = useState("");
-  const [cozyEncounterTerritory, setCozyEncounterTerritory] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const p = new URLSearchParams(window.location.search);
-    return p.get("cozy") || p.get("encounter") ? (p.get("territory") ?? "silver-lake") : null;
-  });
   const transition = useWorldTransition();
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
     staleTime: 30000,
@@ -205,6 +205,48 @@ export default function LanternCityScene({
     refetchInterval: 30000,
     retry: false,
   });
+  const cozyMission = trpc.system.goldlineWorld.cozyVillagerMission.useQuery(
+    { territoryId: "silver-lake", limit: 8 },
+    { staleTime: 30000, refetchInterval: 30000 }
+  );
+  const isSyntheticPreview =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "synthetic";
+  const isSilverLakeRecoveryEligible = useMemo(() => {
+    if (isSyntheticPreview) return true;
+    if (
+      overview.data?.featuredOperation.binding === "recovery" &&
+      overview.data?.featuredOperation.territoryId === "silver-lake"
+    ) {
+      return true;
+    }
+    const targets = (cozyMission.data?.targets ?? []) as CozyProjectedTarget[];
+    if (targets.length > 0) {
+      return targets.some(
+        t =>
+          t.silverLakeStatus?.message !== "independently_verified_sent" &&
+          t.silverLakeStatus?.message !== "cancelled" &&
+          t.silverLakeStatus?.message !== "failed"
+      );
+    }
+    const slCustomers = (atlas.data?.customers ?? []).filter(c => {
+      const terr = classifyTerritory(
+        c.location?.latitude ?? 0,
+        c.location?.longitude ?? 0
+      );
+      return terr?.id === "silver-lake";
+    });
+    return slCustomers.some(
+      c =>
+        c.cadence.state === "dimming" ||
+        (c.cadence.daysSinceLastOrder ?? 0) >= 30
+    );
+  }, [
+    isSyntheticPreview,
+    overview.data?.featuredOperation,
+    cozyMission.data?.targets,
+    atlas.data?.customers,
+  ]);
   useEffect(() => {
     if (!root.current) return;
     const observer = new ResizeObserver(([entry]) => {
@@ -256,6 +298,18 @@ export default function LanternCityScene({
           overview.data?.featuredOperation.binding !== "recovery"
             ? overview.data?.featuredOperation.territoryId
             : null,
+        recoveryOpportunityTerritoryId: isSilverLakeRecoveryEligible
+          ? "silver-lake"
+          : null,
+        recoveryInvitation: isSilverLakeRecoveryEligible
+          ? {
+              customerFirstName:
+                ((cozyMission.data?.targets?.[0] as CozyProjectedTarget | undefined)?.displayName?.split(" ")[0]) || "Elena",
+              neighborhood: "Silver Lake",
+              note: "Barnaby prepared fresh stationery for a warm reconnection.",
+              villagerName: "Barnaby",
+            }
+          : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -280,6 +334,7 @@ export default function LanternCityScene({
       conquest,
       territoryId,
       overview.data,
+      isSilverLakeRecoveryEligible,
     ]
   );
   const selected = scene.objects.find(object => object.id === selectedId);
@@ -349,6 +404,12 @@ export default function LanternCityScene({
     element: HTMLElement,
     target: SceneSelectTarget = "default"
   ) {
+    // Only the golden-messenger opportunity leads into the walkable 3D Silver Lake; an ordinary customer
+    // light still opens its inspector.
+    if (object.isRecoveryOpportunity) {
+      openSilverLake3D("silver-lake");
+      return;
+    }
     setSelectedId(object.id);
     setSelectedClusterKey(null);
     setTerritoryId(object.territoryId);
@@ -509,7 +570,7 @@ export default function LanternCityScene({
                 type="button"
                 onClick={() => {
                   setCommand("map");
-                  setCozyEncounterTerritory("silver-lake");
+                  openSilverLake3D("silver-lake");
                 }}
                 style={{
                   background: "linear-gradient(180deg, #f7b733 0%, #ea9a1b 100%)",
@@ -629,26 +690,12 @@ export default function LanternCityScene({
           }}
         />
       ) : null}
-      {selectedTerritory && !cozyEncounterTerritory && !inspect && !rekindle ? (
+      {selectedTerritory && !inspect && !rekindle ? (
         <TerritoryRoom
           truth={selectedTerritory}
           onClose={() => setTerritoryId(null)}
           onCustomers={() => setCommand("customers")}
-          onOpenCozyEncounter={(tId) => setCozyEncounterTerritory(tId)}
-        />
-      ) : null}
-      {cozyEncounterTerritory ? (
-        <CozyNeighborhoodEncounter
-          territoryId={cozyEncounterTerritory}
-          onExit={() => {
-            setCozyEncounterTerritory(null);
-            if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cozy")) {
-              // Dropping ?cozy=1 closes the encounter. Keeping ?scene=v6 stops
-              // the next host render from switching this route to the island board.
-              window.history.replaceState({}, "", "/growth/lantern-city?scene=v6");
-            }
-          }}
-          onOpenCustomer={onOpenCustomer}
+          onOpenCozyEncounter={(tId) => openSilverLake3D(tId)}
         />
       ) : null}
     </main>

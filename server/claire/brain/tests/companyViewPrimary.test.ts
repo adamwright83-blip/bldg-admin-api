@@ -504,4 +504,19 @@ describe("Brain V2 primary company view", () => {
       }
     }
   });
+
+  it("answers a selected-business question for the exact period named", async () => {
+    const { deps, readCompanyView } = depsFor(["default", "laundry_farm"]);
+    const result = await runClaireV2PrimaryTurn(turn("What were my sales last week?", "voice", "default"), deps);
+    expect(readCompanyView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period: expect.objectContaining({ kind: "last_week" }),
+        requestedTenantIds: ["default"],
+      })
+    );
+    expect(result.speak).not.toMatch(/can't verify last week/);
+    expect(result.speak).toContain("Laundry Butler");
+    expect(result.speak).not.toContain("Laundry Farm");
+    expect(result.brainV2.origin).toBe("brain_v2");
+  });
 });
