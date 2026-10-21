@@ -97,7 +97,7 @@ describe("JOYSTICK public start", () => {
     expect(landingSource).toContain("trial_days: 7");
     expect(landingSource).toContain("card_required_at_signup: true");
     expect(landingSource).not.toMatch(
-      /captureProductEvent\([\s\S]*\b(message|body|answer)\b/
+      /captureProductEvent\([^)]*\b(message|body|answer)\b/
     );
   });
 });
@@ -124,7 +124,7 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       accent: "#e39b00",
       paper: "#f1e6cf",
       photoWhere: "at a lobby desk in Koreatown",
-      caption: "Adam loved Tomb Raider. Shies away from lobbies.",
+      caption: "Adam loves Tomb Raider. The front desk is the level he skips.",
       companion: "Rook",
       companionTruth: "Socially fearless at any front desk.",
       companionWhy: "Exaggerates hilariously.",
@@ -149,7 +149,7 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       accent: "#e0457b",
       paper: "#f3dde3",
       photoWhere: "on her couch at night",
-      caption: "Daisy loved cozy games. Forgets to follow up.",
+      caption: "Daisy loves cozy games. Follow-ups are not cozy.",
       companion: "Sable",
       companionTruth: "Remembers every customer.",
       companionWhy: "Remembers every excuse, too.",
@@ -159,22 +159,22 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       panelTitle: "Sable · Recall",
       panelLine1: "Maya R. · last order Aug 3",
       panelLine2: '"Try me next month." She said that twice.',
-      panelLine3: "Check-in drafted for Daisy to approve.",
+      panelLine3: "The WeHo one. The dog, the rug. You said she was cute.",
       portraitAriaLabel: "Daisy, stand-in for a real photo on her couch at night",
       sceneAriaLabel:
         "Silver Lake: the fountain, two neighbours, Hazel the squirrel and strung lanterns, sketched in ink",
       companionAriaLabel:
-        "Sable, sketched, holding the ledger she never forgets",
+        "Sable, sketched: a sleek black cat with a scroll satchel",
     });
 
-    // 3. Shawn
+    // 3. Shawn / Sean
     expect(PERSONAS[2]).toEqual({
       key: "shawn",
-      name: "Shawn",
+      name: "Sean",
       accent: "#13a39a",
       paper: "#d9ebe8",
       photoWhere: "at the laundromat counter",
-      caption: "Shawn loved making videos. Never starts the ad.",
+      caption: "Sean doomscrolls IG and TikTok. Has never pressed record.",
       companion: "Luma",
       companionTruth: "Makes the ad in an hour.",
       companionWhy: "Changes it eleven times.",
@@ -186,10 +186,10 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       panelLine2: "Three openers cut from last month's orders.",
       panelLine3: "Version 11. She is not done.",
       portraitAriaLabel:
-        "Shawn, stand-in for a real photo at the laundromat counter",
+        "Sean, stand-in for a real photo at the laundromat counter",
       sceneAriaLabel:
         "CHANNEL 382: the clay studio camera, an ON AIR sign and a clapperboard, sketched in ink",
-      companionAriaLabel: "Luma, sketched, holding a frame",
+      companionAriaLabel: "Luma, sketched: an alert chameleon framing a shot",
     });
 
     // 4. TJ
@@ -199,7 +199,7 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       accent: "#e8472a",
       paper: "#eadfd3",
       photoWhere: "at a front door in the flats",
-      caption: "TJ loved shooters. Starts at the wrong end of the block.",
+      caption: "TJ plays Call of Duty nightly. Won't hang a door hanger.",
       companion: "Orren",
       companionTruth: "Never wastes a step.",
       companionWhy: "Never admits a wrong turn.",
@@ -213,8 +213,8 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       portraitAriaLabel:
         "TJ, stand-in for a real flash photo at a front door with hangers",
       sceneAriaLabel:
-        "Beverly Hills containment: palm trees, a masked figure, a helicopter and a warning sign, sketched in ink",
-      companionAriaLabel: "Orren, sketched, beside a signpost",
+        "Beverly Hills: palm trees, a masked figure, a helicopter and a warning sign, sketched in ink",
+      companionAriaLabel: "Orren, sketched: a steady desert tortoise with a compass pack",
     });
   });
 

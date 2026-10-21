@@ -1,10 +1,17 @@
 /* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useState, type FormEvent } from "react";
 import { captureProductEvent } from "@/lib/posthog";
 import {
+  CLAIRE_DECISION_CHOICES,
+  CLAIRE_ROTATING_WORDS,
+  DAY_LINE_ROUTINES,
+  DOSSIER_TABS,
   FADE_DURATION_MS,
   HOW_IT_WORKS_STEPS,
+  LIVE_RUN_METRICS,
   PERSONAS,
+  RECEIPTS_GRID,
+  ROSTER_COMPANIONS,
   ROTATION_PERIOD_MS,
   initialPersonaState,
   personaReducer,
@@ -127,9 +134,11 @@ function renderPortrait(key: string, label: string) {
   }
 }
 
+// Single-line Picasso style animal drawings for the 4 companions
 function renderCompanion(key: string, label: string, accent: string) {
   switch (key) {
     case "adam":
+      // Rook — Upright fearless messenger bird with bucket hat, goggles, wind-up key, satchel
       return (
         <svg
           viewBox="0 0 180 200"
@@ -163,6 +172,7 @@ function renderCompanion(key: string, label: string, accent: string) {
         </svg>
       );
     case "daisy":
+      // Sable — Sleek black cat with alert ears, whiskers, collar tag, satchel with scrolls
       return (
         <svg
           viewBox="0 0 180 200"
@@ -178,20 +188,37 @@ function renderCompanion(key: string, label: string, accent: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path
-              d="M90 22 C 70 22, 60 40, 66 58 C 70 70, 82 76, 90 76 C 100 76, 112 68, 114 54 C 116 36, 106 22, 90 22 Z"
-              fill={accent}
-            />
-            <path d="M84 48 q4 -4 8 0 M98 48 q4 -4 8 0 M88 62 q6 4 12 0" />
-            <path d="M90 76 C 76 90, 70 110, 70 140 L 70 196 M90 76 C 108 90, 116 110, 116 140 L 116 196" />
-            <path d="M70 100 C 50 104, 40 118, 38 134 M116 100 C 136 104, 146 118, 148 134" />
-            <path d="M34 124 L 92 124 L 92 170 L 34 170 Z" fill="#fbfaf6" />
-            <path d="M44 138 h38 M44 150 h38 M44 162 h22" />
-            <path d="M60 196 h20 M106 196 h20" />
+            {/* Ears */}
+            <path d="M64 46 L 54 20 L 76 34" fill={accent} />
+            <path d="M104 34 L 126 20 L 116 46" fill={accent} />
+            {/* Crown and face */}
+            <path d="M76 34 C 88 30, 96 30, 104 34" />
+            <path d="M54 48 C 46 72, 70 82, 90 82 C 110 82, 134 72, 126 48" />
+            {/* Alert eyes */}
+            <path d="M72 52 q 6 -4 12 0 M96 52 q 6 -4 12 0" />
+            <circle cx="78" cy="53" r="2.5" fill="#111" />
+            <circle cx="102" cy="53" r="2.5" fill="#111" />
+            {/* Nose, mouth, whiskers */}
+            <path d="M87 64 l 3 3 l 3 -3 Z" fill="#111" />
+            <path d="M90 67 v 4 q -6 4 -10 2 M90 71 q 6 4 10 2" />
+            <path d="M52 64 L 30 60 M52 70 L 28 72 M128 64 L 150 60 M128 70 L 152 72" />
+            {/* Collar with accent pendant */}
+            <path d="M72 84 C 82 88, 98 88, 108 84" />
+            <circle cx="90" cy="94" r="6" fill={accent} />
+            {/* Body, legs, paws */}
+            <path d="M74 86 C 54 110, 48 152, 52 196" />
+            <path d="M106 86 C 116 110, 118 152, 114 196" />
+            <path d="M44 196 h 16 M106 196 h 16" />
+            {/* Scroll satchel */}
+            <path d="M42 120 L 76 116 L 78 152 L 44 156 Z" fill="#fbfaf6" />
+            <path d="M48 118 v -8 c 0 -3, 6 -3, 6 0 v 8 M58 118 v -10 c 0 -3, 6 -3, 6 0 v 10" />
+            {/* High curved tail */}
+            <path d="M52 180 C 30 170, 16 142, 22 112 C 26 92, 40 86, 44 98 C 46 108, 36 118, 32 132" />
           </g>
         </svg>
       );
     case "shawn":
+      // Luma — Chameleon director with visor cap, spiraled tail, camera frame
       return (
         <svg
           viewBox="0 0 180 200"
@@ -207,21 +234,31 @@ function renderCompanion(key: string, label: string, accent: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
+            {/* Director's visor */}
             <path
-              d="M90 20 C 68 20, 58 42, 66 60 C 72 72, 82 76, 90 76 C 100 76, 110 70, 114 56 C 118 38, 108 20, 90 20 Z"
+              d="M62 36 C 62 18, 88 14, 112 22 C 126 26, 138 36, 136 48 L 56 52 Z"
               fill={accent}
             />
-            <path d="M78 22 C 72 10, 84 4, 92 10 C 100 4, 112 12, 104 22" />
-            <path d="M84 48 q4 -4 8 0 M98 48 q4 -4 8 0 M88 62 q6 4 12 0" />
-            <path d="M90 76 C 76 90, 70 110, 70 140 L 70 196 M90 76 C 108 90, 116 110, 116 140 L 116 196" />
-            <path d="M116 96 L 160 92 L 160 150 L 116 152" fill="#fbfaf6" />
-            <path d="M126 112 C 134 104, 148 110, 150 120 C 152 130, 140 138, 132 132" />
-            <path d="M70 100 C 52 108, 46 128, 50 144" />
-            <path d="M60 196 h20 M106 196 h20" />
+            {/* Big circular expressive eye */}
+            <circle cx="92" cy="62" r="12" fill="#fbfaf6" />
+            <circle cx="95" cy="62" r="5" fill="#111" />
+            {/* Snout and smile */}
+            <path d="M62 52 C 42 58, 38 74, 50 84 C 66 94, 90 90, 108 84" />
+            <path d="M46 74 q 10 6 20 0" />
+            {/* Body and spiraled curled tail */}
+            <path d="M108 84 C 130 94, 142 118, 138 148 C 132 174, 110 188, 84 184 C 60 180, 50 158, 62 142 C 72 128, 96 132, 100 148 C 102 160, 92 168, 82 166" />
+            {/* Director's clapperboard / frame */}
+            <path d="M32 106 L 82 96 L 86 140 L 36 150 Z" fill="#fbfaf6" />
+            <path d="M32 106 L 82 96 L 84 110 L 34 120 Z" fill={accent} />
+            <path d="M46 104 L 42 118 M60 101 L 56 115 M74 98 L 70 112" />
+            {/* Hand holding frame */}
+            <path d="M88 118 C 76 120, 68 124, 64 132" />
+            <path d="M114 148 C 108 174, 104 192, 118 196 M68 184 L 64 196" />
           </g>
         </svg>
       );
     case "tj":
+      // Orren — Desert tortoise with compass pack on shell and map scroll
       return (
         <svg
           viewBox="0 0 180 200"
@@ -237,19 +274,31 @@ function renderCompanion(key: string, label: string, accent: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
+            {/* Compass mounted atop shell */}
+            <circle cx="106" cy="34" r="14" fill={accent} />
+            <path d="M106 20 V 10 M102 10 H 110" />
+            <path d="M106 34 L 112 26" stroke="#111" strokeWidth="2.4" />
+            <circle cx="106" cy="34" r="2.5" fill="#111" />
+            {/* Domed sturdy shell */}
             <path
-              d="M78 24 C 58 24, 48 44, 56 62 C 62 74, 72 78, 80 78 C 92 78, 102 70, 104 56 C 106 38, 96 24, 78 24 Z"
-              fill={accent}
-            />
-            <path d="M72 50 q4 -4 8 0 M86 50 q4 -4 8 0 M76 64 q6 4 12 0" />
-            <path d="M80 78 C 66 92, 60 112, 60 142 L 60 196 M80 78 C 98 92, 106 112, 106 142 L 106 196" />
-            <path d="M106 104 C 120 100, 130 104, 136 112" />
-            <path d="M146 40 L 146 196" />
-            <path
-              d="M146 60 L 176 60 L 168 72 L 146 72 Z M146 86 L 118 86 L 126 98 L 146 98 Z"
+              d="M38 140 C 34 76, 70 46, 116 48 C 146 50, 168 76, 164 140 Z"
               fill="#fbfaf6"
             />
-            <path d="M50 196 h20 M96 196 h20 M136 196 h20" />
+            {/* Shell plates */}
+            <path d="M56 100 C 76 76, 110 76, 146 98" />
+            <path d="M46 140 C 70 120, 110 120, 154 138" />
+            <path d="M96 48 V 140 M64 90 L 42 110 M128 88 L 150 110" />
+            {/* Head and neck reaching forward */}
+            <path d="M38 124 C 24 122, 12 132, 14 146 C 16 158, 28 162, 40 156" />
+            <circle cx="24" cy="140" r="3" fill="#111" />
+            <path d="M18 148 q 6 4 10 0" />
+            {/* Front foot */}
+            <path d="M32 152 C 28 174, 30 192, 44 196 C 54 196, 56 184, 54 160" />
+            {/* Back foot */}
+            <path d="M140 148 C 144 172, 146 192, 160 196 C 168 196, 170 184, 166 160" />
+            {/* Underside & rolled map */}
+            <path d="M54 170 H 140" />
+            <rect x="76" y="142" width="28" height="12" rx="3" fill={accent} />
           </g>
         </svg>
       );
@@ -360,11 +409,10 @@ function renderPanelFooter(key: string, accent: string) {
   }
 }
 
-const PARTY_LEDE =
-  "Each one has the thing you don't, and a flaw of their own. You earn them by doing the work.";
-
 interface GameCapture {
   key: string;
+  pillTitle: string;
+  pillChore: string;
   title: string;
   line: string;
   note: string;
@@ -376,6 +424,8 @@ interface GameCapture {
 const GAMES: readonly GameCapture[] = [
   {
     key: "silver-lake",
+    pillTitle: "Silver Lake",
+    pillChore: "the customers who went quiet",
     title: "Silver Lake",
     line: "Your quiet customers live here. Walk over and say hi.",
     note: "Real gameplay. Nothing here is sent without you.",
@@ -385,6 +435,8 @@ const GAMES: readonly GameCapture[] = [
   },
   {
     key: "beverly-hills",
+    pillTitle: "Beverly Hills",
+    pillChore: "the prospects you drive past",
     title: "Beverly Hills",
     line: "Real prospects behind the velvet rope.",
     note: "Real gameplay. Cold outreach is drafted, never sent for you.",
@@ -394,6 +446,8 @@ const GAMES: readonly GameCapture[] = [
   },
   {
     key: "channel-382",
+    pillTitle: "CHANNEL 382",
+    pillChore: "the ad you never film",
     title: "CHANNEL 382",
     line: "The commercial you film is a real ad.",
     note: "Real gameplay capture. Every word is approved before it airs.",
@@ -403,6 +457,8 @@ const GAMES: readonly GameCapture[] = [
   },
   {
     key: "century-park-east",
+    pillTitle: "Century Park East",
+    pillChore: "the building you’ve never walked",
     title: "Century Park East",
     line: "One tower. The residents who went quiet.",
     note: "Real gameplay. Letters go out only after you approve them.",
@@ -433,10 +489,35 @@ export default function JoystickLanding() {
   const [timerResetKey, setTimerResetKey] = useState(0);
   const [flippedCompanions, setFlippedCompanions] = useState<Record<string, boolean>>({});
 
+  // Hero phone field state
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneSubmitted, setPhoneSubmitted] = useState(false);
+
+  // Claire rotating word state (books, orders, customers, routes, goals)
+  const [wordIndex, setWordIndex] = useState(0);
+
+  // Claire call card flip state (Decision flip)
+  const [claireCardFlipped, setClaireCardFlipped] = useState(false);
+
+  // Games chore switcher
+  const [activeGameKey, setActiveGameKey] = useState<string>("silver-lake");
+
+  // Dossier tab state
+  const [activeDossierTab, setActiveDossierTab] = useState<string>("wash-and-fold");
+
+  // Day Line chore input
+  const [choreInputValue, setChoreInputValue] = useState("");
+
+  // Day Line category filter
+  const [activeRoutineCategory, setActiveRoutineCategory] = useState<string>("All");
+
+  // Lantern city map node hover state
+  const [hoveredLantern, setHoveredLantern] = useState<number | null>(null);
+
   useEffect(() => {
     captureProductEvent("landing_page_visited", {
-      path:
-        typeof window !== "undefined" ? window.location.pathname : "/joystick",
+      path: typeof window !== "undefined" ? window.location.pathname : "/joystick",
       source: "joystick_landing",
     });
     captureProductEvent("landing_pricing_viewed", {
@@ -462,7 +543,7 @@ export default function JoystickLanding() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Persona selection never loses its fade-completion timer when rotation pauses.
+  // Persona rotation timer
   useEffect(() => {
     if (!state.fading) return;
     const timeout = window.setTimeout(() => {
@@ -479,6 +560,15 @@ export default function JoystickLanding() {
     return () => window.clearInterval(timer);
   }, [reducedMotion, isHoveringHero, state.index, timerResetKey]);
 
+  // Claire rotating word timer (every 2.5s)
+  useEffect(() => {
+    if (reducedMotion) return;
+    const wordTimer = window.setInterval(() => {
+      setWordIndex((prev) => (prev + 1) % CLAIRE_ROTATING_WORDS.length);
+    }, 2500);
+    return () => window.clearInterval(wordTimer);
+  }, [reducedMotion]);
+
   const handleDotClick = (index: number) => {
     if (index === state.index && !state.fading) return;
     dispatch({ type: "START_FADE", nextIndex: index });
@@ -489,49 +579,54 @@ export default function JoystickLanding() {
     setFlippedCompanions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handlePhoneSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!phoneInput || phoneInput.trim().length < 10) return;
+    setPhoneLoading(true);
+
+    captureProductEvent("claire_call_requested", {
+      phone: phoneInput.slice(0, 6) + "****",
+      source: "landing_hero_phone",
+    });
+
+    try {
+      if (typeof window !== "undefined") {
+        await fetch("/api/claire/request-demo-call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phoneInput }),
+        });
+      }
+    } catch {
+      // Fallback cleanly
+    } finally {
+      setPhoneLoading(false);
+      setPhoneSubmitted(true);
+    }
+  };
+
+  const handleChoreSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (typeof window !== "undefined") {
+      const target = choreInputValue.trim()
+        ? `${START_PATH}?chore=${encodeURIComponent(choreInputValue.trim())}`
+        : START_PATH;
+      window.location.href = target;
+    }
+  };
+
   const currentPersona = PERSONAS[state.index];
   const fadeOpacity = state.fading ? 0 : 1;
   const humanFlipClass = state.isFlippedHuman ? "is-flipped" : "";
   const [claireStep, partyStep, gamesStep] = HOW_IT_WORKS_STEPS;
-  const [featuredGame, ...otherGames] = GAMES;
+  const activeGame = GAMES.find((g) => g.key === activeGameKey) ?? GAMES[0];
+  const activeDossier =
+    DOSSIER_TABS.find((d) => d.id === activeDossierTab) ?? DOSSIER_TABS[0];
 
-  const renderCapture = (game: GameCapture, featured: boolean) => {
-    const showVideo = game.video !== null && !reducedMotion;
-    return (
-      <figure
-        key={game.key}
-        className={`jl-capture ${featured ? "jl-capture-featured" : ""}`}
-      >
-        {showVideo ? (
-          <video
-            className="jl-shot"
-            muted
-            loop
-            playsInline
-            autoPlay
-            preload={featured ? "auto" : "metadata"}
-            poster={game.poster}
-            aria-label={game.alt}
-          >
-            <source src={game.video ?? undefined} type="video/mp4" />
-          </video>
-        ) : (
-          <img
-            className="jl-shot"
-            src={game.poster}
-            alt={game.alt}
-            loading={featured ? "eager" : "lazy"}
-          />
-        )}
-        <figcaption className="jl-capture-caption">
-          <span className="jl-capture-line">
-            {game.title}. {game.line}
-          </span>
-          <span className="jl-capture-note">{game.note}</span>
-        </figcaption>
-      </figure>
-    );
-  };
+  const filteredRoutines =
+    activeRoutineCategory === "All"
+      ? DAY_LINE_ROUTINES
+      : DAY_LINE_ROUTINES.filter((r) => r.category === activeRoutineCategory);
 
   return (
     <main
@@ -539,6 +634,23 @@ export default function JoystickLanding() {
       data-testid="joystick-marketing"
       aria-label="Joystick — Knows your business, then makes your next move a game."
     >
+      {/* 0. FOUNDER LIVE RUN TOP BANNER */}
+      <div className="jl-top-ticker" role="region" aria-label="Founder live run banner">
+        <div className="jl-wrap jl-top-ticker-inner">
+          <span className="jl-top-ticker-text">
+            Claire is taking Laundry Farm to 50 active customers in public.
+          </span>
+          <a
+            href="https://x.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="jl-top-ticker-link"
+          >
+            Follow the run on X →
+          </a>
+        </div>
+      </div>
+
       {/* 1. NAV */}
       <nav className="jl-nav jl-wrap" aria-label="Main navigation">
         <div className="jl-nav-brand">
@@ -548,14 +660,20 @@ export default function JoystickLanding() {
         <div className="jl-nav-links">
           <a href="#games">The games</a>
           <a href="#how">How it works</a>
+          <a href="#city">The city</a>
+          <a href="#day-line">The Day Line</a>
+          <a href="#receipts">Receipts</a>
           <a href="#pricing">Pricing</a>
           <a href="/dayforge-login" id="signin">
             Sign in
           </a>
+          <a href={START_PATH} className="jl-nav-cta">
+            Turn my work into a game →
+          </a>
         </div>
       </nav>
 
-      {/* 2. HERO: one sentence, one object */}
+      {/* 2. HERO */}
       <section
         className="jl-hero-section jl-wrap"
         aria-label="Joystick hero"
@@ -601,7 +719,10 @@ export default function JoystickLanding() {
               onClick={() => dispatch({ type: "TOGGLE_FLIP_HUMAN" })}
             >
               <div className={`jl-human-inner jl-flip-inner ${humanFlipClass}`}>
-                <div className="jl-face jl-human-front">
+                <div
+                  className="jl-face jl-human-front"
+                  style={{ background: currentPersona.paper }}
+                >
                   <div className="jl-human-tape" />
                   <div
                     className="jl-human-sketch-wrap"
@@ -664,10 +785,44 @@ export default function JoystickLanding() {
                   })
                 }
               >
-                Preview my first game →
+                Turn my work into a game →
               </a>
               <div className="jl-cta-microcopy">
                 3 questions. A game built for your business. No account required.
+              </div>
+            </div>
+
+            {/* HERO PHONE FIELD: Direct Outbound Call Hook */}
+            <div className="jl-hero-phone-box">
+              <div className="jl-hero-phone-prompt">
+                Or give Claire your number. She calls in two minutes with your first move.
+              </div>
+              {phoneSubmitted ? (
+                <div className="jl-hero-phone-confirmed">
+                  Claire is dialing {phoneInput}. Pick up when your phone rings.
+                </div>
+              ) : (
+                <form onSubmit={handlePhoneSubmit} className="jl-hero-phone-form">
+                  <input
+                    type="tel"
+                    className="jl-hero-phone-input"
+                    placeholder="(555) 000-0000"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    aria-label="Phone number for Claire to call"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="jl-hero-phone-btn"
+                    disabled={phoneLoading}
+                  >
+                    {phoneLoading ? "Dialing…" : "Call me →"}
+                  </button>
+                </form>
+              )}
+              <div className="jl-hero-phone-consent">
+                One call from Claire. No texts, no list.
               </div>
             </div>
           </div>
@@ -697,7 +852,7 @@ export default function JoystickLanding() {
         </div>
       </section>
 
-      {/* 3. CLAIRE READS YOUR BOOKS */}
+      {/* 3. CLAIRE READS YOUR BOOKS (ROTATING WORD & DECISION FLIP) */}
       <section
         id="how"
         className="jl-band"
@@ -709,7 +864,13 @@ export default function JoystickLanding() {
             <div>
               <div className="jl-section-label">How Joystick works</div>
               <h2 id="how-heading" className="jl-h2">
-                {stepTitle(claireStep.title)}
+                Claire reads your{" "}
+                <span
+                  className="jl-rotating-word"
+                  style={{ color: currentPersona.accent }}
+                >
+                  {CLAIRE_ROTATING_WORDS[wordIndex]}.
+                </span>
               </h2>
             </div>
             <p className="jl-lede-text">{claireStep.text}</p>
@@ -727,40 +888,85 @@ export default function JoystickLanding() {
                 currentPersona.accent
               )}
             </div>
-            <div className="jl-call-card" style={{ opacity: fadeOpacity }}>
-              <div
-                className="jl-call-quote"
-                aria-hidden="true"
-                style={{ color: currentPersona.accent }}
-              >
-                &ldquo;
-              </div>
-              <div className="jl-call-text">
-                <div className="jl-call-header">
-                  Claire <span className="jl-call-role">· runs your day ·</span>{" "}
-                  <span
-                    className="jl-call-time"
+
+            <div
+              className={`jl-call-card-wrap ${claireCardFlipped ? "is-flipped" : ""}`}
+              onClick={() => setClaireCardFlipped(!claireCardFlipped)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  setClaireCardFlipped(!claireCardFlipped);
+                }
+              }}
+              aria-label="Click to flip between what Claire noticed and the player decision"
+            >
+              <div className="jl-call-card-inner">
+                {/* FRONT: What Claire noticed */}
+                <div className="jl-call-card-face jl-call-card-front">
+                  <div
+                    className="jl-call-quote"
+                    aria-hidden="true"
                     style={{ color: currentPersona.accent }}
                   >
-                    {currentPersona.callTime}
-                  </span>
+                    &ldquo;
+                  </div>
+                  <div className="jl-call-text">
+                    <div className="jl-call-header">
+                      Claire <span className="jl-call-role">· runs your day ·</span>{" "}
+                      <span
+                        className="jl-call-time"
+                        style={{ color: currentPersona.accent }}
+                      >
+                        {currentPersona.callTime}
+                      </span>
+                    </div>
+                    <div className="jl-call-line">{currentPersona.callLine}</div>
+                  </div>
+                  <div className="jl-call-bottom-hint">
+                    flip to see your move →
+                  </div>
                 </div>
-                <div className="jl-call-line">{currentPersona.callLine}</div>
+
+                {/* BACK: The Three Player Decisions with a Cost */}
+                <div className="jl-call-card-face jl-call-card-back">
+                  <div className="jl-decision-header" style={{ color: currentPersona.accent }}>
+                    The Game Move · Player Decision
+                  </div>
+                  <div className="jl-decision-list">
+                    {CLAIRE_DECISION_CHOICES.map((choice, i) => (
+                      <div key={i} className="jl-decision-item">
+                        <span className="jl-decision-num">0{i + 1}</span>
+                        <span className="jl-decision-title">{choice.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="jl-decision-subtext">
+                    She calls. You don't type.
+                  </div>
+                </div>
               </div>
-              <div className="jl-call-tagline">She calls. You don't type.</div>
             </div>
+          </div>
+          <div className="jl-claire-personal-note">
+            She knows a lot about your business. Less about herself, on purpose.
           </div>
         </div>
       </section>
 
-      {/* 4. YOU GET THE ONE YOU'RE MISSING */}
+      {/* 4. GOOD AT THE PART YOU AVOID (COMPANIONS) */}
       <section className="jl-band" aria-labelledby="party-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
-            <h2 id="party-heading" className="jl-h2">
-              {stepTitle(partyStep.title)}
-            </h2>
-            <p className="jl-lede-text">{PARTY_LEDE}</p>
+            <div>
+              <div className="jl-section-label">Your crew</div>
+              <h2 id="party-heading" className="jl-h2">
+                Good at the part you avoid.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Rook, Sable, Luma, Orren. Each has what you don't, and a flaw you'll enjoy. You earn them by doing the work.
+            </p>
           </div>
 
           <div className="jl-object jl-party">
@@ -819,7 +1025,7 @@ export default function JoystickLanding() {
         </div>
       </section>
 
-      {/* 5. YOUR NEXT MOVE BECOMES A GAME */}
+      {/* 5. THE GAMES (CHORE PILLS SWITCHER) */}
       <section id="games" className="jl-band" aria-labelledby="games-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
@@ -832,16 +1038,461 @@ export default function JoystickLanding() {
             <p className="jl-lede-text">{gamesStep.text}</p>
           </div>
 
+          {/* Chore Pills */}
+          <div className="jl-game-pills-row" role="tablist" aria-label="Game chores">
+            {GAMES.map((game) => (
+              <button
+                key={game.key}
+                type="button"
+                role="tab"
+                aria-selected={activeGameKey === game.key}
+                className={`jl-game-pill ${activeGameKey === game.key ? "is-active" : ""}`}
+                onClick={() => setActiveGameKey(game.key)}
+              >
+                <span className="jl-game-pill-title">{game.pillTitle}</span>
+                <span className="jl-game-pill-chore">{game.pillChore}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="jl-object">
-            {renderCapture(featuredGame, true)}
-            <div className="jl-capture-row">
-              {otherGames.map((game) => renderCapture(game, false))}
+            <figure className="jl-capture jl-capture-featured">
+              {activeGame.video !== null && !reducedMotion ? (
+                <video
+                  key={activeGame.key}
+                  className="jl-shot"
+                  muted
+                  loop
+                  playsInline
+                  autoPlay
+                  poster={activeGame.poster}
+                  aria-label={activeGame.alt}
+                >
+                  <source src={activeGame.video} type="video/mp4" />
+                </video>
+              ) : (
+                <img
+                  className="jl-shot"
+                  src={activeGame.poster}
+                  alt={activeGame.alt}
+                  loading="lazy"
+                />
+              )}
+              <figcaption className="jl-capture-caption">
+                <span className="jl-capture-line">
+                  {activeGame.title}. {activeGame.line}
+                </span>
+                <span className="jl-capture-note">{activeGame.note}</span>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. THE CITY (LANTERN CITY — LIGHTWEIGHT 2D CANVAS) */}
+      <section id="city" className="jl-band jl-city-section" aria-labelledby="city-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">Lantern City</div>
+              <h2 id="city-heading" className="jl-h2">
+                Your customers are spread across a city.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Most of them have gone quiet. Claire knows which doors, and which one to knock first.
+            </p>
+          </div>
+
+          {/* Lightweight 2D Lantern Map Canvas */}
+          <div className="jl-city-canvas-wrap">
+            <svg
+              className="jl-city-svg"
+              viewBox="0 0 960 440"
+              preserveAspectRatio="xMidYMid slice"
+              role="img"
+              aria-label="Lantern City map: glowing lanterns show active customers; dim lanterns show quiet doors"
+            >
+              <defs>
+                <radialGradient id="cityMist" cx="50%" cy="50%" r="60%">
+                  <stop offset="0%" stopColor="#1a1a24" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#0c0d12" stopOpacity="1" />
+                </radialGradient>
+                <filter id="lanternGlow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="6" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <rect width="960" height="440" fill="url(#cityMist)" rx="8" />
+
+              {/* Stylized street grid lines */}
+              <g stroke="rgba(255,255,255,0.08)" strokeWidth="1" strokeDasharray="3 4">
+                <path d="M 60 80 Q 240 120, 480 90 T 900 110" fill="none" />
+                <path d="M 80 180 Q 320 210, 560 170 T 920 230" fill="none" />
+                <path d="M 40 320 Q 300 310, 600 340 T 940 330" fill="none" />
+                <path d="M 220 40 L 260 400 M 460 30 L 480 410 M 720 40 L 700 420" fill="none" />
+              </g>
+
+              {/* Territory boundaries */}
+              <text x="90" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
+                SILVER LAKE SECTOR
+              </text>
+              <text x="490" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
+                BEVERLY FLATS
+              </text>
+              <text x="760" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
+                K-TOWN BOULEVARD
+              </text>
+
+              {/* Lanterns: Glowing amber = Active, Dim = Quiet */}
+              {[
+                { id: 1, x: 180, y: 140, active: true, name: "Maya R.", note: "78 days quiet · $48 last wash" },
+                { id: 2, x: 260, y: 220, active: false, name: "Hazel House", note: "3 deliveries logged" },
+                { id: 3, x: 380, y: 160, active: true, name: "Rise Wilshire", note: "24 units · prospect door" },
+                { id: 4, x: 520, y: 280, active: false, name: "The Flats 14B", note: "Door tags hung Tuesday" },
+                { id: 5, x: 620, y: 130, active: true, name: "Sunset Loft", note: "Weekly regular · pickup 10am" },
+                { id: 6, x: 740, y: 240, active: true, name: "CPE Tower East", note: "8 residents quiet" },
+                { id: 7, x: 840, y: 170, active: false, name: "Vermont Studios", note: "Ad air #02 pending" },
+              ].map((lantern) => (
+                <g
+                  key={lantern.id}
+                  className="jl-lantern-node"
+                  onMouseEnter={() => setHoveredLantern(lantern.id)}
+                  onMouseLeave={() => setHoveredLantern(null)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {/* Outer glow */}
+                  <circle
+                    cx={lantern.x}
+                    cy={lantern.y}
+                    r={lantern.active ? 20 : 10}
+                    fill={lantern.active ? "rgba(227, 155, 0, 0.25)" : "rgba(255, 255, 255, 0.05)"}
+                    filter={lantern.active ? "url(#lanternGlow)" : undefined}
+                  />
+                  {/* Lantern core */}
+                  <circle
+                    cx={lantern.x}
+                    cy={lantern.y}
+                    r={lantern.active ? 6 : 3.5}
+                    fill={lantern.active ? "#e39b00" : "#666"}
+                  />
+                  {/* Label */}
+                  <text
+                    x={lantern.x}
+                    y={lantern.y - 12}
+                    textAnchor="middle"
+                    fill={lantern.active ? "#fbfaf6" : "#888"}
+                    fontSize="11"
+                    fontFamily="Inter, sans-serif"
+                    fontWeight="500"
+                  >
+                    {lantern.name}
+                  </text>
+                </g>
+              ))}
+            </svg>
+
+            <div className="jl-city-hud">
+              <span className="jl-city-hud-indicator" />
+              <span>Lantern City active: 142 doors walked this week · 8 quiet doors ready for Claire's call</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 6. PRICING & COMMERCIAL TERMS */}
+      {/* 7. THE DOSSIER (LIVING WIKI FORMAT) */}
+      <section className="jl-band" aria-labelledby="dossier-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">The Dossier</div>
+              <h2 id="dossier-heading" className="jl-h2">
+                She reads your books before the first call.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Orders, customers, payments, routes. Every number has a receipt.
+            </p>
+          </div>
+
+          <div className="jl-dossier-wrap">
+            {/* Dossier Tabs */}
+            <div className="jl-dossier-tabs" role="tablist">
+              {DOSSIER_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeDossierTab === tab.id}
+                  className={`jl-dossier-tab ${activeDossierTab === tab.id ? "is-active" : ""}`}
+                  onClick={() => setActiveDossierTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Dossier Card */}
+            <div className="jl-dossier-card">
+              <div className="jl-dossier-header">
+                <div className="jl-dossier-title">{activeDossier.operator}</div>
+                <div className="jl-dossier-badge">{activeDossier.ticket}</div>
+              </div>
+              <div className="jl-dossier-grid">
+                <div className="jl-dossier-item">
+                  <span className="jl-dossier-field">Who went quiet</span>
+                  <span className="jl-dossier-val">{activeDossier.quiet}</span>
+                </div>
+                <div className="jl-dossier-item">
+                  <span className="jl-dossier-field">What's owed</span>
+                  <span className="jl-dossier-val">{activeDossier.owed}</span>
+                </div>
+                <div className="jl-dossier-item">
+                  <span className="jl-dossier-field">The goal</span>
+                  <span className="jl-dossier-val" style={{ fontWeight: 600, color: "#111" }}>
+                    {activeDossier.goal}
+                  </span>
+                </div>
+                <div className="jl-dossier-item">
+                  <span className="jl-dossier-field">What you keep skipping</span>
+                  <span className="jl-dossier-val">{activeDossier.skipped}</span>
+                </div>
+              </div>
+              <div className="jl-dossier-footer">
+                There is a page about Claire. She hasn’t written it yet.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. THE RECEIPTS GRID (INTEGRATIONS) */}
+      <section id="receipts" className="jl-band" aria-labelledby="receipts-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">Connectors</div>
+              <h2 id="receipts-heading" className="jl-h2">
+                The books, not the inbox.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Claire reads where the money actually moves. Each receipt becomes a move.
+            </p>
+          </div>
+
+          <div className="jl-receipts-grid">
+            {RECEIPTS_GRID.map((card, i) => (
+              <div key={i} className="jl-receipt-card">
+                <div className="jl-receipt-top">
+                  <span className="jl-receipt-cat">{card.category}</span>
+                  <span
+                    className="jl-receipt-territory"
+                    style={{ background: card.accent }}
+                  >
+                    {card.gameTerritory}
+                  </span>
+                </div>
+                <div className="jl-receipt-sources">{card.sources}</div>
+                <div className="jl-receipt-line">&ldquo;{card.claireLine}&rdquo;</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 9. THE DAY LINE (ROUTINES) */}
+      <section id="day-line" className="jl-band" aria-labelledby="dayline-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">The Day Line</div>
+              <h2 id="dayline-heading" className="jl-h2">
+                The chores you avoid, on a schedule.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Claire calls at 7:30 with three moves. She calls again at night to hear what happened.
+            </p>
+          </div>
+
+          {/* Routine category filters */}
+          <div className="jl-routine-filters">
+            {(["All", "Win-backs", "Prospects", "Ads", "Money", "Reviews", "Routes"] as const).map(
+              (cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`jl-routine-filter-btn ${activeRoutineCategory === cat ? "is-active" : ""}`}
+                  onClick={() => setActiveRoutineCategory(cat)}
+                >
+                  {cat}
+                </button>
+              )
+            )}
+          </div>
+
+          {/* Timeline cards */}
+          <div className="jl-routines-grid">
+            {filteredRoutines.map((routine) => (
+              <div key={routine.id} className="jl-routine-card">
+                <div className="jl-routine-time-row">
+                  <span className="jl-routine-time">{routine.time}</span>
+                  <span className="jl-routine-cat">{routine.category}</span>
+                </div>
+                <div className="jl-routine-title">{routine.title}</div>
+                <div className="jl-routine-desc">{routine.desc}</div>
+                <div className="jl-routine-receipt">Receipt: {routine.receipt}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Chore input: carry into /joystick-start */}
+          <div className="jl-chore-prompt-box">
+            <div className="jl-chore-prompt-label">
+              Tell Claire the chore you avoid:
+            </div>
+            <form onSubmit={handleChoreSubmit} className="jl-chore-prompt-form">
+              <input
+                type="text"
+                className="jl-chore-prompt-input"
+                placeholder="e.g. Calling inactive clients, walking commercial high-rises..."
+                value={choreInputValue}
+                onChange={(e) => setChoreInputValue(e.target.value)}
+              />
+              <button type="submit" className="jl-chore-prompt-btn">
+                She builds the game →
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* 10. SEATS (SOLO BUSINESS CREW) */}
+      <section className="jl-band" aria-labelledby="seats-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">Seats</div>
+              <h2 id="seats-heading" className="jl-h2">
+                You’re solo. Your crew isn’t.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Your driver gets the route. Your customer gets their order. Only you get the books.
+            </p>
+          </div>
+
+          <div className="jl-seats-devices">
+            {/* Device 1: Driver App */}
+            <div className="jl-seat-device">
+              <div className="jl-seat-badge">Driver App</div>
+              <div className="jl-seat-screen">
+                <div className="jl-seat-screen-header">Stop 04 · Rise Wilshire</div>
+                <div className="jl-seat-screen-detail">Gate code #1940 · 2 bags picked up</div>
+                <div className="jl-seat-screen-meta">Zero access to books or customer billing</div>
+              </div>
+            </div>
+
+            {/* Device 2: Resident App */}
+            <div className="jl-seat-device">
+              <div className="jl-seat-badge">Customer App</div>
+              <div className="jl-seat-screen">
+                <div className="jl-seat-screen-header">Order #8412 · On Route</div>
+                <div className="jl-seat-screen-detail">Estimated delivery: 2:15 PM</div>
+                <div className="jl-seat-screen-meta">Clean direct chat · Zero admin access</div>
+              </div>
+            </div>
+
+            {/* Device 3: Your Day Line */}
+            <div className="jl-seat-device jl-seat-primary">
+              <div className="jl-seat-badge">Your Day Line</div>
+              <div className="jl-seat-screen">
+                <div className="jl-seat-screen-header">Today: 3 High-Leverage Moves</div>
+                <div className="jl-seat-screen-detail">$480 projected · 2 win-backs pending approval</div>
+                <div className="jl-seat-screen-meta">The books, the receipts, full control</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 11. TRUST (FOUR AIRTIGHT TILES) */}
+      <section className="jl-band jl-trust-section" aria-labelledby="trust-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">Trust</div>
+              <h2 id="trust-heading" className="jl-h2">
+                Nothing goes out without you.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Your companions draft, calculate, and route. You approve every message and dollar.
+            </p>
+          </div>
+
+          <div className="jl-trust-grid">
+            <div className="jl-trust-tile">
+              <div className="jl-trust-title">Asks first</div>
+              <div className="jl-trust-desc">
+                Companions draft. You approve every message, invoice, and dollar before it moves.
+              </div>
+            </div>
+            <div className="jl-trust-tile">
+              <div className="jl-trust-title">Every number has a receipt</div>
+              <div className="jl-trust-desc">
+                Claire cannot say a figure she cannot show on your real books.
+              </div>
+            </div>
+            <div className="jl-trust-tile">
+              <div className="jl-trust-title">Pending means pending</div>
+              <div className="jl-trust-desc">
+                Nothing is marked confirmed until a human confirms it.
+              </div>
+            </div>
+            <div className="jl-trust-tile">
+              <div className="jl-trust-title">Your voice, your number</div>
+              <div className="jl-trust-desc">
+                Customers never meet a bot. Messages send from your device.
+              </div>
+            </div>
+          </div>
+          <div className="jl-trust-subline">Your books train nothing.</div>
+        </div>
+      </section>
+
+      {/* 12. THE RUN (LIVE OPERATOR LEDGER) */}
+      <section className="jl-band" aria-labelledby="run-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">Live proof</div>
+              <h2 id="run-heading" className="jl-h2">
+                Real evidence moves the world.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              The founder playing in public is the proof. Live verified operations this week:
+            </p>
+          </div>
+
+          <div className="jl-run-metrics-grid">
+            {LIVE_RUN_METRICS.map((metric, i) => (
+              <div key={i} className="jl-run-metric-card">
+                <div className="jl-run-metric-count">{metric.count}</div>
+                <div className="jl-run-metric-label">{metric.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 13. PRICING & COMMERCIAL TERMS */}
       <section
         id="pricing"
         className="jl-band jl-pricing-section"
@@ -876,7 +1527,7 @@ export default function JoystickLanding() {
                     })
                   }
                 >
-                  Preview my first game →
+                  Turn my work into a game →
                 </a>
               </div>
               <p
@@ -887,6 +1538,33 @@ export default function JoystickLanding() {
               </p>
             </div>
           </div>
+
+          {/* Transparent Tier Architecture */}
+          <div className="jl-pricing-tiers-row">
+            <div className="jl-pricing-tier">
+              <div className="jl-tier-name">Explore</div>
+              <div className="jl-tier-price">Free</div>
+              <div className="jl-tier-desc">Sample worlds, no card required.</div>
+            </div>
+            <div className="jl-pricing-tier jl-tier-highlight">
+              <div className="jl-tier-name">JOYSTICK</div>
+              <div className="jl-tier-price">$79<span>/mo</span></div>
+              <div className="jl-tier-desc">Unmetered gameplay, $40 AI allowance, overage off by default.</div>
+            </div>
+            <div className="jl-pricing-tier">
+              <div className="jl-tier-name">Commerce</div>
+              <div className="jl-tier-price">$119<span>/mo</span></div>
+              <div className="jl-tier-desc">Native orders, payments, and the customer app.</div>
+            </div>
+            <div className="jl-pricing-tier">
+              <div className="jl-tier-name">Workshop</div>
+              <div className="jl-tier-price">Custom</div>
+              <div className="jl-tier-desc">Custom game builds you approve one at a time.</div>
+            </div>
+          </div>
+          <div className="jl-pricing-punchline">
+            Companions aren’t a tier. You earn them.
+          </div>
           <p
             className="jl-pricing-illustration"
             data-testid="landing-examples-illustration"
@@ -896,10 +1574,81 @@ export default function JoystickLanding() {
         </div>
       </section>
 
+      {/* 14. SEVEN COMPANIONS ROSTER & FINAL CALL */}
+      <section className="jl-band jl-roster-section" aria-labelledby="roster-heading">
+        <div className="jl-wrap">
+          <div className="jl-lede">
+            <div>
+              <div className="jl-section-label">The roster</div>
+              <h2 id="roster-heading" className="jl-h2">
+                Meet your companions.
+              </h2>
+            </div>
+            <p className="jl-lede-text">
+              Four in the field today. Three you unlock by doing the work.
+            </p>
+          </div>
+
+          <div className="jl-roster-grid">
+            {ROSTER_COMPANIONS.map((companion) => (
+              <div
+                key={companion.name}
+                className={`jl-roster-card ${companion.status === "earned" ? "is-earned" : ""}`}
+              >
+                <div className="jl-roster-card-top">
+                  <span className="jl-roster-name" style={{ color: companion.accent }}>
+                    {companion.name}
+                  </span>
+                  <span className="jl-roster-reason">{companion.oneWordReason}</span>
+                </div>
+                <div className="jl-roster-animal">{companion.animal}</div>
+                <div className="jl-roster-role">{companion.role}</div>
+                <div className="jl-roster-flaw">{companion.flaw}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Grand Finale Alone on Screen */}
+          <div className="jl-final-call-box">
+            <h3 className="jl-final-h3">
+              Start with the door you keep driving past.
+            </h3>
+            <a
+              className="jl-cta-button jl-final-cta"
+              href={START_PATH}
+              onClick={() =>
+                captureProductEvent("joystick_start_clicked", {
+                  source: "landing_footer_cta",
+                })
+              }
+            >
+              Turn my work into a game →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* 15. FOOTER */}
       <footer className="jl-footer">
         <div className="jl-wrap jl-footer-row">
-          <span>Joystick · Real work. Playable.</span>
-          <a href="/dayforge-login">Sign in</a>
+          <div className="jl-footer-brand">
+            <span className="jl-footer-title">Joystick</span>
+            <span className="jl-footer-copy">Real work. Playable.</span>
+          </div>
+          <div className="jl-footer-links">
+            <a href="#games">The games</a>
+            <a href="#day-line">The Day Line</a>
+            <a href="#receipts">Receipts</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#trust">Trust</a>
+            <a href="/patch-notes">Patch notes</a>
+            <a href="/field-guide">Field guide</a>
+            <a href="/press">Press</a>
+            <a href="https://x.com" target="_blank" rel="noopener noreferrer">
+              X
+            </a>
+            <a href="/dayforge-login">Sign in</a>
+          </div>
         </div>
       </footer>
     </main>

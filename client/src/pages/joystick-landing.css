@@ -55,12 +55,48 @@ body {
 }
 
 /* ==========================================================================
+   0. TOP TICKER
+   ========================================================================== */
+
+.jl-top-ticker {
+  background: var(--jl-ink);
+  color: #fbfaf6;
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.jl-top-ticker-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.jl-top-ticker-text {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.jl-top-ticker-link {
+  color: #fbfaf6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.jl-top-ticker-link:hover {
+  opacity: 1;
+}
+
+/* ==========================================================================
    1. NAV
    ========================================================================== */
 
 .jl-nav {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
@@ -90,6 +126,7 @@ body {
 
 .jl-nav-links {
   display: flex;
+  align-items: center;
   gap: 28px;
   font-size: 14px;
 }
@@ -103,6 +140,23 @@ body {
 .jl-nav-links a:focus-visible {
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+
+.jl-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  background: var(--jl-ink);
+  color: #ffffff !important;
+  border-radius: 6px;
+  text-decoration: none !important;
+  transition: opacity 0.2s ease;
+}
+
+.jl-nav-cta:hover {
+  opacity: 0.9;
 }
 
 /* ==========================================================================
@@ -378,6 +432,84 @@ body {
   margin: 0;
 }
 
+.jl-hero-phone-box {
+  margin-top: 36px;
+  max-width: 420px;
+}
+
+.jl-hero-phone-prompt {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jl-ink);
+  margin-bottom: 8px;
+}
+
+.jl-hero-phone-form {
+  display: flex;
+  gap: 8px;
+}
+
+.jl-hero-phone-input {
+  flex: 1;
+  font-family: var(--jl-body);
+  font-size: 15px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--jl-ink);
+}
+
+.jl-hero-phone-input:focus {
+  outline: 2px solid var(--jl-marker);
+  outline-offset: 2px;
+}
+
+.jl-hero-phone-btn {
+  font-family: var(--jl-body);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 18px;
+  background: var(--jl-ink);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.jl-hero-phone-btn:hover {
+  opacity: 0.9;
+}
+
+.jl-hero-phone-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.jl-hero-phone-consent {
+  font-size: 12px;
+  color: var(--jl-meta);
+  margin-top: 6px;
+}
+
+.jl-hero-phone-confirmed {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--jl-ink);
+  background: rgba(227, 155, 0, 0.15);
+  border: 1px solid var(--jl-marker);
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+
+.jl-rotating-word {
+  display: inline-block;
+  min-width: 3.5ch;
+  transition: color 0.4s ease;
+}
+
 /* ==========================================================================
    3. BANDS: the shared section grammar
    ========================================================================== */
@@ -451,6 +583,54 @@ body {
   height: auto;
 }
 
+.jl-call-card-wrap {
+  perspective: 1200px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+}
+
+.jl-call-card-inner {
+  position: relative;
+  width: 100%;
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.jl-call-card-wrap.is-flipped .jl-call-card-inner {
+  transform: rotateY(180deg);
+}
+
+.jl-call-card-face {
+  background: #ffffff;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(17, 17, 17, 0.06);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.jl-call-card-front {
+  padding: 30px 34px 26px 30px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px 18px;
+  position: relative;
+}
+
+.jl-call-card-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  padding: 28px 32px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
 .jl-call-card {
   background: #ffffff;
   border: 1.5px solid var(--jl-ink);
@@ -461,6 +641,65 @@ body {
   gap: 10px 18px;
   box-shadow: 0 18px 40px rgba(17, 17, 17, 0.06);
   transition: opacity 0.4s ease;
+}
+
+.jl-call-bottom-hint {
+  grid-column: 2;
+  font-family: var(--jl-hand);
+  font-size: 16px;
+  color: var(--jl-meta-light);
+  margin-top: 8px;
+}
+
+.jl-decision-header {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.jl-decision-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.jl-decision-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--jl-ink);
+  line-height: 1.4;
+}
+
+.jl-decision-num {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--jl-meta);
+}
+
+.jl-decision-title {
+  flex: 1;
+}
+
+.jl-decision-subtext {
+  font-size: 13px;
+  color: var(--jl-meta);
+  margin-top: 14px;
+  border-top: 1px dashed var(--jl-rule);
+  padding-top: 10px;
+}
+
+.jl-claire-personal-note {
+  max-width: 720px;
+  margin: 24px auto 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--jl-meta-light);
+  font-style: italic;
 }
 
 .jl-call-quote {
@@ -723,6 +962,752 @@ body {
 }
 
 /* ==========================================================================
+   5B. THE GAMES: Chore Pills
+   ========================================================================== */
+
+.jl-game-pills-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 36px;
+  margin-bottom: 24px;
+}
+
+.jl-game-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  font-family: var(--jl-body);
+}
+
+.jl-game-pill:hover {
+  border-color: var(--jl-ink);
+}
+
+.jl-game-pill.is-active {
+  border: 1.5px solid var(--jl-ink);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(17, 17, 17, 0.06);
+}
+
+.jl-game-pill-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jl-ink);
+}
+
+.jl-game-pill-chore {
+  font-size: 12px;
+  color: var(--jl-meta);
+}
+
+/* ==========================================================================
+   6. LANTERN CITY: 2D Canvas
+   ========================================================================== */
+
+.jl-city-section {
+  position: relative;
+}
+
+.jl-city-canvas-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.12);
+  margin-top: 48px;
+  background: #0c0d12;
+}
+
+.jl-city-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 960 / 440;
+}
+
+.jl-city-hud {
+  position: absolute;
+  bottom: 14px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(12, 13, 18, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.jl-city-hud-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27c93f;
+  box-shadow: 0 0 8px #27c93f;
+  flex-shrink: 0;
+}
+
+.jl-lantern-node {
+  transition: transform 0.2s ease;
+}
+
+.jl-lantern-node:hover {
+  transform: scale(1.15);
+  transform-origin: center;
+}
+
+/* ==========================================================================
+   7. THE DOSSIER
+   ========================================================================== */
+
+.jl-dossier-wrap {
+  margin-top: 48px;
+}
+
+.jl-dossier-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.jl-dossier-tab {
+  font-family: var(--jl-body);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--jl-rule);
+  background: #ffffff;
+  color: var(--jl-meta);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.jl-dossier-tab:hover {
+  border-color: var(--jl-ink);
+  color: var(--jl-ink);
+}
+
+.jl-dossier-tab.is-active {
+  border-color: var(--jl-ink);
+  background: var(--jl-ink);
+  color: #ffffff;
+}
+
+.jl-dossier-card {
+  background: #ffffff;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 16px 36px rgba(17, 17, 17, 0.05);
+}
+
+.jl-dossier-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  border-bottom: 1px solid var(--jl-rule);
+  padding-bottom: 18px;
+  margin-bottom: 24px;
+}
+
+.jl-dossier-title {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--jl-ink);
+}
+
+.jl-dossier-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jl-meta);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.jl-dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.jl-dossier-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jl-dossier-field {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jl-meta);
+}
+
+.jl-dossier-val {
+  font-size: 15px;
+  color: var(--jl-body-muted);
+  line-height: 1.45;
+}
+
+.jl-dossier-footer {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--jl-rule);
+  font-size: 13px;
+  color: var(--jl-meta);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   8. THE RECEIPTS GRID
+   ========================================================================== */
+
+.jl-receipts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.jl-receipt-card {
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.jl-receipt-card:hover {
+  border-color: var(--jl-ink);
+  transform: translateY(-2px);
+}
+
+.jl-receipt-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.jl-receipt-cat {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jl-ink);
+}
+
+.jl-receipt-territory {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #111111;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.jl-receipt-sources {
+  font-size: 12px;
+  color: var(--jl-meta);
+  font-weight: 500;
+}
+
+.jl-receipt-line {
+  font-size: 14px;
+  color: var(--jl-body-muted);
+  line-height: 1.45;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   9. THE DAY LINE: Routines & Chore Prompt
+   ========================================================================== */
+
+.jl-routine-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 36px;
+  margin-bottom: 24px;
+}
+
+.jl-routine-filter-btn {
+  font-family: var(--jl-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--jl-rule);
+  background: #ffffff;
+  color: var(--jl-meta);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.jl-routine-filter-btn:hover {
+  border-color: var(--jl-ink);
+  color: var(--jl-ink);
+}
+
+.jl-routine-filter-btn.is-active {
+  border-color: var(--jl-ink);
+  background: var(--jl-ink);
+  color: #ffffff;
+}
+
+.jl-routines-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.jl-routine-card {
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 10px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jl-routine-time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.jl-routine-time {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--jl-meta);
+}
+
+.jl-routine-cat {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jl-marker);
+}
+
+.jl-routine-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--jl-ink);
+}
+
+.jl-routine-desc {
+  font-size: 14px;
+  color: var(--jl-body-muted);
+  line-height: 1.45;
+}
+
+.jl-routine-receipt {
+  font-size: 12px;
+  color: var(--jl-meta-light);
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--jl-rule);
+}
+
+.jl-chore-prompt-box {
+  margin-top: 48px;
+  padding: 28px 32px;
+  background: #ffffff;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 30px rgba(17, 17, 17, 0.05);
+}
+
+.jl-chore-prompt-label {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--jl-ink);
+}
+
+.jl-chore-prompt-form {
+  display: flex;
+  gap: 12px;
+}
+
+.jl-chore-prompt-input {
+  flex: 1;
+  font-family: var(--jl-body);
+  font-size: 15px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--jl-ink);
+}
+
+.jl-chore-prompt-input:focus {
+  outline: 2px solid var(--jl-marker);
+  outline-offset: 2px;
+}
+
+.jl-chore-prompt-btn {
+  font-family: var(--jl-body);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 24px;
+  background: var(--jl-ink);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.jl-chore-prompt-btn:hover {
+  opacity: 0.9;
+}
+
+/* ==========================================================================
+   10. SEATS (DEVICES)
+   ========================================================================== */
+
+.jl-seats-devices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  margin-top: 48px;
+}
+
+.jl-seat-device {
+  background: #ffffff;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 14px 34px rgba(17, 17, 17, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+}
+
+.jl-seat-device.jl-seat-primary {
+  border-width: 2px;
+  box-shadow: 0 20px 44px rgba(17, 17, 17, 0.1);
+  transform: translateY(-4px);
+}
+
+.jl-seat-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--jl-meta);
+}
+
+.jl-seat-screen {
+  background: var(--jl-paper);
+  border: 1px solid var(--jl-rule);
+  border-radius: 12px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.jl-seat-screen-header {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--jl-ink);
+}
+
+.jl-seat-screen-detail {
+  font-size: 13px;
+  color: var(--jl-body-muted);
+  line-height: 1.45;
+}
+
+.jl-seat-screen-meta {
+  font-size: 11px;
+  color: var(--jl-meta-light);
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--jl-rule);
+}
+
+/* ==========================================================================
+   11. TRUST TILES
+   ========================================================================== */
+
+.jl-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.jl-trust-tile {
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jl-trust-title {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--jl-ink);
+}
+
+.jl-trust-desc {
+  font-size: 14px;
+  color: var(--jl-body-muted);
+  line-height: 1.5;
+}
+
+.jl-trust-subline {
+  margin-top: 36px;
+  text-align: center;
+  font-family: var(--jl-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--jl-ink);
+}
+
+/* ==========================================================================
+   12. LIVE RUN METRICS
+   ========================================================================== */
+
+.jl-run-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.jl-run-metric-card {
+  background: #ffffff;
+  border: 1.5px solid var(--jl-ink);
+  border-radius: 10px;
+  padding: 24px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jl-run-metric-count {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 36px;
+  color: var(--jl-ink);
+  line-height: 1;
+}
+
+.jl-run-metric-label {
+  font-size: 13px;
+  color: var(--jl-body-muted);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   13. PRICING
+   ========================================================================== */
+
+.jl-pricing-tiers-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 48px;
+}
+
+.jl-pricing-tier {
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 10px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.jl-pricing-tier:hover {
+  transform: translateY(-2px);
+  border-color: var(--jl-ink);
+}
+
+.jl-pricing-tier.jl-tier-highlight {
+  border: 2px solid var(--jl-ink);
+  box-shadow: 0 12px 30px rgba(17, 17, 17, 0.08);
+}
+
+.jl-tier-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--jl-meta);
+}
+
+.jl-tier-price {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 32px;
+  color: var(--jl-ink);
+  line-height: 1.1;
+}
+
+.jl-tier-price span {
+  font-size: 14px;
+  font-family: var(--jl-body);
+  font-weight: 400;
+  color: var(--jl-meta);
+}
+
+.jl-tier-desc {
+  font-size: 13px;
+  color: var(--jl-body-muted);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.jl-pricing-punchline {
+  text-align: center;
+  font-size: 15px;
+  color: var(--jl-meta-light);
+  font-style: italic;
+  margin-top: 24px;
+}
+
+/* ==========================================================================
+   14. ROSTER & FINALE
+   ========================================================================== */
+
+.jl-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 48px;
+}
+
+.jl-roster-card {
+  background: #ffffff;
+  border: 1px solid var(--jl-rule);
+  border-radius: 10px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.jl-roster-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--jl-ink);
+}
+
+.jl-roster-card.is-earned {
+  background: #fbfaf6;
+  border-style: dashed;
+}
+
+.jl-roster-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.jl-roster-name {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.jl-roster-reason {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jl-meta);
+}
+
+.jl-roster-animal {
+  font-size: 12px;
+  color: var(--jl-meta-light);
+  font-weight: 500;
+}
+
+.jl-roster-role {
+  font-size: 13px;
+  color: var(--jl-ink);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.jl-roster-flaw {
+  font-size: 12px;
+  color: var(--jl-body-muted);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.jl-final-call-box {
+  margin-top: clamp(80px, 12vw, 140px);
+  text-align: center;
+  padding: clamp(48px, 8vw, 96px) 24px;
+  border-top: 1px solid var(--jl-rule);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.jl-final-h3 {
+  font-family: var(--jl-display);
+  font-weight: 700;
+  font-size: clamp(36px, 5.5vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  margin: 0;
+  max-width: 18ch;
+}
+
+.jl-final-cta {
+  font-size: 18px;
+  padding: 16px 36px;
+}
+
+/* ==========================================================================
    7. PRICING
    ========================================================================== */
 
@@ -826,6 +1811,17 @@ body {
   .jl-nav-links {
     gap: 18px;
   }
+
+  .jl-dossier-grid,
+  .jl-receipts-grid,
+  .jl-routines-grid,
+  .jl-seats-devices,
+  .jl-trust-grid,
+  .jl-run-metrics-grid,
+  .jl-pricing-tiers-row,
+  .jl-roster-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 480px) {
@@ -844,6 +1840,11 @@ body {
     padding: 24px 22px;
   }
 
+  .jl-call-card-front {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px 20px;
+  }
+
   .jl-call-quote {
     display: none;
   }
@@ -851,11 +1852,28 @@ body {
   .jl-call-tagline {
     grid-column: 1;
   }
+
+  .jl-dossier-grid,
+  .jl-receipts-grid,
+  .jl-routines-grid,
+  .jl-seats-devices,
+  .jl-trust-grid,
+  .jl-run-metrics-grid,
+  .jl-pricing-tiers-row,
+  .jl-roster-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jl-hero-phone-form,
+  .jl-chore-prompt-form {
+    flex-direction: column;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .jl-human-inner,
   .jl-companion-inner,
+  .jl-call-card-inner,
   .jl-human-sketch-wrap,
   .jl-caption,
   .jl-call-card,

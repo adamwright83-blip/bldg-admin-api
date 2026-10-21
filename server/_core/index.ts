@@ -343,6 +343,58 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Public hero phone field: places an immediate demo call from Claire or records the lead
+  app.post("/api/claire/request-demo-call", async (req, res) => {
+    try {
+      const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+      if (!phone || phone.replace(/\D/g, "").length < 10) {
+        return res.status(400).json({ error: "Please enter a valid 10-digit phone number" });
+      }
+
+      const cleanDigits = phone.replace(/\D/g, "");
+      console.log(`[Claire Demo Call] Outbound request for +1${cleanDigits}`);
+
+      const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+      const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+      const fromPhone = process.env.TWILIO_PHONE_NUMBER?.trim() || process.env.CLAIRE_PHONE_NUMBER?.trim();
+
+      let placedSid: string | null = null;
+      if (accountSid && authToken && fromPhone) {
+        try {
+          const { placeClaireOutboundCall } = await import("../twilioPlatform/claireCallProvider");
+          const publicBase = process.env.VITE_APP_URL || "https://gojoystick.com";
+          const result = await placeClaireOutboundCall({
+            to: `+1${cleanDigits}`,
+            from: fromPhone,
+            createOptions: {
+              url: `${publicBase}/api/claire/twilio/inbound`,
+              statusCallback: `${publicBase}/api/claire/twilio/call-status`,
+              statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+            },
+          });
+          placedSid = result.callSid;
+          console.log(`[Claire Demo Call] Placed Twilio call SID: ${placedSid}`);
+        } catch (callErr) {
+          console.warn("[Claire Demo Call] Outbound call dispatch failed:", callErr);
+        }
+      }
+
+      // Record owner notification for visibility
+      try {
+        const { notifyOwner } = await import("./notification");
+        notifyOwner({
+          title: "Claire Demo Call Requested",
+          content: `Phone: ${phone}\nCall SID: ${placedSid || "queued"}\nConsent: One call from Claire. No texts, no list.`,
+        }).catch(() => undefined);
+      } catch {}
+
+      return res.json({ ok: true, callSid: placedSid, message: "Claire is dialing now." });
+    } catch (err: any) {
+      console.error("[Claire Demo Call] Error handling request:", err);
+      return res.status(500).json({ error: "Failed to schedule call" });
+    }
+  });
   registerPresidentAgentRoutes(app);
   registerLegacyDayforgeRetentionRoute(app);
   registerLegacyDayforgeSaasAuthRoute(app);
