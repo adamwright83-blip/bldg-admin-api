@@ -972,6 +972,22 @@ export async function recordCommercialMissionVisitOutcome(input: {
   });
   if (!persisted?.visitOutcome) throw new Error("Visit outcome was not persisted");
 
+  // Claire progression: this is the ONE writer of a visit outcome (verified arrival required), so every
+  // caller (debrief call, mission-linked debrief, field UI) credits field effort here. Idempotent on the
+  // mission; never blocks or fails the write. Credit belongs to the assignee, like the visit score below.
+  const progressionOutcome = persisted.visitOutcome;
+  void import("../claire/progression/evidenceSources")
+    .then(({ creditCommercialVisitProgression }) =>
+      creditCommercialVisitProgression({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        operatorOpenId: persisted.mission.assignedTo ?? input.actorId,
+        outcome: progressionOutcome.outcome,
+        recordedAt: progressionOutcome.createdAt ? new Date(progressionOutcome.createdAt) : new Date(),
+      })
+    )
+    .catch(error => console.warn("[Claire progression] visit credit unavailable", error instanceof Error ? error.message : error));
+
   if (input.outcome === "won") {
     await reconcileCommercialMissionWonDownstream({
       tenantId: input.tenantId,

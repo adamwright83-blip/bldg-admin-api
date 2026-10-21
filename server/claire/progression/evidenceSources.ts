@@ -6,6 +6,13 @@ import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
 import { recordProgressionEvidence, refreshProgression } from "./service";
 import type { OperatorScope, ProgressionStore } from "./store";
 import { getProgressionStore } from "./drizzleStore";
+import { and, eq, inArray } from "drizzle-orm";
+import { commercialMissions, commercialVisitOutcomes, openChannelMissionTasks, openChannelMissions } from "../../../drizzle/schema";
+import { getDb } from "../../db";
+import { DAY1_BUSINESS_DATE, decodeDay1Payload, type Day1TenDoorsPayload } from "../../../shared/day1TenDoors";
+import type { Day1EvidencePayloadExtension } from "../../../shared/day1Evidence";
+import { deriveCommercialVisitEvidence, deriveDay1VisitEvidence, type CommercialVisitOutcomeRow, type DerivedEvidence } from "./fieldEvidence";
+import type { BackfillCandidate, BackfillSources } from "./backfill";
 
 /**
  * Where evidence comes from. Every source here reads persisted business truth
@@ -130,4 +137,202 @@ export async function syncProgressionForOperator(
   } catch (error) {
     console.warn("[Claire progression] sync failed; access unchanged", error instanceof Error ? error.message : error);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Field-effort feeds (W4, 2026-10-21). Every field writer now reaches progression, and every feed
+// credits the CANONICAL operator so a legacy login id (driver-primary, a numeric id) cannot split it.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The operator scope progression credits. A login alias that the persistent-operator identity layer
+ * binds to a canonical operator is credited to that operator; an unresolved id stays as it is
+ * (never guessed, never merged by name).
+ */
+export async function canonicalProgressionOperator(tenantId: string, openId: string): Promise<string> {
+  try {
+    const { resolveCanonicalOperatorIdentity } = await import("../../agents/persistentOperator/identity");
+    const resolved = await resolveCanonicalOperatorIdentity({
+      tenantId,
+      source: { type: "open_id", value: openId },
+      subsystem: "claire.progression",
+    });
+    return resolved.ok ? resolved.identity.canonicalOpenId : openId;
+  } catch {
+    return openId;
+  }
+}
+
+async function recordDerived(
+  store: ProgressionStore,
+  scope: OperatorScope,
+  evidence: readonly DerivedEvidence[],
+  now: () => Date
+): Promise<number> {
+  let created = 0;
+  for (const item of evidence) {
+    const result = await recordProgressionEvidence(store, { ...scope, ...item }, now);
+    if (result.ok && result.created) created += 1;
+  }
+  return created;
+}
+
+/**
+ * A Day 1 Ten Doors outcome was just committed by the operator's explicit tap. Credit the visit
+ * (see deriveDay1VisitEvidence for what counts), then sync order truth and refresh, in that order
+ * (same reason as recordConfirmedVisitEvidence: the cursor must not pass an earlier import).
+ * Never throws: a progression failure must not fail the field tap.
+ */
+export async function creditDay1OutcomeProgression(
+  input: { tenantId: string; driverId: string; payload: Day1TenDoorsPayload & Day1EvidencePayloadExtension },
+  options: { store?: ProgressionStore; now?: () => Date; resolveOperator?: typeof canonicalProgressionOperator } = {}
+): Promise<void> {
+  try {
+    const now = options.now ?? (() => new Date());
+    const store = options.store ?? getProgressionStore();
+    const operatorUserId = await (options.resolveOperator ?? canonicalProgressionOperator)(input.tenantId, input.driverId);
+    if (!operatorUserId) return;
+    const scope = { tenantId: input.tenantId, operatorUserId };
+    const { evidence } = deriveDay1VisitEvidence({ payload: input.payload });
+    if (!(await recordDerived(store, scope, evidence, now))) return;
+    await syncProgressionForOperator(scope, { store, now, force: true });
+  } catch (error) {
+    console.warn("[Claire progression] Day 1 outcome credit failed", error instanceof Error ? error.message : error);
+  }
+}
+
+/**
+ * A commercial mission visit outcome was just persisted by its ONE writer (which requires a verified
+ * arrival). Covers every caller: the Claire debrief call, the mission-linked debrief and the field UI.
+ * Credit belongs to the assigned operator, matching the writer's own visit-score rule.
+ */
+export async function creditCommercialVisitProgression(
+  input: { tenantId: string; missionId: number; operatorOpenId: string; outcome: string; recordedAt: Date },
+  options: { store?: ProgressionStore; now?: () => Date; resolveOperator?: typeof canonicalProgressionOperator } = {}
+): Promise<void> {
+  try {
+    const operatorUserId = await (options.resolveOperator ?? canonicalProgressionOperator)(input.tenantId, input.operatorOpenId);
+    await recordConfirmedVisitEvidence(
+      { tenantId: input.tenantId, operatorUserId, missionId: input.missionId, outcome: input.outcome, occurredAt: input.recordedAt },
+      options.store,
+      options.now
+    );
+  } catch (error) {
+    console.warn("[Claire progression] commercial visit credit failed", error instanceof Error ? error.message : error);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Backfill source loaders (read-only).
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Every Day 1 driver id in the tenant. Reported by the backfill so an admin can name which ids are this
+ * operator (`--alias`). Not auto-merged: identity resolution logs diagnostics on failure, and a dry-run
+ * must write nothing, so folding another login into this operator is always an explicit admin decision.
+ */
+export async function listDay1DriverIds(tenantId: string): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ driverId: openChannelMissions.driverId })
+    .from(openChannelMissions)
+    .where(and(eq(openChannelMissions.tenantId, tenantId), eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE)));
+  return rows.map(row => row.driverId).sort();
+}
+
+async function loadDay1Payloads(tenantId: string, driverId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const missions = await db
+    .select({ id: openChannelMissions.id })
+    .from(openChannelMissions)
+    .where(
+      and(
+        eq(openChannelMissions.tenantId, tenantId),
+        eq(openChannelMissions.driverId, driverId),
+        eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE),
+        inArray(openChannelMissions.status, ["active", "completed"])
+      )
+    );
+  if (!missions.length) return [];
+  const tasks = await db
+    .select({ missionId: openChannelMissionTasks.missionId, detail: openChannelMissionTasks.detail })
+    .from(openChannelMissionTasks)
+    .where(and(eq(openChannelMissionTasks.tenantId, tenantId), inArray(openChannelMissionTasks.missionId, missions.map(m => m.id))));
+  return tasks.flatMap(task => {
+    const payload = decodeDay1Payload(task.detail);
+    return payload ? [{ missionId: task.missionId, payload: payload as Day1TenDoorsPayload & Day1EvidencePayloadExtension }] : [];
+  });
+}
+
+async function loadCommercialVisitOutcomes(tenantId: string, ids: readonly string[]): Promise<CommercialVisitOutcomeRow[]> {
+  const db = await getDb();
+  if (!db || !ids.length) return [];
+  const rows = await db
+    .select({
+      missionId: commercialVisitOutcomes.missionId,
+      outcome: commercialVisitOutcomes.outcome,
+      recordedAt: commercialVisitOutcomes.createdAt,
+      recordedBy: commercialVisitOutcomes.recordedBy,
+      assignedTo: commercialMissions.assignedTo,
+    })
+    .from(commercialVisitOutcomes)
+    .innerJoin(
+      commercialMissions,
+      and(eq(commercialMissions.tenantId, commercialVisitOutcomes.tenantId), eq(commercialMissions.id, commercialVisitOutcomes.missionId))
+    )
+    .where(eq(commercialVisitOutcomes.tenantId, tenantId));
+  // Credit belongs to the assignee; the recorder only when the mission has none.
+  return rows
+    .filter(row => ids.includes(row.assignedTo ?? row.recordedBy))
+    .map(row => ({ missionId: row.missionId, outcome: row.outcome, recordedAt: row.recordedAt }));
+}
+
+/** Every authoritative source, re-derived for one operator and its aliases. Read-only. */
+export async function loadProgressionBackfillSources(
+  scope: OperatorScope,
+  options: {
+    aliases?: readonly string[];
+    store?: ProgressionStore;
+    /** Canonical order truth (native + CleanCloud, deduped). Defaults to the production loader. */
+    loadTruth?: (tenantId: string) => Promise<CustomerOrderTruthRecord[]>;
+  } = {}
+): Promise<BackfillSources> {
+  const store = options.store ?? getProgressionStore();
+  const aliases = [...new Set((options.aliases ?? []).filter(id => id && id !== scope.operatorUserId))];
+  const ids = [scope.operatorUserId, ...aliases];
+  const candidates: BackfillCandidate[] = [];
+  const skipped: BackfillSources["skipped"] = [];
+  const originOf = (id: string) => (id === scope.operatorUserId ? "operator" : `alias:${id}`);
+
+  for (const id of ids) {
+    for (const { missionId, payload } of await loadDay1Payloads(scope.tenantId, id)) {
+      const derived = deriveDay1VisitEvidence({ payload });
+      candidates.push(...derived.evidence.map(item => ({ ...item, origin: `day1:${originOf(id)}:${missionId}` })));
+      skipped.push(...derived.skipped.map(item => ({ ...item, origin: `day1:${originOf(id)}:${missionId}` })));
+    }
+    for (const followUp of await loadCompletedFollowUps({ tenantId: scope.tenantId, operatorUserId: id })) {
+      candidates.push({
+        category: "growth_action", kind: "follow_up_done", sourceType: "commercial_follow_up", sourceId: followUp.id,
+        provenance: "commercial_follow_up_completed", occurredAt: followUp.completedAt, recognizedAt: followUp.completedAt,
+        origin: `follow_up:${originOf(id)}`,
+      });
+    }
+  }
+  const commercial = deriveCommercialVisitEvidence(await loadCommercialVisitOutcomes(scope.tenantId, ids));
+  candidates.push(...commercial.evidence.map(item => ({ ...item, origin: "commercial_visit_outcome" })));
+
+  const truth = await (options.loadTruth ?? ((tenantId: string) => loadCustomerOrderTruth(tenantId)))(scope.tenantId);
+  for (const progress of deriveProgressFromOrderTruth(groupCustomerOrderTruth(scope.tenantId, truth))) {
+    candidates.push({ ...progress, origin: "customer_order_truth" });
+  }
+
+  const aliasHeldEvidence: BackfillSources["aliasHeldEvidence"] = [];
+  for (const alias of aliases) {
+    const rows = (await store.listEvidence({ tenantId: scope.tenantId, operatorUserId: alias })).length;
+    if (rows) aliasHeldEvidence.push({ operatorUserId: alias, rows });
+  }
+  const unclaimedDay1DriverIds = (await listDay1DriverIds(scope.tenantId)).filter(id => !ids.includes(id));
+  return { candidates, skipped, aliasHeldEvidence, unclaimedDay1DriverIds };
 }

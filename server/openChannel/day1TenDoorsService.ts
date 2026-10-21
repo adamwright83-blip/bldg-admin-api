@@ -538,6 +538,14 @@ export async function recordDay1TenDoorsOutcome(input: {
     throw new Error("Day 1 outcome was not committed");
   }
 
+  // Claire progression (field effort, never Goldline/Kingdom progression): the committed outcome is one
+  // confirmed field visit for the canonical operator. Idempotent per door; never blocks or fails the tap.
+  void import("../claire/progression/evidenceSources")
+    .then(({ creditDay1OutcomeProgression }) =>
+      creditDay1OutcomeProgression({ tenantId: input.tenantId, driverId: input.driverId, payload: confirmed })
+    )
+    .catch(error => console.warn("[Claire progression] Day 1 credit unavailable", error instanceof Error ? error.message : error));
+
   if (day1IsComplete(confirmed) && mission.status !== "completed") {
     const completedAt = new Date();
     await db

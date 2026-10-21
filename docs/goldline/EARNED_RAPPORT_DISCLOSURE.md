@@ -21,7 +21,7 @@ This document constrains future Claire relationship/story work. It records what 
 | | Growth action (effort) | Business progress |
 |---|---|---|
 | Drives | rapport band | rung eligibility + entitlements |
-| Live sources (policy `2026-09-19.2`) | debrief-confirmed persisted field-visit outcome; completed `commercial_follow_ups` (status completed + completedAt + completedBy) | canonical customer/order truth (`geography/customerOrderTruth` + `customerIdentity`: native + CleanCloud, duplicates merged, canonical identity groups) → `new_paying_customer`, `dormant_customer_reorder`; debrief-confirmed won mission → `target_account_won` |
+| Live sources (policy `2026-09-19.2`) | `confirmed_field_visit` from either persisted field writer: a commercial mission visit outcome (`commercial_visit_outcomes`, written only after a verified arrival, by any caller: debrief call, mission-linked debrief or field UI), or a Day 1 Ten Doors outcome tap (`pitched`; `couldnt_reach` only with a recorded arrival); completed `commercial_follow_ups` (status completed + completedAt + completedBy) | canonical customer/order truth (`geography/customerOrderTruth` + `customerIdentity`: native + CleanCloud, duplicates merged, canonical identity groups) → `new_paying_customer`, `dormant_customer_reorder`; debrief-confirmed won mission → `target_account_won` |
 | Counts a loss? | yes (a real visit) | never; no negative evidence exists |
 | Timestamps | `occurredAt` (chronology), `recognizedAt` (may it count yet) | same |
 
@@ -30,6 +30,31 @@ Modules (`server/claire/progression/`): `policy.ts` (the ONE versioned policy), 
 `paidOrderProgress.ts`, `evidenceSources.ts`, `personalController.ts`, `personalReveal.ts`,
 `personalFollowUp.ts`, `pendingReceipts.ts`, `dialogueRegistry.ts`, `authoredDialogue.ts`,
 `declineTelemetry.ts`, `toneLint.ts`, `simulator.ts`.
+
+## Evidence feeds and the backfill (W4, 2026-10-21)
+
+- **Where each feed is called.** `commercialMissionFieldService.recordCommercialMissionVisitOutcome` (the ONE visit-outcome
+  writer) credits the mission's assignee after every persisted outcome; `day1TenDoorsService.recordDay1TenDoorsOutcome`
+  credits the operator after every committed tap; the Twilio debrief keeps its own call (idempotent). Order truth and
+  completed follow-ups are pulled by `syncProgressionForOperator`, which every field feed forces before refreshing.
+- **Day 1 identity.** One door is one evidence identity (`day1_ten_doors:<targetId>`), across missions and logins, so the
+  same pitch recorded under two logins never counts twice. Chronology is never guessed: a legacy outcome with no
+  recorded time, a `couldnt_reach` with no recorded arrival, and an `operator_backfill` outcome with no recorded arrival are
+  skipped (a backfill's recording time is "recorded now", not "happened now").
+- **Canonical operator.** Live feeds credit the persistent-operator canonical id for the login. A login the identity layer
+  does not bind (e.g. the shared-password `driver-primary`) stays its own scope; folding it into an operator is an explicit
+  admin decision (`--alias`), never automatic.
+- **Not evidence, by design.** `call_completed` (now also emitted when a Brain V2 or scheduled call ends on its own logic, as
+  relationship telemetry only), showrunner debrief `missionUpdates` (a model's reading of what the operator said),
+  strategic-proposal approval (`plan_created` / `said_yes_to_claire`), Day Line commitments marked done.
+- **Backfill.** `scripts/claire-progression-backfill.ts` (`progression/backfill.ts`) re-derives one operator's evidence from
+  the authoritative sources. Dry-run is the default and only reads: it projects band, rung and mints by replaying the real
+  refresh on an in-memory copy. `--apply` writes through the governed writer; a second apply creates nothing; the no-backlog
+  rule still allows at most ONE initial entitlement. Never auto-run.
+- **Admin view.** `claire.progressionStatus` (admin role, strictly read-only): band, rung, counts, evidence by kind, newest 20
+  rows, entitlements by status, distance to the next band/rung, and optionally the backfill dry-run report.
+- **Grant versions.** The database upsert records the policy version whenever a component rises, independent of the
+  column order the ORM emits (before 2026-10-21 an update that raised a band left its version NULL).
 
 ## Policy and versioning
 

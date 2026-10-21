@@ -50,7 +50,9 @@ import { getProgressionStore } from "./progression/drizzleStore";
 import { planPersonalTurn, personalExchangesUsed } from "./progression/personalController";
 import { PROGRESSION_POLICY } from "./progression/policy";
 import { loadPersonalProgressionContext } from "./progression/service";
-import { syncProgressionForOperator } from "./progression/evidenceSources";
+import { loadDisclosureSafetyOk, loadProgressionBackfillSources, syncProgressionForOperator } from "./progression/evidenceSources";
+import { formatBackfillReport, planProgressionBackfill } from "./progression/backfill";
+import { readProgressionStatus } from "./progression/status";
 import { claireRepair2FlagName, isClaireRepair2Enabled } from "./repair2Flags";
 import { setActiveMacroGoal } from "./macroGoalService";
 import {
@@ -942,6 +944,33 @@ export const claireRouter = router({
    * operator-facing game UI. Read-only; answers "why is this operator at this
    * rung, what evidence backs it, and would this topic be answered right now".
    */
+  /**
+   * Earned Rapport: admin/debug ONLY, STRICTLY READ-ONLY (unlike progressionDebug, which may release
+   * expired reservations or sync). Band, rung, evidence counts by kind, the newest 20 evidence rows,
+   * entitlements and the distance to the next band/rung. `backfillPreview` adds the backfill DRY-RUN
+   * (what re-deriving authoritative sources would mint), which also only reads. Never operator-facing.
+   */
+  progressionStatus: legacyAdminRoleProcedure
+    .input(
+      z.object({
+        operatorUserId: z.string().min(1),
+        backfillPreview: z.boolean().default(false),
+        aliases: z.array(z.string().min(1)).max(10).default([]),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const store = getProgressionStore();
+      const scope = { tenantId: ctx.tenantId, operatorUserId: input.operatorUserId };
+      const status = await readProgressionStatus(store, scope);
+      if (!input.backfillPreview) return { status, backfillPreview: null };
+      const plan = await planProgressionBackfill(scope, {
+        store,
+        loadSources: target => loadProgressionBackfillSources(target, { aliases: input.aliases, store }),
+        loadDisclosureSafetyOk,
+      });
+      return { status, backfillPreview: { plan, report: formatBackfillReport(plan, "dry-run") } };
+    }),
+
   progressionDebug: legacyAdminRoleProcedure
     .input(
       z.object({
