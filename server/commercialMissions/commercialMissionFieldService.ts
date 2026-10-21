@@ -5,6 +5,7 @@ import {
   commercialMissionFieldChecklistItems,
   commercialMissionFieldStates,
   commercialMissionPhoneHandoffs,
+  commercialMissions,
   commercialProposals,
   commercialVisitOutcomes,
   tenantFieldChecklistTemplates,
@@ -850,6 +851,35 @@ export async function reconcileCommercialMissionVisitScore(input: {
     },
   });
   return state;
+}
+
+/**
+ * Read-only: persisted visit outcomes whose credit belongs to one of these operator ids (the mission's
+ * assignee, or the recorder when the mission has none), for Claire progression's backfill.
+ */
+export async function listCommercialVisitOutcomesCreditedTo(input: {
+  tenantId: string;
+  operatorIds: readonly string[];
+}): Promise<Array<{ missionId: number; outcome: string; recordedAt: Date }>> {
+  const db = await getDb();
+  if (!db || !input.operatorIds.length) return [];
+  const rows = await db
+    .select({
+      missionId: commercialVisitOutcomes.missionId,
+      outcome: commercialVisitOutcomes.outcome,
+      recordedAt: commercialVisitOutcomes.createdAt,
+      recordedBy: commercialVisitOutcomes.recordedBy,
+      assignedTo: commercialMissions.assignedTo,
+    })
+    .from(commercialVisitOutcomes)
+    .innerJoin(
+      commercialMissions,
+      and(eq(commercialMissions.tenantId, commercialVisitOutcomes.tenantId), eq(commercialMissions.id, commercialVisitOutcomes.missionId))
+    )
+    .where(eq(commercialVisitOutcomes.tenantId, input.tenantId));
+  return rows
+    .filter(row => input.operatorIds.includes(row.assignedTo ?? row.recordedBy))
+    .map(row => ({ missionId: row.missionId, outcome: row.outcome, recordedAt: row.recordedAt }));
 }
 
 export async function recordCommercialMissionVisitOutcome(input: {

@@ -6,10 +6,9 @@ import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
 import { recordProgressionEvidence, refreshProgression } from "./service";
 import type { OperatorScope, ProgressionStore } from "./store";
 import { getProgressionStore } from "./drizzleStore";
-import { and, eq, inArray } from "drizzle-orm";
-import { commercialMissions, commercialVisitOutcomes, openChannelMissionTasks, openChannelMissions } from "../../../drizzle/schema";
-import { getDb } from "../../db";
-import { DAY1_BUSINESS_DATE, decodeDay1Payload, type Day1TenDoorsPayload } from "../../../shared/day1TenDoors";
+import { getDay1TenDoorsMissionReadOnly, listDay1TenDoorsDriverIds } from "../../openChannel/day1TenDoorsService";
+import { listCommercialVisitOutcomesCreditedTo } from "../../commercialMissions/commercialMissionFieldService";
+import type { Day1TenDoorsPayload } from "../../../shared/day1TenDoors";
 import type { Day1EvidencePayloadExtension } from "../../../shared/day1Evidence";
 import { deriveCommercialVisitEvidence, deriveDay1VisitEvidence, type CommercialVisitOutcomeRow, type DerivedEvidence } from "./fieldEvidence";
 import type { BackfillCandidate, BackfillSources } from "./backfill";
@@ -226,67 +225,21 @@ export async function creditCommercialVisitProgression(
 // Backfill source loaders (read-only).
 // ---------------------------------------------------------------------------------------------
 
-/**
- * Every Day 1 driver id in the tenant. Reported by the backfill so an admin can name which ids are this
- * operator (`--alias`). Not auto-merged: identity resolution logs diagnostics on failure, and a dry-run
- * must write nothing, so folding another login into this operator is always an explicit admin decision.
- */
-export async function listDay1DriverIds(tenantId: string): Promise<string[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db
-    .selectDistinct({ driverId: openChannelMissions.driverId })
-    .from(openChannelMissions)
-    .where(and(eq(openChannelMissions.tenantId, tenantId), eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE)));
-  return rows.map(row => row.driverId).sort();
-}
-
 async function loadDay1Payloads(tenantId: string, driverId: string) {
-  const db = await getDb();
-  if (!db) return [];
-  const missions = await db
-    .select({ id: openChannelMissions.id })
-    .from(openChannelMissions)
-    .where(
-      and(
-        eq(openChannelMissions.tenantId, tenantId),
-        eq(openChannelMissions.driverId, driverId),
-        eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE),
-        inArray(openChannelMissions.status, ["active", "completed"])
-      )
-    );
-  if (!missions.length) return [];
-  const tasks = await db
-    .select({ missionId: openChannelMissionTasks.missionId, detail: openChannelMissionTasks.detail })
-    .from(openChannelMissionTasks)
-    .where(and(eq(openChannelMissionTasks.tenantId, tenantId), inArray(openChannelMissionTasks.missionId, missions.map(m => m.id))));
-  return tasks.flatMap(task => {
-    const payload = decodeDay1Payload(task.detail);
-    return payload ? [{ missionId: task.missionId, payload: payload as Day1TenDoorsPayload & Day1EvidencePayloadExtension }] : [];
-  });
+  const mission = await getDay1TenDoorsMissionReadOnly({ tenantId, driverId });
+  if (!mission) return [];
+  const payload: Day1TenDoorsPayload & Day1EvidencePayloadExtension = {
+    kind: "day1_ten_doors",
+    targets: mission.targets,
+    outcomes: mission.outcomes,
+    evidenceEvents: mission.evidenceEvents,
+    visitEvidence: mission.visitEvidence,
+  };
+  return [{ missionId: mission.missionId, payload }];
 }
 
 async function loadCommercialVisitOutcomes(tenantId: string, ids: readonly string[]): Promise<CommercialVisitOutcomeRow[]> {
-  const db = await getDb();
-  if (!db || !ids.length) return [];
-  const rows = await db
-    .select({
-      missionId: commercialVisitOutcomes.missionId,
-      outcome: commercialVisitOutcomes.outcome,
-      recordedAt: commercialVisitOutcomes.createdAt,
-      recordedBy: commercialVisitOutcomes.recordedBy,
-      assignedTo: commercialMissions.assignedTo,
-    })
-    .from(commercialVisitOutcomes)
-    .innerJoin(
-      commercialMissions,
-      and(eq(commercialMissions.tenantId, commercialVisitOutcomes.tenantId), eq(commercialMissions.id, commercialVisitOutcomes.missionId))
-    )
-    .where(eq(commercialVisitOutcomes.tenantId, tenantId));
-  // Credit belongs to the assignee; the recorder only when the mission has none.
-  return rows
-    .filter(row => ids.includes(row.assignedTo ?? row.recordedBy))
-    .map(row => ({ missionId: row.missionId, outcome: row.outcome, recordedAt: row.recordedAt }));
+  return listCommercialVisitOutcomesCreditedTo({ tenantId, operatorIds: ids });
 }
 
 /** Every authoritative source, re-derived for one operator and its aliases. Read-only. */
@@ -333,6 +286,6 @@ export async function loadProgressionBackfillSources(
     const rows = (await store.listEvidence({ tenantId: scope.tenantId, operatorUserId: alias })).length;
     if (rows) aliasHeldEvidence.push({ operatorUserId: alias, rows });
   }
-  const unclaimedDay1DriverIds = (await listDay1DriverIds(scope.tenantId)).filter(id => !ids.includes(id));
+  const unclaimedDay1DriverIds = (await listDay1TenDoorsDriverIds(scope.tenantId)).filter(id => !ids.includes(id));
   return { candidates, skipped, aliasHeldEvidence, unclaimedDay1DriverIds };
 }

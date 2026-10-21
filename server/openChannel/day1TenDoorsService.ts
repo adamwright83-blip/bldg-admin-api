@@ -165,6 +165,17 @@ export async function getDay1TenDoorsMissionReadOnly(input: {
   return findExistingDay1Mission(input);
 }
 
+/** Read-only: every driver id holding a Day 1 mission in the tenant (progression backfill reports them). */
+export async function listDay1TenDoorsDriverIds(tenantId: string): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ driverId: openChannelMissions.driverId })
+    .from(openChannelMissions)
+    .where(and(eq(openChannelMissions.tenantId, tenantId), eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE)));
+  return rows.map(row => row.driverId).sort();
+}
+
 async function loadWritableDay1Mission(input: {
   tenantId: string;
   driverId: string;
