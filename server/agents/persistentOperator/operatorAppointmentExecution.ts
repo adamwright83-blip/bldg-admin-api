@@ -2,6 +2,7 @@ import { requireCallableStrategicProposal } from "../../strategy/strategicStore"
 import { drizzlePreparedItemStore } from "./preparedItems";
 import { DAILY_CLAIRE_CALLS, dailyPurposeForKind, type DailyClairePurpose } from "../../../shared/dailyClaireCalls";
 import { buildShowrunnerBriefing, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
+import { prepareDaphneCallDecision } from "../daphne/decisionPointSeam";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
@@ -328,6 +329,9 @@ async function executeDailyClaireCall(input: {
       const briefing = await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
       const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
       if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");
+      // Daphne decision point (off unless DAPHNE_V2_DECISION_POINTS): recorded before the call
+      // is placed; a Daphne failure never blocks or changes the call itself.
+      const daphneDecision = await prepareDaphneCallDecision({ identity, purpose, briefing, timeZone: step.timeZone, now });
       const started = await startClairePreDriveCall({
         tenantId: context.scope.tenantId,
         actorId: identity.communicationOperatorUserId,
@@ -349,6 +353,7 @@ async function executeDailyClaireCall(input: {
           replan: null,
           turns: 0,
           clockOffsetMs: now.getTime() - Date.now(),
+          daphneDecision,
         },
       });
       // The opening just spoke what Claire promised on an earlier call; that promise is now kept.

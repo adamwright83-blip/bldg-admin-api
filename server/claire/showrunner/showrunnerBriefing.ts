@@ -1,5 +1,6 @@
 import { proposalItemExecutionWindow, strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal } from "../../../shared/strategicIntelligence";
+import { weeklyHeadlineObjective } from "../../../shared/strategicHeadline";
 import { investigateForPreparation } from "../../analytics/analysis/proactiveInvestigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -159,6 +160,18 @@ export async function loadPreparedItemsForCall(
       targets: campaign.remainingTargets,
       remainingCount: campaign.remainingCount,
     }));
+}
+
+/**
+ * The week's headline for calls. The leading macro goal comes first, even when a
+ * stored proposal's weeklyPlan.objective was written from an area focus before
+ * this rule existed; only without a leading macro goal does the stored wording stand.
+ */
+export function briefingObjective(
+  proposal: Pick<StrategicPlanningProposal, "diagnosis" | "weeklyPlan"> | null | undefined
+): string | null {
+  if (!proposal) return null;
+  return weeklyHeadlineObjective(proposal.diagnosis) ?? proposal.weeklyPlan?.objective ?? proposal.diagnosis.objective?.statement ?? null;
 }
 
 const UNREADABLE_WIN_BACK = "Win-back dossier could not be read. That is not an empty customer list.";
@@ -399,10 +412,7 @@ export async function buildShowrunnerBriefing(input: {
     } else {
       const research = await investigateForPreparation({
         tenantId: identity.tenantId,
-        objective:
-          proposal?.weeklyPlan?.objective ??
-          proposal?.diagnosis.goal.statement ??
-          null,
+        objective: briefingObjective(proposal) ?? proposal?.diagnosis.goal.statement ?? null,
         now,
         timeZone,
       });
@@ -486,7 +496,7 @@ export async function buildShowrunnerBriefing(input: {
     purpose: input.purpose,
     businessDate,
     weekday: formatInTimeZone(now, timeZone, "EEEE"),
-    objective: proposal?.weeklyPlan?.objective ?? proposal?.diagnosis.objective?.statement ?? null,
+    objective: briefingObjective(proposal),
     weekPlan: proposal?.weeklyPlan
       ? {
           outcomes: proposal.weeklyPlan.outcomes,
