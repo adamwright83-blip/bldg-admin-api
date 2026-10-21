@@ -18,7 +18,12 @@ export type QuestItemKind =
   | "acorn_jar"
   | "scarf"
   | "spectacles"
-  | "teacup";
+  | "teacup"
+  // Hazel's HOA letter: a makeshift glove, a porcupine, its shed quill, and an inkwell
+  | "tea_cosy"
+  | "porcupine"
+  | "quill"
+  | "inkwell";
 
 export type QuestSpot = {
   id: string;
@@ -38,6 +43,31 @@ export type ReunionQuestTemplate = {
   spotId: string;
   lines: { locked: string; need: string; carrying: string; waiting: string; thanks: string };
   reunion: ReunionBeat[];
+  /**
+   * A quest made of linked steps instead of one find: each step's prop changes what the next one can do. Finishing the
+   * last step is "item found"; the giver's reunion is the hand-over. Stations stay in the world when used.
+   */
+  steps?: readonly QuestStep[];
+  /** the numbered tasks on the quest card, in order; the last is the hand-over to the giver */
+  tasks?: readonly string[];
+};
+
+export type QuestStepId = string;
+export type QuestStep = {
+  id: QuestStepId;
+  kind: QuestItemKind;
+  spotId: string;
+  /** a station stays put when used (shake it, dip in it); anything else is picked up and gone */
+  station?: boolean;
+  /** the prompt button */
+  prompt: string;
+  /** what happens, said right after doing it */
+  done: string;
+  /** a station used at the wrong moment: before its step, and after it */
+  early?: string;
+  late?: string;
+  /** the task number on the quest card this step completes (1-based), if any */
+  completesTask?: number;
 };
 
 /**
@@ -46,6 +76,71 @@ export type ReunionQuestTemplate = {
  * garden hose, never an actual instrument.
  */
 export const REUNION_QUEST_TEMPLATES: readonly ReunionQuestTemplate[] = [
+  {
+    // the opening errand. Three tasks on the card; the glove is the puzzle you discover when Pip says ow.
+    id: "squirrel_hoa_letter",
+    giver: { variant: "squirrel", name: "Hazel" },
+    item: { kind: "quill", name: "inked quill" },
+    spotId: "west_bench",
+    tasks: [
+      "Shake the porcupine",
+      "Dip its shed quill in the ink well",
+      "Write a letter to the squirrel to appease its HOA complaint",
+    ],
+    steps: [
+      {
+        id: "glove",
+        kind: "tea_cosy",
+        spotId: "west_bench",
+        prompt: "Put on the tea cosy",
+        done: "A knitted tea cosy. On a hand, it's an excellent oven glove. Pip, prepare yourself.",
+      },
+      {
+        id: "shake",
+        kind: "porcupine",
+        spotId: "pumpkin_nap",
+        station: true,
+        prompt: "Shake the porcupine",
+        early: "OW. Pip is mostly quills. You'll need something on your hand first. Something thick. Something knitted.",
+        done: "You give Pip a gentle shake. Pip shivers like a wet dog, and one shed quill floats down.",
+        late: "Pip has already given you a quill. Pip would like to go back to sleep now.",
+        completesTask: 1,
+      },
+      {
+        id: "quill",
+        kind: "quill",
+        spotId: "pumpkin_quill",
+        prompt: "Pick up the quill",
+        done: "One quill. Freshly shed. Very pointy at one end, very fancy at the other.",
+      },
+      {
+        id: "dip",
+        kind: "inkwell",
+        spotId: "east_bench_ink",
+        station: true,
+        prompt: "Dip the quill in the ink well",
+        early: "A full ink well. You'll need something to dip in it.",
+        done: "Dip, dab, drip. The quill is ready to write. Take it to Hazel.",
+        late: "The quill is already inky. So, now, are you.",
+        completesTask: 2,
+      },
+    ],
+    lines: {
+      locked: "I'm drafting a complaint about the fountain. Come back when I've finished the third paragraph.",
+      need: "I have filed a formal complaint with the Silver Lake HOA. It will be withdrawn upon receipt of a proper letter. In ink. With a quill. Pip the porcupine has quills. Pip also has opinions. Go on.",
+      carrying: "Is that a quill? Inked? Then sit. Write. I'm listening.",
+      waiting: "{customerFirst} is still here. The HOA recommends you write.",
+      thanks: "Complaint withdrawn. Permanently. Mostly.",
+    },
+    reunion: [
+      { speaker: "narrator", text: "You write the letter in your best quill handwriting. It is mostly apology and partly acorn compliments." },
+      { speaker: "giver", text: "...This is acceptable. Complaint withdrawn. Formally." },
+      { speaker: "narrator", text: "Hazel stamps the letter with an acorn, then points across the courtyard. {customerName} is there." },
+      { speaker: "giver", text: "That's {customerFirst}. It's been {daysSinceLastOrder} days since the last pickup. The HOA has noticed." },
+      { speaker: "giver", text: "{paidOrders} {orderWord}, then nothing." },
+      { speaker: "giver", text: "You should write to {customerFirst}. Regular ink is fine." },
+    ],
+  },
   {
     id: "cat_hose_flute",
     giver: { variant: "cat", name: "Cleo" },
@@ -359,3 +454,51 @@ export function questPhases(
   }
   return phases;
 }
+
+// ------------------------------------------------------------------ linked steps
+
+/** a step prop out in the world, keyed so the customer can be read back from it */
+export type StepItem = { stepId: QuestStepId; kind: QuestItemKind; spotId: string; station: boolean };
+
+/**
+ * What's out in the world at step `at` (0 = nothing done; steps.length = all done). Pick-ups show only at their own
+ * step; stations stay for the whole quest, so you can find the porcupine before you know you need a glove.
+ */
+export function stepItems(template: ReunionQuestTemplate, at: number): StepItem[] {
+  const steps = template.steps ?? [];
+  if (at >= steps.length) return [];
+  return steps
+    .map((st, i) => ({ st, i }))
+    .filter(({ st, i }) => (st.station ? true : i === at))
+    .map(({ st }) => ({ stepId: st.id, kind: st.kind, spotId: st.spotId, station: Boolean(st.station) }));
+}
+
+/** Using a step's prop at step `at`: whether it counts, what is said, and the step after. */
+export function applyStepItem(template: ReunionQuestTemplate, at: number, stepId: QuestStepId): { ok: boolean; line: string; next: number } {
+  const steps = template.steps ?? [];
+  const i = steps.findIndex(st => st.id === stepId);
+  if (i < 0) return { ok: false, line: "", next: at };
+  const st = steps[i];
+  if (i === at) return { ok: true, line: st.done, next: at + 1 };
+  if (i > at) return { ok: false, line: st.early ?? "", next: at };
+  return { ok: false, line: st.late ?? "", next: at };
+}
+
+/** The numbered tasks with their state, for the quest card. */
+export function questTaskList(template: ReunionQuestTemplate, at: number, phase: QuestPhase): { label: string; done: boolean }[] {
+  const tasks = template.tasks ?? [];
+  const steps = template.steps ?? [];
+  return tasks.map((label, k) => {
+    const n = k + 1;
+    const step = steps.findIndex(st => st.completesTask === n);
+    const done = step >= 0 ? at > step : phase === "waiting" || phase === "done";
+    return { label, done };
+  });
+}
+
+/** `item:<customerId>#<stepId>` for a step prop; the plain `item:<customerId>` stays for one-find quests. */
+export const stepItemKey = (customerId: string, stepId: QuestStepId) => `item:${customerId}#${stepId}`;
+export const stepIdFromItemKey = (key: string): QuestStepId | null => {
+  const hash = key.lastIndexOf("#");
+  return key.startsWith("item:") && hash > 5 ? key.slice(hash + 1) : null;
+};

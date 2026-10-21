@@ -851,3 +851,91 @@
     animation: none;
   }
 }
+
+/* a linked-step errand's numbered tasks (Hazel's HOA letter): a little paper card, like a note pinned to a door */
+.questTasks {
+  position: absolute;
+  z-index: 110;
+  right: 16px;
+  top: 84px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px 14px 12px;
+  border-radius: 14px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 4px 0 #5a3a24;
+  color: #3b2a1e;
+  transform: rotate(0.6deg);
+  /* a note to read, never in the way of a tap */
+  pointer-events: none;
+}
+
+.questTasksTitle {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a5a3a;
+  margin-bottom: 6px;
+}
+
+.questTasks ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.questTasks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.questTasks li[data-done="true"] {
+  color: #9b8a78;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.questTaskNum {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid #5a3a24;
+  background: #ffd36b;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.questTasks li[data-done="true"] .questTaskNum {
+  background: #a8d8a0;
+}
+
+.questTasksNote {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #8a5a3a;
+}
+
+@media (max-width: 640px) {
+  .questTasks {
+    top: 118px;
+    right: auto;
+    left: 10px;
+    width: min(230px, calc(100vw - 20px));
+    padding: 9px 11px;
+  }
+  .questTasks li {
+    font-size: 13px;
+  }
+}

@@ -8,7 +8,12 @@ import {
   hasRealDecision,
   questPhases,
   questSlotsFor,
+  questTaskList,
   reunionBeats,
+  stepIdFromItemKey,
+  stepItemKey,
+  stepItems,
+  applyStepItem,
   type QuestAssignment,
   type QuestPhase,
   type QuestSlots,
@@ -28,8 +33,13 @@ import type { QuestItemView } from "./silverLakeRuntime";
 
 export const questGiverKey = (customerId: string) => `quest:${customerId}`;
 export const questItemKey = (customerId: string) => `item:${customerId}`;
-export const customerIdFromQuestKey = (key: string) =>
-  key.startsWith("quest:") ? key.slice(6) : key.startsWith("item:") ? key.slice(5) : null;
+export const customerIdFromQuestKey = (key: string) => {
+  if (key.startsWith("quest:")) return key.slice(6);
+  if (!key.startsWith("item:")) return null;
+  // a step prop is `item:<customerId>#<stepId>`
+  const step = stepIdFromItemKey(key);
+  return step ? key.slice(5, key.length - step.length - 1) : key.slice(5);
+};
 
 export type ActiveQuest = {
   assignment: QuestAssignment;
@@ -56,6 +66,8 @@ export function useReunionQuests(input: {
   const [localPasses, setLocalPasses] = useState<ReadonlySet<string>>(() => new Set());
   const [localFound, setLocalFound] = useState<ReadonlySet<string>>(() => new Set());
   const [localReunited, setLocalReunited] = useState<ReadonlySet<string>>(() => new Set());
+  // how far through a linked-step quest each customer's errand is (this visit; finishing it is "item found")
+  const [stepAt, setStepAt] = useState<ReadonlyMap<string, number>>(() => new Map());
 
   const eventsQuery = trpc.system.goldlineWorld.reunionQuestEvents.useQuery(
     { territoryId },
@@ -117,22 +129,79 @@ export function useReunionQuests(input: {
     [byCustomer, targetsById, phases, spotsById]
   );
 
-  /** the active quest's prop is the only one out in the world */
+  /** the active quest's props are the only ones out in the world */
   const items = useMemo<QuestItemView[]>(() => {
     if (!chain) return [];
     return chain
       .filter(q => phases.get(q.customerId) === "need")
-      .map(q => ({ key: questItemKey(q.customerId), kind: q.template.item.kind, spotId: q.template.spotId }));
-  }, [chain, phases]);
+      .flatMap<QuestItemView>(q =>
+        q.template.steps?.length
+          ? stepItems(q.template, stepAt.get(q.customerId) ?? 0).map(st => ({
+              key: stepItemKey(q.customerId, st.stepId),
+              kind: st.kind,
+              spotId: st.spotId,
+              station: st.station,
+            }))
+          : [{ key: questItemKey(q.customerId), kind: q.template.item.kind, spotId: q.template.spotId }]
+      );
+  }, [chain, phases, stepAt]);
 
+  /**
+   * Picks up (or uses) a prop. A one-find quest's item is found at once. A step quest moves one step on, or says why
+   * not yet (Pip without a glove: "OW"); its last step is "item found". Returns the line to show.
+   */
   const pickItem = useCallback(
-    (itemKey: string) => {
+    (itemKey: string): { line: string; found: boolean; stepId: string | null; ok: boolean } => {
       const id = customerIdFromQuestKey(itemKey);
-      if (!id) return;
+      if (!id) return { line: "", found: false, stepId: null, ok: false };
+      const stepId = stepIdFromItemKey(itemKey);
+      const template = byCustomer.get(id)?.template;
+      let line = "";
+      if (stepId && template?.steps?.length) {
+        const at = stepAt.get(id) ?? 0;
+        const use = applyStepItem(template, at, stepId);
+        if (!use.ok) return { line: use.line, found: false, stepId, ok: false };
+        setStepAt(prev => new Map(prev).set(id, use.next));
+        if (use.next < template.steps.length) return { line: use.line, found: false, stepId, ok: true };
+        line = use.line;
+      }
       setLocalFound(prev => new Set(prev).add(id));
       record(id, "item_found").catch(err => console.warn("Reunion quest progress was not saved:", err));
+      return { line, found: true, stepId, ok: true };
     },
-    [record]
+    [record, byCustomer, stepAt]
+  );
+
+  /** a step quest's numbered tasks for the quest card, or null for a one-find errand */
+  const tasks = useCallback(
+    (customerId: string) => {
+      const q = byCustomer.get(customerId);
+      const phase = phases.get(customerId);
+      if (!q?.template.tasks?.length || !phase) return null;
+      const at = phase === "need" ? stepAt.get(customerId) ?? 0 : (q.template.steps?.length ?? 0);
+      return questTaskList(q.template, at, phase);
+    },
+    [byCustomer, phases, stepAt]
+  );
+  /** whether this visit's step quest has reached a given step (the glove is on once "glove" is done) */
+  const stepDone = useCallback(
+    (customerId: string, stepId: string) => {
+      const q = byCustomer.get(customerId);
+      const i = q?.template.steps?.findIndex(st => st.id === stepId) ?? -1;
+      if (i < 0) return false;
+      const phase = phases.get(customerId);
+      if (phase && phase !== "need" && phase !== "locked") return true;
+      return (stepAt.get(customerId) ?? 0) > i;
+    },
+    [byCustomer, phases, stepAt]
+  );
+  /** test and capture hook: jump a step quest to a step (the synthetic preview only) */
+  const jumpToStep = useCallback(
+    (customerId: string, at: number) => {
+      if (!synthetic) return;
+      setStepAt(prev => new Map(prev).set(customerId, at));
+    },
+    [synthetic]
   );
 
   /** gives the item back: the reunion starts, and from here on the customer stands beside the giver */
@@ -175,6 +244,9 @@ export function useReunionQuests(input: {
     quest,
     items,
     pickItem,
+    tasks,
+    stepDone,
+    jumpToStep,
     startReunion,
     pass,
     isPassed,

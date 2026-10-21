@@ -51,6 +51,33 @@ finding the hose completes the quest: business first, fiction optional.
 **The world remembers.** A reunited customer stands beside their giver at the doorstep from then on, and after a
 decision the giver just says thanks.
 
+## The opening errand: Hazel's HOA letter (linked steps)
+
+Added 2026-10-20 (Adam's idea, with ChatGPT's review). The first errand in the chain is no longer a single find. Hazel
+the squirrel has filed a complaint with the Silver Lake HOA. It is withdrawn only by a proper letter, in ink, with a
+quill. The quest card shows three numbered tasks, in Adam's words:
+
+1. Shake the porcupine
+2. Dip its shed quill in the ink well
+3. Write a letter to the squirrel to appease its HOA complaint
+
+Each step physically changes what the next one can do:
+
+| Step | Prop (spot) | What happens |
+|---|---|---|
+| (the puzzle) | tea cosy (`west_bench`) | Pip is mostly quills: shaking Pip bare-handed gets "OW". The makeshift glove is a knitted **tea cosy**, worn like a big oven mitt. It shows on her hand from then on. |
+| 1 | Pip the porcupine (`pumpkin_nap`, a station that stays put) | With the glove on, a gentle shake. Pip shivers like a wet dog and one shed quill floats down. |
+| — | the quill (`pumpkin_quill`) | Pick it up. |
+| 2 | the ink well (`east_bench_ink`, a station) | Without a quill: "You'll need something to dip in it." With it: the quill is inked. This is "item found". |
+| 3 | Hazel | The hand-over is the letter. The reunion: Hazel withdraws the complaint, then points across the courtyard: the real customer is there, with only the real numbers. |
+
+Rules for linked steps, binding:
+- **Steps are fiction progress inside one errand.** The server still records only `item_found` (the last step) and
+  `reunited`. Sub-steps live in the visit's memory. Nothing about the unlock rule changes.
+- **Stations stay; pick-ups appear only at their own step.** So you can meet Pip before you know you need a glove.
+- **The landing page skips the glove.** Its hero shows her already wearing the tea cosy, so the story there is just
+  1-2-3. The capture uses the synthetic preview's `__silverLakeQuest.jumpToStep(1)`.
+
 ## Cats make their own instruments
 
 Cleo's "flute" is never a musical instrument. It is an ordinary found object, a length of old garden hose, which Cleo
@@ -119,12 +146,14 @@ customer.
 
 ## Templates
 
-There are eight templates, one per villager animal, so all eight doorsteps can host an errand. When it can, the
+There are nine templates: Hazel's opening errand, then one per villager animal, so all eight doorsteps can host an
+errand. When it can, the
 assigner gives a customer a giver of a different animal, so a reunion shows two different villagers.
 
 | Template | Giver | Item (prop) | Spot | Reach |
 |---|---|---|---|---|
-| `cat_hose_flute` (first, most polished) | Cleo the cat | old garden hose, played as a flute | `tree_hollow`: in the roots of the crooked tree by the pumpkins | ground |
+| `squirrel_hoa_letter` (first: the opening errand, linked steps) | Hazel the squirrel | inked quill (tea cosy, Pip, quill, ink well) | `west_bench` (first step) | ground |
+| `cat_hose_flute` | Cleo the cat | old garden hose, played as a flute | `tree_hollow`: in the roots of the crooked tree by the pumpkins | ground |
 | `bunny_kite` | Bella the bunny | kite | `tree_branch`: up in the big tree, north-west | hop |
 | `bear_watering_can` | Bruno the bear | watering can | `behind_crate`: behind the old crate by the lilac cottage | ground |
 | `otter_duck` | Oliver the otter | rubber duck | `fountain_rim`: bobbing at the edge of the fountain | ground |
@@ -160,8 +189,8 @@ progress:
 5. A template is used once per visit. Eight templates cover the courtyard's eight doorsteps.
 
 The chain is assigned once per visit, so a decision made during the visit completes a quest rather than reshuffling the
-chain. In the synthetic preview the chain is: Mei Lin → Cleo, Sarah Jenkins → Bella, Marcus Vance → Bruno,
-Chloe Bennett → Oliver, Grace Holloway → Sammy.
+chain. In the synthetic preview the chain is: Mei Lin → Hazel, Sarah Jenkins → Cleo, Marcus Vance → Bella,
+Chloe Bennett → Bruno, Grace Holloway → Oliver.
 
 ## The unlock rule
 
@@ -223,8 +252,8 @@ reset wipes the table for the proof tenant.
 - Unit: `client/src/pages/goldline/silverLake3d/reunionQuests.test.ts` (unlock rule, assignment, slots, guardrails,
   pass expiry) and `server/experience/lanternCity/reunionQuestEvents.test.ts`.
 - Browser: `e2e/goldline-smoke/playableVillagers.spec.ts` tests 8–11. They cover:
-  - Cleo's hose, the reunion and the desk;
-  - a pass unlocking Bella;
+  - Hazel's linked steps (Pip's "OW" before the glove), the reunion and the desk, with no fiction in the letter;
+  - a pass unlocking Cleo, whose hose is still a single find;
   - the skip;
   - a real-customer pass that survives a reload.
 

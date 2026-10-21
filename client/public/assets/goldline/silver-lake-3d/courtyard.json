@@ -455,6 +455,38 @@
    "y": 1.92,
    "z": 0.05,
    "reach": "ground"
+  },
+  {
+   "id": "west_bench",
+   "hint": "on the west bench by the fountain, keeping nothing warm",
+   "x": -3.62,
+   "y": -1.72,
+   "z": 0.45,
+   "reach": "ground"
+  },
+  {
+   "id": "pumpkin_nap",
+   "hint": "napping in the pumpkins",
+   "x": 8.2,
+   "y": 8.0,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "pumpkin_quill",
+   "hint": "where it rolled, just past the pumpkins",
+   "x": 6.1,
+   "y": 10.2,
+   "z": 0.0,
+   "reach": "ground"
+  },
+  {
+   "id": "east_bench_ink",
+   "hint": "on the east bench by the fountain",
+   "x": 4.32,
+   "y": 1.72,
+   "z": 0.45,
+   "reach": "ground"
   }
  ]
 }

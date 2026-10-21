@@ -1,0 +1,188 @@
+/* Silver Lake's real 3D world stays mounted and visible throughout this encounter. */
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 85;
+  color: #38251c;
+  font-family: "Nunito", ui-rounded, system-ui, sans-serif;
+  pointer-events: none;
+}
+.spotlight {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 40% 48% at 72% 46%, transparent 18%, rgba(14, 24, 17, .25) 85%),
+    linear-gradient(90deg, rgba(17, 29, 23, .42) 0%, rgba(17, 29, 23, .05) 68%, rgba(17, 29, 23, .14));
+  animation: arrive .8s ease-out both;
+}
+.topLine {
+  position: absolute;
+  top: max(19px, env(safe-area-inset-top));
+  inset-inline: clamp(16px, 3vw, 50px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  pointer-events: auto;
+}
+.chapter {
+  color: #fff8de;
+  font: 700 clamp(11px, 1.1vw, 14px)/1.5 "Nunito", system-ui, sans-serif;
+  letter-spacing: .14em;
+  text-shadow: 0 2px 8px #1b3029;
+}
+.chapter span { opacity: .6; padding: 0 .5em; }
+.leave {
+  color: #fff8df;
+  background: rgba(35, 40, 28, .62);
+  border: 1px solid rgba(255, 249, 212, .6);
+  border-radius: 100px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font: 700 13px/1.25 "Nunito", system-ui, sans-serif;
+}
+.letter {
+  position: absolute;
+  top: 50%;
+  left: clamp(18px, 5vw, 90px);
+  transform: translateY(-44%);
+  width: min(480px, 40vw);
+  max-height: min(78dvh, 680px);
+  overflow-y: auto;
+  border-radius: 3px 18px 14px 16px;
+  border: 1px solid #c8a87d;
+  background: #f9edcf;
+  padding: clamp(23px, 3.1vw, 42px);
+  box-shadow: 0 24px 45px rgba(22, 22, 13, .35), 2px 2px 0 #d6c29c inset;
+  pointer-events: auto;
+  animation: letterIn .55s cubic-bezier(.22,1,.36,1) both;
+}
+.letter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .16;
+  background-image: repeating-linear-gradient(0deg, transparent 0 16px, #b99867 17px, transparent 18px);
+}
+.fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(45deg, #ddc69a 0 48%, #faf0d4 50%);
+  box-shadow: -2px 2px 5px #866c4033;
+}
+.author {
+  display: block;
+  color: #906640;
+  font-size: 10px;
+  letter-spacing: .24em;
+  font-weight: 800;
+  margin: 0 0 18px;
+}
+.letter h2 {
+  margin: 0 0 .5em;
+  font: 500 clamp(30px, 3.8vw, 51px)/1.03 Georgia, "Iowan Old Style", serif;
+  letter-spacing: -.045em;
+}
+.letter p {
+  position: relative;
+  margin: 0 0 14px;
+  font-size: clamp(15px, 1.35vw, 19px);
+  line-height: 1.5;
+}
+.letter p strong { font-weight: 900; }
+.letter .ink {
+  margin-block: 16px 20px;
+  color: #6b553c;
+  font: italic clamp(18px, 2.1vw, 25px)/1.35 Georgia, serif;
+}
+.start {
+  background: #825c39;
+  border: 1px solid #5b3d25;
+  box-shadow: 2px 4px 0 #56351d;
+  color: #fff9e8;
+  padding: 12px 20px;
+  cursor: pointer;
+  border-radius: 7px;
+  font: 700 16px/1.3 "Nunito", system-ui, sans-serif;
+}
+.start span { padding-left: 1em; }
+.lanterns { display: flex; flex-direction: column; gap: 9px; margin: 20px 0; }
+.lantern {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 13px;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid #d4b786;
+  background: rgba(255,255,247,.64);
+  border-radius: 8px;
+  padding: 12px;
+  color: inherit;
+  transition: transform .18s ease, background .18s ease;
+}
+.lantern:hover, .lantern:focus-visible { transform: translateX(5px); background: #fff9e8; }
+.lamp {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50% 50% 7px 7px;
+  background: radial-gradient(circle at 40% 30%, #fff4aa, #d5a03d 65%, #784c28);
+  border: 2px solid #a46b33;
+  color: #573c22;
+  font: 800 18px Georgia, serif;
+  box-shadow: 0 0 12px #d9a14c88;
+}
+.lantern strong, .lantern small { display: block; }
+.lantern strong { font: 700 16px/1.2 "Nunito", system-ui, sans-serif; }
+.lantern small { margin-top: 4px; color: #846a50; font-size: 12px; }
+.next { margin-left: auto; }
+.wait { font-size: 13px; color: #74583d; }
+.demo { font-size: 12px !important; margin: 18px 0 0 !important; color: #74583d; }
+.worldNote {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: 3.5vw;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: #fff5d7;
+  text-shadow: 0 2px 8px #233322;
+  font: 600 12px/1.4 "Nunito", system-ui, sans-serif;
+}
+.littleStar { color: #ffe6a0; font-size: 34px; }
+@keyframes letterIn {
+  from { opacity: 0; transform: translateY(-37%) rotate(-2deg); }
+  to { opacity: 1; transform: translateY(-44%) rotate(0); }
+}
+@keyframes arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 700px) {
+  .topLine { inset-inline: 12px; }
+  .chapter { font-size: 10px; max-width: 56%; }
+  .leave { font-size: 11px; padding: 9px 10px; }
+  .letter {
+    top: auto;
+    bottom: max(24px, env(safe-area-inset-bottom));
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none;
+    max-height: min(55dvh, 520px);
+    padding: 23px 22px 20px;
+    animation: mobileIn .5s ease-out both;
+  }
+  .letter h2 { font-size: clamp(29px, 8vw, 42px); }
+  .letter p { font-size: 15px; line-height: 1.43; }
+  .worldNote { display: none; }
+  .spotlight { background: linear-gradient(180deg, transparent 0 32%, rgba(15,30,28,.12) 53%, rgba(15,30,28,.6) 100%); }
+}
+@keyframes mobileIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .screen *, .screen::before, .screen::after { animation: none !important; transition: none !important; }
+}

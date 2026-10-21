@@ -21,6 +21,7 @@ import {
 import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { useSilverLakeOutreach } from "./useSilverLakeOutreach";
 import { createCozyMusic, type CozyMusic } from "./cozyMusic";
+import SilverLakeDiscoveryPrelude from "./SilverLakeDiscoveryPrelude";
 import { customerIdFromQuestKey, questGiverKey, useReunionQuests } from "./useReunionQuests";
 import type { QuestSpot, ReunionBeat } from "./reunionQuests";
 import styles from "./silver-lake-3d.module.css";
@@ -130,6 +131,13 @@ export default function SilverLake3D({
   const [reunion, setReunion] = useState<{ customerId: string; beats: ReunionBeat[]; index: number } | null>(null);
   const [nearItem, setNearItem] = useState<{ key: string; hop: boolean } | null>(null);
   const [questNote, setQuestNote] = useState<string | null>(null);
+  // Opt-in playable prologue. Never intercept a deep link or an ongoing customer action.
+  // ?preview=synthetic&discovery=1 is a safe demonstration with no outbound writes.
+  const [discoveryOpen, setDiscoveryOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const q = new URLSearchParams(window.location.search);
+    return q.get("discovery") === "1" && !q.has("customer");
+  });
 
   const o = useSilverLakeOutreach(territoryId);
   const { targets, selectedTarget, setSelectedSlotId } = o;
@@ -316,15 +324,35 @@ export default function SilverLake3D({
   setSelectedSlotIdRef.current = setSelectedSlotId;
   const pickItemRef = useRef<(key: string) => void>(() => {});
   pickItemRef.current = key => {
-    rq.pickItem(key);
+    const result = rq.pickItem(key);
     const id = customerIdFromQuestKey(key);
     const q = id ? rq.quest(id) : null;
-    if (q) setQuestNote(`You found the ${q.template.item.name}! Bring it to ${q.template.giver.name}.`);
+    if (result.line) setQuestNote(result.line);
+    else if (q && result.found) setQuestNote(`You found the ${q.template.item.name}! Bring it to ${q.template.giver.name}.`);
   };
 
   useEffect(() => {
     if (ready) runtimeRef.current?.setQuestItems(rq.items);
   }, [ready, rq.items]);
+
+  // the makeshift glove: once she's put the tea cosy on, she wears it until the letter's written
+  const gloveOn = Boolean(rq.activeCustomerId && rq.stepDone(rq.activeCustomerId, "glove"));
+  useEffect(() => {
+    if (ready) runtimeRef.current?.setHeroGlove(gloveOn);
+  }, [ready, gloveOn]);
+
+  // capture and test hook, synthetic preview only: jump the open step quest to a step (1 = the glove is on)
+  useEffect(() => {
+    if (!o.isSyntheticPreview) return;
+    const w = window as unknown as { __silverLakeQuest?: unknown };
+    w.__silverLakeQuest = {
+      active: () => rq.activeCustomerId,
+      jumpToStep: (n: number) => (rq.activeCustomerId ? (rq.jumpToStep(rq.activeCustomerId, n), true) : false),
+    };
+    return () => {
+      delete w.__silverLakeQuest;
+    };
+  }, [o.isSyntheticPreview, rq.activeCustomerId, rq.jumpToStep]);
 
   useEffect(() => {
     if (!questNote) return;
@@ -357,10 +385,16 @@ export default function SilverLake3D({
   }, [ready, o.neighborhoodMemory.featureChoice]);
 
   useEffect(() => {
+    if (!ready) return;
+    runtimeRef.current?.setDiscoverySurvey(discoveryOpen);
+    return () => runtimeRef.current?.setDiscoverySurvey(false);
+  }, [discoveryOpen, ready]);
+
+  useEffect(() => {
     runtimeRef.current?.setPaused(
-      Boolean(selectedTarget) || Boolean(ambientKey) || Boolean(questTalkId) || Boolean(reunion)
+      Boolean(discoveryOpen) || Boolean(selectedTarget) || Boolean(ambientKey) || Boolean(questTalkId) || Boolean(reunion)
     );
-  }, [selectedTarget, ambientKey, questTalkId, reunion, ready]);
+  }, [discoveryOpen, selectedTarget, ambientKey, questTalkId, reunion, ready]);
 
   // a deep link with a named customer (Home, the Day Line, the outbox) opens that neighbour's desk straight away
   useEffect(() => {
@@ -435,8 +469,25 @@ export default function SilverLake3D({
   const questTalk = questTalkId ? rq.quest(questTalkId) : null;
   const nearItemQuest = nearItem ? rq.quest(customerIdFromQuestKey(nearItem.key) ?? "") : null;
   const carrying = rq.chain.map(q => rq.quest(q.customerId)).find(q => q?.phase === "carrying") ?? null;
+  // a linked-step errand shows its numbered tasks on a card (Hazel's: shake, dip, write)
+  const openQuest = rq.activeCustomerId ? rq.quest(rq.activeCustomerId) : null;
+  const openTasks = rq.activeCustomerId ? rq.tasks(rq.activeCustomerId) : null;
+  const nearStep = nearItem && nearItemQuest ? nearItemQuest.template.steps?.find(st => nearItem.key.endsWith(`#${st.id}`)) ?? null : null;
   const reunionQuest = reunion ? rq.quest(reunion.customerId) : null;
   const reunionTarget = reunion ? targetByKey.get(`customer:${reunion.customerId}`) ?? null : null;
+
+  const followDiscoveredLight = (t: CozyProjectedTarget) => {
+    // Discovery is a camera and story introduction, not a new action system.
+    // The EXISTING authored villager quest owns all meaningful game progression.
+    setDiscoveryOpen(false);
+    const q = rq.quest(t.customerId);
+    if (q && q.phase !== "done") {
+      runtimeRef.current?.focusVillager(questGiverKey(t.customerId));
+      setQuestTalkId(t.customerId);
+    } else {
+      openCustomer(t, true);
+    }
+  };
 
   return (
     <div
@@ -450,6 +501,18 @@ export default function SilverLake3D({
       }}
     >
       <div ref={hostRef} className={styles.stage} />
+      {discoveryOpen && ready ? (
+        <SilverLakeDiscoveryPrelude
+          targets={targets}
+          synthetic={o.isSyntheticPreview}
+          loading={o.loading || (!o.loadFailed && !o.withheldReason && targets.length > 0 && !rq.on)}
+          loadFailed={o.loadFailed}
+          withheldReason={o.withheldReason}
+          focusMissing={o.focusMissing}
+          onClose={() => setDiscoveryOpen(false)}
+          onSelect={followDiscoveredLight}
+        />
+      ) : null}
 
       {!ready && !failed ? (
         <div className={styles.loading} aria-hidden>
@@ -600,7 +663,7 @@ export default function SilverLake3D({
         })}
       </nav>
 
-      {ready && !talking ? (
+      {ready && !talking && !discoveryOpen ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD / arrows to walk</span>
           <span>Shift to run</span>
@@ -618,9 +681,11 @@ export default function SilverLake3D({
           data-hop={nearItem.hop ? "true" : "false"}
         >
           <kbd className={nearItem.hop ? styles.kbdWide : undefined}>{nearItem.hop ? "Space" : "E"}</kbd>{" "}
-          {nearItem.hop
-            ? `Hop up for the ${nearItemQuest.template.item.name}`
-            : `Pick up the ${nearItemQuest.template.item.name}`}
+          {nearStep
+            ? nearStep.prompt
+            : nearItem.hop
+              ? `Hop up for the ${nearItemQuest.template.item.name}`
+              : `Pick up the ${nearItemQuest.template.item.name}`}
         </button>
       ) : null}
 
@@ -674,6 +739,21 @@ export default function SilverLake3D({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {rq.on && openQuest && openTasks && openQuest.phase !== "done" && !talking && !discoveryOpen ? (
+        <aside className={styles.questTasks} aria-label={`${openQuest.template.giver.name}'s errand`} data-testid="quest-tasks">
+          <div className={styles.questTasksTitle}>{openQuest.template.giver.name}'s HOA complaint</div>
+          <ol>
+            {openTasks.map((task, i) => (
+              <li key={task.label} data-done={task.done ? "true" : "false"}>
+                <span className={styles.questTaskNum}>{task.done ? "✓" : i + 1}</span>
+                {task.label}
+              </li>
+            ))}
+          </ol>
+          {gloveOn ? <div className={styles.questTasksNote}>Wearing: a tea cosy, as a glove</div> : null}
+        </aside>
       ) : null}
 
       {rq.on && (questNote || (carrying && !talking)) ? (
