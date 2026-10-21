@@ -548,7 +548,11 @@ function renderPanelFooter(key: string, accent: string) {
 
 export default function JoystickLanding() {
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [state, dispatch] = useReducer(personaReducer, initialPersonaState);
+  const [state, dispatch] = useReducer(
+    (current: typeof initialPersonaState, action: Parameters<typeof personaReducer>[1]) =>
+      personaReducer(current, action),
+    initialPersonaState
+  );
   const [isHoveringHero, setIsHoveringHero] = useState(false);
   const [timerResetKey, setTimerResetKey] = useState(0);
 
