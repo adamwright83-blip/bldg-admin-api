@@ -39,6 +39,21 @@ Authority stage: **D — primary for the authorized operator** (2026-10-19).
    conversational mode** — the organ no longer re-detects the turn. Composed speech
    may not name a dollar figure or percentage V2's evidence does not license.
 
+## Claire leads (W1, 2026-10-21)
+
+- A request for the next move ("what do you have for me tomorrow / what do you want me to
+  do", or being told she should be running the operator) is a **lead plan**, composed by V2
+  (`executive/leadPlan.ts`) over goal progress + the day's work + the **game master view**
+  (`businessMemory/gameMasterView.ts`, reader in `server/claire/gameMaster/`). On a scheduled
+  call it never reaches the conductor's analysis reader. Goal first; every empty progression
+  store is spoken as "no record", never done.
+- The plan may **offer** one Day Line move: a `propose_day_line` grant with authority basis
+  `standing_goal_policy`, held pending by the adapter; only the operator's yes commits it
+  (`commit_briefing`, pending lifecycle). The adapter refuses any non-propose grant on that basis.
+- Perception: a dictated example of how Claire should speak, or role feedback, is never the
+  operator's commitment; a prior-claim challenge needs an actual dispute of its content.
+- Acceptance: `tests/claireLeads.replay.test.ts` (the 2026-10-20 evening debrief).
+
 ## Reused services (executors, not deciders)
 
 Grant-bound Day Line / briefing adapter; weekly planning session service; the

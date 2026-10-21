@@ -11,6 +11,10 @@ export type EvidenceType =
   | "day_line_read"
   | "field_today"
   | "workday_command"
+  /** The operator's live game: active Kingdom and the real Day 1 field outcomes behind it. */
+  | "game_state"
+  /** Distance to the operator's macro goal: target, run baseline, verified current count. */
+  | "goal_progress"
   | "conversation_turn"
   | "operator_utterance"
   | "claim_receipt"

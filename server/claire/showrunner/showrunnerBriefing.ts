@@ -13,6 +13,7 @@ import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/mi
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
+import { dedupeSpokenTitles } from "../speech/dedupeSpokenTitles";
 import { readWinBackDossier, type WinBackDossier } from "../../strategy/winBackDossier";
 import type { CustomerTruthDisposition } from "../../analytics/sourceCoverage";
 import {
@@ -20,6 +21,23 @@ import {
   speakDriverDayLineCall,
   type DriverDayLineCallFacts,
 } from "./driverDayLineCall";
+import {
+  productionGameMasterReaders,
+  readGameMasterView,
+  isNoRecord,
+  type GameMasterReaders,
+  type GameMasterView,
+} from "../gameMaster/gameMasterView";
+import {
+  productionGoalProgressReaders,
+  readGoalProgress,
+  speakGoalProgress,
+  type GoalProgress,
+  type GoalProgressReaders,
+} from "../gameMaster/goalProgress";
+
+/** The game master view for the scheduled-call conductor, and which driver id it was read for. */
+export type ShowrunnerGameState = GameMasterView & { readForDriverId: string };
 
 export const SHOWRUNNER_DEVELOPMENT_SOURCE = "claire_showrunner_development";
 export const DESK_PREPARATION_SOURCE = "claire_desk_preparation";
@@ -62,6 +80,13 @@ export type ShowrunnerBriefing = {
    * question. At most the first is asked on a call. Empty on a weekend for sales follow-ups unless asked.
    */
   carriedOpen?: CarriedOpenItem[];
+  /** The game master view: every Kingdom, Day 1 outcomes, progression, companions, chapters. Read only. */
+  gameState?: ShowrunnerGameState | null;
+  /**
+   * The headline goal: the operator's macro goal (operator_macro_goals) and the
+   * distance to it. `objective` above is the week's focus INSIDE it, never the headline.
+   */
+  goal?: GoalProgress | null;
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -108,6 +133,50 @@ export function describeWinBackForBriefing(dossier: WinBackDossier | null): {
   };
 }
 
+/**
+ * Game state for the briefing, read by the operator's SIGNED-IN openId.
+ *
+ * Driver-id split: production Day 1 rows exist under driver ids "1",
+ * "driver-primary" and "adam-admin". The durable key the driver app and
+ * `deriveKingdomStatuses` use is the signed-in openId (`identity.canonicalOpenId`),
+ * so that is read first; the operator's alias openIds are tried only when it
+ * holds no Day 1 mission, and the first mission with recorded visits wins.
+ * Never throws: an unreadable game is a gap in the briefing, not a failed call.
+ */
+export async function loadShowrunnerGameState(
+  input: { tenantId: string; openId: string; aliasOpenIds?: readonly string[]; canonicalOperatorId?: string | null },
+  readers: GameMasterReaders = productionGameMasterReaders
+): Promise<ShowrunnerGameState> {
+  const ids = [input.openId, ...(input.aliasOpenIds ?? [])].map(id => id.trim()).filter((id, i, all) => id && all.indexOf(id) === i);
+  let best: GameMasterView | null = null;
+  const visited = (view: GameMasterView) => (isNoRecord(view.day1TenDoors) ? -1 : view.day1TenDoors.visitedCount);
+  for (const openId of ids) {
+    const view = await readGameMasterView(
+      { tenantId: input.tenantId, operatorUserId: openId, canonicalOperatorId: input.canonicalOperatorId ?? null },
+      readers
+    );
+    if (!best || visited(view) > visited(best)) best = view;
+    // The signed-in openId wins whenever it holds a Day 1 mission.
+    if (openId === input.openId && !isNoRecord(view.day1TenDoors)) break;
+  }
+  const view =
+    best ??
+    (await readGameMasterView({ tenantId: input.tenantId, operatorUserId: input.openId, canonicalOperatorId: input.canonicalOperatorId ?? null }, readers));
+  return { ...view, readForDriverId: view.driverId };
+}
+
+/** The macro goal for the first of the operator's openIds that has one. Never throws. */
+export async function loadShowrunnerGoal(
+  input: { tenantId: string; openIds: readonly string[]; now: Date; timeZone: string },
+  readers: GoalProgressReaders = productionGoalProgressReaders
+): Promise<GoalProgress | null> {
+  for (const operatorUserId of [...new Set(input.openIds.map(id => id.trim()).filter(Boolean))]) {
+    const goal = await readGoalProgress({ tenantId: input.tenantId, operatorUserId, now: input.now, timeZone: input.timeZone }, readers).catch(() => null);
+    if (goal) return goal;
+  }
+  return null;
+}
+
 function items(state: Awaited<ReturnType<typeof getDayDirectorState>>): BriefingItem[] {
   return state.commitments.map(c => ({
     id: c.id,
@@ -148,6 +217,10 @@ export async function buildShowrunnerBriefing(input: {
   /** Test seam. Production callers keep the live day-director read. */
   getDay?: typeof getDayDirectorState;
   listOpen?: typeof listOpenDayDirectorCommitmentsBetween;
+  /** Test seam for the game-state read. Production reads the stores. */
+  loadGameState?: typeof loadShowrunnerGameState;
+  /** Test seam for the macro goal read. */
+  loadGoal?: typeof loadShowrunnerGoal;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -278,6 +351,19 @@ export async function buildShowrunnerBriefing(input: {
   }
   const pendingApproval =
     pendingDecision?.items.map(item => ({ id: item.id, title: item.title })) ?? [];
+  // Read by the signed-in openId; aliases only fill in when it holds no Day 1 mission.
+  const gameState = await (input.loadGameState ?? loadShowrunnerGameState)({
+    tenantId: identity.tenantId,
+    openId: identity.canonicalOpenId,
+    aliasOpenIds: (identity.aliases ?? []).map(alias => alias.openId),
+    canonicalOperatorId: identity.canonicalOperatorId,
+  }).catch(() => null);
+  const goal = await (input.loadGoal ?? loadShowrunnerGoal)({
+    tenantId: identity.tenantId,
+    openIds: [identity.canonicalOpenId, identity.communicationOperatorUserId, ...(identity.aliases ?? []).map(alias => alias.openId)],
+    now,
+    timeZone,
+  }).catch(() => null);
   const driverDayLine =
     input.purpose === "desk_planning"
       ? null
@@ -313,6 +399,8 @@ export async function buildShowrunnerBriefing(input: {
     opportunity,
     driverDayLine,
     carriedOpen,
+    gameState,
+    goal,
     purpose: input.purpose,
     businessDate,
     weekday: formatInTimeZone(now, timeZone, "EEEE"),
@@ -338,7 +426,29 @@ export async function buildShowrunnerBriefing(input: {
 
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
-/** The spoken opening, built only from briefing facts. */
+/**
+ * The goal line every scheduled call opens with: the macro goal and the distance
+ * to it, then the week's focus as a sub-objective when it differs.
+ */
+export function showrunnerGoalLine(b: Pick<ShowrunnerBriefing, "goal" | "objective">): string {
+  const focus = b.objective?.trim().replace(/[.!]+$/, "") ?? "";
+  if (b.goal) {
+    const sameAsGoal = focus && focus.toLowerCase() === b.goal.objective.trim().replace(/[.!]+$/, "").toLowerCase();
+    return [speakGoalProgress(b.goal), focus && !sameAsGoal ? `This week's focus inside that is ${focus}.` : ""].filter(Boolean).join(" ");
+  }
+  return focus ? `I don't have your goal on record; this week's focus is ${focus}.` : "I don't have your goal on record yet.";
+}
+
+/** The next game move, from the game master view, or "" when there is none. */
+function gameMoveLine(b: ShowrunnerBriefing): string {
+  const view = b.gameState;
+  if (!view || isNoRecord(view.colosseum) || view.colosseum.satisfied || !view.colosseum.remaining.length) return "";
+  const names = view.colosseum.remaining.map(target => target.name);
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+  return `The game move is ${who}: ${view.colosseum.remaining.length === 1 ? "one" : view.colosseum.remaining.length === 2 ? "two" : view.colosseum.remaining.length} left for the Colosseum.`;
+}
+
+/** The spoken opening, built only from briefing facts. Goal first, then the one move. */
 export function showrunnerOpening(b: ShowrunnerBriefing): string {
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
     const line = speakDriverDayLineCall(b.driverDayLine, b.purpose);
@@ -350,8 +460,9 @@ export function showrunnerOpening(b: ShowrunnerBriefing): string {
     if (b.purpose === "morning_readiness") {
       return [
         "Good morning, it's Claire.",
-        b.objective ? `This week is about: ${b.objective}.` : "",
+        showrunnerGoalLine(b),
         line,
+        gameMoveLine(b),
         b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
         carriedLine,
         carried ? carried.question : "Are you ready to get going?",
@@ -359,13 +470,23 @@ export function showrunnerOpening(b: ShowrunnerBriefing): string {
         .filter(Boolean)
         .join(" ");
     }
-    return ["Hi, it's Claire for today's wrap.", line, carriedLine, carried ? carried.question : "How did it go?"].filter(Boolean).join(" ");
+    return [
+      "Hi, it's Claire for today's wrap.",
+      showrunnerGoalLine(b),
+      "Tonight I need two things from you: what got done, and what's in the way of tomorrow.",
+      line,
+      carriedLine,
+      gameMoveLine(b),
+      carried ? carried.question : "How did it go?",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
   const open = b.today.filter(i => i.status === "open");
   return [
     `Hi, it's Claire for today's wrap.`,
     open.length || b.today.length
-      ? `Today you had ${list([...new Set(b.today.map(i => i.title))])}.`
+      ? `Today you had ${list(dedupeSpokenTitles(b.today.map(i => i.title)))}.`
       : "There wasn't anything on today's Day Line.",
     "How did it go?",
   ].join(" ");

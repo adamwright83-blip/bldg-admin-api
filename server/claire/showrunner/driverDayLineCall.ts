@@ -6,6 +6,7 @@
  * read as `trpc.system.field.today`. This module does not keep a list of its own.
  * It does not award points, coins, or streaks, and it does not place a call.
  */
+import { dedupeSpokenTitles } from "../speech/dedupeSpokenTitles";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
@@ -387,7 +388,7 @@ export function speakDriverDayLineCall(
   line: DriverDayLineCallFacts | null | undefined,
   purpose: "morning_readiness" | "evening_debrief"
 ): string {
-  const approvalTitles = (items: Array<{ title: string }>) => [...new Set(items.map(item => item.title))];
+  const approvalTitles = (items: Array<{ title: string }>) => dedupeSpokenTitles(items.map(item => item.title));
   if (!line || line.read !== "read") {
     const approval = approvalTitles(line?.pendingApproval ?? []);
     return [
@@ -400,7 +401,8 @@ export function speakDriverDayLineCall(
   const spoken = collapseSelfGeneratedDuplicates(
     line.stops.filter(stop => !isTestFixtureTitle(stop.title) && !stop.quietOnWeekend)
   );
-  const titles = (stops: DriverDayLineStopFact[]) => [...new Set(stops.map(stop => stop.title))];
+  // Two rows for one building are one thing to the operator; say it once.
+  const titles = (stops: DriverDayLineStopFact[]) => dedupeSpokenTitles(stops.map(stop => stop.title));
   const executable = titles(spoken.filter(stop => stop.executable));
   const evidenced = titles(spoken.filter(stop => stop.completion === "completed_with_evidence"));
   const unmarked = titles(spoken.filter(stop => stop.completion === "completed_without_evidence"));
@@ -431,8 +433,8 @@ export function speakDriverDayLineCall(
         : "Today's line is empty so far.",
     evidenced.length ? `Done and verified: ${join(evidenced)}.` : "",
     unmarked.length ? `Marked done, not yet verified: ${join(unmarked)}.` : "",
-    blocked.length ? `Blocked or deferred: ${join([...new Set(blocked)])}.` : "",
-    approval.length ? `Waiting on your approval: ${join([...new Set(approval)])}.` : "",
+    blocked.length ? `Blocked or deferred: ${join(dedupeSpokenTitles(blocked))}.` : "",
+    approval.length ? `Waiting on your approval: ${join(dedupeSpokenTitles(approval))}.` : "",
     omitted.length
       ? `I could not read ${join(omitted)}, so this is not the full Day Line.`
       : "",

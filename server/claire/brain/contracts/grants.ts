@@ -77,6 +77,12 @@ export type ExecutiveActionGrant = {
     identity?: string;
     accountId?: number | null;
     titles?: string[];
+    /**
+     * The business date a Claire-proposed move is for. Only a `standing_goal_policy`
+     * proposal carries it: operator-committed work takes its date from the
+     * operator's own words.
+     */
+    businessDate?: string;
   };
   authorityBasis: ActionAuthorityBasis;
   sourceTurnAssembledText: string;
