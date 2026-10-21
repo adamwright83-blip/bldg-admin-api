@@ -372,9 +372,11 @@ export async function buildShowrunnerBriefing(input: {
   const adaptations = [...presentations.entries()].map(([type, p]) =>
     type === OPERATOR_SCOPE ? `For you generally: ${p.note}` : `For ${type.replaceAll("_", " ")} work: ${p.note}`
   );
-  // Test data never reaches a briefing Claire reads aloud.
-  const today = items(todayState).filter(i => !isTestFixtureTitle(i.title));
-  const tomorrow = items(tomorrowState).filter(i => !isTestFixtureTitle(i.title));
+  // Test data never reaches a call Claire speaks (morning and evening). The Desk planning board is the
+  // operator's own working surface and shows what is on the Day Line, test rows included, so they can be seen and removed.
+  const spoken = input.purpose !== "desk_planning";
+  const today = items(todayState).filter(i => !spoken || !isTestFixtureTitle(i.title));
+  const tomorrow = items(tomorrowState).filter(i => !spoken || !isTestFixtureTitle(i.title));
   const uncertain = [
     ...today
       .filter(i => i.status === "open" && /meet|visit|building|property|pitch/i.test(`${i.title} ${i.objective ?? ""}`))

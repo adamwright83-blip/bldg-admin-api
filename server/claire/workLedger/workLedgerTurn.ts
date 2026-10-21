@@ -515,6 +515,7 @@ async function runWorkLedgerTurnCore(
     },
     clock: { today: clock.today, minutesNow: clock.minutesNow },
     deps: deps.apply,
+    operatorWords: utterance,
   });
 
   // Held work after this turn: the plan's list, minus what is now verifiably on the line.

@@ -7,7 +7,7 @@
  * hide the row from the Day Line board; the prod clean-up is in scripts/dayline/close-duplicate-dana.md.
  */
 const TEST_TITLE = /\btest(?:ing)?\b/i;
-const FIXTURE_MARKERS = /\b(?:e2e|synthetic|fixture|safe to archive|codex property mission|qa only)\b/i;
+const FIXTURE_MARKERS = /\b(?:e2e|synthetic|safe to archive|codex property mission)\b/i;
 
 export function isTestFixtureTitle(...texts: Array<string | null | undefined>): boolean {
   return texts.some(text => Boolean(text) && (TEST_TITLE.test(text!) || FIXTURE_MARKERS.test(text!)));

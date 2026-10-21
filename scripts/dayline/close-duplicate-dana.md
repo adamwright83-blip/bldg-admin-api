@@ -4,7 +4,7 @@ Status: **NOT RUN against production.** This is the exact, reviewed plan. Every 
 from production MySQL (read-only, `MYSQL_PUBLIC_URL` from `railway variables --service MySQL`)
 on 2026-10-20. Re-read each row before acting; ids are stable, statuses may not be.
 
-Scope: tenant `default`, Day Director actor `1` (the operator row the Day Line reads; it is not
+Scope: the tenant is named explicitly as `@tenant` below (set once to the literal `default`), Day Director actor `1` (the operator row the Day Line reads; it is not
 `adam-admin`), table `day_director_commitments`.
 
 ## 1. The four open "Call Dana" commitments
@@ -26,6 +26,9 @@ Closing is done through the governed overlay, never by `DELETE` or by flipping `
 `getDayDirectorState` then hides the row. Equivalent SQL, one row at a time, after reading it back:
 
 ```sql
+-- The tenant this runbook is scoped to, stated once and passed as a parameter.
+SET @tenant := 'default';
+
 -- Read first. Expect status='open' and no existing dayLine overlay.
 SELECT id, title, status, JSON_EXTRACT(metadataJson,'$.dayLine') FROM day_director_commitments
  WHERE id IN ('a9205d11-573e-4ced-88fb-35f58ee6c7eb','8baa4898-0bfd-4081-bd39-51b76d1e2a89','cf7f48fb-2d57-45d7-a847-f4dc12bc2ff7');
@@ -37,7 +40,7 @@ UPDATE day_director_commitments
            'cancelledAt', DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%sZ'),
            'cancelledBy', 'adam-admin',
            'cancelledReason', 'duplicate of e758bb5d-7851-4b1b-80e7-a9317fef1ffd (same commitment restated); folded 2026-10-20'))
- WHERE tenantId='default' AND actorId='1' AND status='open'
+ WHERE tenantId = @tenant AND actorId = '1' AND status = 'open'
    AND id IN ('a9205d11-573e-4ced-88fb-35f58ee6c7eb','8baa4898-0bfd-4081-bd39-51b76d1e2a89','cf7f48fb-2d57-45d7-a847-f4dc12bc2ff7');
 -- Expect 3 rows affected. Then re-run the SELECT: overlay present on all three.
 ```
@@ -89,7 +92,7 @@ Also in production and matched by the new test-data guard: two open commercial f
 pipeline 6, account 6 "CODEX PROPERTY MISSION E2E 184fdf60 — SAFE TO ARCHIVE"
 (`a34bdc71-8993-417e-acc0-52fcdd16e54b`, `e97ba04d-de06-4724-bb00-1458b6fdce9f`, both due
 2026-08-07, note "Synthetic verification follow-up"). Cancel them with
-`UPDATE commercial_follow_ups SET status='cancelled' WHERE tenantId='default' AND id IN (...) AND status='open'`.
+`UPDATE commercial_follow_ups SET status='cancelled' WHERE tenantId = @tenant AND id IN (...) AND status='open'` (with `@tenant` set as in section 1).
 
 ## 4. The duplicate Los Feliz Towers follow-ups
 
