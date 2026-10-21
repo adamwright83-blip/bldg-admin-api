@@ -11,6 +11,13 @@ import { parseSalesHoldInstruction } from "../../../shared/claireProactive";
 import { recordOperatorSalesHoldInstruction } from "../../agents/persistentOperator/salesHoldInstruction";
 import type { ShowrunnerBriefing } from "./showrunnerBriefing";
 import { driverDayLineStopIds } from "./driverDayLineCall";
+import { applyOpenItemDecision, interpretOpenItemReply, type OpenItemDeps } from "../dayLine/openItemLifecycle";
+import {
+  completeDayDirectorCommitment,
+  getDayDirectorState,
+  moveDayDirectorCommitment,
+} from "../../planning/dayDirector/dayDirectorService";
+import { cancelDayLineItem } from "../../planning/dayline/dayLineMutationService";
 import { contactEditsForAnalysisSelection,
   replanFromDeskEdits, type DeskPlanEdit } from "./deskPlanEdits";
 import {
@@ -78,6 +85,8 @@ export type ShowrunnerCallState = ClaireAnalyticsState & {
   turns: number;
   /** Business clock offset fixed when the call was placed (0 in production). */
   clockOffsetMs?: number;
+  /** The carried open item Claire asked about in the opening has been answered; do not interpret later turns as its answer. */
+  openItemHandled?: boolean;
 };
 
 type ModelTurn = {
@@ -232,6 +241,8 @@ export async function runShowrunnerTurn(input: {
    * (the ledger already recorded that work) and is told what the ledger holds.
    */
   workLedger?: { section: string | null };
+  /** Governed writers for closing the carried open item; injectable for tests. */
+  openItem?: Partial<OpenItemDeps>;
 }): Promise<{ speak: string; end: boolean; state: ShowrunnerCallState; saved?: string[] }> {
   const state: ShowrunnerCallState = JSON.parse(JSON.stringify(input.state));
   state.turns += 1;
@@ -251,6 +262,35 @@ export async function runShowrunnerTurn(input: {
       return { speak: `Done. ${approved} I'll have it ready in the morning.`, end: state.purpose === "evening_debrief", state };
     }
     return { speak: "I couldn't save that approval just now, so nothing changed. You can approve it in the app.", end: false, state };
+  }
+
+  // The opening asked one yes/no about the item that has been open across several days. Its answer
+  // ("done", "drop it", "not this week", "never talk about it again") goes through the governed writers,
+  // is read back, and only then spoken. A bare yes/no counts only as the reply to that question.
+  const carried = state.purpose === "desk_planning" ? null : (state.briefing.carriedOpen?.[0] ?? null);
+  if (carried && !state.openItemHandled) {
+    const decision = interpretOpenItemReply(input.utterance, state.businessDate);
+    const actionable = decision.kind === "drop" || ((decision.kind === "done" || decision.kind === "snooze") && state.turns <= 1);
+    if (actionable && (decision.kind === "drop" || decision.kind === "done" || decision.kind === "snooze")) {
+      state.openItemHandled = true;
+      const outcome = await applyOpenItemDecision({
+        decision,
+        item: carried,
+        target: { tenantId: state.tenantId, actorId: state.dayDirectorActorId },
+        operatorWords: input.utterance,
+        today: state.businessDate,
+        deps: {
+          complete: completeDayDirectorCommitment,
+          cancel: cancelDayLineItem,
+          move: moveDayDirectorCommitment,
+          readState: getDayDirectorState,
+          ...input.openItem,
+        },
+      });
+      const closer = state.purpose === "evening_debrief" ? "How did the rest of the day go?" : "Are you ready to get going?";
+      return { speak: `${outcome.speak} ${closer}`, end: false, state, saved: outcome.applied ? [outcome.speak] : undefined };
+    }
+    if (decision.kind === "still_open" && state.turns <= 1) state.openItemHandled = true;
   }
 
   const contactEdits =

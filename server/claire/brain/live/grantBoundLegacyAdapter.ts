@@ -183,14 +183,17 @@ async function commitParsed(input: {
   const speak = speakBriefingCommit(result, input.today);
   const wrote = hasAuthoritativeCommit(result);
 
-  if (wrote || result.failed.length === 0) {
+  // Work the title gate refused stays pending: Claire asked one question and still holds it.
+  const clarifying = Boolean(result.needsClarification?.length);
+  const settled = (wrote || result.failed.length === 0) && !(clarifying && !wrote);
+  if (settled && !clarifying) {
     input.state.pendingBriefing = null;
   }
 
   return {
     speak,
-    receiptBackedCommit: wrote || result.failed.length === 0 ? speak : undefined,
-    kind: wrote || result.failed.length === 0 ? "briefing_saved" : "answered",
+    receiptBackedCommit: settled ? speak : undefined,
+    kind: settled ? "briefing_saved" : "answered",
     actionIds: result.commitmentIds,
     mutationReceipts: result.receipts,
     assembledUtterance: input.parsed.items.map(item => item.quote).join(" "),

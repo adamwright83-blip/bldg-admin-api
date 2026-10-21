@@ -21,7 +21,7 @@ import { isClaireProgressionEnabled } from "../progression/progressionFlag";
 import { commitPendingDisclosuresForConversation } from "../progression/service";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
-import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
+import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit, unsettledItems } from "../briefing/briefingCommit";
 import { detectReconciliationComplete, isMorningGreeting } from "../workdayCommandLanguage";
 import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayPlanService";
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
@@ -1902,8 +1902,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         (result?.receipts?.length ?? 0) > 0 ||
         (result?.commitmentIds?.length ?? 0) > 0
       );
-      if (result?.failed?.length) {
-        state.pendingBriefing = { parsed: { ...pending, items: result.failed.map(failure => failure.item) }, createdAt: nowMs };
+      if (result && unsettledItems(result).length) {
+        state.pendingBriefing = { parsed: { ...pending, items: unsettledItems(result) }, createdAt: nowMs };
       } else if (writeSucceeded) {
         state.pendingBriefing = null;
       }
@@ -2281,8 +2281,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const unrelated = [...(state.heldBriefingItems ?? []), ...(heldBeforeCommit?.parsed.items ?? [])]
       .filter(item => !savedKeys.has(`${item.businessDate}:${item.title.toLowerCase()}`) && !attemptedKeys.has(`${item.businessDate}:${item.title.toLowerCase()}`));
     state.heldBriefingItems = Array.from(new Map(unrelated.map(item => [`${item.businessDate}:${item.title.toLowerCase()}`, item])).values());
-    state.pendingBriefing = result.failed?.length
-      ? { parsed: { ...reconciled, items: result.failed.map(failure => failure.item) }, createdAt: nowMs } : null;
+    state.pendingBriefing = unsettledItems(result).length
+      ? { parsed: { ...reconciled, items: unsettledItems(result) }, createdAt: nowMs } : null;
     mark("briefing");
     const weeklySpeech = await completeMorningReconciliation();
     const updateSpeech = (result.receipts ?? [])
@@ -2432,8 +2432,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mark("briefing");
         return finish({ speak: "I understood it, but nothing saved. Want me to try again?", kind: "briefing_proposed" });
       }
-      state.pendingBriefing = result.failed?.length
-        ? { parsed: { ...reconciled, items: result.failed.map(failure => failure.item) }, createdAt: nowMs } : null;
+      state.pendingBriefing = unsettledItems(result).length
+        ? { parsed: { ...reconciled, items: unsettledItems(result) }, createdAt: nowMs } : null;
       mark("briefing");
       const weeklySpeech = await completeMorningReconciliation();
       return finish({

@@ -11,9 +11,16 @@
  */
 
 export const TITLE_TARGET_MAX_WORDS = 8;
+/**
+ * The target compacts a title (determiners go first, reasons are split off). It is not a place to chop a
+ * faithful verb + object in half: "Build Laundry Farm landing page to match Instagram ad" lost its last
+ * word, and "Figure out how to get out in streets" lost a whole second task, to an 8-word hard cut.
+ * Only a title longer than this is cut, and a cut is never allowed to land on a dangling word.
+ */
+export const TITLE_HARD_MAX_WORDS = 12;
 
 /** Where a reason / feeling / background clause begins. Everything from here on is context, not the task. */
-const REASON_SPLIT =
+export const REASON_SPLIT =
   /\s*[,;—-]?\s*\b(?:because|since|so that|which means|and that means|that means|but whatever|whatever|and (?:i|we)(?:'m| am| are|'ve| have)\b|as (?:my|our) \w+|my boss|and my boss|considering|given that)\b/i;
 
 const LEAD_IN =
@@ -67,7 +74,7 @@ export function compressTitle(raw: string): string {
     parts.pop();
   }
   // Prefer the target length, but stop before dropping a protected identifier.
-  while (parts.length > TITLE_TARGET_MAX_WORDS) {
+  while (parts.length > TITLE_HARD_MAX_WORDS) {
     const last = parts[parts.length - 1]!;
     if (isProtectedTitleToken(last)) break;
     parts.pop();

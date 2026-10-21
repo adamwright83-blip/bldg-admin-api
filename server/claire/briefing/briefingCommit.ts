@@ -13,6 +13,9 @@ import type { MutationReceipt } from "../assertionGuard";
 import { spokenDay } from "./briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "./briefingTypes";
 import { enforceTitleContract } from "./titleContract";
+import { acceptRewrittenTitle, gateDayLineTitle } from "./dayLineTitleGate";
+import { rewriteTitleWithModel, type TitleRewriter } from "./dayLineTitleRewrite";
+import { executionTypePhrase } from "../../../shared/objectiveExecution";
 import { classifyDayDirectorKind, isHousekeepingUtterance } from "../workdayCommandKind";
 import {
   commandMetadataFromUtterance,
@@ -205,6 +208,11 @@ export type BriefingCommitResult = {
   alreadyPresent?: BriefingItem[];
   warnings?: Array<{ item: BriefingItem; error: string }>;
   failed: Array<{ item: BriefingItem; error: string }>;
+  /**
+   * Items the title gate refused (a cut voice fragment that could not be rewritten from the operator's
+   * own words). Nothing was written for these; Claire asks the one question instead.
+   */
+  needsClarification?: Array<{ item: BriefingItem; question: string; reason: string }>;
   commitmentIds: string[];
   receipts: MutationReceipt[];
 };
@@ -225,6 +233,8 @@ export async function commitBriefing(
     update?: typeof updateDayDirectorCommitment;
     linkVehicleWork?: typeof confirmLinkedVehicleWork;
     readCanonical?: typeof readDayDirectorCanonicalCommitment;
+    /** Model rewrite for a refused title. null disables it. Default: the grounded model rewrite (production only). */
+    rewriteTitle?: TitleRewriter | null;
   } = {}
 ): Promise<BriefingCommitResult> {
   const isTestMockMode = Boolean(deps.accept || deps.linkVehicleWork);
@@ -246,7 +256,8 @@ export async function commitBriefing(
     surface: "claire_turn",
     sourceRef: `briefing:${input.conversationKey}`,
   });
-  const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], commitmentIds: [], receipts: [] };
+  const rewriteTitle: TitleRewriter | null = deps.rewriteTitle === undefined ? (isTestMockMode ? null : rewriteTitleWithModel) : deps.rewriteTitle;
+  const result: BriefingCommitResult = { added: [], completed: [], alreadyPresent: [], warnings: [], failed: [], needsClarification: [], commitmentIds: [], receipts: [] };
   const verified = async (item: BriefingItem, id: string, expectedTitle: string | null = item.title, status?: string, checkType = true) => {
     const row = await readCanonical({ tenantId: input.tenantId, actorId: input.dayDirectorActorId,
       businessDate: item.businessDate, commitmentId: id });
@@ -257,8 +268,27 @@ export async function commitBriefing(
       (status && row.status !== status)) throw new Error("Day Line canonical readback did not confirm this item");
     return row;
   };
-  for (const item of parsed.items) {
+  for (const rawItem of parsed.items) {
+    let item = rawItem;
     try {
+      // Title gate: a raw utterance fragment never becomes a Day Line row.
+      if (!(rawItem.kind === "new_work" && rawItem.existing)) {
+        const gate = gateDayLineTitle({ title: rawItem.title, quote: rawItem.quote });
+        if (gate.verdict === "commit") {
+          if (gate.changed) item = { ...rawItem, title: gate.title };
+        } else {
+          const rewritten = rewriteTitle
+            ? await rewriteTitle({ tenantId: input.tenantId, title: rawItem.title, quote: rawItem.quote }).catch(() => null)
+            : null;
+          const accepted = rewritten ? acceptRewrittenTitle(rewritten, rawItem.quote) : null;
+          if (accepted) {
+            item = { ...rawItem, title: accepted };
+          } else {
+            result.needsClarification!.push({ item: rawItem, question: gate.question, reason: gate.reason });
+            continue;
+          }
+        }
+      }
       if (item.kind === "new_work" && item.existing) {
         if (item.existing.source !== "day_line") continue;
         if (testMockStore) {
@@ -408,24 +438,25 @@ export async function commitBriefing(
   return result;
 }
 
-/** Truthful readback: only what actually saved is spoken as saved. */
+/** Items that are still unsaved: the write failed, or the title gate needs the operator's answer first. */
+export function unsettledItems(result: Pick<BriefingCommitResult, "failed" | "needsClarification">): BriefingItem[] {
+  return [...result.failed.map(failure => failure.item), ...(result.needsClarification ?? []).map(entry => entry.item)];
+}
+
+/**
+ * Truthful readback: only what actually saved is spoken as saved, and it names what was added THIS turn
+ * (title and day). A count is a trailing aside, never the answer: "Done. 7 on today's line." told the
+ * operator nothing about what had just happened (production call 2026-10-15).
+ */
 export function speakBriefingCommit(result: BriefingCommitResult, today: string): string {
   const sentences: string[] = [];
-  const byDay = new Map<string, number>();
-  for (const item of result.added) byDay.set(item.businessDate, (byDay.get(item.businessDate) ?? 0) + 1);
-  const dayParts = Array.from(byDay.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, count]) => {
-      const label = spokenDay(day, today);
-      return `${count} on ${label === "today" ? "today's" : label === "tomorrow" ? "tomorrow's" : `${label}'s`} line`;
-    });
+  const newCount = result.added.length + result.completed.length;
+  const clarify = result.needsClarification ?? [];
   if (!result.failed.length) {
-    const existingWord = result.alreadyPresent?.length ? `${result.alreadyPresent.length} already on the line` : null;
-    const doneWord = result.completed.length ? `${result.completed.length} marked done` : null;
-    const parts = [...dayParts, ...(existingWord ? [existingWord] : []), ...(doneWord ? [doneWord] : [])];
-    sentences.push(parts.length ? `Done. ${joinList(parts).replace(/^./, c => c.toUpperCase())}.` : "Nothing new needed saving.");
+    if (newCount > 0) sentences.push("Done.");
+    else if (!(result.alreadyPresent?.length) && !clarify.length) sentences.push("Nothing new needed saving.");
   } else {
-    const saved = result.added.length + result.completed.length;
+    const saved = newCount;
     const failureTitle = (f: any) => f?.item?.title ?? f?.title ?? "item";
     sentences.push(
       saved
@@ -436,24 +467,24 @@ export function speakBriefingCommit(result: BriefingCommitResult, today: string)
   }
   if (result.warnings?.length) sentences.push(`The items are on the line, but I couldn't verify the timing for ${joinList(result.warnings.map(w => w.item.title))}.`);
   const named = [
-    ...result.added.map(item => ({ item, verb: "Added" })),
-    ...result.completed.map(item => ({ item, verb: "Marked done" })),
-    ...(result.alreadyPresent ?? []).map(item => ({ item, verb: "Already saved" })),
+    ...result.added.map(item => ({ item, kind: "added" as const })),
+    ...result.completed.map(item => ({ item, kind: "done" as const })),
+    ...(result.alreadyPresent ?? []).map(item => ({ item, kind: "present" as const })),
   ];
   if (named.length) {
-    const details = named.map(({ item, verb }) =>
-      `${verb} ${item.title}${item.executionType ? ` as a ${item.executionType.replace(/_/g, " ")}` : ""} for ${spokenDay(item.businessDate, today)}.`
-    );
-    if (!result.failed.length) {
-      if (result.added.length === 0 && result.completed.length === 0) {
-        sentences[0] = details.join(" ");
-      } else {
-        sentences.push(details.join(" "));
-      }
-    } else {
-      sentences.unshift(details.join(" "));
-    }
+    const details = named.map(({ item, kind }) => {
+      const day = spokenDay(item.businessDate, today);
+      const type = executionTypePhrase(item.executionType, item.quote);
+      if (kind === "added" && type) return `Recorded as ${type}: ${item.title}, for ${day}.`;
+      const verb = kind === "added" ? "Added" : kind === "done" ? "Marked done" : "Already saved";
+      return `${verb} ${item.title}${type ? ` as ${type}` : ""} for ${day}.`;
+    });
+    if (result.failed.length) sentences.unshift(details.join(" "));
+    else sentences.push(details.join(" "));
+  }
+  if (!result.failed.length && newCount > 1) sentences.push(`That's ${newCount} new items in all.`);
+  if (clarify.length) {
+    sentences.push(clarify.length > 1 ? `${clarify[0]!.question} I'll ask about the others after.` : clarify[0]!.question);
   }
   return sentences.join(" ");
 }
-

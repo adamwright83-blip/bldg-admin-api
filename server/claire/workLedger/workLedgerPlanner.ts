@@ -25,7 +25,7 @@ import { DEFAULT_ANTHROPIC_MODEL, normalizeAnthropicModel } from "../../_core/mo
 import { claireModelAcceptsSampling, claireModelDefaultsToThinking } from "../claireModel";
 import { addDaysYmd, isValidYmd } from "../../analytics/businessPeriods";
 import { weekdayOf } from "../briefing/briefingTiming";
-import type { ObjectiveExecutionType } from "../../../shared/objectiveExecution";
+import { explicitOperatorExecutionType, type ObjectiveExecutionType } from "../../../shared/objectiveExecution";
 
 export type LedgerExecutionType = ObjectiveExecutionType | null;
 
@@ -622,12 +622,30 @@ export function validateWorkLedgerPlan(raw: RawPlan, input: WorkLedgerPlanInput,
       ? { kind: signal.kind, about: signal.about.trim().slice(0, 200), quote: signal.quote.trim().slice(0, 400) }
       : { kind: "none", about: "", quote: "" };
 
+  // The operator's declared credit kind ("put this on the record as a marketing challenge so I get credit")
+  // must land on the item even when the model forgot to carry it (production call 2026-10-15). Only when
+  // "this" is unambiguous: exactly one item being saved now, or exactly one saved earlier in this call.
+  const declared = explicitOperatorExecutionType(input.utterance);
+  let heldOut = held;
+  let editsOut = edits;
+  if (declared && !held.some(item => saveRefs.includes(item.ref) && item.executionType) && !edits.some(edit => edit.executionType !== "unchanged")) {
+    const untyped = held.filter(item => saveRefs.includes(item.ref) && !item.executionType);
+    if (untyped.length === 1) {
+      heldOut = held.map(item => (item === untyped[0] ? { ...item, executionType: declared } : item));
+    } else if (!untyped.length) {
+      const saved = input.dayLine.filter(item => item.savedThisConversation && item.status === "open" && item.executionType !== declared);
+      if (saved.length === 1) {
+        editsOut = [...edits, { id: saved[0]!.id, title: null, executionType: declared, detail: null, timing: null, moveTo: null }];
+      }
+    }
+  }
+
   return {
-    workChanged: raw.workChanged,
+    workChanged: raw.workChanged || heldOut !== held || editsOut !== edits,
     endCall: raw.endCall,
-    held,
+    held: heldOut,
     saveRefs,
-    edits,
+    edits: editsOut,
     completeIds,
     confirmIds,
     removeIds,

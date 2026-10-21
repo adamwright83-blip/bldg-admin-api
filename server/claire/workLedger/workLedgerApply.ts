@@ -68,6 +68,11 @@ export type WorkLedgerApplyResult = {
   /** Held refs that are now on the Day Line. */
   savedRefs: string[];
   savedIds: string[];
+  /**
+   * Held work the title gate refused to write because no clear task could be made from the operator's
+   * own words. Nothing was saved for these; Claire asks the question and keeps holding the work.
+   */
+  clarifications?: Array<{ title: string; question: string }>;
 };
 
 function dayLineRef(item: LedgerDayLineItem): DayLineItemRef {
@@ -144,6 +149,7 @@ export async function applyWorkLedgerPlan(input: {
   const { plan, target, clock } = input;
   const byId = new Map(input.dayLine.map(item => [item.id, item]));
   const failures: WorkLedgerApplyResult["failures"] = [];
+  const clarifications: NonNullable<WorkLedgerApplyResult["clarifications"]> = [];
   const expected: Array<
     | { kind: "created"; id: string; ref: string; held: LedgerHeldItem }
     | { kind: "updated"; id: string; previous: LedgerDayLineItem; title: string | null; executionType: LedgerExecutionType | "unchanged"; detailNote: string | null; scheduleLabel: string | null }
@@ -177,6 +183,10 @@ export async function applyWorkLedgerPlan(input: {
       continue;
     }
     const id = result.commitmentIds[0];
+    if (!id && result.needsClarification?.length) {
+      clarifications.push({ title: held.title, question: result.needsClarification[0]!.question });
+      continue;
+    }
     if (result.failed.length || !id) {
       failures.push({ title: held.title, error: result.failed[0]?.error ?? "Day Line write returned no id" });
       continue;
@@ -296,7 +306,7 @@ export async function applyWorkLedgerPlan(input: {
         const title = entry.kind === "created" ? entry.held.title : entry.previous.title;
         failures.push({ title, error: `readback failed: ${error instanceof Error ? error.message : String(error)}` });
       }
-      return { changes, failures, receipts, savedRefs, savedIds };
+      return { changes, failures, receipts, savedRefs, savedIds, clarifications };
     }
     for (const entry of expected) {
       if (entry.kind === "created") {
@@ -366,7 +376,7 @@ export async function applyWorkLedgerPlan(input: {
       changes.push({ kind: "confirmed", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, status: row.status });
     }
   }
-  return { changes, failures, receipts, savedRefs, savedIds };
+  return { changes, failures, receipts, savedRefs, savedIds, clarifications };
 }
 
 function lowerFirst(text: string): string {
@@ -451,6 +461,7 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
         : `Took ${joinList(removed.map(change => `"${change.title}"`))} off the line.`
     );
   }
+  if (result.clarifications?.length) sentences.push(result.clarifications[0]!.question);
   if (result.failures.length) {
     const titles = Array.from(new Set(result.failures.map(failure => lowerFirst(failure.title))));
     sentences.push(
