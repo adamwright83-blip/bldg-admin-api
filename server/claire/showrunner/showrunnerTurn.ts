@@ -93,6 +93,11 @@ export type ShowrunnerCallState = ClaireAnalyticsState & {
   askedAgenda?: string[];
   /** Business clock offset fixed when the call was placed (0 in production). */
   clockOffsetMs?: number;
+  /**
+   * The prepared item (promise) this call's opening speaks. Recorded at dial, consumed only when the
+   * operator is heard on this call; an unanswered, failed or voicemail call leaves it prepared.
+   */
+  preparedOffered?: { ids: string[]; consumedAt: string | null } | null;
   /** The carried open item Claire asked about in the opening has been answered; do not interpret later turns as its answer. */
   openItemHandled?: boolean;
   /** Daphne's recorded framing decision for this call (DAPHNE_V2_DECISION_POINTS); absent when off. */

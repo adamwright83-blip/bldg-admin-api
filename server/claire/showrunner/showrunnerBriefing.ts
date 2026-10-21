@@ -596,9 +596,18 @@ export function openingEncouragement(b: ShowrunnerBriefing): string | null {
   return first ? `The first one is the move that serves "${headline}".` : null;
 }
 
-function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
+/**
+ * The one prepared item the opening speaks, or null. The dialer records exactly this item's id on the
+ * call, and it is consumed only once the operator is heard on that call (claireTwilio), never at dial.
+ */
+export function preparedItemSpoken(b: Pick<ShowrunnerBriefing, "preparedItems">): PreparedPropertyVisits | null {
   const item = b.preparedItems?.find(candidate => candidate.kind === "property_visit_choice");
-  if (!item || !item.targets.length) return null;
+  return item && item.targets.length ? item : null;
+}
+
+function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
+  const item = preparedItemSpoken(b);
+  if (!item) return null;
   const names = item.targets.slice(0, 3).map(target => target.name);
   const more = item.remainingCount > names.length ? ` (${item.remainingCount} open in all)` : "";
   return `Last night I said I'd have the open property visits ready: ${list(names)}${more}. Which one do you want first?`;
@@ -609,7 +618,7 @@ function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
  * call's reply reader so a reply is only read as that item's answer when its question was asked.
  */
 export function carriedItemAsked(b: Pick<ShowrunnerBriefing, "carriedOpen" | "standing" | "preparedItems">) {
-  if (b.preparedItems?.some(item => item.kind === "property_visit_choice" && item.targets.length)) return null;
+  if (preparedItemSpoken(b)) return null;
   const held = b.standing?.heldTopics ?? [];
   return b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
 }

@@ -1,7 +1,6 @@
 import { requireCallableStrategicProposal } from "../../strategy/strategicStore";
-import { drizzlePreparedItemStore } from "./preparedItems";
 import { DAILY_CLAIRE_CALLS, dailyPurposeForKind, type DailyClairePurpose } from "../../../shared/dailyClaireCalls";
-import { buildShowrunnerBriefing, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
+import { buildShowrunnerBriefing, preparedItemSpoken, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
 import { prepareDaphneCallDecision } from "../daphne/decisionPointSeam";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { loadStrategicProposal } from "../../strategy/strategicStore";
@@ -293,7 +292,7 @@ export async function executeOperatorAppointment(
  * the call happens when its own grant authorizes it, even if the Day Line is
  * complete. Authority is rechecked at policy time and again at dispatch.
  */
-async function executeDailyClaireCall(input: {
+export async function executeDailyClaireCall(input: {
   step: ClaimedOperatorAppointment;
   now: Date;
   store?: OperatorAppointmentStore;
@@ -354,15 +353,14 @@ async function executeDailyClaireCall(input: {
           turns: 0,
           clockOffsetMs: now.getTime() - Date.now(),
           daphneDecision,
+          // Not consumed here: placing a call is not delivering it. The voice turn handler consumes
+          // exactly this item once the operator is heard on this call (claireTwilio).
+          preparedOffered: (() => {
+            const spoken = preparedItemSpoken(briefing);
+            return spoken ? { ids: [spoken.id], consumedAt: null } : null;
+          })(),
         },
       });
-      // The opening just spoke what Claire promised on an earlier call; that promise is now kept.
-      const promisedIds = (briefing.preparedItems ?? []).map(item => item.id);
-      if (promisedIds.length) {
-        await drizzlePreparedItemStore()
-          .markConsumed({ tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId }, promisedIds, `appointment:${context.jobId}`)
-          .catch(error => console.warn("[Claire] could not mark prepared items consumed", error instanceof Error ? error.message : error));
-      }
       return started;
     },
   });

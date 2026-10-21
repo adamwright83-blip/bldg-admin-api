@@ -841,6 +841,17 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         });
         return { speak, endCall: true, listenOnly: false, gatherTwiml: speak ? speakAndHangUp(speak) : amdHangupTwiml() };
       }
+      // A person answered and spoke: the opening (and any promise it kept) was delivered on this call.
+      if (conversation.showrunner?.preparedOffered && !conversation.showrunner.preparedOffered.consumedAt) {
+        const { consumeDeliveredPreparedItems } = await import("./showrunner/preparedDelivery");
+        const delivered = await consumeDeliveredPreparedItems({
+          showrunner: conversation.showrunner,
+          conversationKey: conversationId,
+          operatorUtterance: input.utterance,
+          sourceConfirmed: input.sourceConfirmed,
+        });
+        if (delivered === "consumed") await saveCall(conversationId, conversation);
+      }
       if (!conversation.inboundContextReady) {
         const prepared = await preparedInboundContextFor({
           conversationId,
