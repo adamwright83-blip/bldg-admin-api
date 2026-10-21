@@ -104,6 +104,8 @@ export type ShadowRetrievalContext = {
   surface: "voice" | "text";
   /** Authoritative V1 receipts used only to locate and rerun the challenged claim. */
   priorClaimReceipts: FactualClaimReceipt[];
+  /** Canonical operator id, when the surface carries one (scheduled calls). Read keys only. */
+  canonicalOperatorId?: string | null;
 };
 
 export function liveExecutiveDeps(
@@ -118,6 +120,7 @@ export function liveExecutiveDeps(
     businessDate: ctx.businessDate,
     timeZone: ctx.timeZone,
     priorClaimReceipts: ctx.priorClaimReceipts,
+    canonicalOperatorId: ctx.canonicalOperatorId ?? null,
   };
   const contexts = {
     business,

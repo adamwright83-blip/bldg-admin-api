@@ -89,6 +89,11 @@ function requeryUsingPriorParameters(
   return query;
 }
 
+/** "What is my goal?" / "Do you remember my goal?" — answered from the macro goal reader. */
+export function asksAboutGoal(text: string): boolean {
+  return /\b(?:what(?:'s|\s+is|\s+was)|remember|know|tell\s+me)\b[\s\S]{0,30}\b(?:my|our|the)\s+(?:main\s+|big\s+)?goal\b/i.test(text);
+}
+
 /** Imperative halt: "Stop." / "Hey, stop." is discourse, not a route object. */
 function isDiscourseStop(text: string): boolean {
   return /^(?:(?:hey|ok|okay|wait)[,.]?\s+)?(?:please\s+)?stop(?:\s+please)?[.!?]*$/i.test(text.trim());
@@ -155,17 +160,29 @@ export function planRetrievalPassA(
 
     // A pure continuation walks memory's resolved result; it must not re-query.
     if (!attention.continueOrderedQuery) {
-      if (wantsOperations(perceived.assembledText)) {
-        requests.push({ compartment: "businessMemory", kind: "operations" });
-      }
       const kinds = new Set(attention.activeTaskSets.map(set => set.kind));
       const scopedAccount =
         kinds.has("account_judgment") || attention.entitiesToResolve.length > 0;
+      // "What do you have for me tomorrow?" reads tomorrow's day, not today's.
+      const lead = perceived.broadBriefingRequest ? perceived.leadRequest : null;
+      const dayOffset = lead?.horizon === "tomorrow" ? 1 : undefined;
+      if (wantsOperations(perceived.assembledText) || lead) {
+        requests.push({ compartment: "businessMemory", kind: "operations", ...(dayOffset ? { dayOffset } : {}) });
+      }
       if (
         !scopedAccount &&
         (wantsOperations(perceived.assembledText) || kinds.has("broad_planning") || perceived.broadBriefingRequest)
       ) {
-        requests.push({ compartment: "businessMemory", kind: "workday_command" });
+        requests.push({ compartment: "businessMemory", kind: "workday_command", ...(dayOffset ? { dayOffset } : {}) });
+      }
+      // An unscoped briefing sees the operator's game: the active Kingdom and the
+      // real buildings in its hunt still unvisited. A scoped question never does.
+      if (!scopedAccount && (kinds.has("broad_planning") || perceived.broadBriefingRequest)) {
+        requests.push({ compartment: "businessMemory", kind: "game_state" });
+      }
+      // The plan opens with the goal and the distance to it; a goal question is answered from it.
+      if ((!scopedAccount && perceived.broadBriefingRequest) || asksAboutGoal(perceived.assembledText)) {
+        requests.push({ compartment: "businessMemory", kind: "goal_progress" });
       }
       // A bounded semantic planner may choose query CRITERIA, never facts or numbers.
       // If it is absent or fails, the deterministic parser remains the fallback.
@@ -185,6 +202,11 @@ export function planRetrievalPassA(
 
   if (may("selfMemory")) {
     requests.push({ compartment: "selfMemory", kind: "disclosure_entitlement" });
+  }
+
+  // The standing macro goal is cheap and unscoped; an unscoped briefing plans against it.
+  if (may("goals") && attention.boardEligible) {
+    requests.push({ compartment: "goals", kind: "macro_goal", scoped: false });
   }
 
   return requests;

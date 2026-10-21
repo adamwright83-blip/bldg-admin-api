@@ -76,6 +76,12 @@ export type ShowrunnerCallState = ClaireAnalyticsState & {
   /** itemIds: the exact items a "yes" approves; absent means the whole revision (call replans). */
   replan: null | { proposalId: string; revision: string; summary: string; approved: boolean; askedTurn?: number; itemIds?: string[] };
   turns: number;
+  /**
+   * Questions Claire has asked on this call, as spoken. An unanswered question
+   * may be asked once more, then it is dropped (2026-10-20: the same agenda
+   * question three times, then "which three buildings?" three times).
+   */
+  askedAgenda?: string[];
   /** Business clock offset fixed when the call was placed (0 in production). */
   clockOffsetMs?: number;
 };
@@ -199,6 +205,9 @@ function systemPrompt(state: ShowrunnerCallState): string {
         ];
   return [
     ...role,
+    "BRIEFING.goal is the headline goal (the operator's macro goal and the distance to it); BRIEFING.objective is only this week's focus inside it. Name the goal before anything else when the operator asks what to do.",
+    "BRIEFING.gameState is the game master view: every Kingdom, the Day 1 buildings and their outcomes, and BRIEFING.gameState.colosseum (pitched, remaining, and the Day 1 buildings beyond it). When the operator asks what is next or which buildings, name them from there; never ask which buildings when colosseum.remaining is non-empty. A stage whose record field is 'none' has no record: say 'no record', never that it is done.",
+    "alreadyAsked lists questions you already asked this call. Never ask one of them again unless the operator brings it back; ask a different, genuinely needed question or none.",
     "Speak naturally in at most three short sentences, one question at most. No motivational speeches, no shaming, no lists read aloud.",
     "TRUTH: use only facts in BRIEFING or the operator's own words. Never invent customers, addresses, times, sales, travel times, prepared materials, or outcomes.",
     "Operator reports are reports, not verified results; you may say 'you said', never 'confirmed'.",
@@ -327,6 +336,7 @@ export async function runShowrunnerTurn(input: {
               return { date: day.toISOString().slice(0, 10), weekday: day.toUTCString().slice(0, 3) };
             }),
             alreadyCaptured: state.captured,
+            alreadyAsked: state.askedAgenda ?? [],
             conversation: input.history.slice(-12),
             operatorUtterance: input.utterance.slice(0, 1500),
           }),
@@ -393,6 +403,10 @@ export async function runShowrunnerTurn(input: {
   let speak = input.workLedger
     ? cleanLedgerReply(model.speak) || "Nothing new is confirmed saved."
     : model.speak.trim();
+  // No re-ask: a question already asked twice is dropped, whatever the model said.
+  const guarded = dropRepeatedQuestions(speak, state.askedAgenda ?? []);
+  speak = guarded.speak || "Noted.";
+  state.askedAgenda = [...(state.askedAgenda ?? []), ...guarded.asked].slice(-24);
   const savedNotes = preparation.map(p => `Reminder saved: ${p}`);
   if (planEdits.length) {
     // Desk edits: exact items, pending until an unambiguous yes; holds of draft items need no approval.
@@ -446,4 +460,51 @@ export function isUnambiguousAgreement(utterance: string): boolean {
   if (!text || QUALIFIER.test(text) || !AGREE_HEAD.test(text)) return false;
   const rest = text.replace(AGREE_HEAD, "").split(/[,;]|\s+-\s+/).map(s => s.trim()).filter(Boolean);
   return rest.every(part => AGREE_TAIL.test(part));
+}
+
+
+const QUESTION_FILLER = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "you", "your", "did", "do", "does", "any", "is", "are", "was", "were",
+  "it", "that", "this", "those", "these", "so", "ok", "okay", "get", "got", "for", "on", "in", "at", "today", "tonight",
+]);
+
+function questionTokens(question: string): Set<string> {
+  return new Set(
+    question
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter(token => token.length > 1 && !QUESTION_FILLER.has(token))
+      .map(token => token.replace(/(?:ings|ing|es|s)$/, ""))
+  );
+}
+
+/** Same question, rephrased: most content words shared. */
+export function sameQuestion(a: string, b: string): boolean {
+  const left = questionTokens(a);
+  const right = questionTokens(b);
+  if (!left.size || !right.size) return a.trim().toLowerCase() === b.trim().toLowerCase();
+  const shared = [...left].filter(token => right.has(token)).length;
+  return shared / Math.min(left.size, right.size) >= 0.6;
+}
+
+/**
+ * Drop any question sentence that was already asked twice on this call; report
+ * the questions this reply still asks so the caller can remember them.
+ */
+export function dropRepeatedQuestions(speak: string, asked: readonly string[]): { speak: string; asked: string[] } {
+  const sentences = speak.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map(part => part.trim()).filter(Boolean) ?? [];
+  const kept: string[] = [];
+  const questions: string[] = [];
+  for (const sentence of sentences) {
+    if (!sentence.endsWith("?")) {
+      kept.push(sentence);
+      continue;
+    }
+    const times = asked.filter(previous => sameQuestion(previous, sentence)).length;
+    if (times >= 2) continue;
+    kept.push(sentence);
+    questions.push(sentence);
+  }
+  return { speak: kept.join(" ").trim(), asked: questions };
 }

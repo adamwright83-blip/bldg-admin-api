@@ -59,6 +59,36 @@ function titleMatchesScope(itemTitle: string, scopeTitle: string): boolean {
   return shared >= Math.min(2, left.length, right.length);
 }
 
+/**
+ * A move Claire proposed from the standing goal policy (a lead plan) has no
+ * operator sentence to parse: the work is exactly the grant's titles, on the
+ * grant's business date. It becomes a PENDING briefing only; the operator's own
+ * "yes" is what commits it, through the same `commit_briefing` lifecycle.
+ */
+function planSourcedWork(grant: ExecutiveActionGrant, today: string): ParsedBriefing {
+  const titles = grant.scope.titles?.map(title => title.trim()).filter(Boolean) ?? [];
+  if (!titles.length) throw new Error("Brain V2 lead-plan grant is missing bounded work scope");
+  const businessDate = grant.scope.businessDate ?? today;
+  return {
+    items: titles.map(title => ({
+      kind: "new_work" as const,
+      title,
+      quote: title,
+      businessDate,
+      timing: { kind: "none" as const },
+      quantity: null,
+      people: [],
+      place: null,
+      needs: null,
+      existing: null,
+    })),
+    context: [],
+    questions: [],
+    unparsed: [],
+    source: "deterministic",
+  };
+}
+
 function parseGrantWork(input: {
   grant: ExecutiveActionGrant;
   timeZone: string;
@@ -67,6 +97,9 @@ function parseGrantWork(input: {
   const titles = input.grant.scope.titles?.filter(Boolean) ?? [];
   if (!titles.length) {
     throw new Error("Brain V2 Day Line grant is missing bounded work scope");
+  }
+  if (input.grant.authorityBasis === "standing_goal_policy") {
+    return planSourcedWork(input.grant, briefingClock(input.now, input.timeZone).today);
   }
 
   const parsed = parseBriefingDeterministically(
@@ -183,6 +216,11 @@ export async function executeGrantBoundLegacyAdapter(input: {
     throw new Error(
       `Brain V2 legacy adapter refuses unsupported action class: ${input.grant.actionClass}`
     );
+  }
+
+  // A plan Claire authored may only be OFFERED. Committing it needs the operator's yes.
+  if (input.grant.authorityBasis === "standing_goal_policy" && input.grant.actionClass !== "propose_day_line") {
+    throw new Error("Brain V2 lead-plan authority may propose, never commit");
   }
 
   const parsed = parseGrantWork({

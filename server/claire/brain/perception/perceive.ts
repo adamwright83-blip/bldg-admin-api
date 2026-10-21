@@ -5,10 +5,25 @@
 import { interpretTurn } from "../../turn/interpretTurn";
 import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../../topicDetection";
 import { operatorAskedOntology } from "../../progression/ontologyGuard";
-import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTurn } from "../contracts/perceivedTurn";
+import type {
+  BusinessIntentKind,
+  ClaireRoleFeedbackKind,
+  DialogueActKind,
+  PerceivedEntity,
+  PerceivedTurn,
+} from "../contracts/perceivedTurn";
 import { isStandaloneOperatorArtifactVoiceRequest } from "../../operatorArtifactVoice";
 import { reconcileCallControl } from "../executive/callControl";
 import { classifyWorkFrame, type WorkFrameClassification } from "./workFrame";
+import { asksAboutGoal } from "../executive/retrievalPlan";
+import {
+  claireRoleRemark,
+  dictatedClaireExample,
+  intentionIsAboutClaire,
+  leadHorizon,
+  leadRequest,
+  type LeadRequest,
+} from "./leadRequest";
 
 export type PerceiveInput = {
   rawText: string;
@@ -16,9 +31,19 @@ export type PerceiveInput = {
   completeness: PerceivedTurn["completeness"];
 };
 
-function intentFromAssembled(assembled: string, turn: ReturnType<typeof interpretTurn>): BusinessIntentKind {
+function intentFromAssembled(
+  assembled: string,
+  turn: ReturnType<typeof interpretTurn>,
+  lead: LeadRequest | null,
+  roleFeedback: ClaireRoleFeedbackKind
+): BusinessIntentKind {
   if (turn.correctnessChallenge) return "correctness_challenge";
   if (turn.provenanceQuestion) return "provenance_question";
+  // "What do you have for me tomorrow? What do you want me to do?" asks for the
+  // next move. It is an unscoped briefing, not a figure, as long as nobody is named.
+  if (lead && (turn.entities.length === 0 || roleFeedback !== "none")) return "broad_briefing";
+  // "Do you remember my goal?" is a fact about the business, answered from the goal reader.
+  if (asksAboutGoal(assembled)) return "fact_question";
   if (turn.queryRefinement) return "query_refinement";
   if (turn.queryParameterChange) return "query_requery";
   if (turn.broadBriefingRequest) return "broad_briefing";
@@ -154,10 +179,49 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   ) {
     classification = { ...classification, workDeclarationKind: "none" };
   }
+
+  /**
+   * Feedback about Claire's role is not the operator's work.
+   *
+   * "Tomorrow you're gonna hit 3 locations in person" dictates Claire's lines; it is
+   * not the operator committing to their own Day Line. "You should already know
+   * them, I need to have that coded in you" is about Claire, so it is not an
+   * attested intention ("That is what you intend to do"). Both are read here from
+   * the words alone; the semantic organ may add the same reading. Authority can
+   * only be LOWERED by this — nothing here mints work.
+   */
+  const explicitLead = leadRequest(assembledText);
+  const roleFeedback: ClaireRoleFeedbackKind = dictatedClaireExample(assembledText)
+    ? "dictated_example"
+    : claireRoleRemark(assembledText) ||
+        (turn.aboutClaireCapability &&
+          classification.status === "classified" &&
+          intentionIsAboutClaire(classification.declaredContentLabel))
+      ? "role_remark"
+      : "none";
+  if (roleFeedback !== "none" && classification.status === "classified") {
+    classification = {
+      ...classification,
+      workDeclarationKind: "none",
+      operatorIntentAttested: false,
+      declaredContentLabel: null,
+      openFragment: false,
+      strategicShape: "none",
+    };
+  }
+  // Telling Claire she should be leading is itself a request to be led.
+  const lead: LeadRequest | null =
+    explicitLead ??
+    (roleFeedback !== "none" && !turn.hasBusinessQuestion && !turn.correctnessChallenge && !turn.provenanceQuestion
+      ? { horizon: leadHorizon(assembledText) }
+      : null);
+  const businessIntent = intentFromAssembled(assembledText, turn, lead, roleFeedback);
+  const leadBriefing = businessIntent === "broad_briefing" && lead !== null;
   const entities: PerceivedEntity[] = [
     // A mention only. Whether it is a person or an account is decided downstream,
-    // by authoritative evidence, never by counting words here.
-    ...turn.entities.map(raw => ({ raw, kind: "entity_mention" as const })),
+    // by authoritative evidence, never by counting words here. Claire's dictated
+    // lines ("Open up the first Kingdom") name no customer, so they resolve nothing.
+    ...(roleFeedback === "none" ? turn.entities : []).map(raw => ({ raw, kind: "entity_mention" as const })),
     ...turn.temporal.map(raw => ({ raw, kind: "temporal" as const })),
   ];
 
@@ -202,6 +266,13 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   if (callControl !== "end") {
     dialogueActs = dialogueActs.filter(act => act !== "leave_taking");
   }
+  if (roleFeedback !== "none") {
+    // Dictated lines and role remarks commit the operator to nothing and direct Claire to no write.
+    dialogueActs = dialogueActs.filter(act => act !== "commitment" && act !== "directive");
+  }
+  if (leadBriefing && !dialogueActs.includes("question")) dialogueActs.push("question");
+  if (dialogueActs.length > 1) dialogueActs = dialogueActs.filter(act => act !== "continue");
+  if (!dialogueActs.length) dialogueActs = ["continue"];
 
   const ambiguities: string[] = [];
   if (classification.status === "unknown") ambiguities.push("work_frame_unknown");
@@ -212,7 +283,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     assembledText,
     completeness: input.completeness,
     dialogueActs,
-    businessIntent: intentFromAssembled(assembledText, turn),
+    businessIntent,
     entities,
     temporalReferences: turn.temporal,
     cardinality: turn.cardinality,
@@ -224,16 +295,16 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     correctionTarget,
     refusal,
     acknowledgement: turn.acknowledgement,
-    explicitActionRequest: turn.hasExplicitActionRequest,
-    operatorWorkCommitment: turn.operatorWorkCommitment,
+    explicitActionRequest: roleFeedback === "none" && turn.hasExplicitActionRequest,
+    operatorWorkCommitment: roleFeedback === "none" && turn.operatorWorkCommitment,
     personalProbe: personalProbeOf(assembledText),
     narrativeProbe: narrativeProbeOf(assembledText),
     callControl,
     ambiguities,
-    mayProposeWorkHint: turn.mayProposeWork,
-    hasBusinessQuestion: turn.hasBusinessQuestion,
+    mayProposeWorkHint: roleFeedback === "none" && turn.mayProposeWork,
+    hasBusinessQuestion: turn.hasBusinessQuestion || leadBriefing || businessIntent === "fact_question",
     listRequest: turn.listRequest,
-    broadBriefingRequest: turn.broadBriefingRequest,
+    broadBriefingRequest: turn.broadBriefingRequest || leadBriefing,
     aboutClaireCapability: turn.aboutClaireCapability,
     classifierStatus: classification.status,
     workDeclarationKind: classification.status === "classified" ? classification.workDeclarationKind : "none",
@@ -246,5 +317,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     openFragment: classification.status === "classified" ? classification.openFragment : false,
     strategicShape: classification.status === "classified" ? classification.strategicShape : "none",
     declaredContentLabel: classification.status === "classified" ? classification.declaredContentLabel : null,
+    leadRequest: leadBriefing ? lead : null,
+    claireRoleFeedback: roleFeedback,
   };
 }
