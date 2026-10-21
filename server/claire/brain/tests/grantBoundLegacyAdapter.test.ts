@@ -174,12 +174,14 @@ describe("Brain V2 grant-bound legacy adapter", () => {
   it("uses indeterminate speech after a grant execution error and never claims nothing changed", () => {
     const result = brainV2ExecutionFailureResult({
       assembledUtterance: "Add call Dana Tuesday to the Day Line.",
+      attempted: 'saving "Call Dana" to the Day Line',
     });
     expect(result).toMatchObject({
       kind: "answered",
       actionIds: [],
       assembledUtterance: "Add call Dana Tuesday to the Day Line.",
     });
+    expect(result.speak).toMatch(/I tried saving "Call Dana" to the Day Line/);
     expect(result.speak).toMatch(/couldn't verify/i);
     expect(result.speak).toMatch(/won't retry/i);
     expect(result.speak).not.toMatch(/\bdone\b|\bsaved\b|nothing changed/i);

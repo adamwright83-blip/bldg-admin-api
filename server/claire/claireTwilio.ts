@@ -22,6 +22,7 @@ import {
   getLatestMissionSalesBrief,
 } from "../missionSalesBrief/missionSalesBriefService";
 import { trackEmptyTranscript, trackNonEmptyTranscript } from "./voiceCommitmentLoop";
+import { silencePromptDecision } from "./voice/silencePrompt";
 import { assembleTomorrowCandidates, confirmWorkdayPlan } from "./workdayPlanService";
 import {
   extractClaireDebrief,
@@ -126,8 +127,10 @@ import {
   amdDetectionTwiml,
   amdHangupTwiml,
   authorizedAmdCreateFields,
+  amdDecisionLog,
   CLAIRE_AMD_PATH,
   recordAuthorizedCallAttempted,
+  voicemailTurnDecision,
 } from "./amdVoicemail";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
@@ -204,9 +207,30 @@ type PreDriveConversation = ClaireTurnState & {
   relayGatherFallbackUsed?: boolean;
   /** Claire sent Conversation Relay's documented end message. */
   relayIntentionalEnd?: boolean;
+  /** When the last silence prompt was spoken. Cleared when the operator speaks. */
+  silencePromptedAt?: number | null;
+  /** A voicemail greeting or menu was recognised. The one bounded line is spent; nothing more is spoken. */
+  voicemailDetected?: boolean;
   /** CallSid observed on the Relay socket or the Connect action callback. */
   relayCallSid?: string | null;
 };
+
+const SCHEDULED_OUTBOUND_KINDS = new Set<string>([
+  "morning_readiness",
+  "evening_debrief",
+  "evening_planning",
+  "morning_reconciliation",
+  "weekly_planning_invite",
+  "weekly_planning",
+]);
+
+/** Claire dialed this call. Inbound pickups have no opening brief and no scheduled kind. */
+export function isOutboundConversation(
+  conversation: Pick<PreDriveConversation, "brief" | "sessionKind">
+): boolean {
+  if (conversation.brief != null) return true;
+  return Boolean(conversation.sessionKind && SCHEDULED_OUTBOUND_KINDS.has(conversation.sessionKind));
+}
 
 function callStateKey(conversationId: string): string {
   return `claire-call:${conversationId}`;
@@ -786,6 +810,37 @@ export function runAuthoritativeClaireVoiceTurn(input: {
   const daphneSourceId=input.sourceEventId ?? `voice:${conversationId}:${conversation.turns+1}`;
   return (async () => {
     try {
+      /**
+       * A voicemail greeting or menu is not the operator. Recognised on an outbound call,
+       * Claire speaks the one bounded voicemail line and ends; a later prompt gets silence.
+       */
+      const voicemail = voicemailTurnDecision({
+        utterance: [conversation.pendingFragment, input.utterance].filter(Boolean).join(" "),
+        outbound: isOutboundConversation(conversation),
+        alreadyDetected: Boolean(conversation.voicemailDetected),
+      });
+      if (voicemail.action !== "none") {
+        const speak = voicemail.action === "leave_message" ? voicemail.speak : "";
+        conversation.voicemailDetected = true;
+        conversation.pendingFragment = null;
+        conversation.fragmentHolds = 0;
+        conversation.touchedAt = Date.now();
+        await saveCall(conversationId, conversation);
+        console.info("[Claire] voicemail recognised in conversation", {
+          event: "claire_voicemail_detected",
+          conversationId,
+          sessionKind: conversation.sessionKind ?? null,
+          spoke: voicemail.action === "leave_message",
+        });
+        await endClaireCallLedger({
+          callSid: input.callSid,
+          claireConversationId: conversationId,
+          operatorText: input.rawTranscript ?? input.utterance,
+          claireText: speak,
+          reason: voicemail.reason,
+        });
+        return { speak, endCall: true, listenOnly: false, gatherTwiml: speak ? speakAndHangUp(speak) : amdHangupTwiml() };
+      }
       if (!conversation.inboundContextReady) {
         const prepared = await preparedInboundContextFor({
           conversationId,
@@ -1288,6 +1343,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           brainV2LiveHandled = true;
           return brainV2ExecutionFailureResult({
             assembledUtterance: liveAssembledUtterance,
+            attempted: liveV2.attempted ?? "that",
           });
         }
         return await runLegacyAdapter();
@@ -1672,6 +1728,11 @@ export async function startClairePreDriveCall(input: {
       operatorUserId: input.actorId,
       interactiveTwiml,
       decisionUrl: `${publicBaseUrl()}${CLAIRE_AMD_PATH}?token=${encodeURIComponent(token)}`,
+    });
+    console.info("[Claire] outbound call amd", {
+      event: "claire_outbound_amd_requested",
+      conversationId,
+      requested: Boolean(amdFields.machineDetection),
     });
     const call = {
       sid: (
@@ -2072,6 +2133,13 @@ export async function renderConversationRelayConnectAction(input: {
     sessionStatus === "ended" ||
     sessionStatus === "completed"
   ) {
+    // The relay closed: the call is over whichever side hung up. Complete the session now
+    // instead of leaving it for the idle sweep. Idempotent if a status callback also fires.
+    void finalizeClaireCallLedger({
+      callSid: callSid || undefined,
+      claireConversationId: claims.conversationId,
+      reason: conversation.relayIntentionalEnd ? "relay_closed_by_claire" : "relay_closed",
+    });
     if (callSid && !conversation.relayCallSid) conversation.relayCallSid = callSid;
     conversation.relayIntentionalEnd = true;
     await saveCall(claims.conversationId, conversation);
@@ -2190,8 +2258,24 @@ export function registerClaireRoutes(app: Express): void {
           conversation.pendingFragment = null;
           allowFragmentWait = false;
           trackNonEmptyTranscript(conversation);
+          conversation.silencePromptedAt = null;
         } else {
           conversation.touchedAt = Date.now();
+          // Claire never speaks into silence right after she has spoken, and never twice in a row.
+          const lastClaire = conversation.history?.findLast(entry => entry.speaker === "claire") ?? null;
+          if (
+            silencePromptDecision({
+              nowMs: Date.now(),
+              lastClaire: lastClaire ? { text: lastClaire.text, at: lastClaire.at } : null,
+              promptedSinceOperator: Boolean(conversation.silencePromptedAt),
+            }) === "listen_quietly" &&
+            !(conversation.silencePromptedAt && (conversation.consecutiveEmptyTranscripts ?? 0) >= 1)
+          ) {
+            await saveCall(claims.conversationId, conversation);
+            return res.send(
+              renderDaphneGather({ text: "", token, hints: conversation.hints, listenOnly: true })
+            );
+          }
           const { shouldEndCall } = trackEmptyTranscript(conversation);
           if (shouldEndCall) {
             await dropCall(claims.conversationId);
@@ -2204,6 +2288,7 @@ export function registerClaireRoutes(app: Express): void {
             });
             return res.send(speakAndHangUp(hangup));
           }
+          conversation.silencePromptedAt = Date.now();
           await saveCall(claims.conversationId, conversation);
           const prompt = conversation.pendingBriefing ? "Still there? Say yes and I'll add the list." : "Go ahead, I'm listening.";
           await persistOperatorAndClaire({
@@ -2218,6 +2303,7 @@ export function registerClaireRoutes(app: Express): void {
         }
       } else {
         trackNonEmptyTranscript(conversation);
+        conversation.silencePromptedAt = null;
       }
 
       const holding = Boolean(conversation.pendingBriefing || conversation.pendingProposal || conversation.pendingAccountFollowUp);
@@ -2665,6 +2751,9 @@ export function registerClaireRoutes(app: Express): void {
         from: body.From,
         to: body.To,
       });
+      // What Twilio said and what Claire did with it. Without this a voicemail that reached
+      // the interactive path cannot be told apart from AMD never having run.
+      console.info("[Claire] amd decision", amdDecisionLog({ callSid: body.CallSid, answeredBy: body.AnsweredBy }));
       if (
         String(body.AnsweredBy ?? "")
           .trim()

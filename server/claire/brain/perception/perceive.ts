@@ -9,6 +9,7 @@ import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTur
 import { isStandaloneOperatorArtifactVoiceRequest } from "../../operatorArtifactVoice";
 import { reconcileCallControl } from "../executive/callControl";
 import { classifyWorkFrame, type WorkFrameClassification } from "./workFrame";
+import { isEncouragementRequest, isMacroGoalQuestion, isRepeatRequest, isRomanticAdvance } from "./conversationalActs";
 
 export type PerceiveInput = {
   rawText: string;
@@ -207,12 +208,70 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   if (classification.status === "unknown") ambiguities.push("work_frame_unknown");
   if (classification.status === "failed") ambiguities.push("work_frame_failed");
 
+  let businessIntent = intentFromAssembled(assembledText, turn);
+  let hasBusinessQuestion = turn.hasBusinessQuestion;
+  let personalProbe = personalProbeOf(assembledText);
+  let explicitActionRequest = turn.hasExplicitActionRequest;
+  let operatorWorkCommitment = turn.operatorWorkCommitment;
+  let mayProposeWorkHint = turn.mayProposeWork;
+
+  /**
+   * A repeat request is about the TRANSPORT of Claire's last turn, not its truth. It
+   * opens no prior-claim lane, no business query, no personal lane and no work frame,
+   * so it can never mint a grant or reach the adjudicator.
+   */
+  const repeatRequest = isRepeatRequest(assembledText) && callControl !== "end";
+  if (repeatRequest) {
+    dialogueActs = ["repeat_request"];
+    businessIntent = "none";
+    hasBusinessQuestion = false;
+    personalProbe = false;
+    correction = false;
+    correctionTarget = null;
+    refusal = false;
+    explicitActionRequest = false;
+    operatorWorkCommitment = false;
+    mayProposeWorkHint = false;
+    if (classification.status === "classified") {
+      classification = {
+        ...classification,
+        workDeclarationKind: "none",
+        attentionRepair: "none",
+        operatorIntentAttested: false,
+        explicitMissionWriteRequest: false,
+        openFragment: false,
+        declaredContentLabel: null,
+      };
+    }
+  }
+
+  /** The operator's macro goal is business memory, however it is phrased at Claire. */
+  if (!repeatRequest && isMacroGoalQuestion(assembledText)) {
+    personalProbe = false;
+    if (businessIntent === "none") businessIntent = "fact_question";
+    hasBusinessQuestion = true;
+    if (!dialogueActs.includes("question")) dialogueActs = [...dialogueActs.filter(act => act !== "continue"), "question"];
+  }
+
+  /**
+   * An advance is its own act. It is not a biography probe (no canon, no disclosure
+   * entitlement is consulted for it) and the executive deflects it. Encouragement is a
+   * work request: it must never reach the personal lane or the decline registry.
+   */
+  if (!repeatRequest && isRomanticAdvance(assembledText) && !isMacroGoalQuestion(assembledText)) {
+    personalProbe = false;
+    dialogueActs = [...dialogueActs.filter(act => act !== "continue"), "romantic_or_personal_advance"];
+  } else if (!repeatRequest && isEncouragementRequest(assembledText)) {
+    personalProbe = false;
+    dialogueActs = [...dialogueActs.filter(act => act !== "continue"), "encouragement_request"];
+  }
+
   return {
     rawText: input.rawText,
     assembledText,
     completeness: input.completeness,
     dialogueActs,
-    businessIntent: intentFromAssembled(assembledText, turn),
+    businessIntent,
     entities,
     temporalReferences: turn.temporal,
     cardinality: turn.cardinality,
@@ -224,14 +283,14 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     correctionTarget,
     refusal,
     acknowledgement: turn.acknowledgement,
-    explicitActionRequest: turn.hasExplicitActionRequest,
-    operatorWorkCommitment: turn.operatorWorkCommitment,
-    personalProbe: personalProbeOf(assembledText),
-    narrativeProbe: narrativeProbeOf(assembledText),
+    explicitActionRequest,
+    operatorWorkCommitment,
+    personalProbe,
+    narrativeProbe: repeatRequest ? false : narrativeProbeOf(assembledText),
     callControl,
     ambiguities,
-    mayProposeWorkHint: turn.mayProposeWork,
-    hasBusinessQuestion: turn.hasBusinessQuestion,
+    mayProposeWorkHint,
+    hasBusinessQuestion,
     listRequest: turn.listRequest,
     broadBriefingRequest: turn.broadBriefingRequest,
     aboutClaireCapability: turn.aboutClaireCapability,

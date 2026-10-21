@@ -75,6 +75,7 @@ describe("Desktop router Brain V2 fail-closed execution authority", () => {
     hoisted.runClaireBrainV2LiveTurn.mockResolvedValue({
       active: false,
       reason: "execution_error",
+      attempted: 'saving "Call Dana" to the Day Line',
     });
 
     const claire = caller("adam-admin");
@@ -87,9 +88,9 @@ describe("Desktop router Brain V2 fail-closed execution authority", () => {
     // 1. Proves V1 legacy adapter was NOT called
     expect(hoisted.runClaireTurn).not.toHaveBeenCalled();
 
-    // 2. Truthful speech confirms verification failure without false promises
+    // 2. Truthful speech names what was attempted, without false promises
     expect(result.reply).toBe(
-      "I couldn't verify that action completed, so I won't retry it through another path."
+      "I tried saving \"Call Dana\" to the Day Line and couldn't verify it completed, so I won't retry it through another path."
     );
 
     // 3. Authority flag indicates Brain V2 handled the turn (did not silently fail back to V1)

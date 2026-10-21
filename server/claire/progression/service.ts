@@ -185,7 +185,7 @@ export function deriveTopicHistory(ledger: PersonalLedgerEntry[]): Record<string
     if (row.kind === "asked") {
       entry.askCount += 1;
       entry.lastAskedAt = row.occurredAt;
-    } else if (row.kind === "refused" || row.kind === "decline_fallback") {
+    } else if (row.kind === "refused" || row.kind === "decline_fallback" || row.kind === "advance_declined") {
       entry.refusalCount += 1;
       entry.lastRefusedAt = row.occurredAt;
     }

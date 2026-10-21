@@ -510,6 +510,7 @@ export const claireRouter = router({
                 brainV2LiveHandled: true,
                 result: brainV2ExecutionFailureResult({
                   assembledUtterance: input.utterance,
+                  attempted: liveV2.attempted ?? "that",
                 }),
               };
             }
