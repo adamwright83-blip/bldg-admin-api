@@ -64,6 +64,7 @@ const LAZY_3D_PREFIXES = [
   "SilverLake3D",
   "BeverlyHills3D",
   "CenturyParkEast3D",
+  "Channel382",
   "SmallComforts",
   "LaundryOperationsFloor",
   "hero",

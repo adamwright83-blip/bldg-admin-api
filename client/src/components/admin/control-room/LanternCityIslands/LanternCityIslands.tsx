@@ -216,11 +216,13 @@ export default function LanternCityIslands({
               </div>
             ) : null}
           </header>
-          {mode === "explore" && ownBuildings.length ? (
+          {mode === "explore" ? (
             <div className={styles.towers}>
               {ownBuildings.map(building => (
                 <button key={building.id} type="button" onClick={() => setTower(building.id)}>{building.name} floors</button>
               ))}
+              {/* the marketing game: a tiny TV station whose one commercial is a real ad */}
+              <button type="button" onClick={() => window.location.assign("/growth/lantern-city?level=channel-382")} data-testid="lantern-channel-382">📺 CHANNEL 382</button>
             </div>
           ) : null}
         </>

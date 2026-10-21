@@ -429,6 +429,11 @@ jobs:
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/beverlyHills.spec.ts
               e2e/goldline-smoke/centuryParkEast.spec.ts
+          - name: fast-smoke-channel-382
+            timeout: 15
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/channel382.spec.ts
           - name: fast-smoke-territories
             timeout: 5
             command: >-
