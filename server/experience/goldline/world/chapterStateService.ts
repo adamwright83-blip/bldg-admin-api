@@ -65,6 +65,24 @@ export async function getChapterState(input: {
   return { revision: row.revision, state: parsed.data };
 }
 
+/** Every chapter this operator has saved state for (id, revision, last write). Read only. */
+export async function listChapterStatesForOperator(input: {
+  tenantId: string;
+  operatorId: string;
+}): Promise<Array<{ chapterId: string; revision: number; updatedAt: string }>> {
+  const db = await getDb();
+  if (!db) throw new Error("Goldline chapter state store is unavailable");
+  const rows = await db
+    .select({
+      chapterId: goldlineChapterStates.chapterId,
+      revision: goldlineChapterStates.revision,
+      updatedAt: goldlineChapterStates.updatedAt,
+    })
+    .from(goldlineChapterStates)
+    .where(and(eq(goldlineChapterStates.tenantId, input.tenantId), eq(goldlineChapterStates.operatorId, input.operatorId)));
+  return rows.map(row => ({ chapterId: row.chapterId, revision: row.revision, updatedAt: row.updatedAt.toISOString() }));
+}
+
 /**
  * Compare-and-set write. `expectedRevision` is 0 for a brand-new chapter.
  * A mismatch throws with the current authoritative row so the caller adopts

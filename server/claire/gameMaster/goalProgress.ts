@@ -87,20 +87,8 @@ export const productionGoalProgressReaders: GoalProgressReaders = {
       : null;
   },
   readRunBaseline: async input => {
-    const [{ getDb }, { macroGoalRuns }, { and, desc, eq }] = await Promise.all([
-      import("../../db"),
-      import("../../../drizzle/schema"),
-      import("drizzle-orm"),
-    ]);
-    const db = await getDb();
-    if (!db) return null;
-    const [row] = await db
-      .select({ baselineValue: macroGoalRuns.baselineValue })
-      .from(macroGoalRuns)
-      .where(and(eq(macroGoalRuns.tenantId, input.tenantId), eq(macroGoalRuns.macroGoalId, input.macroGoalId)))
-      .orderBy(desc(macroGoalRuns.updatedAt))
-      .limit(1);
-    return row?.baselineValue == null ? null : Number(row.baselineValue);
+    const { readMacroGoalRunBaseline } = await import("../../agents/persistentOperator/macroGoalRuns");
+    return readMacroGoalRunBaseline(input);
   },
   readCurrentValue: async input => {
     if (input.metricKey !== "active_customers") return { value: null, note: "no verified current count for this goal's metric" };

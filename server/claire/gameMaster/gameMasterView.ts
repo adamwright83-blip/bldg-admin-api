@@ -319,22 +319,8 @@ export const productionGameMasterReaders: GameMasterReaders = {
     return rows.map(row => ({ companionId: row.companionId, earnedAt: row.earnedAt, earnedViaKingdomId: row.earnedViaKingdomId ?? null }));
   },
   listChapterStates: async input => {
-    const [{ getDb }, { goldlineChapterStates }, { and, eq }] = await Promise.all([
-      import("../../db"),
-      import("../../../drizzle/schema"),
-      import("drizzle-orm"),
-    ]);
-    const db = await getDb();
-    if (!db) throw new Error("chapter state store unavailable");
-    const rows = await db
-      .select({
-        chapterId: goldlineChapterStates.chapterId,
-        revision: goldlineChapterStates.revision,
-        updatedAt: goldlineChapterStates.updatedAt,
-      })
-      .from(goldlineChapterStates)
-      .where(and(eq(goldlineChapterStates.tenantId, input.tenantId), eq(goldlineChapterStates.operatorId, input.operatorId)));
-    return rows.map(row => ({ chapterId: row.chapterId, revision: row.revision, updatedAt: row.updatedAt.toISOString() }));
+    const { listChapterStatesForOperator } = await import("../../experience/goldline/world/chapterStateService");
+    return listChapterStatesForOperator(input);
   },
   readHiddenGameUnlocks: async input => {
     const { readStoredChapterUnlocks } = await import("../../experience/hiddenGame/lostPropertyChapterUnlock");

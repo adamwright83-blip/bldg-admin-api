@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   legacyDayforgeSaasTenants,
   macroGoalRuns,
@@ -118,6 +118,25 @@ function metricCoverage(value: unknown): MetricCoverage | null {
  * value is not enough to complete a goal; it must carry explicit truth quality,
  * coverage and evidence identity.
  */
+/**
+ * The baseline recorded for a macro goal's most recent run, or null when no run
+ * or no baseline exists. Read only; Claire speaks it as the starting point.
+ */
+export async function readMacroGoalRunBaseline(input: {
+  tenantId: string;
+  macroGoalId: string;
+}): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ baselineValue: macroGoalRuns.baselineValue })
+    .from(macroGoalRuns)
+    .where(and(eq(macroGoalRuns.tenantId, input.tenantId), eq(macroGoalRuns.macroGoalId, input.macroGoalId)))
+    .orderBy(desc(macroGoalRuns.updatedAt))
+    .limit(1);
+  return row?.baselineValue == null ? null : Number(row.baselineValue);
+}
+
 export function parseAuthoritativeMetricObservation(
   value: unknown
 ): AuthoritativeMetricObservation {
