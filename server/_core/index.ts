@@ -902,6 +902,9 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      void import("../claire/conversation/ledgerService")
+        .then(({ startClaireSessionIdleSweep }) => startClaireSessionIdleSweep())
+        .catch(error => console.warn("[ClaireLedger] idle sweep not started", error instanceof Error ? error.message : error));
       const stopCleanCloudDirectScheduler = startCleanCloudDirectScheduler();
       server.once("close", stopCleanCloudDirectScheduler);
       void import("../claire/conversation/transcriptLog")

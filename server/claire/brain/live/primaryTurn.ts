@@ -73,9 +73,15 @@ import type { BusinessQueryPlanner, LiveRetrievalDeps } from "../executive/decid
 import { readOnlyWorkingMemorySource } from "../shadow/v1Snapshot";
 import { periodMatches, requestedPeriod } from "../executive/requestedPeriod";
 import {
+  BrainV2ExecutionFailedError,
+  BrainV2GrantNotExecutableError,
   brainV2CallControlResult,
+  brainV2ExecutionFailureResult,
   executeGrantBoundLegacyAdapter,
 } from "./grantBoundLegacyAdapter";
+import { isMacroGoalQuestion } from "../perception/conversationalActs";
+import { advanceRapportBand } from "../executive/integrate";
+import { selectAdvanceDeflection } from "../../progression/dialogueRegistry";
 import { guardCommittedDayLineResult } from "./runClaireBrainV2LiveTurn";
 import {
   interpretSemanticPerception,
@@ -114,6 +120,8 @@ export type ClaireV2Composition =
   | "showrunner"
   | "deterministic"
   | "composed"
+  | "repeat"
+  | "execution_failed"
   | "recovery";
 
 /** Proof of origin carried on every primary result. */
@@ -187,6 +195,17 @@ export type ClaireV2PrimaryDeps = {
     sourceEventId: string;
   }) => Promise<{ state: ShowrunnerCallState; end: boolean; speak: string }>;
   legacyShadow?: LegacyShadowDeps | null;
+  /**
+   * Remember that a romantic or personal advance was deflected (claire_personal_ledger,
+   * kind advance_declined). Absent in tests that do not care; production wires the store.
+   */
+  recordAdvance?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    conversationId: string;
+    rapportBand: 0 | 1 | 2 | 3;
+    declineId: string | null;
+  }) => Promise<void>;
 };
 
 const HISTORY_LIMIT = 32;
@@ -208,10 +227,36 @@ const LEAVES_WEEKLY_INTERVIEW = new Set<SemanticReading["turnKind"]>([
   "challenge_prior_claim",
   "ask_source_of_prior_claim",
   "personal_question_to_claire",
+  "romantic_or_personal_advance",
+  "encouragement_request",
+  "repeat_request",
   "leave_taking",
 ]);
 
 export const V2_RECOVERY_SPEECH = "Sorry, I lost that thought. Say it once more?";
+export const V2_NOTHING_TO_REPEAT_SPEECH = "I haven't said anything yet. Go ahead.";
+export const V2_NO_GOAL_ON_RECORD_SPEECH = "I don't have a goal on record for you yet.";
+
+/**
+ * The operator's macro goal, from what V2 already holds this call: the assembled
+ * context first, then the scheduled-call briefing, then the spoken opening ("This week
+ * is about: …"). Nothing is generated; if none of these carries it, there is no goal to
+ * state.
+ */
+export function macroGoalStatement(input: {
+  context?: ClaireDriveContext | null;
+  state: ClaireV2PrimaryState;
+  brief?: string | null;
+}): string | null {
+  const fromContext = (input.context as { macroGoal?: { objective?: string | null } | null } | null | undefined)?.macroGoal?.objective;
+  if (fromContext?.trim()) return fromContext.trim();
+  const briefing = (input.state.showrunner as { briefing?: { objective?: string | null } | null } | null | undefined)?.briefing;
+  if (briefing?.objective?.trim()) return briefing.objective.trim();
+  const opening = /This week is about:\s*([^.\n]+)\./i.exec(input.brief ?? "") ?? /This week is about:\s*([^.\n]+)\./i.exec(
+    input.state.history?.find(entry => entry.speaker === "claire")?.text ?? ""
+  );
+  return opening?.[1]?.trim() || null;
+}
 
 function remember(
   state: ClaireV2PrimaryState,
@@ -371,6 +416,9 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
       decision.conclusions.some(conclusion => conclusion.kind === "action_unsupported" || conclusion.kind === "external_capability_unowned" || conclusion.kind === "mission_write_unavailable")
         ? "Nothing was written this turn; do not imply a save, send, or schedule."
         : "",
+      acts.includes("encouragement_request")
+        ? "The operator asked for encouragement about their work. This is a work request, not a question about you. Give one short, grounded line from today's verified record, then the next move. Do not decline it, do not speak about yourself."
+        : "",
       "Call the operator's work list the Day Line; never call it 'the board'.",
     ].filter(Boolean).join("; "),
   };
@@ -381,9 +429,12 @@ export function conversationalMode(
   decision: ExecutiveDecision,
   reading: SemanticReading | null
 ): "operational" | "casual" | "personal" | "post_action_review" | null {
+  // Encouragement is a work request: never the personal organ, never the decline registry.
+  if (decision.perceivedTurn.dialogueActs.includes("encouragement_request")) return "operational";
   if (decision.attention.lanes.includes("personal") || decision.attention.lanes.includes("narrative")) return "personal";
   if (!reading) return null;
   if (reading.turnKind === "personal_question_to_claire") return "personal";
+  if (reading.turnKind === "encouragement_request") return "operational";
   if (reading.turnKind === "small_talk") return "casual";
   if (reading.turnKind === "report_or_narration") return "post_action_review";
   return "operational";
@@ -687,12 +738,30 @@ export async function runClaireV2PrimaryTurn(
     // ── Perception → Executive Function, with live read-only retrieval ──
     let adapterResult: ClaireTurnResult | null = null;
     let adapterPromise: Promise<ClaireTurnResult> | null = null;
+    let grantRefusedBeforeWrite: string | null = null;
     const execute = async (grant: ExecutiveActionGrant): Promise<ClaireTurnResult> => {
       if (isClaireRoleFeedback(grant.sourceTurnAssembledText)) {
         throw new Error("Claire role feedback cannot authorize Day Line mutation");
       }
       if (!adapterPromise) adapterPromise = deps.executeGrant(grant, state);
-      adapterResult = guardCommittedDayLineResult(grant, await adapterPromise);
+      try {
+        adapterResult = guardCommittedDayLineResult(grant, await adapterPromise);
+      } catch (error) {
+        // The adapter refused the grant before attempting any write. That is not a
+        // failed action and not a lost thought: the turn simply has no action, and
+        // Claire answers the words themselves. The refusal is logged, never spoken.
+        if (error instanceof BrainV2GrantNotExecutableError) {
+          grantRefusedBeforeWrite = error.message;
+          console.warn("[ClaireBrainV2Primary] grant not executable; no write attempted", {
+            event: "claire_brain_v2_grant_not_executable",
+            conversationKey: input.conversationKey,
+            actionClass: error.actionClass,
+            reason: error.message,
+          });
+          return { speak: "", kind: "answered", assembledUtterance: utterance, thoughtCompleteness: "complete", actionIds: [] };
+        }
+        throw error;
+      }
       return adapterResult;
     };
     const retrieval: ShadowRetrievalContext = {
@@ -777,6 +846,18 @@ export async function runClaireV2PrimaryTurn(
       };
     }
 
+    // ── Repeat request: Claire's previous turn, verbatim, from this call's history ──
+    // Never a correctness challenge, never the adjudicator: the operator did not hear it.
+    if (decision.perceivedTurn.dialogueActs.includes("repeat_request")) {
+      const previous = state.history?.filter(entry => entry.speaker === "claire").at(-1)?.text?.trim();
+      return finish(
+        { speak: previous || V2_NOTHING_TO_REPEAT_SPEECH, kind: "answered", actionIds: [] },
+        "repeat",
+        decision,
+        []
+      );
+    }
+
     // ── Action lifecycle: V2's grant, executed once by the receipt-backed adapter ──
     const executed = adapterResult as ClaireTurnResult | null;
     if (executed) {
@@ -808,6 +889,17 @@ export async function runClaireV2PrimaryTurn(
     const deterministicText = turn.candidateSpeak.trim();
     const attention = decision.attention;
     const intent = decision.perceivedTurn.businessIntent;
+
+    // ── The operator's goal: business memory V2 already holds, stated verbatim ──
+    if (isMacroGoalQuestion(utterance) && attention.priorClaim === "none") {
+      const goal = macroGoalStatement({ context: input.context ?? null, state, brief: input.brief ?? null });
+      return finish(
+        { speak: goal ? `Your goal is: ${goal}.` : V2_NO_GOAL_ON_RECORD_SPEECH, kind: "answered", actionIds: [] },
+        "deterministic",
+        decision,
+        actionClasses
+      );
+    }
 
     // ── Call control ──
     if (turn.candidateEndCall) {
@@ -855,7 +947,30 @@ export async function runClaireV2PrimaryTurn(
     }
 
     // ── Decisive V2 speech: facts, clarifications, refusals, prior-claim verdicts ──
+    // A deflected advance is two authored lines. The composer never sees it.
+    const advanceDeflected = decision.conclusions.some(conclusion => conclusion.kind === "personal_advance_declined");
+    if (advanceDeflected && deps.recordAdvance) {
+      const band = advanceRapportBand(decision.evidence);
+      const { decline } = selectAdvanceDeflection({ rapportBand: band, seed: decision.perceivedTurn.assembledText });
+      // Durable game state: the advance and the line that declined it are remembered.
+      await deps
+        .recordAdvance({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          conversationId: input.conversationKey,
+          rapportBand: band,
+          declineId: decline?.id ?? null,
+        })
+        .catch(error => {
+          console.warn("[ClaireBrainV2Primary] advance ledger write failed", {
+            event: "claire_brain_v2_advance_ledger_failed",
+            conversationKey: input.conversationKey,
+            reason: error instanceof Error ? error.message : "unknown",
+          });
+        });
+    }
     const decisive =
+      advanceDeflected ||
       decision.control.mode === "clarify" ||
       attention.pendingDisposition === "reject" ||
       attention.priorClaim !== "none" ||
@@ -874,9 +989,14 @@ export async function runClaireV2PrimaryTurn(
     // ── Scheduled call: V2 decided this is not work; the agenda conductor speaks ──
     // Strategy and personal questions are answered by V2's composer even inside a
     // planning session; the conductor keeps the agenda, reports and approvals.
-    const composerKinds = new Set<SemanticReading["turnKind"]>(["business_judgment_or_strategy", "personal_question_to_claire"]);
+    const composerKinds = new Set<SemanticReading["turnKind"]>([
+      "business_judgment_or_strategy",
+      "personal_question_to_claire",
+      "encouragement_request",
+    ]);
     const readingKind = (semanticReading as SemanticReading | null)?.turnKind ?? null;
-    if (state.showrunner && deps.showrunner && !(readingKind && composerKinds.has(readingKind))) {
+    const encouragement = decision.perceivedTurn.dialogueActs.includes("encouragement_request");
+    if (state.showrunner && deps.showrunner && !encouragement && !(readingKind && composerKinds.has(readingKind))) {
       let conducted: { state: ShowrunnerCallState; end: boolean; speak: string };
       try {
         conducted = await deps.showrunner({
@@ -911,6 +1031,9 @@ export async function runClaireV2PrimaryTurn(
     const v2Notes = segments
       .filter(segment => segment.type === "CognitiveAcknowledgementSegment" && segment.text.trim())
       .map(segment => segment.text.trim());
+    if (grantRefusedBeforeWrite) {
+      v2Notes.push("The operator's words did not resolve to a Day Line item; nothing was saved and no save was attempted.");
+    }
     const context = input.context ?? null;
     if (!context) {
       return finish(
@@ -998,12 +1121,20 @@ export async function runClaireV2PrimaryTurn(
     );
   } catch (error) {
     console.error("[ClaireBrainV2Primary] turn failed", {
-      event: "claire_brain_v2_primary_failed",
+      event: error instanceof BrainV2ExecutionFailedError ? "claire_brain_v2_primary_execution_failed" : "claire_brain_v2_primary_failed",
       tenantId: input.tenantId,
       surface: input.surface,
       conversationKey: input.conversationKey,
       reason: error instanceof Error ? error.message : "unknown",
     });
+    // A write was attempted and did not complete: say what was attempted, nothing more.
+    if (error instanceof BrainV2ExecutionFailedError) {
+      return finish(
+        brainV2ExecutionFailureResult({ assembledUtterance: utterance, attempted: error.attempted }),
+        "execution_failed",
+        null
+      );
+    }
     return finish({ speak: V2_RECOVERY_SPEECH, kind: "answered", actionIds: [] }, "recovery", null);
   }
 }
@@ -1094,6 +1225,28 @@ export function productionClaireV2PrimaryDeps(input: {
         utterance,
         sourceEventId,
         conversationKey: input.conversationKey,
+      });
+    },
+    recordAdvance: async advance => {
+      const [{ isClaireProgressionEnabled }, { getProgressionStore }] = await Promise.all([
+        import("../../progression/progressionFlag"),
+        import("../../progression/drizzleStore"),
+      ]);
+      if (!isClaireProgressionEnabled(advance.tenantId)) return;
+      await getProgressionStore().appendLedger({
+        tenantId: advance.tenantId,
+        operatorUserId: advance.operatorUserId,
+        conversationId: advance.conversationId,
+        kind: "advance_declined",
+        topic: "romantic_advance",
+        fragmentId: null,
+        entitlementId: null,
+        rungAtTime: 0,
+        rapportBandAtTime: advance.rapportBand,
+        declineId: advance.declineId,
+        failureReason: null,
+        hadUnusedEntitlement: null,
+        failurePhase: null,
       });
     },
     commitPendingDisclosures: async () => {

@@ -49,7 +49,9 @@ export type PersonalLedgerKind =
   | "disclosed"
   | "followup_answered"
   | "thread_closed"
-  | "decline_fallback";
+  | "decline_fallback"
+  /** A romantic or personal advance was deflected. Durable game state: never forgotten, never a rung. */
+  | "advance_declined";
 
 /**
  * Durable record of the personal conversation between operator and Claire:

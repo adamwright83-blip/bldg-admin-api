@@ -398,7 +398,12 @@ describe("Brain V2 live cutover", () => {
     );
 
     expect(executeLegacyAdapter).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ active: false, reason: "execution_error" });
+    // An attempted write that throws is the only execution error, and it says what was attempted.
+    expect(result).toEqual({
+      active: false,
+      reason: "execution_error",
+      attempted: expect.stringMatching(/Day Line/),
+    });
     expect(shouldFallbackToClaireLegacy(result)).toBe(false);
   });
 

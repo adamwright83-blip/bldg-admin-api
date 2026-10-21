@@ -369,14 +369,29 @@ describe("inbound Claire voice uses the existing conversation stack", () => {
     });
     const token = tokenFromTwiml(started.body);
     const continueUrl = `/api/claire/twilio/pre-drive?token=${encodeURIComponent(token)}`;
-    const follow = await post(handlers, "/api/claire/twilio/pre-drive", {
+    // Silence right after her own greeting is the operator taking it in: she listens, she does not prompt.
+    const immediate = await post(handlers, "/api/claire/twilio/pre-drive", {
       originalUrl: continueUrl,
       body: { CallSid: "CA_inbound", SpeechResult: "" },
     });
-    expect(follow.statusCode).toBe(200);
-    expect(follow.body).toContain("<Gather");
-    expect(follow.body).toContain("/api/claire/twilio/pre-drive?token=");
-    expect(follow.body).toContain("Go ahead, I'm listening.");
+    expect(immediate.statusCode).toBe(200);
+    expect(immediate.body).toContain("<Gather");
+    expect(immediate.body).not.toContain("Go ahead, I'm listening.");
+    // Once her greeting is long over, one prompt.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 60_000);
+      const follow = await post(handlers, "/api/claire/twilio/pre-drive", {
+        originalUrl: continueUrl,
+        body: { CallSid: "CA_inbound", SpeechResult: "" },
+      });
+      expect(follow.statusCode).toBe(200);
+      expect(follow.body).toContain("<Gather");
+      expect(follow.body).toContain("/api/claire/twilio/pre-drive?token=");
+      expect(follow.body).toContain("Go ahead, I'm listening.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns pickup TwiML without waiting for slow context assembly", async () => {

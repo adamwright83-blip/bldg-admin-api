@@ -34,7 +34,7 @@ import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate }
 import { buildJudgmentBrief, recommendOverEvidence, type JudgmentRecommender } from "./judgment";
 import { epistemicQualifier } from "./epistemicState";
 import type { ExecutiveControlState } from "../contracts/control";
-import { selectDialogueLine } from "../../progression/dialogueRegistry";
+import { selectAdvanceDeflection, selectDialogueLine } from "../../progression/dialogueRegistry";
 
 export type IntegrationContext = {
   timeZone: string;
@@ -415,6 +415,13 @@ function integrateBusiness(input: {
 }
 
 
+/** The operator's rapport band from self-memory evidence; band 0 when none was read. */
+export function advanceRapportBand(evidence: readonly EvidenceItem[]): 0 | 1 | 2 | 3 {
+  const relationship = evidence.find(item => item.type === "relationship_state");
+  const band = (relationship?.payload as { rapportBand?: number } | undefined)?.rapportBand ?? 0;
+  return (band >= 3 ? 3 : band >= 2 ? 2 : band >= 1 ? 1 : 0) as 0 | 1 | 2 | 3;
+}
+
 /**
  * Personal / narrative lane.
  *
@@ -438,6 +445,28 @@ function integratePersonal(input: {
 
   const personalLane = attention.lanes.includes("personal") || attention.lanes.includes("narrative");
   if (!personalLane) return { segments, conclusions, inhibited, extraEvidence: [] };
+
+  /**
+   * A romantic or personal advance is deflected, never answered and never rewarded. It must
+   * run BEFORE the entitlement check: an unused biography entitlement is no licence to
+   * answer a pass. The reply is two AUTHORED lines chosen deterministically for the
+   * operator's rapport band: a decline, then a pivot back to the work. The advance is
+   * recorded as durable game state by the live turn (kind advance_declined).
+   */
+  if (perceived.dialogueActs.includes("romantic_or_personal_advance")) {
+    const band = advanceRapportBand(evidence);
+    const { decline, pivot } = selectAdvanceDeflection({ rapportBand: band, seed: perceived.assembledText });
+    const text = [decline?.text, pivot?.text].filter(Boolean).join(" ");
+    segments.push({ type: "ConversationalSegment", text });
+    conclusions.push({
+      kind: "personal_advance_declined",
+      detail: text
+        ? `declined with authored lines ${[decline?.id, pivot?.id].filter(Boolean).join(" + ")}; nothing disclosed, nothing accepted`
+        : "no authored deflection available; said nothing",
+      evidenceIds: [],
+    });
+    return { segments, conclusions, inhibited, extraEvidence: [] };
+  }
 
   const entitlement = evidence.find(item => item.type === "disclosure_entitlement");
   if (entitlement) {

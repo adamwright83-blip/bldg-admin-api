@@ -16,6 +16,15 @@ export type DialogueActKind =
   | "greeting"
   | "leave_taking"
   | "attention_repair"
+  /** The operator asked Claire to say her previous turn again. Not a challenge to it. */
+  | "repeat_request"
+  /**
+   * A romantic or personal advance aimed at Claire ("I love you, Claire"). Not a
+   * biography probe: it opens no canon, and Claire deflects it.
+   */
+  | "romantic_or_personal_advance"
+  /** The operator asked for encouragement about their work. A work request, never a decline. */
+  | "encouragement_request"
   | "continue";
 
 /**
