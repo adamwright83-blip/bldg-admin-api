@@ -316,18 +316,18 @@ export async function amdDetectionTwiml(input: {
  * "did you get my voicemail?" must not hang the call up.
  */
 const VOICEMAIL_PROMPT_PATTERNS: readonly RegExp[] = [
-  /\byou(?:'ve|\s+have)\s+reached\b/i,
-  /\bleave\s+(?:me\s+)?(?:a|your)\s+(?:brief\s+)?message\b/i,
-  /\bat\s+the\s+(?:tone|beep)\b|\bafter\s+the\s+(?:tone|beep)\b/i,
-  /\bpress\s+(?:1|2|3|4|5|6|7|8|9|0|one|two|three|pound|star)\b/i,
+  /\byou(?:'ve|\s+have)\s+reached\b(?!\s+(?:me|us|the\s+(?:limit|point|end|cap)))/i,
+  /\bleave\s+(?:me\s+)?(?:a|your)\s+(?:brief\s+)?message\b(?!\s+(?:for|with|to)\b)/i,
+  /\b(?:at|after)\s+the\s+(?:tone|beep)\b/i,
+  /\bpress\s+(?:\d|(?:one|two|three|pound|star)\b(?!\s+(?:more|time|thing|button|key)))/i,
   /\b(?:maximum|max)\s+(?:time|length)\b[^.?!]{0,40}\b(?:permitted|allowed|recording)\b/i,
   /\byour\s+message\s+has\s+been\s+(?:sent|recorded|saved|delivered)\b/i,
   /\bto\s+(?:listen\s+to|review|hear)\s+your\s+message\b/i,
   /\berase\s+and\s+re-?record\b/i,
   /\bif\s+you(?:'re|\s+are)\s+satisfied\s+with\s+(?:the|your)\s+message\b/i,
-  /\b(?:is\s+not|isn'?t|is\s+unable\s+to|cannot|can'?t)\s+(?:available|take\s+your\s+call|come\s+to\s+the\s+phone|answer)\b/i,
+  /\b(?:is\s+not|isn'?t|is\s+unable\s+to)\s+(?:available\s+to\s+)?(?:take\s+your\s+call|come\s+to\s+the\s+phone|answer\s+(?:your\s+call|the\s+phone))\b/i,
   /\brecord\s+your\s+message\b/i,
-  /\bthe\s+person\s+you(?:'re|\s+are)\s+trying\s+to\s+reach\b/i,
+  /\bthe\s+(?:person|party|subscriber|number)\s+you(?:'re|\s+are|\s+have)\s+(?:trying\s+to\s+reach|calling|dialed)\b/i,
   /\bmailbox\s+(?:is\s+)?(?:full|not\s+set\s+up)\b/i,
 ];
 

@@ -27,7 +27,6 @@ import {
   addressesClaire,
   isEncouragementRequest,
   isMacroGoalQuestion,
-  isRepeatRequest,
   isRomanticAdvance,
 } from "./conversationalActs";
 
@@ -170,7 +169,7 @@ const DETERMINISTIC_ONLY_INTENTS = new Set<BusinessIntentKind>(["query_refinemen
  */
 export function reconcileSemanticReading(perceived: PerceivedTurn, reading: SemanticReading): SemanticReading {
   const text = perceived.assembledText;
-  if (perceived.dialogueActs.includes("repeat_request") || (isRepeatRequest(text) && perceived.callControl !== "end")) {
+  if (perceived.dialogueActs.includes("repeat_request")) {
     return { ...reading, turnKind: "repeat_request" };
   }
   if (isMacroGoalQuestion(text) && (reading.turnKind === "personal_question_to_claire" || reading.turnKind === "small_talk" || reading.turnKind === "unclear")) {

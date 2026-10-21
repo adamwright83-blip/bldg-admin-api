@@ -159,6 +159,11 @@ describe("D13 — a voicemail greeting is never answered twice (session 453795a2
       "Leave it for now, I'll deal with it after lunch.",
       "I sent a message to Dana yesterday.",
       "Press on with the Louise follow-up.",
+      "Press one more time on that.",
+      "Leave a message for Dana.",
+      "I can't answer right now, I'm driving.",
+      "Dana isn't available until Tuesday.",
+      "You've reached the limit on that budget.",
       "Yes.",
     ]) {
       expect(looksLikeVoicemailPrompt(text), text).toBe(false);

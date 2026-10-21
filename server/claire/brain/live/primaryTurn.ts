@@ -894,7 +894,7 @@ export async function runClaireV2PrimaryTurn(
     if (isMacroGoalQuestion(utterance) && attention.priorClaim === "none") {
       const goal = macroGoalStatement({ context: input.context ?? null, state, brief: input.brief ?? null });
       return finish(
-        { speak: goal ? `Yes. The goal is: ${goal}.` : V2_NO_GOAL_ON_RECORD_SPEECH, kind: "answered", actionIds: [] },
+        { speak: goal ? `Your goal is: ${goal}.` : V2_NO_GOAL_ON_RECORD_SPEECH, kind: "answered", actionIds: [] },
         "deterministic",
         decision,
         actionClasses

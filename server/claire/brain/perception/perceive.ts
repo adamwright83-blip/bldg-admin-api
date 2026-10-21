@@ -220,7 +220,14 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
    * opens no prior-claim lane, no business query, no personal lane and no work frame,
    * so it can never mint a grant or reach the adjudicator.
    */
-  const repeatRequest = isRepeatRequest(assembledText) && callControl !== "end";
+  // Short, and not also carrying work: "Say that again, and add call Dana" is an instruction
+  // as well, and silently dropping it would cost the operator a second attempt.
+  const repeatRequest =
+    isRepeatRequest(assembledText) &&
+    callControl !== "end" &&
+    assembledText.split(/\s+/).filter(Boolean).length <= 18 &&
+    !turn.hasExplicitActionRequest &&
+    !turn.operatorWorkCommitment;
   if (repeatRequest) {
     dialogueActs = ["repeat_request"];
     businessIntent = "none";

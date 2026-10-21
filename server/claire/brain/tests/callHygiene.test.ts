@@ -27,6 +27,7 @@ import type { ClaireTurnResult } from "../../turn/claireTurn";
 import type { BusinessMemoryDeps } from "../businessMemory/adapter";
 import type { ExecutiveActionGrant } from "../contracts/grants";
 import { perceiveTurn } from "../perception/perceive";
+import { isRomanticAdvance } from "../perception/conversationalActs";
 import { applySemanticReading } from "../perception/semanticPerception";
 import {
   runClaireV2PrimaryTurn,
@@ -205,9 +206,27 @@ describe("D6 — a romantic advance is deflected with authored lines and remembe
     expect(perceived.businessIntent).not.toBe("none");
 
     const result = await runClaireV2PrimaryTurn(turnInput(state, "Do you remember what my goal is?"), h.deps);
-    expect(result.speak).toContain(GOAL);
+    expect(result.speak).toBe(`Your goal is: ${GOAL}.`);
     expect(registryText("decline").some(text => result.speak.includes(text))).toBe(false);
     expect(h.recordAdvance).not.toHaveBeenCalled();
+  });
+
+  it("does not mistake ordinary operator speech for an advance", () => {
+    for (const text of [
+      "I'd like you to call Dana.",
+      "I like you to follow up with the Louise.",
+      "I would love you to look at Tuesday.",
+      "You're pretty good at this.",
+      "You're hot on the Louise lead.",
+      "Would you like me to send that?",
+      "Love the new Day Line layout.",
+      "I love you guys' new feature.",
+    ]) {
+      expect(isRomanticAdvance(text), text).toBe(false);
+    }
+    for (const text of ["I love you, Claire.", "I miss you.", "You're gorgeous.", "Will you marry me?", "Do you love me?"]) {
+      expect(isRomanticAdvance(text), text).toBe(true);
+    }
   });
 
   it("still declines a real biography probe with the authored decline (canon guard unchanged)", async () => {
@@ -252,6 +271,14 @@ describe("D14 — a repeat request re-speaks the previous turn verbatim (session
     expect(result.brainV2.businessIntent).toBe("none");
     expect(h.speak).not.toHaveBeenCalled();
     expect(h.executeGrant).not.toHaveBeenCalled();
+  });
+
+  it("is not a repeat request when it also carries work, or when it is another kind of recheck", () => {
+    expect(perceiveTurn({ rawText: "Check it one more time.", completeness: "complete" }).dialogueActs).not.toContain("repeat_request");
+    expect(perceiveTurn({ rawText: "What's that number for The Louise?", completeness: "complete" }).dialogueActs).not.toContain("repeat_request");
+    expect(
+      perceiveTurn({ rawText: "Say that again, and I need to call Dana Tuesday.", completeness: "complete" }).dialogueActs
+    ).not.toContain("repeat_request");
   });
 
   it("is a different act from a correctness challenge", () => {
