@@ -24,6 +24,7 @@ import {
 } from "@shared/commercialPipeline";
 import type { CommercialLaundryProposalSnapshot } from "@shared/commercialProposal";
 import { getDb } from "../../db";
+import { findOpenFollowUpOfKind } from "./followUpIdempotency";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -588,10 +589,14 @@ export async function syncCommercialPipelineForMissionTransitionWith(
     metadataJson: input.metadata ?? {},
   });
 
+  const followUpNote = String(input.metadata?.notes ?? "Follow up on commercial visit");
   if (
     requestedStage === "follow_up" &&
     typeof input.metadata?.followUpAt === "string" &&
-    typeof input.metadata?.requestId === "string"
+    typeof input.metadata?.requestId === "string" &&
+    // Idempotent on (account, follow-up kind): an open follow-up of the same kind for an account of this
+    // name already exists, so a second copy (different request id) is not created.
+    !(await findOpenFollowUpOfKind(tx, { tenantId: input.tenantId, pipelineId, note: followUpNote }))
   ) {
     await tx
       .insert(commercialFollowUps)

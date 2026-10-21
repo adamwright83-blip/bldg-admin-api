@@ -268,3 +268,11 @@ function hasRemoteMessage(text: string): boolean {
   if (/\b(?:send|sent|sending)\s+(?:a\s+|the\s+|an\s+)?messages?\b/i.test(text)) return true;
   return /\bmessages?\s+(?:sent|send|sending)\b/i.test(text);
 }
+
+/** How an operator-declared credit kind is spoken back ("Recorded as a marketing challenge"). */
+export function executionTypePhrase(type: ObjectiveExecutionType | null | undefined): string | null {
+  if (type === "challenge") return "a marketing challenge";
+  if (type === "mission") return "a sales mission";
+  if (type === "hybrid_objective") return "a hybrid objective";
+  return null;
+}

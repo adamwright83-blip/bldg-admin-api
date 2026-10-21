@@ -263,7 +263,7 @@ describe("Claire reliability verification (PR #599 scenarios)", () => {
 
     expect(result.kind).toBe("briefing_saved");
     expect(result.receiptBackedCommit ?? result.speak).toMatch(/Done\./);
-    expect(result.receiptBackedCommit ?? result.speak).toMatch(/3 on today's line/);
+    expect(result.receiptBackedCommit ?? result.speak).toMatch(/That's 3 new items in all/);
 
     const storedTitles = Array.from(harness.rows.values()).map(row => row.title);
     expect(storedTitles).toHaveLength(3);

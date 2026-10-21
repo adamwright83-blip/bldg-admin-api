@@ -25,6 +25,7 @@ import {
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
 import { getDb } from "../../db";
+import { findOpenFollowUpOfKind } from "./followUpIdempotency";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../../mysqlErrors";
 import {
   getCommercialMission,
@@ -752,10 +753,16 @@ export async function scheduleCommercialFollowUp(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  let reusedExisting = false;
   try {
     await db.transaction(async tx => {
       const pipeline = await readPipelineWith(tx, input);
       if (!pipeline) throw new Error("Commercial pipeline record not found");
+      // Idempotent on (account, follow-up kind): never a second open follow-up of the same kind for an account of this name.
+      if (await findOpenFollowUpOfKind(tx, { tenantId: input.tenantId, pipelineId: pipeline.id, note: input.note })) {
+        reusedExisting = true;
+        return;
+      }
       await tx.insert(commercialFollowUps).values({
         id: randomUUID(),
         tenantId: input.tenantId,
@@ -796,7 +803,9 @@ export async function scheduleCommercialFollowUp(input: {
     if (!isDuplicateKeyError(error)) throw error;
   }
   const detail = await getCommercialPipelineDetail(input);
-  if (!detail?.followUps.some(item => item.requestId === input.requestId))
+  if (!detail) throw new Error("Commercial pipeline record not found");
+  if (reusedExisting) return detail;
+  if (!detail.followUps.some(item => item.requestId === input.requestId))
     throw new Error("Commercial follow-up was not persisted for this request");
   // A real follow-up is itself an outcome worth reconciling against weapon
   // usage — see the note in resolveCommercialPipelineMission. Scoped to the

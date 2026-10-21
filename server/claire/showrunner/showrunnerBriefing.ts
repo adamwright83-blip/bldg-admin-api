@@ -4,7 +4,10 @@ import { investigateForPreparation } from "../../analytics/analysis/proactiveInv
 import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
-import { getDayDirectorState } from "../../planning/dayDirector/dayDirectorService";
+import { getDayDirectorState, listOpenDayDirectorCommitmentsBetween } from "../../planning/dayDirector/dayDirectorService";
+import { collapseOpenCommitments, type CarriedOpenItem } from "../dayLine/openItemLifecycle";
+import { isTestFixtureTitle } from "../dayLine/testDataGuard";
+import { looksLikeSalesFollowUp, mayRaiseOverdueSalesFollowUp } from "../dayLine/weekendQuietRule";
 import { latestStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
 import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/missionFollowUp";
 import { addDaysYmd } from "../../analytics/businessPeriods";
@@ -54,6 +57,11 @@ export type ShowrunnerBriefing = {
    * Morning and evening calls speak this, not a separate list.
    */
   driverDayLine?: DriverDayLineCallFacts | null;
+  /**
+   * The same commitment open across more than one business date, as ONE item with its age and a yes/no
+   * question. At most the first is asked on a call. Empty on a weekend for sales follow-ups unless asked.
+   */
+  carriedOpen?: CarriedOpenItem[];
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -139,6 +147,7 @@ export async function buildShowrunnerBriefing(input: {
   loadDriverDayLine?: typeof loadDriverDayLineForCall;
   /** Test seam. Production callers keep the live day-director read. */
   getDay?: typeof getDayDirectorState;
+  listOpen?: typeof listOpenDayDirectorCommitmentsBetween;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -212,8 +221,9 @@ export async function buildShowrunnerBriefing(input: {
   const adaptations = [...presentations.entries()].map(([type, p]) =>
     type === OPERATOR_SCOPE ? `For you generally: ${p.note}` : `For ${type.replaceAll("_", " ")} work: ${p.note}`
   );
-  const today = items(todayState);
-  const tomorrow = items(tomorrowState);
+  // Test data never reaches a briefing Claire reads aloud.
+  const today = items(todayState).filter(i => !isTestFixtureTitle(i.title));
+  const tomorrow = items(tomorrowState).filter(i => !isTestFixtureTitle(i.title));
   const uncertain = [
     ...today
       .filter(i => i.status === "open" && /meet|visit|building|property|pitch/i.test(`${i.title} ${i.objective ?? ""}`))
@@ -285,10 +295,24 @@ export async function buildShowrunnerBriefing(input: {
           timeZone,
           pendingApproval,
         });
+  let carriedOpen: CarriedOpenItem[] = [];
+  if (input.purpose !== "desk_planning") {
+    const open = await (input.listOpen ?? listOpenDayDirectorCommitmentsBetween)({
+      tenantId: identity.tenantId,
+      actorIds: identity.dayDirectorActorIds?.length ? identity.dayDirectorActorIds : [identity.dayDirectorActorId],
+      fromBusinessDate: addDaysYmd(businessDate, -120),
+      throughBusinessDate: businessDate,
+    }).catch(() => []);
+    carriedOpen = collapseOpenCommitments(
+      open.filter(row => !isTestFixtureTitle(row.title)),
+      businessDate
+    ).filter(item => !looksLikeSalesFollowUp(item.title) || mayRaiseOverdueSalesFollowUp({ businessDate }));
+  }
   return {
     analyticalEvidence,
     opportunity,
     driverDayLine,
+    carriedOpen,
     purpose: input.purpose,
     businessDate,
     weekday: formatInTimeZone(now, timeZone, "EEEE"),
@@ -318,24 +342,30 @@ const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1
 export function showrunnerOpening(b: ShowrunnerBriefing): string {
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
     const line = speakDriverDayLineCall(b.driverDayLine, b.purpose);
+    // One carried item, asked as a yes/no the operator can answer in a word, instead of a list or a generic closer.
+    const carried = b.carriedOpen?.[0] ?? null;
+    const carriedLine = carried
+      ? `${carried.title} has been open ${carried.ageDays} ${carried.ageDays === 1 ? "day" : "days"}${carried.ids.length > 1 ? ` across ${carried.ids.length} entries` : ""}.`
+      : "";
     if (b.purpose === "morning_readiness") {
       return [
         "Good morning, it's Claire.",
         b.objective ? `This week is about: ${b.objective}.` : "",
         line,
         b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
-        "Are you ready to get going?",
+        carriedLine,
+        carried ? carried.question : "Are you ready to get going?",
       ]
         .filter(Boolean)
         .join(" ");
     }
-    return ["Hi, it's Claire for today's wrap.", line, "How did it go?"].join(" ");
+    return ["Hi, it's Claire for today's wrap.", line, carriedLine, carried ? carried.question : "How did it go?"].filter(Boolean).join(" ");
   }
   const open = b.today.filter(i => i.status === "open");
   return [
     `Hi, it's Claire for today's wrap.`,
     open.length || b.today.length
-      ? `Today you had ${list(b.today.map(i => i.title))}.`
+      ? `Today you had ${list([...new Set(b.today.map(i => i.title))])}.`
       : "There wasn't anything on today's Day Line.",
     "How did it go?",
   ].join(" ");
