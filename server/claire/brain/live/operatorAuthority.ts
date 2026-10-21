@@ -12,6 +12,10 @@
  * OpenIDs). Unset, they are the configured owner (`OWNER_OPEN_ID`) plus the
  * historical operator ids the previous gate accepted, so enabling this file
  * never removes the operator who already had V2.
+ *
+ * `CLAIRE_BRAIN_V2_OPERATOR_IDS=*` opens Brain V2 to EVERY operator, for launch: the identity gate
+ * passes and the verified-membership gate below still decides (owner, admin or operator of the
+ * tenant the conversation runs as). Without it, every customer but the owner gets legacy Claire.
  */
 
 import { ENV } from "../../../_core/env";
@@ -37,7 +41,14 @@ export function authorizedClaireOperatorIds(env: NodeJS.ProcessEnv = process.env
   return new Set([...(owner ? [owner] : []), ...HISTORICAL_OPERATOR_IDS]);
 }
 
+/** True when the deployment opens Brain V2 to every verified operator (`CLAIRE_BRAIN_V2_OPERATOR_IDS=*`). */
+export function claireV2OpenToAllOperators(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.CLAIRE_BRAIN_V2_OPERATOR_IDS ?? "").split(",").some(value => value.trim() === "*");
+}
+
 export function isAuthorizedClaireOperatorIdentity(operatorUserId: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!operatorUserId.trim()) return false;
+  if (claireV2OpenToAllOperators(env)) return true;
   return authorizedClaireOperatorIds(env).has(operatorUserId.trim());
 }
 
