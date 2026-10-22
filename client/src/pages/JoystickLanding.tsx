@@ -327,106 +327,179 @@ function renderCompanion(key: string, label: string, accent: string) {
   }
 }
 
-// Single-line black ink drawings for Hero companion cards (per mock & spec)
-function renderHeroCompanion(key: string, accent: string) {
+const S_HERO = {
+  stroke: "#161616",
+  strokeWidth: "3.4",
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function renderHeroPersonArt(key: string) {
   switch (key) {
     case "adam":
-      // Rook — round bird, beak, round glasses, orange hard hat (#e39b00), clipboard with a card
       return (
-        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
-          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M48 42 C 48 22, 68 18, 88 18 C 108 18, 128 22, 128 42 Z" fill={accent} />
-            <path d="M40 42 h 96" strokeWidth="2.8" />
-            <circle cx="76" cy="62" r="12" />
-            <circle cx="100" cy="62" r="12" />
-            <circle cx="78" cy="62" r="3" fill="#111" />
-            <circle cx="102" cy="62" r="3" fill="#111" />
-            <path d="M88 62 h 2" />
-            <path d="M110 58 L 138 64 L 110 70 Z" fill="#fff" />
-            <circle cx="86" cy="96" r="28" fill="#fff" />
-            <path d="M76 124 v 16 M70 140 h 12 M96 124 v 16 M90 140 h 12" />
-            <rect x="94" y="86" width="22" height="28" rx="2" fill="#fff" />
-            <path d="M100 83 h 10 v 4 h -10 Z" fill="#111" />
-            <path d="M98 94 h 14 M98 99 h 14 M98 104 h 10" />
-          </g>
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M62 22 C 40 22, 28 42, 30 64 C 32 88, 46 102, 64 102 C 82 102, 96 88, 98 64 C 100 42, 86 22, 62 22 Z" {...S_HERO} />
+          <path d="M32 50 C 36 30, 56 24, 72 26 C 88 28, 96 40, 96 50" {...S_HERO} />
+          <path d="M34 48 C 50 42, 78 42, 96 48" {...S_HERO} />
+          <path d="M92 44 L 118 40 L 110 50" fill="#cfc6b4" {...S_HERO} />
+          <path d="M22 144 C 26 114, 42 106, 64 106 C 86 106, 100 114, 104 144" {...S_HERO} />
+          <path d="M46 62 q6 -6 12 0 M70 62 q6 -6 12 0" {...S_HERO} />
+          <path d="M54 80 q10 8 20 0" {...S_HERO} />
         </svg>
       );
     case "daisy":
-      // Sable — sleek cat with alert ears, whiskers, collar tag (#e0457b), satchel with scrolls
       return (
-        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
-          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            {/* Alert ears with accent fill */}
-            <path d="M60 48 L 50 24 L 72 38 Z" fill={accent} />
-            <path d="M96 38 L 118 24 L 108 48 Z" fill={accent} />
-            {/* Crown and head */}
-            <path d="M72 38 C 82 34, 88 34, 96 38" />
-            <ellipse cx="84" cy="58" rx="28" ry="22" fill="#fff" />
-            {/* Eyes */}
-            <circle cx="74" cy="54" r="3" fill="#111" />
-            <circle cx="94" cy="54" r="3" fill="#111" />
-            {/* Nose & whiskers */}
-            <path d="M82 62 l 2 2 l 2 -2 Z" fill="#111" />
-            <path d="M84 64 v 3 q -4 3 -8 2 M84 67 q 4 3 8 2" />
-            <path d="M54 58 L 38 54 M54 64 L 36 66 M114 58 L 130 54 M114 64 L 132 66" />
-            {/* Collar and tag */}
-            <path d="M66 78 C 76 82, 92 82, 102 78" />
-            <circle cx="84" cy="88" r="5" fill={accent} />
-            {/* Body */}
-            <path d="M68 80 C 58 100, 56 122, 60 142 M100 80 C 108 100, 110 122, 106 142" />
-            {/* Scroll satchel */}
-            <rect x="52" y="104" width="28" height="24" rx="2" fill="#fff" />
-            <path d="M56 102 v -6 c 0 -2, 4 -2, 4 0 v 6 M64 102 v -8 c 0 -2, 4 -2, 4 0 v 8" />
-            {/* Tail */}
-            <path d="M60 134 C 44 126, 36 108, 40 88 C 42 76, 50 72, 54 82" />
-          </g>
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M62 22 C 40 22, 28 42, 30 64 C 32 88, 46 102, 64 102 C 82 102, 96 88, 98 64 C 100 42, 86 22, 62 22 Z" {...S_HERO} />
+          <path d="M30 60 C 22 92, 26 116, 34 126 M98 60 C 106 92, 102 116, 94 126" {...S_HERO} />
+          <path d="M34 44 C 44 30, 80 28, 94 44" {...S_HERO} />
+          <path d="M22 144 C 26 114, 42 106, 64 106 C 86 106, 100 114, 104 144" {...S_HERO} />
+          <path d="M46 62 q6 -6 12 0 M70 62 q6 -6 12 0" {...S_HERO} />
+          <path d="M54 80 q10 8 20 0" {...S_HERO} />
         </svg>
       );
     case "shawn":
-      // Luma — chameleon director with visor cap (#13a39a), spiraled tail, camera frame
       return (
-        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
-          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            {/* Visor cap in teal */}
-            <path d="M52 40 C 52 24, 76 20, 98 26 C 110 30, 120 38, 118 48 L 48 50 Z" fill={accent} />
-            {/* Chameleon head */}
-            <path d="M52 50 C 38 56, 34 68, 44 76 C 58 84, 78 82, 94 76" />
-            {/* Expressive turret eye */}
-            <circle cx="80" cy="56" r="10" fill="#fff" />
-            <circle cx="83" cy="56" r="4" fill="#111" />
-            <path d="M42 68 q 8 5 16 0" />
-            {/* Body and spiraled tail */}
-            <path d="M94 76 C 112 84, 122 104, 118 128 C 112 148, 94 156, 74 152 C 54 148, 46 130, 56 118 C 64 106, 84 110, 88 122 C 90 130, 82 136, 74 134" />
-            {/* Clapperboard / frame */}
-            <rect x="36" y="94" width="44" height="30" rx="2" fill="#fff" />
-            <path d="M36 94 L 80 94 L 80 102 L 36 102 Z" fill={accent} />
-            <path d="M46 94 L 42 102 M58 94 L 54 102 M70 94 L 66 102" />
-          </g>
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M62 22 C 40 22, 28 42, 30 64 C 32 88, 46 102, 64 102 C 82 102, 96 88, 98 64 C 100 42, 86 22, 62 22 Z" {...S_HERO} />
+          <path d="M40 36 C 50 22, 76 22, 86 36" {...S_HERO} />
+          <path d="M30 60 L24 70 M98 60 L104 70" {...S_HERO} />
+          <path d="M22 144 C 26 114, 42 106, 64 106 C 86 106, 100 114, 104 144" {...S_HERO} />
+          <path d="M46 62 q6 -6 12 0 M70 62 q6 -6 12 0" {...S_HERO} />
+          <path d="M54 80 q10 8 20 0" {...S_HERO} />
         </svg>
       );
     case "tj":
-      // Orren — desert tortoise with compass pack on shell (#e8472a) and map scroll
       return (
-        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
-          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            {/* Mounted compass in red */}
-            <circle cx="94" cy="30" r="12" fill={accent} />
-            <path d="M94 18 V 10 M90 10 H 98" />
-            <circle cx="94" cy="30" r="2.5" fill="#111" />
-            <path d="M94 30 L 100 24" stroke="#111" strokeWidth="2" />
-            {/* Domed shell */}
-            <path d="M38 120 C 34 68, 64 42, 104 44 C 130 46, 148 68, 144 120 Z" fill="#fff" />
-            <path d="M54 86 C 70 66, 100 66, 130 84" />
-            <path d="M44 118 C 66 102, 100 102, 138 116" />
-            <path d="M86 44 V 120 M58 78 L 40 96 M114 76 L 132 94" />
-            {/* Tortoise head reaching out */}
-            <path d="M38 106 C 26 104, 16 112, 18 124 C 20 134, 30 138, 40 132" />
-            <circle cx="26" cy="118" r="2.5" fill="#111" />
-            {/* Feet */}
-            <path d="M34 130 v 14 M98 130 v 14 M126 128 v 16" />
-            {/* Rolled map */}
-            <rect x="68" y="122" width="24" height="10" rx="2" fill={accent} />
-          </g>
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M62 22 C 40 22, 28 42, 30 64 C 32 88, 46 102, 64 102 C 82 102, 96 88, 98 64 C 100 42, 86 22, 62 22 Z" {...S_HERO} />
+          <path d="M36 40 L92 40 M44 40 C 48 30, 76 30, 84 40" {...S_HERO} />
+          <path d="M22 144 C 26 114, 42 106, 64 106 C 86 106, 100 114, 104 144" {...S_HERO} />
+          <path d="M46 62 q6 -6 12 0 M70 62 q6 -6 12 0" {...S_HERO} />
+          <path d="M54 80 q10 8 20 0" {...S_HERO} />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function renderHeroCompArt(key: string, accent: string) {
+  switch (key) {
+    case "adam":
+      return (
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M34 46 C 36 24, 88 24, 90 46 Z" fill={accent} {...S_HERO} />
+          <path d="M24 48 L100 48 L96 54 L28 54 Z" fill={accent} {...S_HERO} />
+          <path d="M38 56 C 30 80, 34 112, 62 118 C 90 112, 94 80, 86 56 Z" fill="#fff" {...S_HERO} />
+          <circle cx="52" cy="68" r="9" fill="#fff" {...S_HERO} />
+          <circle cx="74" cy="68" r="9" fill="#fff" {...S_HERO} />
+          <path d="M61 68 h4" {...S_HERO} />
+          <path d="M83 70 L104 66 L86 78 Z" fill="#fff" {...S_HERO} />
+          <path d="M40 86 C 26 92, 24 106, 36 108" {...S_HERO} />
+          <rect x="56" y="88" width="28" height="20" rx="2" fill="#fff" {...S_HERO} />
+          <path d="M56 118 L54 136 M70 118 L72 136 M46 136 h14 M66 136 h14" {...S_HERO} />
+        </svg>
+      );
+    case "daisy":
+      return (
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M40 44 L34 14 L56 30 Z M84 44 L90 14 L68 30 Z" fill={accent} {...S_HERO} />
+          <circle cx="62" cy="48" r="24" fill={accent} {...S_HERO} />
+          <path d="M53 46 q3 -3 6 0 M65 46 q3 -3 6 0 M58 56 q4 3 8 0" {...S_HERO} />
+          <path d="M44 52 L30 50 M44 56 L30 58 M80 52 L94 50 M80 56 L94 58" {...S_HERO} />
+          <path d="M42 80 C 36 100, 40 120, 62 122 C 84 120, 88 100, 82 80" {...S_HERO} />
+          <rect x="48" y="92" width="30" height="20" fill="#fff" {...S_HERO} />
+          <path d="M53 99 h20 M53 105 h14" {...S_HERO} />
+          <path d="M84 110 C 100 112, 104 96, 96 90" {...S_HERO} />
+          <path d="M54 122 L54 138 M70 122 L70 138" {...S_HERO} />
+        </svg>
+      );
+    case "shawn":
+      return (
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M48 44 C 40 20, 44 4, 54 6 C 62 8, 60 30, 58 44 Z M76 44 C 84 20, 80 4, 70 6 C 62 8, 64 30, 66 44 Z" fill={accent} {...S_HERO} />
+          <circle cx="62" cy="60" r="22" fill={accent} {...S_HERO} />
+          <path d="M54 58 q3 -3 6 0 M66 58 q3 -3 6 0 M58 68 q4 3 8 0" {...S_HERO} />
+          <path d="M44 86 C 38 104, 42 120, 62 122 C 82 120, 86 104, 80 86" {...S_HERO} />
+          <rect x="80" y="84" width="28" height="28" fill="#fff" {...S_HERO} />
+          <path d="M80 98 L74 96" {...S_HERO} />
+          <path d="M54 122 L54 138 M70 122 L70 138" {...S_HERO} />
+        </svg>
+      );
+    case "tj":
+      return (
+        <svg viewBox="0 0 124 144" fill="none" style={{ height: "210px", width: "auto", maxWidth: "92%" }} aria-hidden="true">
+          <path d="M36 40 C 24 44, 22 66, 34 70 Z M80 40 C 92 44, 94 66, 82 70 Z" fill={accent} {...S_HERO} />
+          <circle cx="58" cy="46" r="22" fill={accent} {...S_HERO} />
+          <path d="M50 44 q3 -3 6 0 M62 44 q3 -3 6 0" {...S_HERO} />
+          <path d="M52 56 C 56 62, 64 62, 66 56 Z" fill="#161616" {...S_HERO} />
+          <path d="M42 74 C 36 96, 40 118, 58 120 C 78 118, 82 96, 76 74" {...S_HERO} />
+          <path d="M96 56 L96 126" {...S_HERO} />
+          <path d="M96 62 L120 58 L116 70 L96 72 Z M96 82 L74 86 L78 96 L96 94 Z" fill="#fff" {...S_HERO} />
+          <path d="M50 120 L50 138 M66 120 L66 138" {...S_HERO} />
+          <path d="M40 108 C 28 104, 26 94, 34 90" {...S_HERO} />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function renderHeroScene(key: string, accent: string) {
+  switch (key) {
+    case "adam":
+      return (
+        <svg viewBox="0 0 420 112" aria-hidden="true">
+          <circle cx="70" cy="46" r="34" />
+          <path d="M70 46 L70 24 M70 46 L86 56" />
+          <path d="M58 46 h-6 M82 46 h6 M70 34 v-6 M70 58 v6" />
+          <path d="M110 108 h300 M140 108 V70 h120 V108 M150 70 V56 h100 V70" />
+          <path d="M300 20 V108" />
+          <path className="ac" d="M300 20 L350 28 L300 36 Z" fill={accent} />
+          <path d="M190 80 h20 M190 90 h30" />
+          <path d="M380 108 C 376 90, 384 80, 396 86" />
+        </svg>
+      );
+    case "daisy":
+      return (
+        <svg viewBox="0 0 420 112" aria-hidden="true">
+          <path d="M10 30 C 90 8, 170 48, 250 20 C 320 0, 380 30, 414 18" />
+          <path className="ac" d="M60 24 l8 14 h-16 Z M150 36 l8 14 h-16 Z M240 22 l8 14 h-16 Z M330 20 l8 14 h-16 Z" fill={accent} />
+          <ellipse cx="210" cy="78" rx="110" ry="14" />
+          <path d="M120 80 V108 M300 80 V108 M210 92 V108" />
+          <path d="M170 72 C 172 60, 190 60, 192 72 M230 72 C 232 60, 250 60, 252 72" />
+          <path d="M60 108 C 58 96, 70 92, 78 100" />
+        </svg>
+      );
+    case "shawn":
+      return (
+        <svg viewBox="0 0 420 112" aria-hidden="true">
+          <rect x="40" y="10" width="90" height="26" rx="6" />
+          <path className="ac" d="M52 23 h66" style={{ stroke: accent, strokeWidth: 5, fill: "none" }} />
+          <rect x="200" y="30" width="80" height="48" rx="8" />
+          <path d="M280 44 L310 30 V78 L280 64 Z" />
+          <circle cx="222" cy="22" r="12" />
+          <circle cx="252" cy="22" r="12" />
+          <path d="M240 78 L224 108 M240 78 L256 108 M240 78 V108" />
+          <path d="M340 60 h60 v30 h-60 Z M340 60 L348 46 h52 L400 60" />
+          <path d="M348 52 l6 8 M362 52 l6 8 M376 52 l6 8" />
+        </svg>
+      );
+    case "tj":
+      return (
+        <svg viewBox="0 0 420 112" aria-hidden="true">
+          <ellipse cx="300" cy="46" rx="40" ry="18" />
+          <path d="M300 28 V14 M250 14 h100 M300 46 L240 40 M236 34 v14" />
+          <path d="M276 64 L270 76 h60 L324 64" />
+          <path d="M40 108 h360" />
+          <path d="M60 108 V60 L90 48 L120 60 V108" />
+          <path className="ac" d="M72 108 V90 h20 v18 Z" fill={accent} />
+          <path d="M160 108 V50" />
+          <path d="M160 50 L140 84 h40 Z" />
+          <path d="M160 62 v12 M160 78 v2" />
+          <path d="M200 100 C 230 92, 250 100, 280 92 C 310 84, 340 96, 370 90" />
         </svg>
       );
     default:
@@ -617,6 +690,10 @@ export default function JoystickLanding() {
   const [timerResetKey, setTimerResetKey] = useState(0);
   const [flippedCompanions, setFlippedCompanions] = useState<Record<string, boolean>>({});
 
+  // Hero work mode selection ("cozy" or "road") and status
+  const [selectedWorkMode, setSelectedWorkMode] = useState<"cozy" | "road" | null>(null);
+  const [tileStatus, setTileStatus] = useState<string>("");
+
   // Hero empty card input
   const [heroInputGame, setHeroInputGame] = useState("");
   const [, setHeroInputFocused] = useState(false);
@@ -777,6 +854,27 @@ export default function JoystickLanding() {
     });
   };
 
+  const handleSelectWorkMode = (mode: "cozy" | "road") => {
+    setSelectedWorkMode(mode);
+    setRotationPausedUntil(Date.now() + 10000);
+    const statusMsg = (mode === "cozy" ? "Indoors, cozy" : "Out on the road") + " selected. Opening your game…";
+    setTileStatus(statusMsg);
+    captureProductEvent("hero_game_tile_clicked", { mode });
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        window.location.href = `${START_PATH}?mode=${encodeURIComponent(mode)}`;
+      }, 400);
+    }
+  };
+
+  const handleStartJoystick = (mode?: string) => {
+    captureProductEvent("hero_start_clicked", { source: "hero_tile", mode: mode || "cozy" });
+    if (typeof window !== "undefined") {
+      const target = mode ? `${START_PATH}?mode=${encodeURIComponent(mode)}` : START_PATH;
+      window.location.href = target;
+    }
+  };
+
   const handleHeroCardSubmit = (e: FormEvent) => {
     e.preventDefault();
     captureProductEvent("hero_preview_opened", { source: "card" });
@@ -844,315 +942,175 @@ export default function JoystickLanding() {
         </div>
       </nav>
 
-      {/* 2. HERO: Single concept — your companions. Empty card is the only CTA. */}
+      {/* 2. HERO: Three columns: Headline | Rotating Persona + Companion Pair | Game Pick CTA */}
       <section
-        className="jl-hero-section jl-wrap"
-        aria-label="Joystick hero"
+        className="jl-hero jl-wrap"
+        aria-label="Joystick — Knows your business, then makes your next move a game."
         onPointerEnter={() => setIsHoveringHero(true)}
         onPointerLeave={() => setIsHoveringHero(false)}
       >
-        <div className="jl-hero-main-row">
-          {/* Left Column (~42%): Headline and underlines only. Air beneath is intentional. */}
-          <div className="jl-hero-left">
-            <h1 className="jl-hero-headline">
-              <span className="jl-hero-headline-line">Knows your</span>
-              <span className="jl-hero-headline-line">business, then</span>
-              <span className="jl-hero-headline-line">makes your next</span>
-              <span className="jl-hero-headline-line">
-                move{" "}
-                <span className="jl-hero-headline-underlined">
-                  a game.
-                  <svg
-                    className="jl-hero-double-underline"
-                    viewBox="0 0 280 34"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M4 12 C 70 6, 150 16, 276 8"
-                      fill="none"
-                      stroke="#e39b00"
-                      strokeWidth="5"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M14 24 C 80 18, 170 28, 268 20"
-                      fill="none"
-                      stroke="#e39b00"
-                      strokeWidth="6"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  {/* 6-second idle nudge arrow */}
-                  {idleNudgeVisible && (
-                    <div className="jl-hero-idle-nudge" aria-hidden="true">
-                      <svg className="jl-nudge-arrow-svg" viewBox="0 0 160 60">
-                        <path
-                          className="jl-nudge-path"
-                          d="M 12 36 Q 70 -4, 140 22"
-                          fill="none"
-                          stroke="#e39b00"
-                          strokeWidth="3.2"
-                          strokeLinecap="round"
-                        />
-                        <path
-                          className="jl-nudge-head"
-                          d="M 122 14 L 142 22 L 132 36"
-                          fill="none"
-                          stroke="#e39b00"
-                          strokeWidth="3.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <span className="jl-nudge-text">yours →</span>
-                    </div>
-                  )}
+        <h1 className="jl-hero-h1">
+          <svg className="spark h1" viewBox="0 0 34 34" aria-hidden="true">
+            <g stroke="#e9a100" strokeWidth="3" strokeLinecap="round">
+              <path d="M6 27 L14 19" />
+              <path d="M4 14 L13 15" />
+              <path d="M15 5 L16 14" />
+            </g>
+          </svg>
+          <span className="jl-hero-line-chunk">Knows your</span>
+          <span className="jl-hero-line-chunk">business,</span>
+          <span className="jl-hero-line-chunk">then makes</span>
+          <span className="jl-hero-line-chunk">your next move</span>
+          <span className="u jl-hero-line-chunk">
+            a game.
+            <svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
+              <path
+                d="M4 9 C 60 4, 140 14, 296 7"
+                stroke={currentPersona.accent}
+                strokeWidth="7"
+                fill="none"
+                strokeLinecap="round"
+              />
+              <path
+                d="M14 16 C 70 12, 110 19, 180 14"
+                stroke={currentPersona.accent}
+                strokeWidth="5"
+                fill="none"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+        </h1>
+
+        <div className="jl-pairwrap">
+          <svg className="spark c1" viewBox="0 0 34 34" aria-hidden="true">
+            <g stroke="#161616" strokeWidth="3" strokeLinecap="round">
+              <path d="M6 27 L14 19" />
+              <path d="M4 14 L13 15" />
+              <path d="M15 5 L16 14" />
+            </g>
+          </svg>
+          <svg className="spark c2" viewBox="0 0 34 34" aria-hidden="true">
+            <g stroke="#161616" strokeWidth="3" strokeLinecap="round">
+              <path d="M6 27 L14 19" />
+              <path d="M4 14 L13 15" />
+              <path d="M15 5 L16 14" />
+            </g>
+          </svg>
+          <div className="jl-pair" aria-live="polite">
+            <div
+              className="jl-card jl-person"
+              style={{ background: currentPersona.paper }}
+            >
+              <div className="tape" />
+              <div className="art jl-fade" style={{ opacity: fadeOpacity }}>
+                {renderHeroPersonArt(currentPersona.key)}
+              </div>
+              <div className="cap jl-fade" style={{ opacity: fadeOpacity }}>
+                {currentPersona.caption.split(". ")[0]}.
+                <span className="flaw">{currentPersona.caption.split(". ")[1]}</span>
+                <span className="ul" style={{ background: currentPersona.accent }} />
+              </div>
+            </div>
+
+            <div
+              className="jl-card jl-comp"
+              style={{ background: currentPersona.paper }}
+            >
+              <div className="tape" />
+              <div className="art jl-fade" style={{ opacity: fadeOpacity }}>
+                {renderHeroCompArt(currentPersona.key, currentPersona.accent)}
+              </div>
+              <div className="cap jl-fade" style={{ opacity: fadeOpacity }}>
+                <span className="name" style={{ color: currentPersona.accent }}>
+                  {currentPersona.companion}
                 </span>
-              </span>
-            </h1>
+                {currentPersona.companionGift}
+                <span className="flaw">{currentPersona.companionFlaw}</span>
+                <span className="ul" style={{ background: currentPersona.accent }} />
+              </div>
+            </div>
           </div>
 
-          {/* Right Column: The Gallery Stack */}
-          <div className="jl-hero-gallery">
-            <div className="jl-gallery-stack">
-              <div className="jl-gallery-cards-pair">
-                {/* Person card: tilted ~ -4deg, upper-left */}
-                <div
-                  className={`jl-gallery-card jl-gallery-person-card ${isHeroFlippedPerson ? "is-flipped" : ""}`}
-                  onClick={handleTogglePersonFlip}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") handleTogglePersonFlip();
-                  }}
-                  aria-label={`Flip to see ${currentPersona.name}'s photo`}
-                >
-                <div className="jl-gallery-card-inner">
-                  <div
-                    className="jl-gallery-card-face jl-gallery-card-front"
-                    style={{ background: "#fff3b0" }}
-                  >
-                    <div className="jl-card-tap-label">tap →</div>
-                    <div className="jl-card-spark-left" aria-hidden="true">
-                      <span></span>
-                      <span></span>
-                    </div>
-                    <div className="jl-card-sketch-wrap" style={{ opacity: fadeOpacity }}>
-                      {renderPortrait(currentPersona.key, currentPersona.portraitAriaLabel)}
-                    </div>
-                    <div className="jl-card-caption-handwriting" style={{ opacity: fadeOpacity }}>
-                      {currentPersona.caption}
-                    </div>
-                  </div>
-                  <div
-                    className="jl-gallery-card-face jl-gallery-card-back"
-                    style={{ background: "#fff3b0" }}
-                  >
-                    <div className="jl-real-photo-placeholder">
-                      <svg width="44" height="36" viewBox="0 0 44 36" aria-hidden="true">
-                        <rect x="2" y="8" width="40" height="26" rx="4" fill="none" stroke="#111" strokeWidth="2" />
-                        <circle cx="22" cy="21" r="8" fill="none" stroke="#111" strokeWidth="2" />
-                        <rect x="14" y="2" width="16" height="6" rx="2" fill="none" stroke="#111" strokeWidth="2" />
-                      </svg>
-                      <div className="jl-photo-caption">
-                        [Real flash photo: {currentPersona.name}, {currentPersona.photoWhere}]
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <div className="jl-dots" role="tablist" aria-label="People">
+            {PERSONAS.map((p, idx) => (
+              <button
+                key={p.key}
+                type="button"
+                role="tab"
+                aria-label={p.name}
+                aria-current={idx === state.index ? "true" : "false"}
+                onClick={() => handleDotClick(idx)}
+              />
+            ))}
+          </div>
 
-              {/* Companion card: tilted ~ +3deg, lower-left */}
-              <div
-                className={`jl-gallery-card jl-gallery-companion-card ${isHeroFlippedCompanion ? "is-flipped" : ""}`}
-                onClick={handleToggleCompanionFlip}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") handleToggleCompanionFlip();
-                }}
-                aria-label={`Flip to see ${currentPersona.companion}'s scene`}
-              >
-                <div className="jl-gallery-card-inner">
-                  <div
-                    className="jl-gallery-card-face jl-gallery-card-front"
-                    style={{ background: "#fff3b0" }}
-                  >
-                    <div className="jl-card-tap-label">tap →</div>
-                    <div className="jl-companion-drawing-wrap" style={{ opacity: fadeOpacity }}>
-                      {renderHeroCompanion(currentPersona.key, currentPersona.accent)}
-                    </div>
-                    <div className="jl-companion-text-block" style={{ opacity: fadeOpacity }}>
-                      <div className="jl-companion-handwriting-name" style={{ color: currentPersona.accent }}>
-                        {currentPersona.companion}
-                      </div>
-                      <div className="jl-companion-handwriting-gift">
-                        <strong>{currentPersona.companionGift}</strong> {currentPersona.companionFlaw}
-                      </div>
-                      <div className="jl-companion-handwriting-for">
-                        {currentPersona.forTheOneWhoText}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className="jl-gallery-card-face jl-gallery-card-back"
-                    style={{ background: "#ffffff" }}
-                  >
-                    <div className="jl-companion-scene-header" style={{ background: currentPersona.accent }}>
-                      {currentPersona.panelTitle}
-                    </div>
-                    <div className="jl-companion-scene-content">
-                      <div style={{ fontWeight: 600 }}>{currentPersona.panelLine1}</div>
-                      <div style={{ color: "#444" }}>{currentPersona.panelLine2}</div>
-                      <div style={{ color: "#444" }}>{currentPersona.panelLine3}</div>
-                      <div className="jl-scene-tagline">“{currentPersona.companionInGameLine}”</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <p className="jl-line jl-fade" style={{ opacity: fadeOpacity }}>
+            {currentPersona.oneLiner}
+          </p>
 
-            {/* Empty card: largest, straight, front of stack */}
-              <div className={`jl-gallery-empty-card ${heroCardSettled ? "is-settled" : ""}`}>
-                <div className="jl-empty-card-tape" />
-                <div className="jl-empty-card-sparks" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <div className="jl-empty-card-inner-dashed">
-                  <div className="jl-empty-card-header">
-                    <span className="jl-empty-card-title">Your card.</span>
-                    <svg className="jl-empty-card-underline" viewBox="0 0 120 12" aria-hidden="true">
-                      <path d="M4 7 C 30 3, 70 9, 116 6" fill="none" stroke="#e39b00" strokeWidth="3" strokeLinecap="round" />
-                    </svg>
-                  </div>
-
-                  <div className="jl-empty-card-prompt">
-                    What game did you love growing up?
-                  </div>
-
-                  <form onSubmit={handleHeroCardSubmit} className="jl-empty-card-form">
-                    <div className="jl-empty-card-ruled-line">
-                      <input
-                        type="text"
-                        className="jl-empty-card-input"
-                        value={heroInputGame}
-                        placeholder={currentPersona.gamePlaceholder}
-                        onChange={(e) => {
-                          setHeroInputGame(e.target.value);
-                          captureProductEvent("hero_card_typed", { text: e.target.value });
-                        }}
-                        onFocus={() => setHeroInputFocused(true)}
-                        onBlur={() => setHeroInputFocused(false)}
-                        aria-label="What game did you love growing up?"
-                      />
-                      <span className="jl-empty-card-caret" />
-                    </div>
-                  </form>
-
-                  <div className="jl-empty-card-subtext">
-                    3 questions. No account required.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Gallery meta row: one-liner + dots on left, skip link on right */}
-            <div className="jl-gallery-bottom-row">
-              <div className="jl-gallery-bottom-meta">
-                <div className="jl-rotating-one-liner" style={{ opacity: fadeOpacity }}>
-                  {currentPersona.oneLiner}
-                </div>
-                <div className="jl-gallery-dots">
-                  {PERSONAS.map((p, idx) => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      className={`jl-gallery-dot ${idx === state.index ? "is-active" : ""}`}
-                      aria-label={`Show ${p.name}`}
-                      onClick={() => handleDotClick(idx)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="jl-gallery-skip-wrap">
-                <a
-                  href={START_PATH}
-                  className="jl-empty-card-skip-link"
-                  onClick={handlePreviewLinkClick}
-                >
-                  or just preview my first game →
-                </a>
-              </div>
-            </div>
+          <div className="jl-scene jl-fade" style={{ opacity: fadeOpacity }} aria-hidden="true">
+            {renderHeroScene(currentPersona.key, currentPersona.accent)}
           </div>
         </div>
 
-        {/* Bottom-Middle Section: Kicker, Clip, Static line */}
-        <div className="jl-hero-clip-section">
-          <div className="jl-clip-kicker">
-            YOU DON'T ASK. YOUR COMPANIONS ALREADY FOUND IT.
-          </div>
+        <div className="jl-pick" role="group" aria-labelledby="pk">
+          <h2 id="pk">How do you work?</h2>
 
-          <div
-            className="jl-clip-frame-wrap"
-            onClick={handleClipClick}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") handleClipClick();
-            }}
-            aria-label={`Play ${currentPersona.clipLabel} clip`}
+          <button
+            type="button"
+            className="jl-tile"
+            aria-pressed={selectedWorkMode === "cozy" ? "true" : "false"}
+            onClick={() => handleSelectWorkMode("cozy")}
           >
-            <div className="jl-clip-frame">
-              {/* Dynamic badge for non-Adam slots */}
-              {currentPersona.key !== "adam" && (
-                <div className="jl-clip-label-badge">
-                  {currentPersona.clipLabel}
-                </div>
-              )}
+            <img
+              src="/joystick/gameplay/tile-cozy-silver-lake.jpg"
+              alt="Silver Lake: cozy village with lanterns and villagers"
+            />
+            <span className="shade" />
+            <span className="ring" />
+            <span className="tag">gameplay still · Silver Lake</span>
+            <span className="txt">
+              <b>Indoors, cozy?</b>
+              <small>Villagers, lanterns, letters to write.</small>
+            </span>
+          </button>
 
-              <img
-                src={
-                  currentPersona.key === "adam"
-                    ? "/joystick/gameplay/hero-clip-silver-lake.png"
-                    : currentPersona.key === "daisy"
-                    ? "/joystick/gameplay/century-park-east.jpg"
-                    : currentPersona.key === "shawn"
-                    ? "/joystick/gameplay/channel-382.jpg"
-                    : "/joystick/gameplay/beverly-hills.jpg"
-                }
-                alt={`${currentPersona.clipLabel} gameplay scene`}
-                className="jl-clip-scene-bg"
-              />
+          <p className="jl-or">or</p>
 
-              {/* Thought bubble (for non-Adam slots) */}
-              {currentPersona.key !== "adam" && (
-                <div className="jl-clip-thought-bubble" style={{ opacity: fadeOpacity }}>
-                  <div className="jl-thought-bubble-tail" />
-                  {currentPersona.clipThoughtBubble.map((line, i) => (
-                    <div key={i} className="jl-thought-bubble-line">{line}</div>
-                  ))}
-                </div>
-              )}
+          <button
+            type="button"
+            className="jl-tile"
+            aria-pressed={selectedWorkMode === "road" ? "true" : "false"}
+            onClick={() => handleSelectWorkMode("road")}
+          >
+            <img
+              src="/joystick/gameplay/tile-road-colosseum.jpg"
+              alt="The Colosseum: Clockhead and front desks on the road"
+            />
+            <span className="shade" />
+            <span className="ring" />
+            <span className="tag">gameplay still · the Colosseum</span>
+            <span className="txt">
+              <b>Out on the road?</b>
+              <small>Front desks, building managers, the clock.</small>
+            </span>
+          </button>
 
-              {/* Play circle button bottom-right (for non-Adam slots) */}
-              {currentPersona.key !== "adam" && (
-                <div className="jl-clip-play-circle" aria-hidden="true">
-                  <svg viewBox="0 0 36 36" width="36" height="36" fill="none">
-                    <circle cx="18" cy="18" r="16" stroke="#111" strokeWidth="2.4" fill="#ffffff" />
-                    <polygon points="14,11 25,18 14,25" fill="#111" />
-                  </svg>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="jl-clip-static-caption">
-            Real gameplay. Nothing is sent without you.
+          <div className="jl-turn-on-cta">
+            <button
+              type="button"
+              className="jl-btn-turn-on"
+              onClick={() => handleStartJoystick(selectedWorkMode || "cozy")}
+            >
+              {selectedWorkMode === "cozy"
+                ? "Play in Silver Lake →"
+                : selectedWorkMode === "road"
+                ? "Play on the Road →"
+                : "Turn my work into a game →"}
+            </button>
+            <p className="jl-fine">3 questions. No account required.</p>
+            {tileStatus && <p className="jl-status" aria-live="polite">{tileStatus}</p>}
           </div>
         </div>
       </section>

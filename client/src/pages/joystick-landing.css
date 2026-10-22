@@ -109,766 +109,442 @@ body {
 }
 
 /* ==========================================================================
-   2. HERO: One concept — your companions. Empty card is the only CTA.
+   2. HERO: Three columns: Headline | Rotating Persona + Companion Pair | Game Pick CTA
    ========================================================================== */
 
-.jl-hero-section {
-  padding-top: 6px;
-  padding-bottom: 18px;
-}
-
-.jl-hero-main-row {
+.jl-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-  gap: clamp(24px, 4vw, 56px);
+  grid-template-columns: minmax(0, 4.6fr) minmax(0, 4.2fr) minmax(0, 3.2fr);
+  gap: 36px;
   align-items: start;
+  margin-top: 26px;
+  padding-bottom: 24px;
 }
 
-/* Left Column (~42%): Headline and underlines only */
-.jl-hero-left {
-  position: relative;
-  padding-top: 8px;
-}
-
-.jl-hero-headline {
+.jl-hero-h1 {
   font-family: var(--jl-display);
   font-weight: 700;
-  font-size: clamp(34px, 3.8vw, 60px);
-  line-height: 0.98;
+  font-size: clamp(40px, 5.6vw, 82px);
+  line-height: 1;
   letter-spacing: -0.025em;
   color: var(--jl-ink);
   margin: 0;
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  padding-top: 2px;
 }
 
-.jl-hero-headline-line {
+.jl-hero-line-chunk {
   display: block;
+}
+
+.jl-hero-h1 .u {
+  position: relative;
   white-space: nowrap;
 }
 
-.jl-hero-headline-underlined {
-  position: relative;
-  display: inline-block;
-}
-
-.jl-hero-double-underline {
+.jl-hero-h1 .u svg {
   position: absolute;
-  left: -4px;
-  bottom: -14px;
+  left: -2%;
+  right: -2%;
+  bottom: -0.16em;
   width: 104%;
-  height: 26px;
-  pointer-events: none;
+  height: 0.24em;
 }
 
-/* 6-second idle nudge arrow */
-.jl-hero-idle-nudge {
+.jl-hero-h1 .u svg path {
+  transition: stroke 0.4s;
+}
+
+.jl-hero .spark {
   position: absolute;
-  left: calc(100% + 12px);
-  top: -24px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: none;
-  animation: nudgeFadeIn 0.4s ease forwards;
-  z-index: 15;
+  width: 30px;
+  height: 30px;
 }
 
-.jl-nudge-arrow-svg {
-  width: 130px;
-  height: 48px;
-  overflow: visible;
+.jl-hero .spark.h1 {
+  left: -40px;
+  top: 44%;
 }
 
-.jl-nudge-path {
-  stroke-dasharray: 200;
-  stroke-dashoffset: 200;
-  animation: drawNudge 0.6s ease forwards;
-}
-
-.jl-nudge-head {
-  opacity: 0;
-  animation: fadeInHead 0.2s ease 0.5s forwards;
-}
-
-.jl-nudge-text {
-  font-family: var(--jl-hand);
-  font-size: 24px;
-  color: var(--jl-ink);
-  transform: rotate(-4deg);
-  white-space: nowrap;
-}
-
-@keyframes drawNudge {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes fadeInHead {
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes nudgeFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Right Column: The Gallery Stack */
-.jl-hero-gallery {
+/* rotating pair */
+.jl-pairwrap {
   position: relative;
-  display: flex;
-  flex-direction: column;
 }
 
-.jl-gallery-stack {
+.jl-pairwrap .spark.c1 {
+  left: -26px;
+  top: 8%;
+}
+
+.jl-pairwrap .spark.c2 {
+  right: -26px;
+  top: 16%;
+  transform: scaleX(-1);
+}
+
+.jl-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+  padding-top: 18px;
+}
+
+.jl-card {
   position: relative;
-  width: 100%;
-  max-width: 610px;
-  min-height: 385px;
-}
-
-.jl-gallery-cards-pair {
-  display: contents;
-}
-
-/* Card inner shared 3D flip */
-.jl-gallery-card {
-  position: absolute;
-  perspective: 1200px;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  padding: 0;
-  text-align: left;
-}
-
-.jl-gallery-card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.jl-gallery-card.is-flipped .jl-gallery-card-inner {
-  transform: rotateY(180deg);
-}
-
-.jl-gallery-card-face {
-  position: absolute;
-  inset: 0;
-  border-radius: 4px;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  overflow: hidden;
-}
-
-.jl-gallery-card-back {
-  transform: rotateY(180deg);
-  border: 1.5px solid var(--jl-ink);
-}
-
-/* Dark-shadow rule: only empty card has shadow at rest. Rotating cards get shadow only while flipped. */
-.jl-gallery-card.is-flipped {
-  box-shadow: 0 16px 36px rgba(17, 17, 17, 0.12);
-}
-
-/* 1. Person card: upper-left, tilted ~ -4deg, ~70% size */
-.jl-gallery-person-card {
-  top: 8px;
-  left: 10px;
-  width: 226px;
-  height: 226px;
-  transform: rotate(-4deg);
-  z-index: 2;
-  transition: transform 0.3s ease;
-}
-
-.jl-gallery-person-card:hover {
-  transform: rotate(-4deg) translateY(-3px);
-}
-
-.jl-gallery-person-card .jl-gallery-card-front {
-  padding: 14px 16px 12px;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 14px 30px rgba(0, 0, 0, 0.10);
+  color: #161616;
+  min-height: 420px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid rgba(17, 17, 17, 0.08);
+  transition: background 0.4s;
 }
 
-.jl-card-tap-label {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  font-family: var(--jl-hand);
-  font-size: 16px;
-  color: var(--jl-meta);
-  pointer-events: none;
-}
-
-.jl-card-spark-left {
-  position: absolute;
-  left: -14px;
-  top: 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.jl-card-spark-left span {
-  width: 10px;
-  height: 1.5px;
-  background: var(--jl-marker);
-  transform: rotate(-25deg);
-}
-
-.jl-card-sketch-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 118px;
-  transition: opacity 0.4s ease;
-}
-
-.jl-card-sketch-wrap svg {
-  max-height: 112px;
-  width: auto;
-}
-
-.jl-card-caption-handwriting {
-  font-family: var(--jl-hand);
-  font-size: 17px;
-  line-height: 1.25;
-  color: var(--jl-ink);
-  transition: opacity 0.4s ease;
-}
-
-.jl-real-photo-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 24px;
-  text-align: center;
-  background: #ffffff;
-  color: var(--jl-meta);
-  gap: 12px;
-}
-
-.jl-photo-caption {
-  font-size: 13px;
-  color: var(--jl-body-muted);
-}
-
-/* 2. Companion card: lower-left, tilted ~ +3deg, ~70% size */
-.jl-gallery-companion-card {
-  top: 148px;
-  left: 40px;
-  width: 226px;
-  height: 226px;
-  transform: rotate(3deg);
-  z-index: 3;
-  transition: transform 0.3s ease;
-}
-
-.jl-gallery-companion-card:hover {
-  transform: rotate(3deg) translateY(-3px);
-}
-
-.jl-gallery-companion-card .jl-gallery-card-front {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid rgba(17, 17, 17, 0.08);
-}
-
-.jl-companion-drawing-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 114px;
-  transition: opacity 0.4s ease;
-}
-
-.jl-companion-text-block {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  transition: opacity 0.4s ease;
-}
-
-.jl-companion-handwriting-name {
-  font-family: var(--jl-hand);
-  font-weight: 700;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.jl-companion-handwriting-gift {
-  font-family: var(--jl-hand);
-  font-size: 14px;
-  line-height: 1.2;
-  color: var(--jl-ink);
-}
-
-.jl-companion-handwriting-for {
-  font-family: var(--jl-hand);
-  font-size: 12px;
-  color: var(--jl-meta);
-  font-style: italic;
-}
-
-.jl-companion-scene-header {
-  padding: 8px 12px;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--jl-ink);
-}
-
-.jl-companion-scene-content {
-  padding: 14px 16px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--jl-ink);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.jl-scene-tagline {
-  margin-top: 8px;
-  font-family: var(--jl-hand);
-  font-size: 17px;
-  color: var(--jl-marker);
-}
-
-/* 3. Empty card: largest, straight, front of stack */
-.jl-gallery-empty-card {
-  position: absolute;
-  top: 10px;
-  right: 0;
-  width: 320px;
-  height: 365px;
-  background: #fff3b0;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 18px 20px 14px;
-  box-shadow: 0 18px 42px rgba(60, 40, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-/* Settle animation: 500ms after load */
-@keyframes heroCardEntrance {
-  0% {
-    transform: translateY(-10px);
-    opacity: 0.9;
-  }
-  80% {
-    transform: translateY(2px);
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-/* Continuous breathing lift (3.2s loop) */
-@keyframes heroCardBreathing {
-  0%, 100% {
-    transform: translateY(0);
-    box-shadow: 0 18px 42px rgba(60, 40, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  }
-  50% {
-    transform: translateY(-2px);
-    box-shadow: 0 22px 48px rgba(60, 40, 0, 0.14), 0 4px 10px rgba(0, 0, 0, 0.06);
-  }
-}
-
-.jl-gallery-empty-card.is-settled {
-  animation: heroCardEntrance 0.5s ease-out forwards, heroCardBreathing 3.2s ease-in-out 0.6s infinite;
-}
-
-/* Hover/focus lift */
-.jl-gallery-empty-card:hover,
-.jl-gallery-empty-card:focus-within {
-  transform: translateY(-4px) !important;
-  box-shadow: 0 26px 56px rgba(60, 40, 0, 0.18), 0 6px 14px rgba(0, 0, 0, 0.08) !important;
-}
-
-.jl-gallery-empty-card:hover .jl-empty-card-inner-dashed,
-.jl-gallery-empty-card:focus-within .jl-empty-card-inner-dashed {
-  border-style: solid;
-  border-color: #111111;
-}
-
-/* Frosted Scotch tape top-center */
-.jl-empty-card-tape {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  border-radius: 1px;
-}
-
-/* Decorative ink sparks */
-.jl-empty-card-sparks {
+.jl-card .tape {
   position: absolute;
   top: -12px;
-  right: -8px;
-  display: flex;
-  gap: 3px;
+  left: 50%;
+  width: 92px;
+  height: 26px;
+  transform: translateX(-50%) rotate(-1deg);
+  background: rgba(243, 236, 220, 0.92);
+  border-radius: 2px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
 }
 
-.jl-empty-card-sparks span:nth-child(1) {
-  width: 1.5px;
-  height: 10px;
-  background: #111;
-  transform: rotate(-30deg);
-}
-.jl-empty-card-sparks span:nth-child(2) {
-  width: 1.5px;
-  height: 12px;
-  background: #111;
-  transform: rotate(5deg);
-}
-.jl-empty-card-sparks span:nth-child(3) {
-  width: 1.5px;
-  height: 10px;
-  background: #111;
-  transform: rotate(40deg);
+.jl-person {
+  transform: rotate(-3deg);
 }
 
-/* Dashed inner ink border */
-.jl-empty-card-inner-dashed {
-  border: 1.8px dashed rgba(17, 17, 17, 0.65);
-  border-radius: 3px;
-  height: 100%;
-  padding: 24px 20px 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+.jl-comp {
+  transform: rotate(2.5deg);
+  margin-top: 30px;
 }
 
-.jl-empty-card-header {
-  position: relative;
-  display: inline-block;
-  align-self: flex-start;
+.jl-card .art {
+  height: 230px;
+  display: grid;
+  place-items: center;
+  padding-top: 22px;
 }
 
-.jl-empty-card-title {
+.jl-card .art svg {
+  height: 210px;
+  width: auto;
+  max-width: 92%;
+}
+
+.jl-card .cap {
+  padding: 0 18px 20px;
   font-family: var(--jl-hand);
   font-weight: 700;
-  font-size: 34px;
-  color: var(--jl-ink);
-  line-height: 1;
-}
-
-.jl-empty-card-underline {
-  position: absolute;
-  left: 0;
-  bottom: -6px;
-  width: 100%;
-  height: 10px;
-  pointer-events: none;
-}
-
-.jl-empty-card-prompt {
-  font-family: var(--jl-hand);
-  font-size: 26px;
-  line-height: 1.25;
-  color: var(--jl-ink);
-  margin-top: 14px;
-}
-
-/* Ruled line with blinking caret */
-.jl-empty-card-ruled-line {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  border-bottom: 2px solid #111111;
-  padding-bottom: 4px;
-  margin-top: 18px;
-}
-
-.jl-empty-card-input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  font-family: var(--jl-hand);
-  font-size: 24px;
-  color: var(--jl-ink);
-  padding: 0;
-  outline: none;
-}
-
-.jl-empty-card-input::placeholder {
-  color: rgba(17, 17, 17, 0.35);
-  font-style: italic;
-}
-
-@keyframes blinkCaret {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.jl-empty-card-caret {
-  width: 2px;
-  height: 24px;
-  background: #111111;
-  animation: blinkCaret 1s infinite;
-  margin-left: 2px;
-}
-
-.jl-empty-card-subtext {
-  font-family: var(--jl-body);
-  font-size: 13px;
-  color: var(--jl-meta);
-  text-align: center;
+  font-size: 25px;
+  line-height: 1.04;
   margin-top: auto;
 }
 
-/* Gallery bottom row: meta on left, skip link on right */
-.jl-gallery-bottom-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  width: 100%;
-  max-width: 630px;
+.jl-card .cap .name {
+  font-size: 30px;
+  display: block;
+  margin-bottom: 2px;
+  transition: color 0.4s;
+}
+
+.jl-card .cap .flaw {
+  display: block;
+  font-weight: 500;
+}
+
+.jl-card .cap .ul {
+  display: block;
+  height: 5px;
+  width: 50%;
   margin-top: 10px;
+  border-radius: 3px;
+  transform: rotate(-1.5deg);
+  transition: background 0.4s;
 }
 
-.jl-gallery-bottom-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 260px;
-  margin-left: 20px;
+.jl-fade {
+  transition: opacity 0.4s;
 }
 
-.jl-rotating-one-liner {
-  font-family: var(--jl-hand);
-  font-size: 20px;
-  color: var(--jl-ink);
-  text-align: center;
-  line-height: 1.2;
-  transition: opacity 0.4s ease;
-  min-height: 1.5em;
+.jl-fade.out {
+  opacity: 0;
 }
 
-.jl-gallery-dots {
+.jl-dots {
   display: flex;
   gap: 10px;
-  align-items: center;
+  justify-content: center;
+  margin-top: 22px;
 }
 
-.jl-gallery-dot {
-  width: 9px;
-  height: 9px;
+.jl-dots button {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   border: 1.5px solid var(--jl-ink);
   background: transparent;
   padding: 0;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
 }
 
-.jl-gallery-dot.is-active {
+.jl-dots button[aria-current="true"] {
   background: var(--jl-ink);
 }
 
-.jl-gallery-dot:hover {
-  transform: scale(1.2);
+.jl-dots button:focus-visible {
+  outline: 2px solid #e9a100;
+  outline-offset: 2px;
 }
 
-/* Under empty card skip link */
-.jl-gallery-skip-wrap {
-  margin-top: 6px;
-  margin-right: 8px;
-}
-
-.jl-empty-card-skip-link {
+.jl-line {
   font-family: var(--jl-hand);
-  font-size: 18px;
-  color: var(--jl-meta);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.jl-empty-card-skip-link:hover {
+  font-weight: 500;
+  font-size: 22px;
+  text-align: center;
+  margin: 8px 0 0;
+  min-height: 2.4em;
+  line-height: 1.15;
   color: var(--jl-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
-/* ==========================================================================
-   Bottom-Middle Section: Kicker, Ink-Frame Clip, Static Line
-   ========================================================================== */
+.jl-scene {
+  height: 112px;
+  margin-top: 6px;
+  display: grid;
+  place-items: center;
+}
 
-.jl-hero-clip-section {
-  margin-top: 14px;
+.jl-scene svg {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  stroke: var(--jl-ink);
+  stroke-width: 2.4;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.jl-scene .ac {
+  stroke: none;
+  transition: fill 0.4s;
+}
+
+/* the CTA: two game tiles */
+.jl-pick {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  gap: 12px;
+  padding-top: 18px;
 }
 
-.jl-clip-kicker {
-  font-size: 11px;
+.jl-pick h2 {
+  font-family: var(--jl-hand);
   font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--jl-meta);
-  text-align: center;
+  font-size: 30px;
+  line-height: 1;
+  margin: 0 0 2px;
+  color: var(--jl-ink);
 }
 
-.jl-clip-frame-wrap {
+.jl-tile {
+  position: relative;
+  display: block;
   width: 100%;
-  max-width: 760px;
+  aspect-ratio: 16 / 8.4;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
   cursor: pointer;
+  background: #efe9db;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 10px 26px rgba(0, 0, 0, 0.10);
+  text-align: left;
+  color: #fff;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+}
+
+.jl-tile:hover,
+.jl-tile:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 16px 34px rgba(0, 0, 0, 0.16);
   outline: none;
 }
 
-.jl-clip-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 5;
-  border: 2px solid #111111;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #ffffff;
-  box-shadow: 0 14px 34px rgba(17, 17, 17, 0.08);
+.jl-tile:focus-visible {
+  box-shadow: 0 0 0 3px #e9a100, 0 16px 34px rgba(0, 0, 0, 0.16);
 }
 
-.jl-clip-scene-bg {
+.jl-tile img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s ease, filter 0.4s ease;
 }
 
-.jl-clip-label-badge {
+.jl-tile:hover img {
+  transform: scale(1.05);
+}
+
+.jl-tile .shade {
   position: absolute;
-  top: 12px;
-  left: 14px;
-  background: #ffffff;
-  border: 1.5px solid #111111;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #111111;
-  border-radius: 2px;
-  z-index: 5;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.2) 40%, rgba(0, 0, 0, 0.75) 100%);
 }
 
-/* Thought bubble above companion */
-.jl-clip-thought-bubble {
+.jl-tile .txt {
   position: absolute;
-  top: 18px;
-  left: 45%;
-  background: #ffffff;
-  border: 1.8px solid #111111;
-  border-radius: 18px;
-  padding: 10px 16px;
-  font-family: var(--jl-hand);
-  font-size: 17px;
-  line-height: 1.25;
-  color: var(--jl-ink);
-  z-index: 5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-
-.jl-clip-thought-bubble::before {
-  content: "";
-  position: absolute;
-  bottom: -10px;
-  left: 18px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1.5px solid #111111;
-}
-
-.jl-clip-thought-bubble::after {
-  content: "";
-  position: absolute;
-  bottom: -18px;
-  left: 10px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1.5px solid #111111;
-}
-
-.jl-thought-bubble-line {
-  white-space: nowrap;
-}
-
-/* Play circle bottom-right */
-.jl-clip-play-circle {
-  position: absolute;
+  left: 16px;
+  right: 16px;
   bottom: 12px;
-  right: 14px;
-  width: 38px;
-  height: 38px;
-  z-index: 5;
-  cursor: pointer;
-  transition: transform 0.2s ease;
+  font-family: var(--jl-hand);
+  line-height: 1.05;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-.jl-clip-play-circle:hover {
-  transform: scale(1.1);
+.jl-tile .txt b {
+  display: block;
+  font-weight: 700;
+  font-size: 28px;
 }
 
-/* Action button bar inside frame */
-.jl-clip-action-bar {
+.jl-tile .txt small {
+  display: block;
+  font-weight: 500;
+  font-size: 17px;
+  opacity: 0.95;
+}
+
+.jl-tile .tag {
   position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-}
-
-.jl-clip-action-btn {
+  top: 10px;
+  left: 12px;
   font-family: var(--jl-body);
-  font-size: 13px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.jl-tile .ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 0 #e9a100;
+  transition: box-shadow 0.25s;
+  pointer-events: none;
+}
+
+.jl-tile[aria-pressed="true"] .ring {
+  box-shadow: inset 0 0 0 4px #e9a100;
+}
+
+.jl-or {
+  font-family: var(--jl-hand);
+  font-weight: 500;
+  font-size: 22px;
+  text-align: center;
+  margin: -4px 0;
+  color: var(--jl-meta);
+}
+
+.jl-turn-on-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.jl-btn-turn-on {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 22px;
+  border-radius: 999px;
+  background: #e9a100;
+  color: #111111;
+  font-family: var(--jl-body);
+  font-size: 15px;
   font-weight: 600;
-  padding: 6px 14px;
-  background: #111111;
-  color: #ffffff;
+  text-decoration: none;
   border: none;
-  border-radius: 6px;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 8px 20px rgba(233, 161, 0, 0.25);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
-.jl-clip-action-btn:hover {
-  opacity: 0.9;
+.jl-btn-turn-on:hover,
+.jl-btn-turn-on:focus-visible {
+  transform: translateY(-2px);
+  background: #f5ab0a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), 0 12px 28px rgba(233, 161, 0, 0.35);
+  outline: none;
 }
 
-.jl-clip-static-caption {
+.jl-btn-turn-on:active {
+  transform: translateY(0);
+}
+
+.jl-fine {
   font-size: 12px;
   color: var(--jl-meta);
-  text-align: center;
+  margin: 4px 0 0;
 }
 
+.jl-status {
+  font-family: var(--jl-hand);
+  font-size: 20px;
+  margin: 2px 0 0;
+  min-height: 1.2em;
+  color: #e9a100;
+}
+
+/* Preserved narrow screen responsive hooks asserted in tests */
+@media (max-width: 1080px) {
+  .jl-hero {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+  .jl-hero-h1 {
+    grid-column: 1 / -1;
+    font-size: clamp(40px, 8vw, 76px);
+  }
+  .jl-hero .spark.h1 {
+    display: none;
+  }
+  .jl-hero-row {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .jl-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .jl-pick {
+    order: 1;
+  }
+  .jl-card {
+    min-height: 300px;
+  }
+}
 .jl-headline-underline,
 .jl-bottom-underline {
   position: absolute;
