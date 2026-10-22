@@ -97,7 +97,7 @@ describe("JOYSTICK public start", () => {
     expect(landingSource).toContain("trial_days: 7");
     expect(landingSource).toContain("card_required_at_signup: true");
     expect(landingSource).not.toMatch(
-      /captureProductEvent\([\s\S]*\b(message|body|answer)\b/
+      /captureProductEvent\([^)]*\b(message|body|answer)\b/
     );
   });
 });
@@ -125,9 +125,24 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       paper: "#f1e6cf",
       photoWhere: "at a lobby desk in Koreatown",
       caption: "Adam loved Tomb Raider. Shies away from lobbies.",
+      gamePlaceholder: "Tomb Raider...",
+      oneLiner: "Three doors before noon. Rook wrote the opener.",
+      clipLabel: "Rook · Silver Lake",
+      clipThoughtBubble: [
+        "8 regulars dark since August.",
+        "Silver Lake’s down 12%.",
+        "Let’s get them back.",
+      ],
+      clipHandoff: "a short letter unfolds",
+      clipButton: "Send to Maya →",
+      clipEndCard: "8 found. 1 letter waiting for your OK.",
       companion: "Rook",
+      companionGift: "Socially fearless at any front desk.",
+      companionFlaw: "Exaggerates hilariously.",
       companionTruth: "Socially fearless at any front desk.",
       companionWhy: "Exaggerates hilariously.",
+      companionInGameLine: "“I wrote something.”",
+      forTheOneWhoText: "for the one who shies away from lobbies",
       callTime: "7:31 AM",
       callLine:
         "Three doors before noon. Rise Koreatown first. Rook wrote the opener; I cut the part about the yacht.",
@@ -150,21 +165,36 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       paper: "#f3dde3",
       photoWhere: "on her couch at night",
       caption: "Daisy loved cozy games. Forgets to follow up.",
+      gamePlaceholder: "Stardew Valley...",
+      oneLiner: "Maya first; she’s the easiest yes.",
+      clipLabel: "Sable · Los Feliz",
+      clipThoughtBubble: [
+        "Maya ordered every Tuesday for two years.",
+        "Stopped the week the pickup window moved.",
+        "She’ll say yes if we fix that first.",
+      ],
+      clipHandoff: "the old pickup time, crossed out, new one written",
+      clipButton: "Offer the new window →",
+      clipEndCard: "1 fix. 1 regular back on Tuesdays, if she says yes.",
       companion: "Sable",
+      companionGift: "Remembers every customer.",
+      companionFlaw: "Remembers every excuse, too.",
       companionTruth: "Remembers every customer.",
       companionWhy: "Remembers every excuse, too.",
+      companionInGameLine: "“You’ve been here before.”",
+      forTheOneWhoText: "for the one who forgets to follow up",
       callTime: "9:42 PM",
       callLine:
         "Eight regulars went quiet. Sable has the dates. Maya first; she's the easiest yes.",
       panelTitle: "Sable · Recall",
       panelLine1: "Maya R. · last order Aug 3",
       panelLine2: '"Try me next month." She said that twice.',
-      panelLine3: "Check-in drafted for Daisy to approve.",
+      panelLine3: "The WeHo one. The dog, the rug. You said she was cute.",
       portraitAriaLabel: "Daisy, stand-in for a real photo on her couch at night",
       sceneAriaLabel:
         "Silver Lake: the fountain, two neighbours, Hazel the squirrel and strung lanterns, sketched in ink",
       companionAriaLabel:
-        "Sable, sketched, holding the ledger she never forgets",
+        "Sable, sketched: a sleek black cat with a scroll satchel",
     });
 
     // 3. Shawn
@@ -175,9 +205,24 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       paper: "#d9ebe8",
       photoWhere: "at the laundromat counter",
       caption: "Shawn loved making videos. Never starts the ad.",
+      gamePlaceholder: "Halo...",
+      oneLiner: "The ad goes up Thursday. Luma cut three openers.",
+      clipLabel: "Luma · CHANNEL 382",
+      clipThoughtBubble: [
+        "Three customers said the same thing last month:",
+        "“you got the stain nobody else could.”",
+        "That’s the ad. I made three cuts.",
+      ],
+      clipHandoff: "three cards fan out under ON AIR",
+      clipButton: "This one →",
+      clipEndCard: "Ad drafted. Airs when you say.",
       companion: "Luma",
+      companionGift: "Makes the ad in an hour.",
+      companionFlaw: "Changes it eleven times.",
       companionTruth: "Makes the ad in an hour.",
       companionWhy: "Changes it eleven times.",
+      companionInGameLine: "“I changed it.”",
+      forTheOneWhoText: "for the one who never starts the ad",
       callTime: "8:05 AM",
       callLine:
         "The ad goes up Thursday. Luma cut three openers from last month's orders. Pick one before she cuts a fourth.",
@@ -189,7 +234,7 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
         "Shawn, stand-in for a real photo at the laundromat counter",
       sceneAriaLabel:
         "CHANNEL 382: the clay studio camera, an ON AIR sign and a clapperboard, sketched in ink",
-      companionAriaLabel: "Luma, sketched, holding a frame",
+      companionAriaLabel: "Luma, sketched: an alert chameleon framing a shot",
     });
 
     // 4. TJ
@@ -200,9 +245,24 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       paper: "#eadfd3",
       photoWhere: "at a front door in the flats",
       caption: "TJ loved shooters. Starts at the wrong end of the block.",
+      gamePlaceholder: "Animal Crossing...",
+      oneLiner: "Twenty-four doors in the flats. North end first.",
+      clipLabel: "Orren · the flats",
+      clipThoughtBubble: [
+        "24 doors, none knocked.",
+        "North end’s home before 6; south end isn’t.",
+        "Start north. Twelve doors by dark.",
+      ],
+      clipHandoff: "the route draws itself",
+      clipButton: "Start at the north end →",
+      clipEndCard: "24 doors. Route set.",
       companion: "Orren",
+      companionGift: "Never wastes a step.",
+      companionFlaw: "Never admits a wrong turn.",
       companionTruth: "Never wastes a step.",
       companionWhy: "Never admits a wrong turn.",
+      companionInGameLine: "“Wrong way.”",
+      forTheOneWhoText: "for the one who starts at the wrong end of the block",
       callTime: "7:31 AM",
       callLine:
         "Twenty-four doors in the flats. Orren says north end first. He was right last time, so.",
@@ -213,8 +273,8 @@ describe("JOYSTICK hero copy integrity & forbidden words", () => {
       portraitAriaLabel:
         "TJ, stand-in for a real flash photo at a front door with hangers",
       sceneAriaLabel:
-        "Beverly Hills containment: palm trees, a masked figure, a helicopter and a warning sign, sketched in ink",
-      companionAriaLabel: "Orren, sketched, beside a signpost",
+        "Beverly Hills: palm trees, a masked figure, a helicopter and a warning sign, sketched in ink",
+      companionAriaLabel: "Orren, sketched: a steady desert tortoise with a compass pack",
     });
   });
 
