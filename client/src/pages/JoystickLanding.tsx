@@ -25,9 +25,9 @@ function renderPortrait(key: string, label: string) {
     case "adam":
       return (
         <svg
-          viewBox="0 0 240 300"
-          width="420"
-          height="525"
+          viewBox="0 0 160 160"
+          width="120"
+          height="120"
           role="img"
           aria-label={label}
           style={{ display: "block" }}
@@ -39,21 +39,28 @@ function renderPortrait(key: string, label: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M70 300 C 70 240, 90 215, 118 210 C 150 205, 172 232, 172 300" />
-            <path d="M118 210 C 90 200, 72 170, 76 132 C 80 90, 110 66, 138 70 C 168 74, 182 104, 176 140 C 172 176, 150 204, 128 210" />
-            <path d="M80 118 C 96 96, 120 84, 150 88 C 168 90, 178 100, 180 112" />
-            <path d="M100 140 q8 -6 16 0 M138 140 q8 -6 16 0" />
-            <path d="M120 150 c 4 10, 2 18, -6 20" />
-            <path d="M106 176 q18 12 36 0" />
+            {/* Cap */}
+            <path d="M50 56 C 54 36, 76 28, 98 34 C 108 38, 112 46, 112 56" />
+            <path d="M46 56 C 68 52, 94 52, 114 56 C 128 54, 138 60, 134 68 C 124 70, 112 62, 108 58" />
+            {/* Face oval */}
+            <path d="M52 56 C 50 86, 60 110, 80 112 C 100 110, 110 86, 108 56" />
+            {/* Eyes */}
+            <path d="M64 74 q 6 -4 12 0" />
+            <path d="M86 74 q 6 -4 12 0" />
+            {/* Nose and half smile */}
+            <path d="M78 82 c 1 4, -1 7, -3 8" />
+            <path d="M68 96 q 12 7 24 0" />
+            {/* Neck */}
+            <path d="M68 112 v 24 M92 112 v 24" />
           </g>
         </svg>
       );
     case "daisy":
       return (
         <svg
-          viewBox="0 0 240 300"
-          width="420"
-          height="525"
+          viewBox="0 0 160 160"
+          width="120"
+          height="120"
           role="img"
           aria-label={label}
           style={{ display: "block" }}
@@ -65,22 +72,25 @@ function renderPortrait(key: string, label: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M66 300 C 66 244, 92 220, 120 216 C 152 212, 176 236, 176 300" />
-            <path d="M120 216 C 94 210, 78 182, 80 148 C 82 110, 104 86, 130 86 C 160 86, 178 112, 176 150 C 174 184, 152 212, 128 216" />
-            <path d="M78 150 C 60 120, 70 70, 108 60 C 140 52, 180 66, 184 100 C 186 118, 178 130, 170 136 C 190 96, 160 70, 128 76 C 100 82, 84 112, 78 150 Z" />
-            <path d="M118 62 c-10 -18, 14 -30, 24 -14 c 8 12 -8 22 -12 12" />
-            <path d="M102 152 q8 -6 16 0 M140 152 q8 -6 16 0" />
-            <path d="M124 160 c 4 10, 2 18, -6 20" />
-            <path d="M108 186 q16 12 34 0" />
+            {/* Long hair */}
+            <path d="M52 136 C 44 94, 50 50, 80 46 C 110 50, 116 94, 108 136" />
+            {/* Face */}
+            <path d="M58 64 C 56 88, 64 106, 80 108 C 96 106, 104 88, 102 64" />
+            {/* Gentle eyes */}
+            <circle cx="70" cy="74" r="2.5" fill="#111" />
+            <circle cx="90" cy="74" r="2.5" fill="#111" />
+            {/* Nose and soft smile */}
+            <path d="M80 78 v 6" />
+            <path d="M72 92 q 8 5 16 0" />
           </g>
         </svg>
       );
     case "shawn":
       return (
         <svg
-          viewBox="0 0 240 300"
-          width="420"
-          height="525"
+          viewBox="0 0 160 160"
+          width="120"
+          height="120"
           role="img"
           aria-label={label}
           style={{ display: "block" }}
@@ -92,22 +102,27 @@ function renderPortrait(key: string, label: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M68 300 C 68 242, 92 218, 120 214 C 152 210, 174 234, 174 300" />
-            <path d="M120 214 C 94 206, 78 178, 80 144 C 82 108, 104 84, 130 86 C 160 88, 178 114, 176 150 C 174 184, 152 210, 128 214" />
-            <path d="M72 118 C 72 84, 100 62, 134 64 C 162 66, 184 84, 186 110 L 72 118 Z" />
-            <path d="M186 110 L 212 102 C 216 110, 208 116, 190 118" />
-            <path d="M104 150 q8 -6 16 0 M142 150 q8 -6 16 0" />
-            <path d="M126 158 c 4 10, 2 18, -6 20" />
-            <path d="M110 184 q16 10 32 0" />
+            {/* Beanie / knit cap */}
+            <path d="M52 58 C 52 38, 70 30, 80 30 C 90 30, 108 38, 108 58 Z" />
+            <path d="M48 58 h 64" strokeWidth="3" />
+            {/* Face */}
+            <path d="M54 58 C 52 86, 62 106, 80 108 C 98 106, 108 86, 106 58" />
+            {/* Eyes */}
+            <circle cx="68" cy="72" r="2.5" fill="#111" />
+            <circle cx="92" cy="72" r="2.5" fill="#111" />
+            {/* Smile */}
+            <path d="M72 90 q 8 6 16 0" />
+            {/* Counter line */}
+            <path d="M38 126 h 84" />
           </g>
         </svg>
       );
     case "tj":
       return (
         <svg
-          viewBox="0 0 240 300"
-          width="420"
-          height="525"
+          viewBox="0 0 160 160"
+          width="120"
+          height="120"
           role="img"
           aria-label={label}
           style={{ display: "block" }}
@@ -119,13 +134,16 @@ function renderPortrait(key: string, label: string) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M64 300 C 64 240, 90 214, 120 210 C 154 206, 178 232, 178 300" />
-            <path d="M120 210 C 94 202, 78 174, 80 140 C 82 104, 104 80, 130 82 C 160 84, 178 110, 176 146 C 174 180, 152 206, 128 210" />
-            <path d="M80 126 C 88 92, 112 76, 140 80 C 164 84, 176 102, 178 122 C 160 108, 140 104, 118 112 C 102 118, 90 124, 80 126 Z" />
-            <path d="M92 226 C 86 250, 84 276, 86 300 M154 226 C 160 250, 162 276, 160 300" />
-            <path d="M104 146 q8 -6 16 0 M142 146 q8 -6 16 0" />
-            <path d="M126 154 c 4 10, 2 18, -6 20" />
-            <path d="M110 180 q16 10 32 0" />
+            {/* Hood / collar */}
+            <path d="M48 136 C 44 98, 56 60, 80 56 C 104 60, 116 98, 112 136" />
+            {/* Face */}
+            <path d="M58 64 C 56 86, 64 104, 80 106 C 96 104, 104 86, 102 64" />
+            {/* Eyes */}
+            <circle cx="70" cy="74" r="2.5" fill="#111" />
+            <circle cx="90" cy="74" r="2.5" fill="#111" />
+            <path d="M72 92 q 8 5 16 0" />
+            {/* Doorframe line */}
+            <path d="M120 44 v 92" />
           </g>
         </svg>
       );
@@ -299,6 +317,113 @@ function renderCompanion(key: string, label: string, accent: string) {
             {/* Underside & rolled map */}
             <path d="M54 170 H 140" />
             <rect x="76" y="142" width="28" height="12" rx="3" fill={accent} />
+          </g>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+// Single-line black ink drawings for Hero companion cards (per mock & spec)
+function renderHeroCompanion(key: string, accent: string) {
+  switch (key) {
+    case "adam":
+      // Rook — round bird, beak, round glasses, orange hard hat (#e39b00), clipboard with a card
+      return (
+        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
+          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M48 42 C 48 22, 68 18, 88 18 C 108 18, 128 22, 128 42 Z" fill={accent} />
+            <path d="M40 42 h 96" strokeWidth="2.8" />
+            <circle cx="76" cy="62" r="12" />
+            <circle cx="100" cy="62" r="12" />
+            <circle cx="78" cy="62" r="3" fill="#111" />
+            <circle cx="102" cy="62" r="3" fill="#111" />
+            <path d="M88 62 h 2" />
+            <path d="M110 58 L 138 64 L 110 70 Z" fill="#fff" />
+            <circle cx="86" cy="96" r="28" fill="#fff" />
+            <path d="M76 124 v 16 M70 140 h 12 M96 124 v 16 M90 140 h 12" />
+            <rect x="94" y="86" width="22" height="28" rx="2" fill="#fff" />
+            <path d="M100 83 h 10 v 4 h -10 Z" fill="#111" />
+            <path d="M98 94 h 14 M98 99 h 14 M98 104 h 10" />
+          </g>
+        </svg>
+      );
+    case "daisy":
+      // Sable — sleek cat with alert ears, whiskers, collar tag (#e0457b), satchel with scrolls
+      return (
+        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
+          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            {/* Alert ears with accent fill */}
+            <path d="M60 48 L 50 24 L 72 38 Z" fill={accent} />
+            <path d="M96 38 L 118 24 L 108 48 Z" fill={accent} />
+            {/* Crown and head */}
+            <path d="M72 38 C 82 34, 88 34, 96 38" />
+            <ellipse cx="84" cy="58" rx="28" ry="22" fill="#fff" />
+            {/* Eyes */}
+            <circle cx="74" cy="54" r="3" fill="#111" />
+            <circle cx="94" cy="54" r="3" fill="#111" />
+            {/* Nose & whiskers */}
+            <path d="M82 62 l 2 2 l 2 -2 Z" fill="#111" />
+            <path d="M84 64 v 3 q -4 3 -8 2 M84 67 q 4 3 8 2" />
+            <path d="M54 58 L 38 54 M54 64 L 36 66 M114 58 L 130 54 M114 64 L 132 66" />
+            {/* Collar and tag */}
+            <path d="M66 78 C 76 82, 92 82, 102 78" />
+            <circle cx="84" cy="88" r="5" fill={accent} />
+            {/* Body */}
+            <path d="M68 80 C 58 100, 56 122, 60 142 M100 80 C 108 100, 110 122, 106 142" />
+            {/* Scroll satchel */}
+            <rect x="52" y="104" width="28" height="24" rx="2" fill="#fff" />
+            <path d="M56 102 v -6 c 0 -2, 4 -2, 4 0 v 6 M64 102 v -8 c 0 -2, 4 -2, 4 0 v 8" />
+            {/* Tail */}
+            <path d="M60 134 C 44 126, 36 108, 40 88 C 42 76, 50 72, 54 82" />
+          </g>
+        </svg>
+      );
+    case "shawn":
+      // Luma — chameleon director with visor cap (#13a39a), spiraled tail, camera frame
+      return (
+        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
+          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            {/* Visor cap in teal */}
+            <path d="M52 40 C 52 24, 76 20, 98 26 C 110 30, 120 38, 118 48 L 48 50 Z" fill={accent} />
+            {/* Chameleon head */}
+            <path d="M52 50 C 38 56, 34 68, 44 76 C 58 84, 78 82, 94 76" />
+            {/* Expressive turret eye */}
+            <circle cx="80" cy="56" r="10" fill="#fff" />
+            <circle cx="83" cy="56" r="4" fill="#111" />
+            <path d="M42 68 q 8 5 16 0" />
+            {/* Body and spiraled tail */}
+            <path d="M94 76 C 112 84, 122 104, 118 128 C 112 148, 94 156, 74 152 C 54 148, 46 130, 56 118 C 64 106, 84 110, 88 122 C 90 130, 82 136, 74 134" />
+            {/* Clapperboard / frame */}
+            <rect x="36" y="94" width="44" height="30" rx="2" fill="#fff" />
+            <path d="M36 94 L 80 94 L 80 102 L 36 102 Z" fill={accent} />
+            <path d="M46 94 L 42 102 M58 94 L 54 102 M70 94 L 66 102" />
+          </g>
+        </svg>
+      );
+    case "tj":
+      // Orren — desert tortoise with compass pack on shell (#e8472a) and map scroll
+      return (
+        <svg viewBox="0 0 160 160" width="130" height="130" aria-hidden="true">
+          <g fill="none" stroke="#111" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            {/* Mounted compass in red */}
+            <circle cx="94" cy="30" r="12" fill={accent} />
+            <path d="M94 18 V 10 M90 10 H 98" />
+            <circle cx="94" cy="30" r="2.5" fill="#111" />
+            <path d="M94 30 L 100 24" stroke="#111" strokeWidth="2" />
+            {/* Domed shell */}
+            <path d="M38 120 C 34 68, 64 42, 104 44 C 130 46, 148 68, 144 120 Z" fill="#fff" />
+            <path d="M54 86 C 70 66, 100 66, 130 84" />
+            <path d="M44 118 C 66 102, 100 102, 138 116" />
+            <path d="M86 44 V 120 M58 78 L 40 96 M114 76 L 132 94" />
+            {/* Tortoise head reaching out */}
+            <path d="M38 106 C 26 104, 16 112, 18 124 C 20 134, 30 138, 40 132" />
+            <circle cx="26" cy="118" r="2.5" fill="#111" />
+            {/* Feet */}
+            <path d="M34 130 v 14 M98 130 v 14 M126 128 v 16" />
+            {/* Rolled map */}
+            <rect x="68" y="122" width="24" height="10" rx="2" fill={accent} />
           </g>
         </svg>
       );
@@ -485,14 +610,27 @@ export default function JoystickLanding() {
       personaReducer(current, action),
     initialPersonaState
   );
+  const currentPersona = PERSONAS[state.index];
   const [isHoveringHero, setIsHoveringHero] = useState(false);
   const [timerResetKey, setTimerResetKey] = useState(0);
   const [flippedCompanions, setFlippedCompanions] = useState<Record<string, boolean>>({});
 
-  // Hero phone field state
-  const [phoneInput, setPhoneInput] = useState("");
-  const [phoneLoading, setPhoneLoading] = useState(false);
-  const [phoneSubmitted, setPhoneSubmitted] = useState(false);
+  // Hero empty card input
+  const [heroInputGame, setHeroInputGame] = useState("");
+  const [, setHeroInputFocused] = useState(false);
+
+  // Hero card flip states
+  const [isHeroFlippedPerson, setIsHeroFlippedPerson] = useState(false);
+  const [isHeroFlippedCompanion, setIsHeroFlippedCompanion] = useState(false);
+
+  // Hero card entrance settle animation
+  const [heroCardSettled, setHeroCardSettled] = useState(false);
+
+  // Hero 6-second idle nudge arrow
+  const [idleNudgeVisible, setIdleNudgeVisible] = useState(false);
+
+  // Hero pause timer for interaction (pauses rotation and resumes 10s after)
+  const [rotationPausedUntil, setRotationPausedUntil] = useState<number>(0);
 
   // Claire rotating word state (books, orders, customers, routes, goals)
   const [wordIndex, setWordIndex] = useState(0);
@@ -543,7 +681,41 @@ export default function JoystickLanding() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Persona rotation timer
+  // Settle animation (500ms after load)
+  useEffect(() => {
+    if (reducedMotion) {
+      setHeroCardSettled(true);
+      return;
+    }
+    const settleTimer = window.setTimeout(() => {
+      setHeroCardSettled(true);
+    }, 500);
+    return () => window.clearTimeout(settleTimer);
+  }, [reducedMotion]);
+
+  // Idle nudge: 6 seconds of no interaction
+  useEffect(() => {
+    if (reducedMotion) return;
+    const nudgeTimer = window.setTimeout(() => {
+      setIdleNudgeVisible(true);
+      captureProductEvent("hero_nudge_drawn", { persona: currentPersona.key });
+    }, 6000);
+    return () => window.clearTimeout(nudgeTimer);
+  }, [reducedMotion, currentPersona.key]);
+
+  // Escape key flips back
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsHeroFlippedPerson(false);
+        setIsHeroFlippedCompanion(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Persona rotation timer (7s clock, pauses on flip/tap, resumes 10s after)
   useEffect(() => {
     if (!state.fading) return;
     const timeout = window.setTimeout(() => {
@@ -555,10 +727,12 @@ export default function JoystickLanding() {
   useEffect(() => {
     if (reducedMotion || isHoveringHero) return;
     const timer = window.setInterval(() => {
+      if (Date.now() < rotationPausedUntil) return;
+      if (isHeroFlippedPerson || isHeroFlippedCompanion) return;
       dispatch({ type: "TICK_FADE" });
     }, ROTATION_PERIOD_MS);
     return () => window.clearInterval(timer);
-  }, [reducedMotion, isHoveringHero, state.index, timerResetKey]);
+  }, [reducedMotion, isHoveringHero, rotationPausedUntil, isHeroFlippedPerson, isHeroFlippedCompanion, state.index, timerResetKey]);
 
   // Claire rotating word timer (every 2.5s)
   useEffect(() => {
@@ -579,29 +753,48 @@ export default function JoystickLanding() {
     setFlippedCompanions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handlePhoneSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!phoneInput || phoneInput.trim().length < 10) return;
-    setPhoneLoading(true);
-
-    captureProductEvent("claire_call_requested", {
-      phone: phoneInput.slice(0, 6) + "****",
-      source: "landing_hero_phone",
+  const handleTogglePersonFlip = () => {
+    const next = !isHeroFlippedPerson;
+    setIsHeroFlippedPerson(next);
+    setRotationPausedUntil(Date.now() + 10000);
+    captureProductEvent("hero_card_flipped", {
+      persona: currentPersona.key,
+      side: next ? "back" : "front",
+      target: "person",
     });
+  };
 
-    try {
-      if (typeof window !== "undefined") {
-        await fetch("/api/claire/request-demo-call", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: phoneInput }),
-        });
-      }
-    } catch {
-      // Fallback cleanly
-    } finally {
-      setPhoneLoading(false);
-      setPhoneSubmitted(true);
+  const handleToggleCompanionFlip = () => {
+    const next = !isHeroFlippedCompanion;
+    setIsHeroFlippedCompanion(next);
+    setRotationPausedUntil(Date.now() + 10000);
+    captureProductEvent("hero_card_flipped", {
+      persona: currentPersona.key,
+      side: next ? "back" : "front",
+      target: "companion",
+    });
+  };
+
+  const handleHeroCardSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    captureProductEvent("hero_preview_opened", { source: "card" });
+    if (typeof window !== "undefined") {
+      const val = heroInputGame.trim();
+      const target = val ? `${START_PATH}?game=${encodeURIComponent(val)}` : START_PATH;
+      window.location.href = target;
+    }
+  };
+
+  const handlePreviewLinkClick = () => {
+    captureProductEvent("hero_preview_opened", { source: "link" });
+  };
+
+  const handleClipClick = () => {
+    setRotationPausedUntil(Date.now() + 10000);
+    captureProductEvent("hero_clip_tapped", { persona: currentPersona.key });
+    captureProductEvent("hero_preview_opened", { source: "clip" });
+    if (typeof window !== "undefined") {
+      window.location.href = START_PATH;
     }
   };
 
@@ -615,7 +808,6 @@ export default function JoystickLanding() {
     }
   };
 
-  const currentPersona = PERSONAS[state.index];
   const fadeOpacity = state.fading ? 0 : 1;
   const humanFlipClass = state.isFlippedHuman ? "is-flipped" : "";
   const [claireStep, partyStep, gamesStep] = HOW_IT_WORKS_STEPS;
@@ -634,220 +826,331 @@ export default function JoystickLanding() {
       data-testid="joystick-marketing"
       aria-label="Joystick — Knows your business, then makes your next move a game."
     >
-      {/* 0. FOUNDER LIVE RUN TOP BANNER */}
-      <div className="jl-top-ticker" role="region" aria-label="Founder live run banner">
-        <div className="jl-wrap jl-top-ticker-inner">
-          <span className="jl-top-ticker-text">
-            Claire is taking Laundry Farm to 50 active customers in public.
-          </span>
-          <a
-            href="https://x.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="jl-top-ticker-link"
-          >
-            Follow the run on X →
-          </a>
-        </div>
-      </div>
-
-      {/* 1. NAV */}
+      {/* 1. NAV (No CTA in nav per spec) */}
       <nav className="jl-nav jl-wrap" aria-label="Main navigation">
         <div className="jl-nav-brand">
           <span className="jl-nav-title">Joystick</span>
-          <span className="jl-nav-tagline">Real work. Playable.</span>
+          <span className="jl-nav-tagline">A BUSINESS YOU CAN PLAY.</span>
         </div>
         <div className="jl-nav-links">
           <a href="#games">The games</a>
           <a href="#how">How it works</a>
-          <a href="#city">The city</a>
-          <a href="#day-line">The Day Line</a>
-          <a href="#receipts">Receipts</a>
           <a href="#pricing">Pricing</a>
           <a href="/dayforge-login" id="signin">
             Sign in
           </a>
-          <a href={START_PATH} className="jl-nav-cta">
-            Turn my work into a game →
-          </a>
         </div>
       </nav>
 
-      {/* 2. HERO */}
+      {/* 2. HERO: Single concept — your companions. Empty card is the only CTA. */}
       <section
         className="jl-hero-section jl-wrap"
         aria-label="Joystick hero"
         onPointerEnter={() => setIsHoveringHero(true)}
         onPointerLeave={() => setIsHoveringHero(false)}
       >
-        <div className="jl-hero-row">
-          <div className="jl-headline-block">
-            <div>Knows your</div>
-            <div className="jl-headline-underlined">
-              business,
-              <svg
-                className="jl-headline-underline"
-                viewBox="0 0 420 40"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-                style={{ opacity: fadeOpacity }}
-              >
-                <path
-                  d="M6 24 C 80 10, 160 30, 240 16 C 300 6, 360 24, 412 12"
-                  fill="none"
-                  stroke={currentPersona.accent}
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M14 34 C 90 24, 170 40, 250 28"
-                  fill="none"
-                  stroke={currentPersona.accent}
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  opacity="0.8"
-                />
-              </svg>
-            </div>
+        <div className="jl-hero-main-row">
+          {/* Left Column (~42%): Headline and underlines only. Air beneath is intentional. */}
+          <div className="jl-hero-left">
+            <h1 className="jl-hero-headline">
+              <span className="jl-hero-headline-line">Knows your</span>
+              <span className="jl-hero-headline-line">business, then</span>
+              <span className="jl-hero-headline-line">makes your next</span>
+              <span className="jl-hero-headline-line">
+                move{" "}
+                <span className="jl-hero-headline-underlined">
+                  a game.
+                  <svg
+                    className="jl-hero-double-underline"
+                    viewBox="0 0 280 34"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 12 C 70 6, 150 16, 276 8"
+                      fill="none"
+                      stroke="#e39b00"
+                      strokeWidth="5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M14 24 C 80 18, 170 28, 268 20"
+                      fill="none"
+                      stroke="#e39b00"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  {/* 6-second idle nudge arrow */}
+                  {idleNudgeVisible && (
+                    <div className="jl-hero-idle-nudge" aria-hidden="true">
+                      <svg className="jl-nudge-arrow-svg" viewBox="0 0 160 60">
+                        <path
+                          className="jl-nudge-path"
+                          d="M 12 36 Q 70 -4, 140 22"
+                          fill="none"
+                          stroke="#e39b00"
+                          strokeWidth="3.2"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          className="jl-nudge-head"
+                          d="M 122 14 L 142 22 L 132 36"
+                          fill="none"
+                          stroke="#e39b00"
+                          strokeWidth="3.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span className="jl-nudge-text">yours →</span>
+                    </div>
+                  )}
+                </span>
+              </span>
+            </h1>
           </div>
 
-          <div className="jl-photo-col">
-            <button
-              type="button"
-              className="jl-flip jl-human-card"
-              aria-label="Flip the sketch to see the real photo"
-              onClick={() => dispatch({ type: "TOGGLE_FLIP_HUMAN" })}
-            >
-              <div className={`jl-human-inner jl-flip-inner ${humanFlipClass}`}>
+          {/* Right Column: The Gallery Stack */}
+          <div className="jl-hero-gallery">
+            <div className="jl-gallery-stack">
+              <div className="jl-gallery-cards-pair">
+                {/* Person card: tilted ~ -4deg, upper-left */}
                 <div
-                  className="jl-face jl-human-front"
-                  style={{ background: currentPersona.paper }}
+                  className={`jl-gallery-card jl-gallery-person-card ${isHeroFlippedPerson ? "is-flipped" : ""}`}
+                  onClick={handleTogglePersonFlip}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") handleTogglePersonFlip();
+                  }}
+                  aria-label={`Flip to see ${currentPersona.name}'s photo`}
                 >
-                  <div className="jl-human-tape" />
+                <div className="jl-gallery-card-inner">
                   <div
-                    className="jl-human-sketch-wrap"
-                    style={{ opacity: fadeOpacity }}
+                    className="jl-gallery-card-face jl-gallery-card-front"
+                    style={{ background: "#fff3b0" }}
                   >
-                    {renderPortrait(
-                      currentPersona.key,
-                      currentPersona.portraitAriaLabel
-                    )}
+                    <div className="jl-card-tap-label">tap →</div>
+                    <div className="jl-card-spark-left" aria-hidden="true">
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <div className="jl-card-sketch-wrap" style={{ opacity: fadeOpacity }}>
+                      {renderPortrait(currentPersona.key, currentPersona.portraitAriaLabel)}
+                    </div>
+                    <div className="jl-card-caption-handwriting" style={{ opacity: fadeOpacity }}>
+                      {currentPersona.caption}
+                    </div>
                   </div>
-                  <div className="jl-human-hint">hover to meet the real one →</div>
-                </div>
-
-                <div
-                  className="jl-face jl-human-back"
-                  style={{ background: currentPersona.paper }}
-                >
-                  <div className="jl-human-placeholder">
-                    <svg width="44" height="36" viewBox="0 0 44 36" aria-hidden="true">
-                      <rect x="2" y="8" width="40" height="26" rx="4" fill="none" stroke="#111" strokeWidth="2" />
-                      <circle cx="22" cy="21" r="8" fill="none" stroke="#111" strokeWidth="2" />
-                      <rect x="14" y="2" width="16" height="6" rx="2" fill="none" stroke="#111" strokeWidth="2" />
-                    </svg>
-                    <div>
-                      [Real flash photo: {currentPersona.name},{" "}
-                      {currentPersona.photoWhere}]
+                  <div
+                    className="jl-gallery-card-face jl-gallery-card-back"
+                    style={{ background: "#fff3b0" }}
+                  >
+                    <div className="jl-real-photo-placeholder">
+                      <svg width="44" height="36" viewBox="0 0 44 36" aria-hidden="true">
+                        <rect x="2" y="8" width="40" height="26" rx="4" fill="none" stroke="#111" strokeWidth="2" />
+                        <circle cx="22" cy="21" r="8" fill="none" stroke="#111" strokeWidth="2" />
+                        <rect x="14" y="2" width="16" height="6" rx="2" fill="none" stroke="#111" strokeWidth="2" />
+                      </svg>
+                      <div className="jl-photo-caption">
+                        [Real flash photo: {currentPersona.name}, {currentPersona.photoWhere}]
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </button>
 
-            <div className="jl-caption" style={{ opacity: fadeOpacity }}>
-              {currentPersona.caption}
+              {/* Companion card: tilted ~ +3deg, lower-left */}
+              <div
+                className={`jl-gallery-card jl-gallery-companion-card ${isHeroFlippedCompanion ? "is-flipped" : ""}`}
+                onClick={handleToggleCompanionFlip}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") handleToggleCompanionFlip();
+                }}
+                aria-label={`Flip to see ${currentPersona.companion}'s scene`}
+              >
+                <div className="jl-gallery-card-inner">
+                  <div
+                    className="jl-gallery-card-face jl-gallery-card-front"
+                    style={{ background: "#fff3b0" }}
+                  >
+                    <div className="jl-card-tap-label">tap →</div>
+                    <div className="jl-companion-drawing-wrap" style={{ opacity: fadeOpacity }}>
+                      {renderHeroCompanion(currentPersona.key, currentPersona.accent)}
+                    </div>
+                    <div className="jl-companion-text-block" style={{ opacity: fadeOpacity }}>
+                      <div className="jl-companion-handwriting-name" style={{ color: currentPersona.accent }}>
+                        {currentPersona.companion}
+                      </div>
+                      <div className="jl-companion-handwriting-gift">
+                        <strong>{currentPersona.companionGift}</strong> {currentPersona.companionFlaw}
+                      </div>
+                      <div className="jl-companion-handwriting-for">
+                        {currentPersona.forTheOneWhoText}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className="jl-gallery-card-face jl-gallery-card-back"
+                    style={{ background: "#ffffff" }}
+                  >
+                    <div className="jl-companion-scene-header" style={{ background: currentPersona.accent }}>
+                      {currentPersona.panelTitle}
+                    </div>
+                    <div className="jl-companion-scene-content">
+                      <div style={{ fontWeight: 600 }}>{currentPersona.panelLine1}</div>
+                      <div style={{ color: "#444" }}>{currentPersona.panelLine2}</div>
+                      <div style={{ color: "#444" }}>{currentPersona.panelLine3}</div>
+                      <div className="jl-scene-tagline">“{currentPersona.companionInGameLine}”</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="jl-dots-row">
-              {PERSONAS.map((p, idx) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  className={`jl-persona-dot ${idx === state.index ? "is-active" : ""}`}
-                  aria-label={`Show ${p.name}`}
-                  onClick={() => handleDotClick(idx)}
-                />
-              ))}
+            {/* Empty card: largest, straight, front of stack */}
+              <div className={`jl-gallery-empty-card ${heroCardSettled ? "is-settled" : ""}`}>
+                <div className="jl-empty-card-tape" />
+                <div className="jl-empty-card-sparks" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div className="jl-empty-card-inner-dashed">
+                  <div className="jl-empty-card-header">
+                    <span className="jl-empty-card-title">Your card.</span>
+                    <svg className="jl-empty-card-underline" viewBox="0 0 120 12" aria-hidden="true">
+                      <path d="M4 7 C 30 3, 70 9, 116 6" fill="none" stroke="#e39b00" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                  </div>
+
+                  <div className="jl-empty-card-prompt">
+                    What game did you love growing up?
+                  </div>
+
+                  <form onSubmit={handleHeroCardSubmit} className="jl-empty-card-form">
+                    <div className="jl-empty-card-ruled-line">
+                      <input
+                        type="text"
+                        className="jl-empty-card-input"
+                        value={heroInputGame}
+                        placeholder={currentPersona.gamePlaceholder}
+                        onChange={(e) => {
+                          setHeroInputGame(e.target.value);
+                          captureProductEvent("hero_card_typed", { text: e.target.value });
+                        }}
+                        onFocus={() => setHeroInputFocused(true)}
+                        onBlur={() => setHeroInputFocused(false)}
+                        aria-label="What game did you love growing up?"
+                      />
+                      <span className="jl-empty-card-caret" />
+                    </div>
+                  </form>
+
+                  <div className="jl-empty-card-subtext">
+                    3 questions. No account required.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Gallery meta row: one-liner + dots on left, skip link on right */}
+            <div className="jl-gallery-bottom-row">
+              <div className="jl-gallery-bottom-meta">
+                <div className="jl-rotating-one-liner" style={{ opacity: fadeOpacity }}>
+                  {currentPersona.oneLiner}
+                </div>
+                <div className="jl-gallery-dots">
+                  {PERSONAS.map((p, idx) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      className={`jl-gallery-dot ${idx === state.index ? "is-active" : ""}`}
+                      aria-label={`Show ${p.name}`}
+                      onClick={() => handleDotClick(idx)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="jl-gallery-skip-wrap">
+                <a
+                  href={START_PATH}
+                  className="jl-empty-card-skip-link"
+                  onClick={handlePreviewLinkClick}
+                >
+                  or just preview my first game →
+                </a>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="jl-bottom-row">
-          <div className="jl-bottom-left">
-            <div className="jl-cta-row">
-              <a
-                className="jl-cta-button"
-                href={START_PATH}
-                onClick={() =>
-                  captureProductEvent("joystick_start_clicked", {
-                    source: "landing_hero",
-                  })
-                }
-              >
-                Turn my work into a game →
-              </a>
-              <div className="jl-cta-microcopy">
-                3 questions. A game built for your business. No account required.
-              </div>
-            </div>
+        {/* Bottom-Middle Section: Kicker, Clip, Static line */}
+        <div className="jl-hero-clip-section">
+          <div className="jl-clip-kicker">
+            YOU DON'T ASK. YOUR COMPANIONS ALREADY FOUND IT.
+          </div>
 
-            {/* HERO PHONE FIELD: Direct Outbound Call Hook */}
-            <div className="jl-hero-phone-box">
-              <div className="jl-hero-phone-prompt">
-                Or give Claire your number. She calls in two minutes with your first move.
-              </div>
-              {phoneSubmitted ? (
-                <div className="jl-hero-phone-confirmed">
-                  Claire is dialing {phoneInput}. Pick up when your phone rings.
+          <div
+            className="jl-clip-frame-wrap"
+            onClick={handleClipClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") handleClipClick();
+            }}
+            aria-label={`Play ${currentPersona.clipLabel} clip`}
+          >
+            <div className="jl-clip-frame">
+              {/* Dynamic badge for non-Adam slots */}
+              {currentPersona.key !== "adam" && (
+                <div className="jl-clip-label-badge">
+                  {currentPersona.clipLabel}
                 </div>
-              ) : (
-                <form onSubmit={handlePhoneSubmit} className="jl-hero-phone-form">
-                  <input
-                    type="tel"
-                    className="jl-hero-phone-input"
-                    placeholder="(555) 000-0000"
-                    value={phoneInput}
-                    onChange={(e) => setPhoneInput(e.target.value)}
-                    aria-label="Phone number for Claire to call"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="jl-hero-phone-btn"
-                    disabled={phoneLoading}
-                  >
-                    {phoneLoading ? "Dialing…" : "Call me →"}
-                  </button>
-                </form>
               )}
-              <div className="jl-hero-phone-consent">
-                One call from Claire. No texts, no list.
-              </div>
+
+              <img
+                src={
+                  currentPersona.key === "adam"
+                    ? "/joystick/gameplay/hero-clip-silver-lake.png"
+                    : currentPersona.key === "daisy"
+                    ? "/joystick/gameplay/century-park-east.jpg"
+                    : currentPersona.key === "shawn"
+                    ? "/joystick/gameplay/channel-382.jpg"
+                    : "/joystick/gameplay/beverly-hills.jpg"
+                }
+                alt={`${currentPersona.clipLabel} gameplay scene`}
+                className="jl-clip-scene-bg"
+              />
+
+              {/* Thought bubble (for non-Adam slots) */}
+              {currentPersona.key !== "adam" && (
+                <div className="jl-clip-thought-bubble" style={{ opacity: fadeOpacity }}>
+                  <div className="jl-thought-bubble-tail" />
+                  {currentPersona.clipThoughtBubble.map((line, i) => (
+                    <div key={i} className="jl-thought-bubble-line">{line}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Play circle button bottom-right (for non-Adam slots) */}
+              {currentPersona.key !== "adam" && (
+                <div className="jl-clip-play-circle" aria-hidden="true">
+                  <svg viewBox="0 0 36 36" width="36" height="36" fill="none">
+                    <circle cx="18" cy="18" r="16" stroke="#111" strokeWidth="2.4" fill="#ffffff" />
+                    <polygon points="14,11 25,18 14,25" fill="#111" />
+                  </svg>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="jl-bottom-sentence">
-            <div>then makes</div>
-            <div>your next move</div>
-            <div className="jl-headline-underlined">
-              a game.
-              <svg
-                className="jl-bottom-underline"
-                viewBox="0 0 220 30"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-                style={{ opacity: fadeOpacity }}
-              >
-                <path
-                  d="M6 18 C 50 6, 110 26, 214 10"
-                  fill="none"
-                  stroke={currentPersona.accent}
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
+          <div className="jl-clip-static-caption">
+            Real gameplay. Nothing is sent without you.
           </div>
         </div>
       </section>

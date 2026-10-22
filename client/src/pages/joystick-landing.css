@@ -55,79 +55,45 @@ body {
 }
 
 /* ==========================================================================
-   0. TOP TICKER
-   ========================================================================== */
-
-.jl-top-ticker {
-  background: var(--jl-ink);
-  color: #fbfaf6;
-  font-size: 13px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.jl-top-ticker-inner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.jl-top-ticker-text {
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.jl-top-ticker-link {
-  color: #fbfaf6;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  font-size: 12px;
-  opacity: 0.85;
-}
-
-.jl-top-ticker-link:hover {
-  opacity: 1;
-}
-
-/* ==========================================================================
-   1. NAV
+   1. NAV (Links only, no CTA)
    ========================================================================== */
 
 .jl-nav {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
-  padding-top: 28px;
+  padding-top: 12px;
+  padding-bottom: 6px;
 }
 
 .jl-nav-brand {
   display: flex;
   align-items: baseline;
-  gap: 14px;
+  gap: 12px;
 }
 
 .jl-nav-title {
   font-family: var(--jl-display);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 28px;
   letter-spacing: -0.01em;
   color: var(--jl-ink);
 }
 
 .jl-nav-tagline {
   font-size: 11px;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--jl-meta);
+  font-weight: 600;
 }
 
 .jl-nav-links {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 32px;
   font-size: 14px;
 }
 
@@ -142,57 +108,765 @@ body {
   text-underline-offset: 4px;
 }
 
-.jl-nav-cta {
-  display: inline-flex;
-  align-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 8px 16px;
-  background: var(--jl-ink);
-  color: #ffffff !important;
-  border-radius: 6px;
-  text-decoration: none !important;
-  transition: opacity 0.2s ease;
-}
-
-.jl-nav-cta:hover {
-  opacity: 0.9;
-}
-
 /* ==========================================================================
-   2. HERO: one sentence, one object
+   2. HERO: One concept — your companions. Empty card is the only CTA.
    ========================================================================== */
 
 .jl-hero-section {
-  padding-top: clamp(72px, 10vw, 150px);
-  padding-bottom: var(--jl-band);
+  padding-top: 6px;
+  padding-bottom: 18px;
 }
 
-.jl-hero-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: clamp(48px, 7vw, 110px);
+.jl-hero-main-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
 }
 
-.jl-headline-block,
-.jl-bottom-sentence {
+/* Left Column (~42%): Headline and underlines only */
+.jl-hero-left {
+  position: relative;
+  padding-top: 8px;
+}
+
+.jl-hero-headline {
   font-family: var(--jl-display);
   font-weight: 700;
-  font-size: clamp(56px, 8vw, 112px);
-  line-height: 0.92;
+  font-size: clamp(34px, 3.8vw, 60px);
+  line-height: 0.98;
   letter-spacing: -0.025em;
+  color: var(--jl-ink);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.jl-headline-block {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-top: clamp(8px, 2vw, 32px);
+.jl-hero-headline-line {
+  display: block;
+  white-space: nowrap;
 }
 
-.jl-headline-underlined {
+.jl-hero-headline-underlined {
   position: relative;
   display: inline-block;
+}
+
+.jl-hero-double-underline {
+  position: absolute;
+  left: -4px;
+  bottom: -14px;
+  width: 104%;
+  height: 26px;
+  pointer-events: none;
+}
+
+/* 6-second idle nudge arrow */
+.jl-hero-idle-nudge {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: -24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  animation: nudgeFadeIn 0.4s ease forwards;
+  z-index: 15;
+}
+
+.jl-nudge-arrow-svg {
+  width: 130px;
+  height: 48px;
+  overflow: visible;
+}
+
+.jl-nudge-path {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: drawNudge 0.6s ease forwards;
+}
+
+.jl-nudge-head {
+  opacity: 0;
+  animation: fadeInHead 0.2s ease 0.5s forwards;
+}
+
+.jl-nudge-text {
+  font-family: var(--jl-hand);
+  font-size: 24px;
+  color: var(--jl-ink);
+  transform: rotate(-4deg);
+  white-space: nowrap;
+}
+
+@keyframes drawNudge {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadeInHead {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nudgeFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Right Column: The Gallery Stack */
+.jl-hero-gallery {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.jl-gallery-stack {
+  position: relative;
+  width: 100%;
+  max-width: 610px;
+  min-height: 385px;
+}
+
+.jl-gallery-cards-pair {
+  display: contents;
+}
+
+/* Card inner shared 3D flip */
+.jl-gallery-card {
+  position: absolute;
+  perspective: 1200px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.jl-gallery-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.jl-gallery-card.is-flipped .jl-gallery-card-inner {
+  transform: rotateY(180deg);
+}
+
+.jl-gallery-card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+
+.jl-gallery-card-back {
+  transform: rotateY(180deg);
+  border: 1.5px solid var(--jl-ink);
+}
+
+/* Dark-shadow rule: only empty card has shadow at rest. Rotating cards get shadow only while flipped. */
+.jl-gallery-card.is-flipped {
+  box-shadow: 0 16px 36px rgba(17, 17, 17, 0.12);
+}
+
+/* 1. Person card: upper-left, tilted ~ -4deg, ~70% size */
+.jl-gallery-person-card {
+  top: 8px;
+  left: 10px;
+  width: 226px;
+  height: 226px;
+  transform: rotate(-4deg);
+  z-index: 2;
+  transition: transform 0.3s ease;
+}
+
+.jl-gallery-person-card:hover {
+  transform: rotate(-4deg) translateY(-3px);
+}
+
+.jl-gallery-person-card .jl-gallery-card-front {
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+}
+
+.jl-card-tap-label {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: var(--jl-hand);
+  font-size: 16px;
+  color: var(--jl-meta);
+  pointer-events: none;
+}
+
+.jl-card-spark-left {
+  position: absolute;
+  left: -14px;
+  top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jl-card-spark-left span {
+  width: 10px;
+  height: 1.5px;
+  background: var(--jl-marker);
+  transform: rotate(-25deg);
+}
+
+.jl-card-sketch-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 118px;
+  transition: opacity 0.4s ease;
+}
+
+.jl-card-sketch-wrap svg {
+  max-height: 112px;
+  width: auto;
+}
+
+.jl-card-caption-handwriting {
+  font-family: var(--jl-hand);
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--jl-ink);
+  transition: opacity 0.4s ease;
+}
+
+.jl-real-photo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  background: #ffffff;
+  color: var(--jl-meta);
+  gap: 12px;
+}
+
+.jl-photo-caption {
+  font-size: 13px;
+  color: var(--jl-body-muted);
+}
+
+/* 2. Companion card: lower-left, tilted ~ +3deg, ~70% size */
+.jl-gallery-companion-card {
+  top: 148px;
+  left: 40px;
+  width: 226px;
+  height: 226px;
+  transform: rotate(3deg);
+  z-index: 3;
+  transition: transform 0.3s ease;
+}
+
+.jl-gallery-companion-card:hover {
+  transform: rotate(3deg) translateY(-3px);
+}
+
+.jl-gallery-companion-card .jl-gallery-card-front {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+}
+
+.jl-companion-drawing-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 114px;
+  transition: opacity 0.4s ease;
+}
+
+.jl-companion-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: opacity 0.4s ease;
+}
+
+.jl-companion-handwriting-name {
+  font-family: var(--jl-hand);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.jl-companion-handwriting-gift {
+  font-family: var(--jl-hand);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--jl-ink);
+}
+
+.jl-companion-handwriting-for {
+  font-family: var(--jl-hand);
+  font-size: 12px;
+  color: var(--jl-meta);
+  font-style: italic;
+}
+
+.jl-companion-scene-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--jl-ink);
+}
+
+.jl-companion-scene-content {
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--jl-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jl-scene-tagline {
+  margin-top: 8px;
+  font-family: var(--jl-hand);
+  font-size: 17px;
+  color: var(--jl-marker);
+}
+
+/* 3. Empty card: largest, straight, front of stack */
+.jl-gallery-empty-card {
+  position: absolute;
+  top: 10px;
+  right: 0;
+  width: 320px;
+  height: 365px;
+  background: #fff3b0;
+  border-radius: 4px;
+  z-index: 10;
+  padding: 18px 20px 14px;
+  box-shadow: 0 18px 42px rgba(60, 40, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Settle animation: 500ms after load */
+@keyframes heroCardEntrance {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0.9;
+  }
+  80% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Continuous breathing lift (3.2s loop) */
+@keyframes heroCardBreathing {
+  0%, 100% {
+    transform: translateY(0);
+    box-shadow: 0 18px 42px rgba(60, 40, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
+  }
+  50% {
+    transform: translateY(-2px);
+    box-shadow: 0 22px 48px rgba(60, 40, 0, 0.14), 0 4px 10px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.jl-gallery-empty-card.is-settled {
+  animation: heroCardEntrance 0.5s ease-out forwards, heroCardBreathing 3.2s ease-in-out 0.6s infinite;
+}
+
+/* Hover/focus lift */
+.jl-gallery-empty-card:hover,
+.jl-gallery-empty-card:focus-within {
+  transform: translateY(-4px) !important;
+  box-shadow: 0 26px 56px rgba(60, 40, 0, 0.18), 0 6px 14px rgba(0, 0, 0, 0.08) !important;
+}
+
+.jl-gallery-empty-card:hover .jl-empty-card-inner-dashed,
+.jl-gallery-empty-card:focus-within .jl-empty-card-inner-dashed {
+  border-style: solid;
+  border-color: #111111;
+}
+
+/* Frosted Scotch tape top-center */
+.jl-empty-card-tape {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: 1px;
+}
+
+/* Decorative ink sparks */
+.jl-empty-card-sparks {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  display: flex;
+  gap: 3px;
+}
+
+.jl-empty-card-sparks span:nth-child(1) {
+  width: 1.5px;
+  height: 10px;
+  background: #111;
+  transform: rotate(-30deg);
+}
+.jl-empty-card-sparks span:nth-child(2) {
+  width: 1.5px;
+  height: 12px;
+  background: #111;
+  transform: rotate(5deg);
+}
+.jl-empty-card-sparks span:nth-child(3) {
+  width: 1.5px;
+  height: 10px;
+  background: #111;
+  transform: rotate(40deg);
+}
+
+/* Dashed inner ink border */
+.jl-empty-card-inner-dashed {
+  border: 1.8px dashed rgba(17, 17, 17, 0.65);
+  border-radius: 3px;
+  height: 100%;
+  padding: 24px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.jl-empty-card-header {
+  position: relative;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.jl-empty-card-title {
+  font-family: var(--jl-hand);
+  font-weight: 700;
+  font-size: 34px;
+  color: var(--jl-ink);
+  line-height: 1;
+}
+
+.jl-empty-card-underline {
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 10px;
+  pointer-events: none;
+}
+
+.jl-empty-card-prompt {
+  font-family: var(--jl-hand);
+  font-size: 26px;
+  line-height: 1.25;
+  color: var(--jl-ink);
+  margin-top: 14px;
+}
+
+/* Ruled line with blinking caret */
+.jl-empty-card-ruled-line {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  border-bottom: 2px solid #111111;
+  padding-bottom: 4px;
+  margin-top: 18px;
+}
+
+.jl-empty-card-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--jl-hand);
+  font-size: 24px;
+  color: var(--jl-ink);
+  padding: 0;
+  outline: none;
+}
+
+.jl-empty-card-input::placeholder {
+  color: rgba(17, 17, 17, 0.35);
+  font-style: italic;
+}
+
+@keyframes blinkCaret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.jl-empty-card-caret {
+  width: 2px;
+  height: 24px;
+  background: #111111;
+  animation: blinkCaret 1s infinite;
+  margin-left: 2px;
+}
+
+.jl-empty-card-subtext {
+  font-family: var(--jl-body);
+  font-size: 13px;
+  color: var(--jl-meta);
+  text-align: center;
+  margin-top: auto;
+}
+
+/* Gallery bottom row: meta on left, skip link on right */
+.jl-gallery-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 630px;
+  margin-top: 10px;
+}
+
+.jl-gallery-bottom-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 260px;
+  margin-left: 20px;
+}
+
+.jl-rotating-one-liner {
+  font-family: var(--jl-hand);
+  font-size: 20px;
+  color: var(--jl-ink);
+  text-align: center;
+  line-height: 1.2;
+  transition: opacity 0.4s ease;
+  min-height: 1.5em;
+}
+
+.jl-gallery-dots {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.jl-gallery-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--jl-ink);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.jl-gallery-dot.is-active {
+  background: var(--jl-ink);
+}
+
+.jl-gallery-dot:hover {
+  transform: scale(1.2);
+}
+
+/* Under empty card skip link */
+.jl-gallery-skip-wrap {
+  margin-top: 6px;
+  margin-right: 8px;
+}
+
+.jl-empty-card-skip-link {
+  font-family: var(--jl-hand);
+  font-size: 18px;
+  color: var(--jl-meta);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.jl-empty-card-skip-link:hover {
+  color: var(--jl-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ==========================================================================
+   Bottom-Middle Section: Kicker, Ink-Frame Clip, Static Line
+   ========================================================================== */
+
+.jl-hero-clip-section {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.jl-clip-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--jl-meta);
+  text-align: center;
+}
+
+.jl-clip-frame-wrap {
+  width: 100%;
+  max-width: 760px;
+  cursor: pointer;
+  outline: none;
+}
+
+.jl-clip-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  border: 2px solid #111111;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(17, 17, 17, 0.08);
+}
+
+.jl-clip-scene-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jl-clip-label-badge {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #111111;
+  border-radius: 2px;
+  z-index: 5;
+}
+
+/* Thought bubble above companion */
+.jl-clip-thought-bubble {
+  position: absolute;
+  top: 18px;
+  left: 45%;
+  background: #ffffff;
+  border: 1.8px solid #111111;
+  border-radius: 18px;
+  padding: 10px 16px;
+  font-family: var(--jl-hand);
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--jl-ink);
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.jl-clip-thought-bubble::before {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+}
+
+.jl-clip-thought-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -18px;
+  left: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+}
+
+.jl-thought-bubble-line {
+  white-space: nowrap;
+}
+
+/* Play circle bottom-right */
+.jl-clip-play-circle {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  z-index: 5;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.jl-clip-play-circle:hover {
+  transform: scale(1.1);
+}
+
+/* Action button bar inside frame */
+.jl-clip-action-bar {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.jl-clip-action-btn {
+  font-family: var(--jl-body);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  background: #111111;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.jl-clip-action-btn:hover {
+  opacity: 0.9;
+}
+
+.jl-clip-static-caption {
+  font-size: 12px;
+  color: var(--jl-meta);
+  text-align: center;
 }
 
 .jl-headline-underline,
@@ -1821,6 +2495,138 @@ body {
   .jl-pricing-tiers-row,
   .jl-roster-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .jl-hero-section {
+    padding-top: 8px;
+    padding-bottom: 24px;
+  }
+
+  .jl-hero-main-row {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .jl-hero-left {
+    padding-top: 0;
+    text-align: left;
+    width: 100%;
+  }
+
+  .jl-hero-headline {
+    font-size: clamp(26px, 7vw, 36px);
+    line-height: 1.05;
+  }
+
+  .jl-hero-idle-nudge {
+    display: none;
+  }
+
+  .jl-hero-gallery {
+    width: 100%;
+    align-items: center;
+  }
+
+  .jl-gallery-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+    min-height: auto;
+    gap: 16px;
+  }
+
+  /* Empty card full width on mobile, on screen with headline at 390x844 */
+  .jl-gallery-empty-card {
+    order: 1;
+    position: relative;
+    top: 0;
+    right: 0;
+    width: 100%;
+    max-width: 360px;
+    height: auto;
+    min-height: 330px;
+    padding: 18px 18px 14px;
+  }
+
+  .jl-gallery-cards-pair {
+    order: 2;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .jl-gallery-person-card,
+  .jl-gallery-companion-card {
+    position: relative;
+    top: 0;
+    left: 0;
+    width: 160px;
+    height: 190px;
+    transform: none !important;
+  }
+
+  .jl-gallery-person-card .jl-gallery-card-front,
+  .jl-gallery-companion-card .jl-gallery-card-front {
+    padding: 10px 10px 8px;
+  }
+
+  .jl-card-sketch-wrap,
+  .jl-companion-drawing-wrap {
+    height: 80px;
+  }
+
+  .jl-card-sketch-wrap svg,
+  .jl-companion-drawing-wrap svg {
+    max-height: 75px;
+  }
+
+  .jl-card-caption-handwriting,
+  .jl-companion-handwriting-gift {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .jl-companion-handwriting-name {
+    font-size: 15px;
+  }
+
+  .jl-companion-handwriting-for {
+    font-size: 11px;
+  }
+
+  .jl-gallery-bottom-row {
+    order: 3;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    width: 100%;
+  }
+
+  .jl-gallery-bottom-meta {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .jl-gallery-skip-wrap {
+    margin: 0;
+    text-align: center;
+  }
+
+  .jl-hero-clip-section {
+    margin-top: 20px;
+    width: 100%;
+  }
+
+  .jl-clip-frame-wrap {
+    max-width: 100%;
   }
 }
 
