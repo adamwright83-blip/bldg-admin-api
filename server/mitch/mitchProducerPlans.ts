@@ -7,6 +7,7 @@ import {
   SMALL_COMFORTS_GAME_ID,
   seedSmallComfortsProducerWork,
 } from "./smallComfortsProduction";
+import { seedExecutorSmokeOrder } from "./executorSmokeOrder";
 import type { MitchProductionService } from "./mitchService";
 import type { IMitchProductionStore } from "./mitchStore";
 
@@ -26,6 +27,8 @@ export function createMitchProducerPlan(input: {
   service: MitchProductionService;
   baseBranch?: string;
   baseSha?: string;
+  /** Opt-in (MITCH_EXECUTOR_SMOKE_ORDER=true): add one trivial order to prove the executor loop. */
+  executorSmokeOrder?: boolean;
 }): MitchProducerPlan {
   if (input.gameId === SMALL_COMFORTS_GAME_ID) {
     return {
@@ -63,6 +66,18 @@ export function createMitchProducerPlan(input: {
       );
       if (!milestone)
         throw new Error("Kingdom Two producer milestone was not seeded");
+
+      if (input.executorSmokeOrder) {
+        const smoke = await seedExecutorSmokeOrder({
+          tenantId: input.tenantId,
+          gameId: "kingdom.boreslay",
+          store: input.store,
+          service: input.service,
+          baseBranch: input.baseBranch,
+          baseSha: input.baseSha,
+        });
+        if (smoke) return { state, workOrder: smoke };
+      }
 
       const orders = await input.store.listWorkOrders(
         input.tenantId,

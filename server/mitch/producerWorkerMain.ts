@@ -134,6 +134,7 @@ const plan = createMitchProducerPlan({
     process.env.MITCH_GAME_BASE_SHA?.trim() ||
     process.env.MITCH_SMALL_COMFORTS_BASE_SHA?.trim() ||
     undefined,
+  executorSmokeOrder: process.env.MITCH_EXECUTOR_SMOKE_ORDER === "true",
 });
 
 const coordinator = new MitchProducerCoordinator({
