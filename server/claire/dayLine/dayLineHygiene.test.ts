@@ -361,7 +361,7 @@ describe("4. an open item across dates is one item with its age, asked as a yes/
     const d = deps(rows);
     const outcome = await applyOpenItemDecision({ decision: { kind: "drop" }, item: carried(), target: { tenantId: "default", actorId: "1" }, operatorWords: "drop it", today: "2026-10-20", deps: d });
     expect(outcome).toMatchObject({ applied: true, verified: true });
-    expect(outcome.speak).toBe("Dropped Call Dana to resolve the overdue Louise follow-up and cleared 3 older copies. It's off the line.");
+    expect(outcome.speak).toBe('Dropped "Call Dana to resolve the overdue Louise follow-up" and cleared 3 older copies. It\'s off the line.');
     expect(d.cancel).toHaveBeenCalledTimes(4);
     expect(rows.size).toBe(0);
   });
@@ -369,7 +369,7 @@ describe("4. an open item across dates is one item with its age, asked as a yes/
   it("'done' completes the newest and folds the older copies", async () => {
     const rows = seed();
     const outcome = await applyOpenItemDecision({ decision: { kind: "done" }, item: carried(), target: { tenantId: "default", actorId: "1" }, operatorWords: "yes", today: "2026-10-20", deps: deps(rows) });
-    expect(outcome.speak).toBe("Marked Call Dana to resolve the overdue Louise follow-up done and cleared 3 older copies.");
+    expect(outcome.speak).toBe('Marked "Call Dana to resolve the overdue Louise follow-up" done and cleared 3 older copies.');
     expect(rows.get("e758bb5d")!.status).toBe("completed");
     expect(rows.size).toBe(1);
   });
@@ -378,7 +378,7 @@ describe("4. an open item across dates is one item with its age, asked as a yes/
     const rows = seed();
     const outcome = await applyOpenItemDecision({ decision: { kind: "snooze", until: "2026-10-26" }, item: carried(), target: { tenantId: "default", actorId: "1" }, operatorWords: "not this week", today: "2026-10-20", deps: deps(rows) });
     expect(outcome.applied).toBe(true);
-    expect(outcome.speak).toMatch(/^Moved Call Dana to resolve the overdue Louise follow-up to /);
+    expect(outcome.speak).toMatch(/^Moved "Call Dana to resolve the overdue Louise follow-up" to /);
     expect(rows.get("e758bb5d")!.businessDate).toBe("2026-10-26");
   });
 
@@ -403,7 +403,7 @@ describe("4. an open item across dates is one item with its age, asked as a yes/
 
   it("the evening opening ends on the one yes/no question, not a list and a generic 'How did it go?'", () => {
     const opening = showrunnerOpening(briefing());
-    expect(opening).toContain("Call Dana to resolve the overdue Louise follow-up has been open 29 days across 4 entries.");
+    expect(opening).toContain("One thing has been open 29 days across 4 entries: Call Dana to resolve the overdue Louise follow-up.");
     expect(opening.endsWith("Did you call Dana?")).toBe(true);
     expect(opening).not.toContain("How did it go?");
   });
@@ -421,7 +421,7 @@ describe("4. an open item across dates is one item with its age, asked as a yes/
       invoke: invoke as never, openItem: deps(rows),
     });
     expect(invoke).not.toHaveBeenCalled();
-    expect(turn.speak).toBe("Dropped Call Dana to resolve the overdue Louise follow-up and cleared 3 older copies. It's off the line. How did the rest of the day go?");
+    expect(turn.speak).toBe('Dropped "Call Dana to resolve the overdue Louise follow-up" and cleared 3 older copies. It\'s off the line. How did the rest of the day go?');
     expect(turn.state.openItemHandled).toBe(true);
     expect(rows.size).toBe(0);
   });

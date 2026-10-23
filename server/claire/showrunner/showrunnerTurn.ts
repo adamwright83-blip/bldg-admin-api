@@ -100,6 +100,8 @@ export type ShowrunnerCallState = ClaireAnalyticsState & {
   preparedOffered?: { ids: string[]; consumedAt: string | null } | null;
   /** The carried open item Claire asked about in the opening has been answered; do not interpret later turns as its answer. */
   openItemHandled?: boolean;
+  /** Composer provider failures on this call. The second one ends the call honestly instead of looping. */
+  providerFailures?: number;
   /** Daphne's recorded framing decision for this call (DAPHNE_V2_DECISION_POINTS); absent when off. */
   daphneDecision?: DaphneCallDecision | null;
 };
@@ -294,7 +296,18 @@ export async function runShowrunnerTurn(input: {
   // is read back, and only then spoken. A bare yes/no counts only as the reply to that question.
   const carried = state.purpose === "desk_planning" ? null : carriedItemAsked(state.briefing);
   if (carried && !state.openItemHandled) {
-    const decision = interpretOpenItemReply(input.utterance, state.businessDate);
+    const decision = interpretOpenItemReply(input.utterance, state.businessDate, carried.title);
+    if (decision.kind === "progress" && state.turns <= 1) {
+      // Some of it, not all of it: nothing is closed, and Claire says so.
+      state.openItemHandled = true;
+      const left = decision.of - decision.done;
+      const closer = state.purpose === "evening_debrief" ? "How did the rest of the day go?" : "Are you ready to get going?";
+      return {
+        speak: `That's ${decision.done} of ${decision.of}, so I'm keeping it open for the other ${left}. ${closer}`,
+        end: false,
+        state,
+      };
+    }
     const actionable = decision.kind === "drop" || ((decision.kind === "done" || decision.kind === "snooze") && state.turns <= 1);
     if (actionable && (decision.kind === "drop" || decision.kind === "done" || decision.kind === "snooze")) {
       state.openItemHandled = true;
@@ -405,8 +418,19 @@ export async function runShowrunnerTurn(input: {
     model = JSON.parse(typeof content === "string" ? content : "");
     if (typeof model?.speak !== "string" || !model.speak.trim()) throw new Error("empty speech");
   } catch {
-    // Provider failure: no fabricated speech, no state change.
+    // Provider failure: no fabricated speech, no state change. Once is a blip and Claire asks again; a
+    // second failure on the same call is an outage, and "Sorry, I lost that" on a loop (2026-10-22,
+    // revoked model key) is worse than ending honestly.
     state.turns -= 1;
+    state.providerFailures = (state.providerFailures ?? 0) + 1;
+    if (state.providerFailures >= 2) {
+      return {
+        speak:
+          "I'm sorry, my planning side is down right now, so I can't record or plan from what you're telling me on this call. Your words are kept in the call transcript. I'll stop here rather than waste your time.",
+        end: true,
+        state,
+      };
+    }
     return { speak: "Sorry, I lost that for a second. Could you say it again?", end: false, state };
   }
 
