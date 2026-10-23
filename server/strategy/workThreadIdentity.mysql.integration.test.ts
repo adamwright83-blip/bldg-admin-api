@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import mysql, { type Pool } from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
+import { strategicPlanningHorizon } from "../../shared/weeklyMissionReadiness";
 import { workThreadCandidateId } from "../../shared/workThread";
 import { decideGoalCycle } from "../agents/persistentOperator/decisionEngine";
 import { GoalCycleStore } from "../agents/persistentOperator/goalCycleStore";
@@ -52,6 +52,12 @@ function nextMorningInLosAngeles(): Date {
   return nine.getTime() > now.getTime() ? nine : fromZonedTime(`${formatInTimeZone(new Date(now.getTime() + 24 * HOUR), ZONE, "yyyy-MM-dd")}T09:00:00`, ZONE);
 }
 const advance = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms));
+/** The week preparation plans for right now: on a weekend that is already next week, not this Monday's. */
+const planningWeekStart = () =>
+  strategicPlanningHorizon({
+    businessDate: formatInTimeZone(new Date(), ZONE, "yyyy-MM-dd"),
+    localTime: formatInTimeZone(new Date(), ZONE, "HH:mm"),
+  }).weekStart;
 
 describeMysql("Work Thread identity on MySQL", () => {
   let sql: mysql.Connection;
@@ -199,8 +205,7 @@ describeMysql("Work Thread identity on MySQL", () => {
     expect(await threadsOf(t.tenantId)).toHaveLength(1);
 
     // 6. The operator revises the proposed item's wording, then approves the revision.
-    const weekStart = weekStartMonday(formatInTimeZone(new Date(), t.zone, "yyyy-MM-dd"));
-    const proposal = (await latestStrategicProposal(t.identity, weekStart)) ?? (await latestStrategicProposal(t.identity, (await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone, now: new Date() })).weekStart));
+    const proposal = (await latestStrategicProposal(t.identity, planningWeekStart())) ?? (await latestStrategicProposal(t.identity, (await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone, now: new Date() })).weekStart));
     const strategyItem = proposal!.items.find(item => item.planId.startsWith("strategic_diagnosis:"))!;
     expect(strategyItem).toMatchObject({ candidateId: workThreadCandidateId(threadId), workThreadId: threadId });
     const revised = await reviseStrategicProposal({
@@ -241,7 +246,7 @@ describeMysql("Work Thread identity on MySQL", () => {
     expect(objectives[0]).toMatchObject({ id: first.objectiveId, status: "accepted", latestDecisionId: sixth.decisionId, workThreadId: threadId });
     expect(await threadsOf(t.tenantId)).toHaveLength(1);
     // While that approved execution is open, the opportunity is not proposed again.
-    const afterApproval = (await latestStrategicProposal(t.identity, weekStartMonday(formatInTimeZone(new Date(), t.zone, "yyyy-MM-dd"))))!;
+    const afterApproval = (await latestStrategicProposal(t.identity, planningWeekStart()))!;
     expect(afterApproval.id).not.toBe(revised.id);
     expect(afterApproval.items.some(item => item.planId.startsWith("strategic_diagnosis:"))).toBe(false);
     expect(afterApproval.uncertainty.join(" ")).toContain("is already approved and still open on the Day Line");
