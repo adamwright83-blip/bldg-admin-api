@@ -6,12 +6,13 @@ import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { getDayDirectorState, listOpenDayDirectorCommitmentsBetween } from "../../planning/dayDirector/dayDirectorService";
-import { collapseOpenCommitments, spokenAction, type CarriedOpenItem } from "../dayLine/openItemLifecycle";
+import { actionParts, collapseOpenCommitments, type CarriedOpenItem } from "../dayLine/openItemLifecycle";
 import { isTestFixtureTitle } from "../dayLine/testDataGuard";
 import { looksLikeSalesFollowUp, mayRaiseOverdueSalesFollowUp } from "../dayLine/weekendQuietRule";
 import { latestStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
 import { loadMissionPresentations, OPERATOR_SCOPE } from "../../agents/daphne/missionFollowUp";
 import { addDaysYmd } from "../../analytics/businessPeriods";
+import { spokenDay } from "../briefing/briefingTiming";
 import { weekStartMonday } from "../../../shared/weeklyMissionReadiness";
 import type { ShowrunnerPurpose } from "./showrunnerTurn";
 import { dedupeSpokenTitles } from "../speech/dedupeSpokenTitles";
@@ -69,7 +70,7 @@ export type ShowrunnerBriefing = {
   today: BriefingItem[];
   tomorrow: BriefingItem[];
   /** Operator-reported developments from recent calls. Reported, not verified. */
-  developments: Array<{ summary: string; date: string | null; reportedOn: string }>;
+  developments: Array<{ summary: string; date: string | null; reportedOn: string; kind?: string; spoken?: string }>;
   pendingDecision: null | { proposalId: string; revision: string; summary: string; items: Array<{ id: string; date: string; title: string; window: string | null }> };
   /** Unapproved proposal work whose execution window has passed: shown, never offered for approval, to be rescheduled. */
   needsReschedule?: Array<{ id: string; date: string; title: string; window: string | null }>;
@@ -349,8 +350,9 @@ export async function buildShowrunnerBriefing(input: {
   }).catch(() => []);
   const developments = devRows.map(r => {
     const p = (r.payload ?? {}) as Record<string, string>;
-    const summary = [p.who, p.what].filter(Boolean).join(": ") + (p.date ? ` (${p.date}${p.time ? ` ${p.time}` : ""})` : "");
-    return { summary, date: p.date || null, reportedOn: formatInTimeZone(new Date(r.occurredAt), timeZone, "yyyy-MM-dd") };
+    const spoken = [p.who, p.what].filter(Boolean).join(": ");
+    const summary = spoken + (p.date ? ` (${p.date}${p.time ? ` ${p.time}` : ""})` : "");
+    return { summary, spoken, kind: p.kind, date: p.date || null, reportedOn: formatInTimeZone(new Date(r.occurredAt), timeZone, "yyyy-MM-dd") };
   });
   const weekStartDate = weekStartMonday(businessDate);
   const outcomeRows = await listRecentDaphneObservationsBySource({
@@ -623,6 +625,22 @@ export function carriedItemAsked(b: Pick<ShowrunnerBriefing, "carriedOpen" | "st
   return b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
 }
 
+/**
+ * "Since yesterday" is only what the operator reported YESTERDAY about today or later, spoken with a day
+ * word. 2026-10-23 opened with "Since yesterday: Visit three locations in person tomorrow… (2026-10-21)",
+ * a two-day-old note with an ISO date read aloud. A reported commitment is already on the Day Line.
+ */
+export function sinceYesterdayLine(b: Pick<ShowrunnerBriefing, "developments" | "businessDate">): string {
+  const yesterday = addDaysYmd(b.businessDate, -1);
+  const d = b.developments.find(
+    x => x.reportedOn === yesterday && x.kind !== "commitment" && (!x.date || x.date >= b.businessDate)
+  );
+  if (!d) return "";
+  const what = (d.spoken ?? d.summary.replace(/\s*\(\d{4}-\d{2}-\d{2}[^)]*\)\s*$/, "")).replace(/[.\s]+$/, "");
+  if (!what) return "";
+  return `Since yesterday: ${what}${d.date ? `, ${spokenDay(d.date, b.businessDate)}` : ""}.`;
+}
+
 /** The spoken opening, built only from briefing facts. Goal first, then the one move. */
 export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions = {}): string {
   const tone = options.tone ?? null;
@@ -639,7 +657,7 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
     // the question; otherwise it would dangle without its yes/no.
     const askCarried = !prepared && carried ? carried : null;
     const carriedLine = askCarried
-      ? `One thing has been open ${askCarried.ageDays} ${askCarried.ageDays === 1 ? "day" : "days"}${askCarried.ids.length > 1 ? ` across ${askCarried.ids.length} entries` : ""}: ${spokenAction(askCarried.title)}.`
+      ? `One thing has been open ${askCarried.ageDays} ${askCarried.ageDays === 1 ? "day" : "days"}${askCarried.ids.length > 1 ? ` across ${askCarried.ids.length} entries` : ""}: ${actionParts(askCarried.title).join(", then ")}.`
       : "";
     const closer = (fallback: string) => prepared ?? (askCarried ? askCarried.question : fallback);
     if (b.purpose === "morning_readiness") {
@@ -650,7 +668,7 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
         // Right after the Day Line it refers to, so "the first one" can only mean its first stop.
         encouragement ?? "",
         gameMoveLine(b, tone),
-        b.developments.length ? `Since yesterday: ${b.developments[0]!.summary}.` : "",
+        sinceYesterdayLine(b),
         carriedLine,
         closer("Are you ready to get going?"),
       ]

@@ -106,8 +106,23 @@ export function partialCount(title: string, reply: string): { done: number; of: 
   return { done: reported.n, of: target.n, noun: target.noun };
 }
 
+/**
+ * One title, several jobs: "drop off Thomas's order in Hollywood. Then write 5 notes and mail them…"
+ * (2026-10-23). Asked as one plain "Did you …?" a single "Yes" closed both without saying so.
+ */
+export function actionParts(title: string): string[] {
+  return spokenAction(title)
+    .split(/\.\s+(?:then\s+|and then\s+|also\s+)?|;\s*|,?\s+and then\s+|,?\s+then\s+/i)
+    .map(part => part.trim().replace(/[.?!]+$/g, ""))
+    .filter(Boolean)
+    .map((part, index) => (index === 0 ? part : lowerFirst(part)));
+}
+
 /** A yes/no question the operator can answer in a word: "Did you call Dana?" */
 export function agendaQuestion(title: string): string {
+  const parts = actionParts(title);
+  if (parts.length === 2) return `Did you do both: ${parts[0]}, and ${parts[1]}?`;
+  if (parts.length > 2) return `Did you do all of these: ${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}?`;
   const clean = spokenAction(title);
   const withoutDay = clean.replace(/\s+(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)$/i, "");
   const verb = PERSON_VERBS.exec(withoutDay);
