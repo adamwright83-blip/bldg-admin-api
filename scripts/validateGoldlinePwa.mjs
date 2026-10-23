@@ -78,10 +78,10 @@ if (!existsSync(swPath)) {
   } catch (error) {
     fail(`service worker has a syntax error: ${error.message}`);
   }
-  if (!source.includes('const CACHE_VERSION = "goldline-shell-v3"')) {
-    fail("service worker cache version must be goldline-shell-v3");
+  if (!source.includes('const CACHE_VERSION = "goldline-shell-v4"')) {
+    fail("service worker cache version must be goldline-shell-v4");
   } else {
-    pass("service worker cache is goldline-shell-v3");
+    pass("service worker cache is goldline-shell-v4");
   }
   if (!source.includes('"/goldline.webmanifest"')) {
     fail("service worker precache does not include the manifest");

@@ -26,7 +26,7 @@ describe("JOYSTICK web manifest", () => {
     }
     expect(installHead).toContain('href = "/goldline.webmanifest"');
     expect(installHead).toContain('"/assets/goldline/pwa/icon-192.png"');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "goldline-shell-v3"');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "goldline-shell-v4"');
     expect(serviceWorker).toContain('"/goldline.webmanifest"');
   });
 });
