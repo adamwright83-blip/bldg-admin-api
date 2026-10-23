@@ -66,6 +66,22 @@ vi.mock("./actionExecution", () => ({
 
 vi.mock("../agentEvents", () => ({ logAgentEvent: vi.fn(async () => undefined) }));
 
+let modelHealthy = true;
+vi.mock("../../claire/claireModelHealth", async importOriginal => ({
+  ...(await importOriginal<typeof import("../../claire/claireModelHealth")>()),
+  checkClaireModelHealth: vi.fn(async () =>
+    modelHealthy ? { ok: true } : { ok: false, reason: "authentication_failed", detail: "Anthropic authentication failed (401)." }
+  ),
+}));
+
+const texts: Array<Record<string, any>> = [];
+vi.mock("../../operatorArtifact/sendOperatorArtifact", () => ({
+  sendOperatorArtifact: vi.fn(async (input: Record<string, any>) => {
+    texts.push(input);
+    return { providerAccepted: true, delivered: false, resolvedTo: "+1" };
+  }),
+}));
+
 let executeDailyClaireCall: typeof import("./operatorAppointmentExecution").executeDailyClaireCall;
 
 async function placeMorningCall() {
@@ -100,7 +116,20 @@ describe("placing the daily call never spends the promise it speaks", () => {
   beforeEach(() => {
     markConsumed.mockClear();
     dialed.length = 0;
+    texts.length = 0;
     dialOutcome = "accepted";
+    modelHealthy = true;
+  });
+
+  it("a rejected model key skips the call and texts the operator why (2026-10-22)", async () => {
+    modelHealthy = false;
+    const result = await placeMorningCall();
+    expect(result).toMatchObject({ skipped: "claire_model_unavailable", operatorTexted: true });
+    expect(dialed).toHaveLength(0);
+    expect(markConsumed).not.toHaveBeenCalled();
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatchObject({ tenantId: "default", operatorUserId: "adam-admin", decisionId: "claire-model-down:appointment_daily_test" });
+    expect(texts[0]!.artifact.text).toMatch(/skipped your morning call.*ANTHROPIC_API_KEY/);
   });
 
   it("an accepted dial records exactly the spoken item as offered and consumes nothing", async () => {

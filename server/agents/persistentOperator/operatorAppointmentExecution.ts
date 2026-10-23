@@ -7,6 +7,8 @@ import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
 import { formatInTimeZone } from "date-fns-tz";
 import { startClairePreDriveCall } from "../../claire/claireTwilio";
+import { checkClaireModelHealth, claireModelDownText } from "../../claire/claireModelHealth";
+import { sendOperatorArtifact } from "../../operatorArtifact/sendOperatorArtifact";
 import { executePersistentOperatorAction } from "./actionExecution";
 import { beginWeeklyMission } from "../../claire/weeklyMission/driver";
 import { latestWeeklyIntentForOperators } from "../../claire/weeklyMission/intentStore";
@@ -303,6 +305,26 @@ export async function executeDailyClaireCall(input: {
   const { step, now, store, context, identity, purpose } = input;
   if (!context.actor.standingAuthorizationId) return { skipped: "daily_call_requires_standing_authorization" };
   const businessDate = formatInTimeZone(now, step.timeZone, "yyyy-MM-dd");
+  // A call Claire cannot understand is worse than no call: a rejected model key skips it and says why.
+  const health = await checkClaireModelHealth({ tenantId: context.scope.tenantId });
+  if (!health.ok) {
+    console.error("[Claire] scheduled call skipped: model unavailable", {
+      event: "claire_call_skipped_model_unavailable",
+      appointmentId: context.jobId,
+      purpose,
+      reason: health.reason,
+      detail: health.detail,
+    });
+    const texted = await sendOperatorArtifact({
+      tenantId: context.scope.tenantId,
+      operatorUserId: identity.communicationOperatorUserId,
+      artifact: { kind: "plain_text", text: claireModelDownText(purpose) },
+      decisionId: `claire-model-down:${context.jobId}`,
+    })
+      .then(() => true)
+      .catch(() => false);
+    return { skipped: "claire_model_unavailable", reason: health.reason, operatorTexted: texted };
+  }
   const result = await executePersistentOperatorAction({
     identity,
     actionClass: purpose === "morning_readiness" ? "place_morning_readiness_call" : "place_evening_debrief_call",

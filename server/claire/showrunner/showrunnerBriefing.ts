@@ -6,7 +6,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { getDayDirectorState, listOpenDayDirectorCommitmentsBetween } from "../../planning/dayDirector/dayDirectorService";
-import { collapseOpenCommitments, type CarriedOpenItem } from "../dayLine/openItemLifecycle";
+import { collapseOpenCommitments, spokenAction, type CarriedOpenItem } from "../dayLine/openItemLifecycle";
 import { isTestFixtureTitle } from "../dayLine/testDataGuard";
 import { looksLikeSalesFollowUp, mayRaiseOverdueSalesFollowUp } from "../dayLine/weekendQuietRule";
 import { latestStrategicProposal, strategicResponses } from "../../strategy/strategicStore";
@@ -639,7 +639,7 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
     // the question; otherwise it would dangle without its yes/no.
     const askCarried = !prepared && carried ? carried : null;
     const carriedLine = askCarried
-      ? `${askCarried.title} has been open ${askCarried.ageDays} ${askCarried.ageDays === 1 ? "day" : "days"}${askCarried.ids.length > 1 ? ` across ${askCarried.ids.length} entries` : ""}.`
+      ? `One thing has been open ${askCarried.ageDays} ${askCarried.ageDays === 1 ? "day" : "days"}${askCarried.ids.length > 1 ? ` across ${askCarried.ids.length} entries` : ""}: ${spokenAction(askCarried.title)}.`
       : "";
     const closer = (fallback: string) => prepared ?? (askCarried ? askCarried.question : fallback);
     if (b.purpose === "morning_readiness") {

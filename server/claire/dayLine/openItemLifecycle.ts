@@ -60,9 +60,55 @@ const lowerFirst = (text: string) => (text ? text.charAt(0).toLowerCase() + text
 
 const PERSON_VERBS = /^(call|email|text|message|visit|ask|meet|see|follow up with|reach out to|phone|ping|talk to|speak to|check in with)\s+/i;
 
+/**
+ * Day Line titles are often the operator's own words: "I have to mail 4 former customers to try to get
+ * them to order laundry pickups with me again." Spoken back verbatim that became "Did you i have to mail
+ * 4 former customers…?" on the 2026-10-22 evening call. The action is what Claire says: "mail 4 former
+ * customers".
+ */
+export function spokenAction(title: string): string {
+  let text = title.replace(/\s+/g, " ").replace(/[.?!]+$/g, "").trim();
+  text = text.replace(
+    /^(?:(?:so|ok|okay|and|also|remember|reminder)[:,]?\s+)*(?:i(?:'ve| have)? (?:got|need|have|want|ought|should|must|will|'ll)?\s*(?:to\s+)?|i'll\s+|i will\s+|i should\s+|i must\s+|i need\s+to\s+|need to\s+|have to\s+|got to\s+|gotta\s+|remember to\s+|must\s+|should\s+)/i,
+    ""
+  );
+  // The purpose clause is the operator's reason, not the action.
+  text = text.replace(/\s+(?:to try to|to try and|in order to|so that|so they|so he|so she|to get (?:them|him|her) to)\b.*$/i, "");
+  text = text
+    .replace(/\bme\b/gi, "you")
+    .replace(/\bmy\b/gi, "your")
+    .replace(/\bmyself\b/gi, "yourself");
+  return text.trim() || title.trim();
+}
+
+const NUMBER_WORDS: Record<string, number> = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, fifteen: 15, twenty: 20,
+};
+const COUNT = /\b(\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s+(?:more\s+|of (?:them|the)\s+|(?:former|old|past|new|regular|lapsed)\s+)*([a-z]{3,})/gi;
+
+function countsIn(text: string): Array<{ n: number; noun: string }> {
+  const out: Array<{ n: number; noun: string }> = [];
+  for (const match of text.matchAll(COUNT)) {
+    const raw = match[1]!.toLowerCase();
+    const n = /^\d+$/.test(raw) ? Number(raw) : NUMBER_WORDS[raw];
+    if (n != null) out.push({ n, noun: match[2]!.toLowerCase().replace(/(?:es|s)$/, "") });
+  }
+  return out;
+}
+
+/** "Mail 4 former customers" answered with "I texted 1 former customer": 1 of 4, not done. */
+export function partialCount(title: string, reply: string): { done: number; of: number; noun: string } | null {
+  const target = countsIn(title).find(count => count.n > 1);
+  if (!target) return null;
+  const reported = countsIn(reply).find(count => count.noun === target.noun || count.noun.startsWith(target.noun) || target.noun.startsWith(count.noun));
+  if (!reported || reported.n >= target.n) return null;
+  return { done: reported.n, of: target.n, noun: target.noun };
+}
+
 /** A yes/no question the operator can answer in a word: "Did you call Dana?" */
 export function agendaQuestion(title: string): string {
-  const clean = title.replace(/\s+/g, " ").replace(/[.?!]+$/g, "").trim();
+  const clean = spokenAction(title);
   const withoutDay = clean.replace(/\s+(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)$/i, "");
   const verb = PERSON_VERBS.exec(withoutDay);
   if (verb) {
@@ -109,6 +155,8 @@ export type OpenItemDecision =
   | { kind: "drop" }
   | { kind: "snooze"; until: string }
   | { kind: "still_open" }
+  /** Some of a counted item, not all of it. Nothing is closed. */
+  | { kind: "progress"; done: number; of: number; noun: string }
   | { kind: "unclear" };
 
 function nextWeekdayAfter(today: string, weekday: string): string {
@@ -123,7 +171,7 @@ const DROP =
   /\b(?:drop (?:it|that|this)|kill (?:it|that|this)|forget (?:it|that|about (?:it|that))|take (?:it|that) off|remove (?:it|that)|cancel (?:it|that)|scratch (?:it|that)|not doing (?:it|that)|i(?:'m| am) not (?:going to|gonna) (?:do|call|chase)|never (?:talk|bring|ask|speak|mention)[^.?!]{0,40}(?:again|anymore|any more)|stop (?:asking|bringing|raising|mentioning)[^.?!]{0,30})\b/i;
 const NEGATION = /\b(?:no|nope|not yet|didn'?t|did not|haven'?t|have not|never did|not really)\b/i;
 const DONE =
-  /^(?:yes|yeah|yep|yup|sure|done|did it|all done|finished|handled|already)\b|\b(?:i (?:already |just )?(?:called|did|sent|emailed|texted|spoke|talked|handled|took care|reached|met|visited)|it'?s (?:done|handled|taken care of)|took care of (?:it|that)|i got (?:to|hold of) (?:him|her|them))\b/i;
+  /^(?:yes|yeah|yep|yup|sure|done|did it|all done|finished|handled|already)\b|\b(?:i (?:already |just )?(?:called|did|sent|emailed|mailed|texted|spoke|talked|handled|took care|reached|met|visited|dropped off|delivered|finished)|it'?s (?:done|handled|taken care of)|took care of (?:it|that)|i got (?:to|hold of) (?:him|her|them))\b/i;
 
 /** Reads the operator's answer to an agenda question. "Not this week" moves it; "never again" closes it. */
 /**
@@ -138,10 +186,13 @@ export function isQuestion(text: string): boolean {
   return /\?/.test(text) || QUESTION_OPENER.test(text.trim());
 }
 
-export function interpretOpenItemReply(utterance: string, today: string): OpenItemDecision {
+export function interpretOpenItemReply(utterance: string, today: string, itemTitle?: string): OpenItemDecision {
   const text = utterance.trim();
   if (!text) return { kind: "unclear" };
   if (isQuestion(text)) return { kind: "unclear" };
+  // 2026-10-22: "I sent a text message to 1 former customer" closed "mail 4 former customers".
+  const partial = itemTitle ? partialCount(itemTitle, text) : null;
+  if (partial && !DROP.test(text)) return { kind: "progress", ...partial };
   if (DROP.test(text)) return { kind: "drop" };
   if (/\bnot this week\b/i.test(text) || /\b(?:next week|after the weekend|this weekend)\b/i.test(text)) {
     return { kind: "snooze", until: nextWeekdayAfter(today, "monday") };
@@ -253,15 +304,16 @@ export async function applyOpenItemDecision(input: {
     return {
       applied: false,
       verified: false,
-      speak: `I tried, but I couldn't verify that ${item.title} changed, so treat it as still open.`,
+      speak: `I tried, but I couldn't verify that "${spokenAction(item.title)}" changed, so treat it as still open.`,
     };
   }
   const folded = otherIds.length ? ` and cleared ${otherIds.length} older ${otherIds.length === 1 ? "copy" : "copies"}` : "";
+  const action = spokenAction(item.title);
   const speak =
     decision.kind === "done"
-      ? `Marked ${item.title} done${folded}.`
+      ? `Marked "${action}" done${folded}.`
       : decision.kind === "drop"
-        ? `Dropped ${item.title}${folded}. It's off the line.`
-        : `Moved ${item.title} to ${spokenDay(decision.until, input.today)}${folded}.`;
+        ? `Dropped "${action}"${folded}. It's off the line.`
+        : `Moved "${action}" to ${spokenDay(decision.until, input.today)}${folded}.`;
   return { applied: true, verified: true, speak };
 }
