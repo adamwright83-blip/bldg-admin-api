@@ -1,13 +1,14 @@
 import { trpc } from "@/lib/trpc";
 import { FirstMissionDriver } from "@/components/goldline/onboarding/FirstMissionDriver";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
 import GoldlineOverworld from "./goldline/GoldlineOverworld";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
+import { ClaireComposerSheet } from "@/components/claire/ClaireComposerSheet";
 import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
@@ -145,6 +146,14 @@ function AuthenticatedDriver() {
     };
   }, [authLoading, isAuthenticated, publicDriverHost, publicBootstrapFailed]);
   const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
+  const utils = trpc.useUtils();
+  // A Claire text turn can change the Day Line; re-read what she writes to.
+  const refreshAfterClaire = useCallback(() => {
+    void utils.system.dayDirector.state.invalidate();
+    void utils.system.currentDayLine.today.invalidate();
+    void utils.system.missionDirector.planForDate.invalidate();
+    void utils.system.weeklyMission.dailyReadiness.invalidate();
+  }, [utils]);
   const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
   const firstSparkAvailable = Boolean(firstMission && !firstMission.gameplayCompletedAt);
 
@@ -217,6 +226,7 @@ function AuthenticatedDriver() {
   return (
     <>
       <ClaireAnalysisInbox />
+      <ClaireComposerSheet onTurn={refreshAfterClaire} />
       <GoldlineDriverController firstMissionEvidence={firstMission?.outcome} onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />
     </>
   );

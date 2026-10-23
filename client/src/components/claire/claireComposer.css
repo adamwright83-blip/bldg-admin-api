@@ -1,0 +1,149 @@
+/* Shared Claire composer. Tokens are local so it reads the same on the Claire Desk and the Driver sheet. */
+.cc-root {
+  --cc-navy: #13294b;
+  --cc-ink: #22385a;
+  --cc-muted: #5d6f87;
+  --cc-line: #e7dcc0;
+  --cc-panel: #fffdf7;
+  --cc-you: #eef3fb;
+  --cc-gold: #e2a422;
+  --cc-err: #9a2d22;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  color: var(--cc-ink);
+  font-family: "Inter", system-ui, sans-serif;
+  color-scheme: light;
+}
+.cc-root button { font: inherit; cursor: pointer; }
+.cc-root button:disabled { cursor: not-allowed; opacity: 0.55; }
+.cc-root :focus-visible { outline: 3px solid var(--cc-gold); outline-offset: 2px; }
+
+.cc-empty { margin: 0; font-size: 14px; line-height: 1.45; color: var(--cc-muted); }
+
+.cc-log {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cc-sheet .cc-log { max-height: none; min-height: 0; }
+.cc-line { display: grid; gap: 2px; padding: 9px 12px; border-radius: 14px; max-width: 92%; }
+.cc-line p { margin: 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-who { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cc-muted); }
+.cc-line-you { justify-self: end; background: var(--cc-you); }
+.cc-line-claire { justify-self: start; background: var(--cc-panel); border: 1px solid var(--cc-line); }
+
+.cc-dots { display: inline-flex; gap: 4px; padding: 6px 0; }
+.cc-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--cc-muted); animation: cc-blink 1.2s infinite ease-in-out; }
+.cc-dots i:nth-child(2) { animation-delay: 0.15s; }
+.cc-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes cc-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cc-dots i { animation: none; opacity: 0.6; } }
+
+.cc-error { margin: 0; font-size: 14px; font-weight: 600; color: var(--cc-err); line-height: 1.4; }
+
+.cc-form { display: flex; gap: 8px; align-items: flex-end; }
+.cc-form textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  max-height: 160px;
+  padding: 11px 14px;
+  border: 2px solid var(--cc-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--cc-ink);
+  font: inherit;
+  font-size: 16px; /* 16px keeps iOS from zooming on focus */
+  line-height: 1.35;
+  resize: vertical;
+}
+.cc-form textarea:focus { border-color: var(--cc-gold); outline: none; }
+.cc-form button {
+  min-height: 48px;
+  min-width: 72px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--cc-navy);
+  color: #fff6dc;
+  font-weight: 800;
+}
+.cc-new { justify-self: start; padding: 4px 0; border: 0; background: none; color: var(--cc-muted); font-size: 13px; text-decoration: underline; }
+
+.cc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/*
+ * Driver: floating launcher + bottom sheet. Portaled to body (the Day Line clips fixed descendants).
+ * The Day Line owns the bottom ~160px: game nav (66px), the next-up card (bottom 73px, 82px+ tall)
+ * and the build-mission button (bottom 76px, right 12px). The launcher sits above all three.
+ */
+.cc-launcher {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(176px + env(safe-area-inset-bottom));
+  /* Above the trail and game nav (40); below the Day Line's own overlays (nav layer 79, build CTA 120, garage 200). */
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 18px 0 8px;
+  border: 2px solid #fff3d1;
+  border-radius: 999px;
+  background: #13294b;
+  color: #fff6dc;
+  font: 800 15px/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 10px 28px rgba(4, 18, 12, 0.45);
+  cursor: pointer;
+}
+.cc-launcher-face {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff8e3, #f1d79a);
+  color: #13294b;
+  font-size: 18px;
+  box-shadow: 0 0 0 2px #e2a422;
+}
+.cc-launcher:focus-visible { outline: 3px solid #e2a422; outline-offset: 3px; }
+
+.cc-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482500;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: rgba(4, 18, 12, 0.45);
+}
+.cc-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(560px, 100vw);
+  height: min(78dvh, 680px);
+  padding: 14px 16px max(16px, env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0;
+  background: #fbf8ef;
+  box-shadow: 0 -12px 40px rgba(4, 18, 12, 0.35);
+  font-family: "Inter", system-ui, sans-serif;
+  color-scheme: light;
+}
+.cc-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; }
+.cc-panel-head strong { color: #13294b; letter-spacing: 0.16em; font-size: 14px; }
+.cc-panel-head small { display: block; color: #5d6f87; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.cc-close { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: #13294b; font-size: 22px; cursor: pointer; }
+.cc-panel .cc-sheet { grid-template-rows: minmax(0, 1fr) auto auto auto; min-height: 0; }
+@media (min-width: 720px) {
+  .cc-scrim { align-items: center; }
+  .cc-panel { border-radius: 22px; }
+}
