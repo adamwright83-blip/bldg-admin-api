@@ -4,10 +4,10 @@ import { ClaireComposer } from "./ClaireComposer";
 import "./claireComposer.css";
 
 const INTERACTIVE = 'button, a[href], input, select, textarea, [role="button"], [role="link"], [role="menuitem"]';
-const RECHECK_MS = 150;
+const RECHECK_MS = 250;
 
 /**
- * True when something the operator can tap sits under the launcher. It floats on
+ * True when something the operator could tap sits right under the launcher. It floats on
  * document.body, above every stacking context in the game, so z-index can't keep it
  * off a menu that opens beneath it; it steps aside instead.
  */
@@ -22,9 +22,11 @@ function launcherCoversControl(launcher: HTMLElement): boolean {
     [r.left + inset, r.bottom - inset],
     [r.right - inset, r.bottom - inset],
   ];
-  return points.some(([x, y]) =>
-    document.elementsFromPoint(x, y).some(node => !launcher.contains(node) && node.closest(INTERACTIVE) !== null)
-  );
+  // Only what would take the tap counts: the topmost element under the launcher.
+  return points.some(([x, y]) => {
+    const beneath = document.elementsFromPoint(x, y).find(node => !launcher.contains(node));
+    return beneath?.closest(INTERACTIVE) != null;
+  });
 }
 
 /**
@@ -52,25 +54,16 @@ export function ClaireComposerSheet({ onTurn }: { onTurn?: () => void }) {
   }, [open]);
 
   useEffect(() => {
-    if (open || typeof MutationObserver === "undefined") return;
-    let timer: number | null = null;
+    if (open) return;
     const check = () => {
-      timer = null;
       const launcher = launcherRef.current;
       if (launcher) setStepAside(launcherCoversControl(launcher));
     };
-    const schedule = () => {
-      if (timer === null) timer = window.setTimeout(check, RECHECK_MS);
-    };
-    // Menus and panels open by adding nodes; no scroll/resize listeners (the e2e
-    // listener-count gate counts those).
-    const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { childList: true, subtree: true });
+    // A timer, not DOM events: game menus slide in with CSS animation (no DOM change once
+    // they land), and the e2e listener-count gate counts scroll/resize listeners.
+    const timer = window.setInterval(check, RECHECK_MS);
     check();
-    return () => {
-      observer.disconnect();
-      if (timer !== null) window.clearTimeout(timer);
-    };
+    return () => window.clearInterval(timer);
   }, [open]);
 
   if (typeof document === "undefined") return null;
