@@ -117,6 +117,9 @@
   box-shadow: 0 0 0 2px #e2a422;
 }
 .cc-launcher:focus-visible { outline: 3px solid #e2a422; outline-offset: 3px; }
+/* A control sits under the launcher (e.g. a game menu opened beneath it): get out of the way.
+   visibility, not display, so the launcher keeps its box for the next overlap check. */
+.cc-launcher[data-step-aside="true"] { visibility: hidden; pointer-events: none; }
 
 .cc-scrim {
   position: fixed;
