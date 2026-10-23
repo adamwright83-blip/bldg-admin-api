@@ -732,6 +732,28 @@ export default function JoystickLanding() {
   // Lantern city map node hover state
   const [hoveredLantern, setHoveredLantern] = useState<number | null>(null);
 
+  // Section 6: Lantern City landmark state (1 = Maya R, 2 = Rise Wilshire, 3 = CPE)
+  const [activeLanternLandmark, setActiveLanternLandmark] = useState<number>(1);
+
+  // Section 7: Dossier page state ("clue" | "mission")
+  const [dossierPage, setDossierPage] = useState<"clue" | "mission">("clue");
+
+  // Section 8: Connectors transmutation pipeline trigger (0 = CleanCloud, 1 = Stripe, 2 = Square)
+  const [activePipelineTrigger, setActivePipelineTrigger] = useState<number>(0);
+
+  // Section 10: Seats living handoff dispatch trigger
+  const [isSeatsDispatched, setIsSeatsDispatched] = useState<boolean>(false);
+
+  // Section 11: Trust mechanical approval slate states
+  const [trustTime, setTrustTime] = useState<"8:00 AM" | "9:00 AM">("8:00 AM");
+  const [isTrustApproved, setIsTrustApproved] = useState<boolean>(false);
+
+  // Section 12: Live proof founder clipboard dispatch log tab (0 = Silver Lake, 1 = CPE, 2 = Wilshire)
+  const [activeDispatchTab, setActiveDispatchTab] = useState<number>(0);
+
+  // Section 13: Pricing billing cycle toggle ("monthly" | "annual")
+  const [pricingBillingCycle, setPricingBillingCycle] = useState<"monthly" | "annual">("monthly");
+
   useEffect(() => {
     captureProductEvent("landing_page_visited", {
       path: typeof window !== "undefined" ? window.location.pathname : "/joystick",
@@ -1352,7 +1374,7 @@ export default function JoystickLanding() {
         </div>
       </section>
 
-      {/* 6. THE CITY (LANTERN CITY — LIGHTWEIGHT 2D CANVAS) */}
+      {/* 6. THE CITY (LANTERN CITY — INTERACTIVE STORYBOOK DIORAMA) */}
       <section id="city" className="jl-band jl-city-section" aria-labelledby="city-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
@@ -1367,108 +1389,190 @@ export default function JoystickLanding() {
             </p>
           </div>
 
-          {/* Lightweight 2D Lantern Map Canvas */}
-          <div className="jl-city-canvas-wrap">
-            <svg
-              className="jl-city-svg"
-              viewBox="0 0 960 440"
-              preserveAspectRatio="xMidYMid slice"
-              role="img"
-              aria-label="Lantern City map: glowing lanterns show active customers; dim lanterns show quiet doors"
-            >
-              <defs>
-                <radialGradient id="cityMist" cx="50%" cy="50%" r="60%">
-                  <stop offset="0%" stopColor="#1a1a24" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="#0c0d12" stopOpacity="1" />
-                </radialGradient>
-                <filter id="lanternGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="6" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
+          <div className="jl-city-diorama-container">
+            {/* The Storybook Visual Diorama */}
+            <div className="jl-city-diorama-viewport">
+              <img
+                src="/joystick/lantern-city-diorama.jpg"
+                alt="Lantern City: A cozy storybook neighborhood diorama with craftsman cottages and warm glowing amber lanterns on front porches"
+                className="jl-city-diorama-img"
+                loading="lazy"
+              />
 
-              <rect width="960" height="440" fill="url(#cityMist)" rx="8" />
+              {/* Ambient Mist & Twilight Overlay */}
+              <div className="jl-city-diorama-vignette" />
 
-              {/* Stylized street grid lines */}
-              <g stroke="rgba(255,255,255,0.08)" strokeWidth="1" strokeDasharray="3 4">
-                <path d="M 60 80 Q 240 120, 480 90 T 900 110" fill="none" />
-                <path d="M 80 180 Q 320 210, 560 170 T 920 230" fill="none" />
-                <path d="M 40 320 Q 300 310, 600 340 T 940 330" fill="none" />
-                <path d="M 220 40 L 260 400 M 460 30 L 480 410 M 720 40 L 700 420" fill="none" />
-              </g>
+              {/* Landmark Pin 1: Maya R.'s Cottage */}
+              <button
+                type="button"
+                className={`jl-landmark-pin jl-pin-maya ${activeLanternLandmark === 1 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(1)}
+                aria-label="Maya R. cottage landmark in Silver Lake"
+              >
+                <span className="jl-pin-pulse" />
+                <span className="jl-pin-lantern-icon">🏮</span>
+                <span className="jl-pin-label">Maya R. · Quiet</span>
+              </button>
 
-              {/* Territory boundaries */}
-              <text x="90" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
-                SILVER LAKE SECTOR
-              </text>
-              <text x="490" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
-                BEVERLY FLATS
-              </text>
-              <text x="760" y="60" fill="rgba(255,255,255,0.3)" fontSize="11" letterSpacing="2">
-                K-TOWN BOULEVARD
-              </text>
+              {/* Landmark Pin 2: Rise Wilshire */}
+              <button
+                type="button"
+                className={`jl-landmark-pin jl-pin-rise ${activeLanternLandmark === 2 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(2)}
+                aria-label="Rise Wilshire multi-unit prospect corridor"
+              >
+                <span className="jl-pin-pulse" />
+                <span className="jl-pin-lantern-icon">🏮</span>
+                <span className="jl-pin-label">Rise Wilshire · 24 Units</span>
+              </button>
 
-              {/* Lanterns: Glowing amber = Active, Dim = Quiet */}
-              {[
-                { id: 1, x: 180, y: 140, active: true, name: "Maya R.", note: "78 days quiet · $48 last wash" },
-                { id: 2, x: 260, y: 220, active: false, name: "Hazel House", note: "3 deliveries logged" },
-                { id: 3, x: 380, y: 160, active: true, name: "Rise Wilshire", note: "24 units · prospect door" },
-                { id: 4, x: 520, y: 280, active: false, name: "The Flats 14B", note: "Door tags hung Tuesday" },
-                { id: 5, x: 620, y: 130, active: true, name: "Sunset Loft", note: "Weekly regular · pickup 10am" },
-                { id: 6, x: 740, y: 240, active: true, name: "CPE Tower East", note: "8 residents quiet" },
-                { id: 7, x: 840, y: 170, active: false, name: "Vermont Studios", note: "Ad air #02 pending" },
-              ].map((lantern) => (
-                <g
-                  key={lantern.id}
-                  className="jl-lantern-node"
-                  onMouseEnter={() => setHoveredLantern(lantern.id)}
-                  onMouseLeave={() => setHoveredLantern(null)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {/* Outer glow */}
-                  <circle
-                    cx={lantern.x}
-                    cy={lantern.y}
-                    r={lantern.active ? 20 : 10}
-                    fill={lantern.active ? "rgba(227, 155, 0, 0.25)" : "rgba(255, 255, 255, 0.05)"}
-                    filter={lantern.active ? "url(#lanternGlow)" : undefined}
-                  />
-                  {/* Lantern core */}
-                  <circle
-                    cx={lantern.x}
-                    cy={lantern.y}
-                    r={lantern.active ? 6 : 3.5}
-                    fill={lantern.active ? "#e39b00" : "#666"}
-                  />
-                  {/* Label */}
-                  <text
-                    x={lantern.x}
-                    y={lantern.y - 12}
-                    textAnchor="middle"
-                    fill={lantern.active ? "#fbfaf6" : "#888"}
-                    fontSize="11"
-                    fontFamily="Inter, sans-serif"
-                    fontWeight="500"
-                  >
-                    {lantern.name}
-                  </text>
-                </g>
-              ))}
-            </svg>
+              {/* Landmark Pin 3: Century Park East */}
+              <button
+                type="button"
+                className={`jl-landmark-pin jl-pin-cpe ${activeLanternLandmark === 3 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(3)}
+                aria-label="Century Park East executive win-back tower"
+              >
+                <span className="jl-pin-pulse" />
+                <span className="jl-pin-lantern-icon">🏮</span>
+                <span className="jl-pin-label">Tower B · 8 Quiet</span>
+              </button>
+
+              {/* Unfurling Paper Mission Docket Overlay */}
+              <div className="jl-diorama-mission-docket">
+                <div className="jl-docket-header">
+                  <div className="jl-docket-tag">
+                    {activeLanternLandmark === 1 && "SILVER LAKE SECTOR · REUNION MISSION"}
+                    {activeLanternLandmark === 2 && "WILSHIRE CORRIDOR · PROSPECT MISSION"}
+                    {activeLanternLandmark === 3 && "CENTURY PARK EAST · WIN-BACK"}
+                  </div>
+                  <div className="jl-docket-companion">
+                    {activeLanternLandmark === 1 && "Sable (Recall) in field"}
+                    {activeLanternLandmark === 2 && "Rook (Contact) in field"}
+                    {activeLanternLandmark === 3 && "Orren (Route) in field"}
+                  </div>
+                </div>
+
+                <div className="jl-docket-body">
+                  {activeLanternLandmark === 1 && (
+                    <>
+                      <h4 className="jl-docket-title">Maya R. · 78 Days Quiet</h4>
+                      <p className="jl-docket-desc">
+                        Ordered weekly for 2 years ($48 avg). Paused when the delivery window moved from Tuesday afternoons to mornings. Her porch lantern is lit.
+                      </p>
+                      <div className="jl-docket-metric-row">
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Recoverable Revenue</span>
+                          <span className="jl-metric-val">+$2,490 / yr</span>
+                        </div>
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Route Detour</span>
+                          <span className="jl-metric-val">0.1 mi (Tuesday loop)</span>
+                        </div>
+                      </div>
+                      <a
+                        href={START_PATH}
+                        className="jl-docket-action"
+                        onClick={() => captureProductEvent("city_mission_previewed", { landmark: "maya" })}
+                      >
+                        Preview Claire&apos;s Opener →
+                      </a>
+                    </>
+                  )}
+
+                  {activeLanternLandmark === 2 && (
+                    <>
+                      <h4 className="jl-docket-title">Rise Wilshire · 24 Residential Doors</h4>
+                      <p className="jl-docket-desc">
+                        Directly on your Tuesday van path. Building manager changed last month; resident flyer rack is open. Rook drafted a neighborhood intro note.
+                      </p>
+                      <div className="jl-docket-metric-row">
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Target Density</span>
+                          <span className="jl-metric-val">24 doors / 1 stop</span>
+                        </div>
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Projected Value</span>
+                          <span className="jl-metric-val">+$1,150 / mo</span>
+                        </div>
+                      </div>
+                      <a
+                        href={START_PATH}
+                        className="jl-docket-action"
+                        onClick={() => captureProductEvent("city_mission_previewed", { landmark: "rise" })}
+                      >
+                        Preview Route Tag →
+                      </a>
+                    </>
+                  )}
+
+                  {activeLanternLandmark === 3 && (
+                    <>
+                      <h4 className="jl-docket-title">Century Park East · The Velvet Gate</h4>
+                      <p className="jl-docket-desc">
+                        8 executive residents stopped pickups when the security desk changed concierge protocols. Orren mapped an approved ground-level delivery protocol.
+                      </p>
+                      <div className="jl-docket-metric-row">
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Dormant Accounts</span>
+                          <span className="jl-metric-val">8 verified VIPs</span>
+                        </div>
+                        <div className="jl-docket-metric">
+                          <span className="jl-metric-label">Recoverable Revenue</span>
+                          <span className="jl-metric-val">+$420 / mo</span>
+                        </div>
+                      </div>
+                      <a
+                        href={START_PATH}
+                        className="jl-docket-action"
+                        onClick={() => captureProductEvent("city_mission_previewed", { landmark: "cpe" })}
+                      >
+                        Review Protocol Move →
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Landmark Selector Pills */}
+            <div className="jl-landmark-tabs" role="tablist">
+              <button
+                type="button"
+                className={`jl-landmark-tab ${activeLanternLandmark === 1 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(1)}
+              >
+                <span className="jl-tab-dot" />
+                Maya R. (Silver Lake Cottage)
+              </button>
+              <button
+                type="button"
+                className={`jl-landmark-tab ${activeLanternLandmark === 2 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(2)}
+              >
+                <span className="jl-tab-dot" />
+                Rise Wilshire (24-Door Corridor)
+              </button>
+              <button
+                type="button"
+                className={`jl-landmark-tab ${activeLanternLandmark === 3 ? "is-active" : ""}`}
+                onClick={() => setActiveLanternLandmark(3)}
+              >
+                <span className="jl-tab-dot" />
+                Century Park East (The Velvet Gate)
+              </button>
+            </div>
 
             <div className="jl-city-hud">
               <span className="jl-city-hud-indicator" />
-              <span>Lantern City active: 142 doors walked this week · 8 quiet doors ready for Claire's call</span>
+              <span>Lantern City active · 142 doors walked this week · 8 quiet doors ready for Claire&apos;s call</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 7. THE DOSSIER (LIVING WIKI FORMAT) */}
-      <section className="jl-band" aria-labelledby="dossier-heading">
+      {/* 7. THE DOSSIER (MANILA CASE FILE WITH RECEIPT & GREASE PENCIL) */}
+      <section id="dossier" className="jl-band" aria-labelledby="dossier-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
             <div>
@@ -1482,58 +1586,155 @@ export default function JoystickLanding() {
             </p>
           </div>
 
-          <div className="jl-dossier-wrap">
-            {/* Dossier Tabs */}
-            <div className="jl-dossier-tabs" role="tablist">
-              {DOSSIER_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeDossierTab === tab.id}
-                  className={`jl-dossier-tab ${activeDossierTab === tab.id ? "is-active" : ""}`}
-                  onClick={() => setActiveDossierTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          <div className="jl-dossier-casefile-wrap">
+            {/* The Manila Folder Header */}
+            <div className="jl-casefile-folder">
+              <div className="jl-casefile-tab-top">
+                <span className="jl-brass-clip" aria-hidden="true" />
+                <span className="jl-casefile-serial">FILE #042 · CONFIDENTIAL OPERATOR DOSSIER</span>
+                <span className="jl-casefile-stamp">RECEIPT BACKED</span>
+              </div>
 
-            {/* Dossier Card */}
-            <div className="jl-dossier-card">
-              <div className="jl-dossier-header">
-                <div className="jl-dossier-title">{activeDossier.operator}</div>
-                <div className="jl-dossier-badge">{activeDossier.ticket}</div>
+              {/* Dossier Business Sector Selector */}
+              <div className="jl-dossier-sector-bar">
+                {DOSSIER_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`jl-dossier-sector-btn ${activeDossierTab === tab.id ? "is-active" : ""}`}
+                    onClick={() => setActiveDossierTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-              <div className="jl-dossier-grid">
-                <div className="jl-dossier-item">
-                  <span className="jl-dossier-field">Who went quiet</span>
-                  <span className="jl-dossier-val">{activeDossier.quiet}</span>
+
+              {/* Interactive Page Switcher */}
+              <div className="jl-casefile-spread">
+                <div className="jl-casefile-nav">
+                  <button
+                    type="button"
+                    className={`jl-casefile-nav-btn ${dossierPage === "clue" ? "is-active" : ""}`}
+                    onClick={() => setDossierPage("clue")}
+                  >
+                    1. The Neglected Receipt
+                  </button>
+                  <button
+                    type="button"
+                    className={`jl-casefile-nav-btn ${dossierPage === "mission" ? "is-active" : ""}`}
+                    onClick={() => setDossierPage("mission")}
+                  >
+                    2. Claire&apos;s Playable Move →
+                  </button>
                 </div>
-                <div className="jl-dossier-item">
-                  <span className="jl-dossier-field">What's owed</span>
-                  <span className="jl-dossier-val">{activeDossier.owed}</span>
-                </div>
-                <div className="jl-dossier-item">
-                  <span className="jl-dossier-field">The goal</span>
-                  <span className="jl-dossier-val" style={{ fontWeight: 600, color: "#111" }}>
-                    {activeDossier.goal}
-                  </span>
-                </div>
-                <div className="jl-dossier-item">
-                  <span className="jl-dossier-field">What you keep skipping</span>
-                  <span className="jl-dossier-val">{activeDossier.skipped}</span>
-                </div>
-              </div>
-              <div className="jl-dossier-footer">
-                There is a page about Claire. She hasn’t written it yet.
+
+                {dossierPage === "clue" ? (
+                  <div className="jl-casefile-page jl-page-clue">
+                    <div className="jl-clue-layout">
+                      {/* Crinkled Thermal POS Register Receipt */}
+                      <div className="jl-thermal-receipt">
+                        <div className="jl-receipt-jagged-top" />
+                        <div className="jl-thermal-header">
+                          <div className="jl-thermal-shop">CLEANCLOUD POS · REGISTER #02</div>
+                          <div className="jl-thermal-id">{activeDossier.operator}</div>
+                        </div>
+                        <div className="jl-thermal-divider">- - - - - - - - - - - - - - - - - - -</div>
+                        <div className="jl-thermal-row">
+                          <span>WHO WENT QUIET:</span>
+                          <strong>{activeDossier.quiet}</strong>
+                        </div>
+                        <div className="jl-thermal-row">
+                          <span>WHAT&apos;S OWED:</span>
+                          <span>{activeDossier.owed}</span>
+                        </div>
+                        <div className="jl-thermal-row">
+                          <span>AVERAGE TICKET:</span>
+                          <span>{activeDossier.ticket}</span>
+                        </div>
+                        <div className="jl-thermal-row">
+                          <span>THE GOAL:</span>
+                          <strong>{activeDossier.goal}</strong>
+                        </div>
+                        <div className="jl-thermal-divider">- - - - - - - - - - - - - - - - - - -</div>
+                        <div className="jl-thermal-highlight">
+                          <span className="jl-grease-pencil">SKIPPED MOVE: {activeDossier.skipped}</span>
+                        </div>
+                        <div className="jl-thermal-divider">- - - - - - - - - - - - - - - - - - -</div>
+                        <div className="jl-thermal-footer">
+                          VERIFIED BOOK ENTRY · TAX LEDGER MATCHED
+                        </div>
+                        <div className="jl-receipt-jagged-bottom" />
+                      </div>
+
+                      {/* Paperclipped Note from Claire */}
+                      <div className="jl-claire-pinned-note">
+                        <div className="jl-paperclip" aria-hidden="true" />
+                        <div className="jl-claire-note-tag">Claire&apos;s Field Note</div>
+                        <p className="jl-claire-note-handwriting">
+                          &ldquo;She tipped $12 every single Tuesday for two straight years. She didn&apos;t leave you because of price. You stopped showing up on her street when the delivery route shifted east. She&apos;s not lost. She&apos;s waiting.&rdquo;
+                        </p>
+                        <div className="jl-claire-note-meta">
+                          — Claire · Verified from POS ticket #8412
+                        </div>
+                        <button
+                          type="button"
+                          className="jl-casefile-flip-btn"
+                          onClick={() => setDossierPage("mission")}
+                        >
+                          Turn page to the move she built →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="jl-casefile-page jl-page-mission">
+                    <div className="jl-mission-reveal">
+                      <div className="jl-mission-card-badge">PLAYABLE MOVE #01</div>
+                      <h3 className="jl-mission-reveal-title">
+                        Tuesday Afternoon Reunion Knock
+                      </h3>
+                      <p className="jl-mission-reveal-desc">
+                        Claire reconstructed the route. On Tuesday at 1:45 PM, your van passes Maya&apos;s porch with zero extra transit time. Sable drafted the personal note:
+                      </p>
+                      <blockquote className="jl-mission-draft-quote">
+                        &ldquo;Hey Maya — noticed we missed your Tuesday pickups since the route shifted. We&apos;re back on your block every Tuesday afternoon starting tomorrow. First pickup is on us.&rdquo;
+                      </blockquote>
+                      <div className="jl-mission-economics">
+                        <div className="jl-econ-item">
+                          <span className="jl-econ-num">+$2,490</span>
+                          <span className="jl-econ-label">Annual LTV saved</span>
+                        </div>
+                        <div className="jl-econ-item">
+                          <span className="jl-econ-num">$0.00</span>
+                          <span className="jl-econ-label">Ad spend required</span>
+                        </div>
+                        <div className="jl-econ-item">
+                          <span className="jl-econ-num">1 tap</span>
+                          <span className="jl-econ-label">Approval on Day Line</span>
+                        </div>
+                      </div>
+                      <div className="jl-mission-reveal-footer">
+                        <button
+                          type="button"
+                          className="jl-casefile-back-btn"
+                          onClick={() => setDossierPage("clue")}
+                        >
+                          ← Back to the receipt clue
+                        </button>
+                        <a href={START_PATH} className="jl-cta-button">
+                          Play moves like this on my books →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 8. THE RECEIPTS GRID (INTEGRATIONS) */}
+      {/* 8. CONNECTORS (3-BEAT TRANSMUTATION PIPELINE) */}
       <section id="receipts" className="jl-band" aria-labelledby="receipts-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
@@ -1548,22 +1749,175 @@ export default function JoystickLanding() {
             </p>
           </div>
 
-          <div className="jl-receipts-grid">
-            {RECEIPTS_GRID.map((card, i) => (
-              <div key={i} className="jl-receipt-card">
-                <div className="jl-receipt-top">
-                  <span className="jl-receipt-cat">{card.category}</span>
-                  <span
-                    className="jl-receipt-territory"
-                    style={{ background: card.accent }}
-                  >
-                    {card.gameTerritory}
-                  </span>
+          <div className="jl-transmutation-container">
+            {/* Trigger Selector */}
+            <div className="jl-pipeline-triggers" role="tablist">
+              <button
+                type="button"
+                className={`jl-pipeline-trigger-btn ${activePipelineTrigger === 0 ? "is-active" : ""}`}
+                onClick={() => setActivePipelineTrigger(0)}
+              >
+                1. CleanCloud POS (Dry Cleaning &amp; Laundry)
+              </button>
+              <button
+                type="button"
+                className={`jl-pipeline-trigger-btn ${activePipelineTrigger === 1 ? "is-active" : ""}`}
+                onClick={() => setActivePipelineTrigger(1)}
+              >
+                2. Stripe Billing (Customer Churn Webhook)
+              </button>
+              <button
+                type="button"
+                className={`jl-pipeline-trigger-btn ${activePipelineTrigger === 2 ? "is-active" : ""}`}
+                onClick={() => setActivePipelineTrigger(2)}
+              >
+                3. Square Register (Overdue Invoices)
+              </button>
+            </div>
+
+            {/* 3-Beat Horizontal Pipeline */}
+            <div className="jl-pipeline-stage">
+              {/* Beat 1: Raw Business Signal */}
+              <div className="jl-pipeline-beat jl-beat-raw">
+                <div className="jl-beat-header">
+                  <span className="jl-beat-num">BEAT 1</span>
+                  <span className="jl-beat-title">Raw Business Signal</span>
                 </div>
-                <div className="jl-receipt-sources">{card.sources}</div>
-                <div className="jl-receipt-line">&ldquo;{card.claireLine}&rdquo;</div>
+                <div className="jl-beat-content">
+                  {activePipelineTrigger === 0 && (
+                    <div className="jl-raw-slip">
+                      <div className="jl-slip-badge">CleanCloud POS Event</div>
+                      <div className="jl-slip-code">
+                        <code>
+                          ORDER_ID: 8412<br />
+                          CUSTOMER: Maya R.<br />
+                          DELTA: 78_DAYS_INACTIVE<br />
+                          HIST_SPEND: $5,450
+                        </code>
+                      </div>
+                      <p className="jl-slip-caption">Raw transactions stream directly from your store register.</p>
+                    </div>
+                  )}
+                  {activePipelineTrigger === 1 && (
+                    <div className="jl-raw-slip">
+                      <div className="jl-slip-badge">Stripe Webhook Event</div>
+                      <div className="jl-slip-code">
+                        <code>
+                          EVENT: sub.canceled<br />
+                          CUSTOMER: Dr. Aris Thorne<br />
+                          PLAN: $420_MONTHLY_TIER<br />
+                          REASON: schedule_conflict
+                        </code>
+                      </div>
+                      <p className="jl-slip-caption">Real webhook payloads caught at the second of churn.</p>
+                    </div>
+                  )}
+                  {activePipelineTrigger === 2 && (
+                    <div className="jl-raw-slip">
+                      <div className="jl-slip-badge">Square Register Event</div>
+                      <div className="jl-slip-code">
+                        <code>
+                          INVOICE: #0194<br />
+                          CUSTOMER: Rise Commercial<br />
+                          AGING: 42_DAYS_OVERDUE<br />
+                          BALANCE: $680.00
+                        </code>
+                      </div>
+                      <p className="jl-slip-caption">Aged accounts receivable extracted from counter POS.</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
+
+              {/* Arrow Connector */}
+              <div className="jl-pipeline-arrow" aria-hidden="true">
+                <span>→</span>
+              </div>
+
+              {/* Beat 2: Claire's Ink Lens */}
+              <div className="jl-pipeline-beat jl-beat-lens">
+                <div className="jl-beat-header">
+                  <span className="jl-beat-num">BEAT 2</span>
+                  <span className="jl-beat-title">Claire&apos;s Ink Lens</span>
+                </div>
+                <div className="jl-beat-content">
+                  <div className="jl-lens-circle">
+                    <span className="jl-lens-tag">Operational Signal Found</span>
+                    {activePipelineTrigger === 0 && (
+                      <p className="jl-lens-quote">
+                        &ldquo;Maya didn&apos;t leave over quality. Your van is 0.1 miles away on Tuesdays. Route overlap found.&rdquo;
+                      </p>
+                    )}
+                    {activePipelineTrigger === 1 && (
+                      <p className="jl-lens-quote">
+                        &ldquo;Dr. Thorne canceled because his clinic opens at 8 AM. We have an open van slot at 7:45 AM.&rdquo;
+                      </p>
+                    )}
+                    {activePipelineTrigger === 2 && (
+                      <p className="jl-lens-quote">
+                        &ldquo;Rise property manager is on site every Thursday. Rook drafted a courteous payment docket.&rdquo;
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Arrow Connector */}
+              <div className="jl-pipeline-arrow" aria-hidden="true">
+                <span>→</span>
+              </div>
+
+              {/* Beat 3: Playable Quest Card */}
+              <div className="jl-pipeline-beat jl-beat-card">
+                <div className="jl-beat-header">
+                  <span className="jl-beat-num">BEAT 3</span>
+                  <span className="jl-beat-title">Playable Move Built</span>
+                </div>
+                <div className="jl-beat-content">
+                  <div className="jl-quest-card">
+                    <div className="jl-quest-top">
+                      <span className="jl-quest-badge">READY ON DAY LINE</span>
+                      <span className="jl-quest-icon">⚡</span>
+                    </div>
+                    {activePipelineTrigger === 0 && (
+                      <>
+                        <h4 className="jl-quest-name">Reunion Knock · Silver Lake</h4>
+                        <div className="jl-quest-impact">+$310 / mo recovered</div>
+                        <p className="jl-quest-micro">Sable drafted the message. Awaiting your 1-tap sign-off.</p>
+                      </>
+                    )}
+                    {activePipelineTrigger === 1 && (
+                      <>
+                        <h4 className="jl-quest-name">Early Clinic Window Save</h4>
+                        <div className="jl-quest-impact">+$420 / mo account retained</div>
+                        <p className="jl-quest-micro">Claire adjusted route timing. 1 tap queues the offer.</p>
+                      </>
+                    )}
+                    {activePipelineTrigger === 2 && (
+                      <>
+                        <h4 className="jl-quest-name">Thursday Front-Desk Drop</h4>
+                        <div className="jl-quest-impact">+$680 overdue collected</div>
+                        <p className="jl-quest-micro">Courteous invoice reminder printed for driver stop.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Connectors Strip */}
+            <div className="jl-connectors-support-strip">
+              <span className="jl-connectors-label">Connects to your real stack:</span>
+              <div className="jl-connectors-badges">
+                <span className="jl-connector-pill">CleanCloud</span>
+                <span className="jl-connector-pill">Stripe</span>
+                <span className="jl-connector-pill">Square</span>
+                <span className="jl-connector-pill">QuickBooks</span>
+                <span className="jl-connector-pill">Shopify</span>
+                <span className="jl-connector-pill">Toast</span>
+                <span className="jl-connector-pill">Clover</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -1635,8 +1989,8 @@ export default function JoystickLanding() {
         </div>
       </section>
 
-      {/* 10. SEATS (SOLO BUSINESS CREW) */}
-      <section className="jl-band" aria-labelledby="seats-heading">
+      {/* 10. SEATS (LIVING HANDOFF ACROSS 3 DEVICES) */}
+      <section id="seats" className="jl-band" aria-labelledby="seats-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
             <div>
@@ -1650,42 +2004,112 @@ export default function JoystickLanding() {
             </p>
           </div>
 
-          <div className="jl-seats-devices">
-            {/* Device 1: Driver App */}
-            <div className="jl-seat-device">
-              <div className="jl-seat-badge">Driver App</div>
-              <div className="jl-seat-screen">
-                <div className="jl-seat-screen-header">Stop 04 · Rise Wilshire</div>
-                <div className="jl-seat-screen-detail">Gate code #1940 · 2 bags picked up</div>
-                <div className="jl-seat-screen-meta">Zero access to books or customer billing</div>
+          <div className="jl-seats-handoff-container">
+            {/* The 3 Phone Screens Cascade */}
+            <div className="jl-handoff-cascade">
+              {/* Phone 1: Owner Cockpit */}
+              <div className="jl-phone-frame jl-phone-owner">
+                <div className="jl-phone-notch" />
+                <div className="jl-phone-header">
+                  <span className="jl-phone-time">7:32 AM</span>
+                  <span className="jl-phone-role-badge">OPERATOR COCKPIT</span>
+                </div>
+                <div className="jl-phone-screen">
+                  <div className="jl-screen-title">Today: 3 High-Leverage Stops</div>
+                  <div className="jl-owner-kpi">
+                    <span className="jl-kpi-val">$380</span>
+                    <span className="jl-kpi-lbl">Projected route revenue</span>
+                  </div>
+                  <div className="jl-owner-stops-preview">
+                    <div className="jl-stop-chip">Stop 01: Maya R. (Reunion)</div>
+                    <div className="jl-stop-chip">Stop 02: Rise Wilshire (Gate 1940)</div>
+                    <div className="jl-stop-chip">Stop 03: Century Park East</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`jl-dispatch-action-btn ${isSeatsDispatched ? "is-dispatched" : ""}`}
+                    onClick={() => {
+                      setIsSeatsDispatched(true);
+                      captureProductEvent("seats_route_dispatched", { source: "landing_demo" });
+                    }}
+                  >
+                    {isSeatsDispatched ? "✓ Dispatched to Leo's Phone" : "Dispatch Route to Leo →"}
+                  </button>
+                  <div className="jl-privacy-guard">
+                    Strict Privacy: You see the books, gross margins, and customer dossiers.
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Device 2: Resident App */}
-            <div className="jl-seat-device">
-              <div className="jl-seat-badge">Customer App</div>
-              <div className="jl-seat-screen">
-                <div className="jl-seat-screen-header">Order #8412 · On Route</div>
-                <div className="jl-seat-screen-detail">Estimated delivery: 2:15 PM</div>
-                <div className="jl-seat-screen-meta">Clean direct chat · Zero admin access</div>
+              {/* Ink Route Line Between Phones */}
+              <div className={`jl-handoff-thread ${isSeatsDispatched ? "is-pulsing" : ""}`}>
+                <span className="jl-thread-pulse-dot" />
               </div>
-            </div>
 
-            {/* Device 3: Your Day Line */}
-            <div className="jl-seat-device jl-seat-primary">
-              <div className="jl-seat-badge">Your Day Line</div>
-              <div className="jl-seat-screen">
-                <div className="jl-seat-screen-header">Today: 3 High-Leverage Moves</div>
-                <div className="jl-seat-screen-detail">$480 projected · 2 win-backs pending approval</div>
-                <div className="jl-seat-screen-meta">The books, the receipts, full control</div>
+              {/* Phone 2: Driver Leo's Rugged App */}
+              <div className="jl-phone-frame jl-phone-driver">
+                <div className="jl-phone-notch" />
+                <div className="jl-phone-header">
+                  <span className="jl-phone-time">10:14 AM</span>
+                  <span className="jl-phone-role-badge">DRIVER LEO</span>
+                </div>
+                <div className="jl-phone-screen">
+                  <div className="jl-screen-tag">NEXT STOP (04 OF 12)</div>
+                  <div className="jl-driver-stop-title">Rise Wilshire · Unit 4B</div>
+                  <div className="jl-driver-instructions">
+                    <div className="jl-driver-field">
+                      <span className="jl-df-lbl">Gate Code:</span>
+                      <strong className="jl-df-val">#1940</strong>
+                    </div>
+                    <div className="jl-driver-field">
+                      <span className="jl-df-lbl">Instructions:</span>
+                      <span className="jl-df-val">2 laundry bags at front door. Knock twice.</span>
+                    </div>
+                  </div>
+                  <div className="jl-driver-status-tag">
+                    {isSeatsDispatched ? "Stop Loaded & Route Active" : "Waiting for dispatch"}
+                  </div>
+                  <div className="jl-privacy-guard">
+                    Strict Privacy: Leo sees only gates and packages. Zero access to billing or revenue.
+                  </div>
+                </div>
+              </div>
+
+              {/* Ink Route Line Between Phones */}
+              <div className={`jl-handoff-thread ${isSeatsDispatched ? "is-pulsing" : ""}`}>
+                <span className="jl-thread-pulse-dot" />
+              </div>
+
+              {/* Phone 3: Customer Resident Card */}
+              <div className="jl-phone-frame jl-phone-customer">
+                <div className="jl-phone-notch" />
+                <div className="jl-phone-header">
+                  <span className="jl-phone-time">10:16 AM</span>
+                  <span className="jl-phone-role-badge">CUSTOMER APP / SMS</span>
+                </div>
+                <div className="jl-phone-screen">
+                  <div className="jl-sms-bubble jl-sms-incoming">
+                    <p className="jl-sms-text">
+                      &ldquo;Hi Maya! Your driver Leo is 2 stops away in the green Laundry Farm van. ETA: 10:28 AM.&rdquo;
+                    </p>
+                    <span className="jl-sms-time">10:16 AM · Sent from your number</span>
+                  </div>
+                  <div className="jl-resident-card">
+                    <span className="jl-res-lbl">Order #8412</span>
+                    <strong className="jl-res-status">Van Approaching Porch</strong>
+                  </div>
+                  <div className="jl-privacy-guard">
+                    Direct human contact. Zero bots, zero confusing automated menus.
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 11. TRUST (FOUR AIRTIGHT TILES) */}
-      <section className="jl-band jl-trust-section" aria-labelledby="trust-heading">
+      {/* 11. TRUST (THE MECHANICAL APPROVAL GATE) */}
+      <section id="trust" className="jl-band jl-trust-section" aria-labelledby="trust-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
             <div>
@@ -1699,38 +2123,119 @@ export default function JoystickLanding() {
             </p>
           </div>
 
-          <div className="jl-trust-grid">
-            <div className="jl-trust-tile">
-              <div className="jl-trust-title">Asks first</div>
-              <div className="jl-trust-desc">
-                Companions draft. You approve every message, invoice, and dollar before it moves.
+          <div className="jl-approval-gate-container">
+            {/* The Mechanical Desk Approval Slate */}
+            <div className="jl-approval-slate">
+              <div className="jl-slate-top">
+                <div className="jl-slate-badge">
+                  {isTrustApproved ? "STATUS: APPROVED & TRANSMITTED" : "STATUS: PENDING OPERATOR SIGN-OFF"}
+                </div>
+                <div className="jl-slate-companion">Rook drafted · Claire verified</div>
+              </div>
+
+              <div className="jl-slate-draft-card">
+                <div className="jl-draft-target-row">
+                  <span className="jl-draft-to">TO:</span>
+                  <strong>Dr. Aris Thorne ($420/mo VIP Account)</strong>
+                </div>
+
+                <div className="jl-draft-time-selector">
+                  <span className="jl-selector-label">Proposed Departure Window:</span>
+                  <div className="jl-time-chips">
+                    <button
+                      type="button"
+                      className={`jl-time-chip ${trustTime === "8:00 AM" ? "is-selected" : ""}`}
+                      onClick={() => setTrustTime("8:00 AM")}
+                      disabled={isTrustApproved}
+                    >
+                      8:00 AM Window
+                    </button>
+                    <button
+                      type="button"
+                      className={`jl-time-chip ${trustTime === "9:00 AM" ? "is-selected" : ""}`}
+                      onClick={() => setTrustTime("9:00 AM")}
+                      disabled={isTrustApproved}
+                    >
+                      9:00 AM Window
+                    </button>
+                  </div>
+                </div>
+
+                <div className="jl-draft-message-box">
+                  <div className="jl-message-origin">PREVIEW OUTGOING SMS (SENT FROM YOUR IPHONE):</div>
+                  <p className="jl-message-body">
+                    &ldquo;Hi Dr. Thorne — noticed you haven&apos;t had a pickup since our Tuesday schedule shifted. We&apos;ve added an {trustTime} window on your block. Would you like us to grab your linens tomorrow morning?&rdquo;
+                  </p>
+                </div>
+
+                {/* Mechanical Stamping Area */}
+                <div className="jl-stamp-action-area">
+                  {!isTrustApproved ? (
+                    <button
+                      type="button"
+                      className="jl-mechanical-stamp-btn"
+                      onClick={() => {
+                        setIsTrustApproved(true);
+                        captureProductEvent("trust_stamp_approved", { time: trustTime });
+                      }}
+                    >
+                      <span className="jl-stamp-handle" aria-hidden="true" />
+                      <span className="jl-stamp-press-text">Press Brass Stamp to Approve Message</span>
+                    </button>
+                  ) : (
+                    <div className="jl-stamp-seal-imprint">
+                      <div className="jl-seal-circle">
+                        <span className="jl-seal-inner-border" />
+                        <span className="jl-seal-text">APPROVED &amp; QUEUED FOR {trustTime} FROM YOUR IPHONE</span>
+                        <span className="jl-seal-date">VERIFIED OPERATOR OK</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="jl-seal-reset-btn"
+                        onClick={() => setIsTrustApproved(false)}
+                      >
+                        Reset approval slate
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="jl-trust-tile">
-              <div className="jl-trust-title">Every number has a receipt</div>
-              <div className="jl-trust-desc">
-                Claire cannot say a figure she cannot show on your real books.
+
+            {/* 4 Concrete Pillars */}
+            <div className="jl-trust-pillars-row">
+              <div className="jl-trust-pillar">
+                <div className="jl-pillar-title">Asks first</div>
+                <div className="jl-pillar-desc">
+                  Companions draft messages, recalculate routes, and prepare invoices. Zero messages are transmitted and zero funds are billed without human sign-off.
+                </div>
+              </div>
+              <div className="jl-trust-pillar">
+                <div className="jl-pillar-title">Receipt-backed truth</div>
+                <div className="jl-pillar-desc">
+                  Claire cannot speak a number or name she cannot show on your real books. Every proposal cites the exact POS ticket or Stripe ledger entry.
+                </div>
+              </div>
+              <div className="jl-trust-pillar">
+                <div className="jl-pillar-title">Isolated private data</div>
+                <div className="jl-pillar-desc">
+                  Your proprietary customer lists and receipts reside in a dedicated tenant database. Your books are never pooled or used to train general models.
+                </div>
+              </div>
+              <div className="jl-trust-pillar">
+                <div className="jl-pillar-title">Sent from your device</div>
+                <div className="jl-pillar-desc">
+                  Customers communicate with your verified phone number and brand. They never interact with an unmonitored chatbot.
+                </div>
               </div>
             </div>
-            <div className="jl-trust-tile">
-              <div className="jl-trust-title">Pending means pending</div>
-              <div className="jl-trust-desc">
-                Nothing is marked confirmed until a human confirms it.
-              </div>
-            </div>
-            <div className="jl-trust-tile">
-              <div className="jl-trust-title">Your voice, your number</div>
-              <div className="jl-trust-desc">
-                Customers never meet a bot. Messages send from your device.
-              </div>
-            </div>
+            <div className="jl-trust-subline">Your books train nothing.</div>
           </div>
-          <div className="jl-trust-subline">Your books train nothing.</div>
         </div>
       </section>
 
-      {/* 12. THE RUN (LIVE OPERATOR LEDGER) */}
-      <section className="jl-band" aria-labelledby="run-heading">
+      {/* 12. LIVE PROOF (DOCUMENTARY FOUNDER FIELD DISPATCH) */}
+      <section id="run" className="jl-band" aria-labelledby="run-heading">
         <div className="jl-wrap">
           <div className="jl-lede">
             <div>
@@ -1740,22 +2245,176 @@ export default function JoystickLanding() {
               </h2>
             </div>
             <p className="jl-lede-text">
-              The founder playing in public is the proof. Live verified operations this week:
+              The founder playing in public is the proof. Real field dispatches from our active Los Angeles laundry route:
             </p>
           </div>
 
-          <div className="jl-run-metrics-grid">
-            {LIVE_RUN_METRICS.map((metric, i) => (
-              <div key={i} className="jl-run-metric-card">
-                <div className="jl-run-metric-count">{metric.count}</div>
-                <div className="jl-run-metric-label">{metric.label}</div>
+          <div className="jl-founder-clipboard-wrap">
+            {/* Wooden Clipboard with Metal Clip */}
+            <div className="jl-vintage-clipboard">
+              <div className="jl-clipboard-clip" aria-hidden="true" />
+
+              {/* Photo Strip Clipped to Board */}
+              <div className="jl-clipboard-photos">
+                <figure className="jl-clip-photo">
+                  <img
+                    src="/landingfinal/founder.jpg"
+                    alt="Founder running public route operations in Los Angeles"
+                    className="jl-photo-img"
+                    loading="lazy"
+                  />
+                  <figcaption className="jl-photo-caption">Founder in field · Route #04</figcaption>
+                </figure>
+                <figure className="jl-clip-photo">
+                  <img
+                    src="/landingfinal/owner-walkup.jpg"
+                    alt="Founder walking up residential steps delivering door tags"
+                    className="jl-photo-img"
+                    loading="lazy"
+                  />
+                  <figcaption className="jl-photo-caption">Reconnecting quiet porch lanterns</figcaption>
+                </figure>
+                <figure className="jl-clip-photo">
+                  <img
+                    src="/landingfinal/collateral.jpg"
+                    alt="Physical door dockets and verification collateral"
+                    className="jl-photo-img"
+                    loading="lazy"
+                  />
+                  <figcaption className="jl-photo-caption">Printed mission collateral</figcaption>
+                </figure>
               </div>
-            ))}
+
+              {/* Typewritten Field Dispatch Log */}
+              <div className="jl-clipboard-dossier">
+                <div className="jl-dispatch-tab-bar" role="tablist">
+                  <button
+                    type="button"
+                    className={`jl-dispatch-tab ${activeDispatchTab === 0 ? "is-active" : ""}`}
+                    onClick={() => setActiveDispatchTab(0)}
+                  >
+                    Dispatch #042: Silver Lake
+                  </button>
+                  <button
+                    type="button"
+                    className={`jl-dispatch-tab ${activeDispatchTab === 1 ? "is-active" : ""}`}
+                    onClick={() => setActiveDispatchTab(1)}
+                  >
+                    Dispatch #019: Century Park
+                  </button>
+                  <button
+                    type="button"
+                    className={`jl-dispatch-tab ${activeDispatchTab === 2 ? "is-active" : ""}`}
+                    onClick={() => setActiveDispatchTab(2)}
+                  >
+                    Dispatch #003: Wilshire High-Rise
+                  </button>
+                </div>
+
+                <div className="jl-dispatch-typewritten-card">
+                  {activeDispatchTab === 0 && (
+                    <>
+                      <div className="jl-dispatch-meta-line">
+                        <span>SECTOR: Silver Lake &amp; Echo Park Loop</span>
+                        <span>DATE: Verified Tuesday Sweep</span>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Attempted Mission:</strong>
+                        <p className="jl-dispatch-text">
+                          Sable identified 14 homes with quiet porch lanterns along the existing morning van run. Founder walked the block with personalized handwritten dockets.
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Actual Outcome:</strong>
+                        <p className="jl-dispatch-text">
+                          3 inactive regular accounts reconnected on the spot. 2 new recurring pickups scheduled for Thursday. <strong>+$310 revenue recovered in 90 minutes.</strong>
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The World Reaction:</strong>
+                        <blockquote className="jl-dispatch-quote">
+                          &ldquo;Maya R.: &lsquo;I wondered where you guys went! Put me down for Tuesdays again.&rsquo;&rdquo;
+                        </blockquote>
+                      </div>
+                    </>
+                  )}
+
+                  {activeDispatchTab === 1 && (
+                    <>
+                      <div className="jl-dispatch-meta-line">
+                        <span>SECTOR: Century Park East (Tower B)</span>
+                        <span>DATE: Verified Thursday Sweep</span>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Attempted Mission:</strong>
+                        <p className="jl-dispatch-text">
+                          Orren routed 8 executive accounts that lapsed following a building concierge desk transition. Re-established ground-level delivery protocol with building superintendent.
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Actual Outcome:</strong>
+                        <p className="jl-dispatch-text">
+                          Dedicated laundry drop bin re-approved by building security. 4 accounts resumed weekly service. <strong>+$420/month recurring volume secured.</strong>
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The World Reaction:</strong>
+                        <blockquote className="jl-dispatch-quote">
+                          &ldquo;Concierge desk: &lsquo;We can hold the bins at the south gate. Saves us 3 interruptions every morning.&rsquo;&rdquo;
+                        </blockquote>
+                      </div>
+                    </>
+                  )}
+
+                  {activeDispatchTab === 2 && (
+                    <>
+                      <div className="jl-dispatch-meta-line">
+                        <span>SECTOR: Wilshire Commercial Corridor</span>
+                        <span>DATE: Verified Friday Sweep</span>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Attempted Mission:</strong>
+                        <p className="jl-dispatch-text">
+                          Rook drafted commercial introduction dockets for 2 boutique fitness studios located directly across the avenue from existing customer stops.
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The Actual Outcome:</strong>
+                        <p className="jl-dispatch-text">
+                          Both studios signed bi-weekly towel turnover agreements on first visit. <strong>+$560/month recurring margin added with zero extra driver fuel.</strong>
+                        </p>
+                      </div>
+                      <div className="jl-dispatch-section">
+                        <strong className="jl-dispatch-label">The World Reaction:</strong>
+                        <blockquote className="jl-dispatch-quote">
+                          &ldquo;Studio Manager: &lsquo;Our current service is late every Monday. If you are already on this block, we are switching.&rsquo;&rdquo;
+                        </blockquote>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="jl-dispatch-verified-footer">
+                    <span className="jl-ledger-stamp">LOGGED TO LIVE PUBLIC OPERATOR RUN</span>
+                    <span>Cohort 01: 50 active businesses in public launch</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics Count Row */}
+            <div className="jl-run-metrics-grid">
+              {LIVE_RUN_METRICS.map((metric, i) => (
+                <div key={i} className="jl-run-metric-card">
+                  <div className="jl-run-metric-count">{metric.count}</div>
+                  <div className="jl-run-metric-label">{metric.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 13. PRICING & COMMERCIAL TERMS */}
+      {/* 13. PRICING & INFRASTRUCTURE ARCHITECTURE */}
       <section
         id="pricing"
         className="jl-band jl-pricing-section"
@@ -1763,14 +2422,52 @@ export default function JoystickLanding() {
         data-testid="section-pricing"
       >
         <div className="jl-wrap">
-          <div className="jl-lede jl-pricing-card" data-testid="landing-pricing-card">
+          <div className="jl-lede">
             <div>
               <div className="jl-section-label">Pricing</div>
               <h2 id="pricing-heading" className="jl-h2 jl-pricing-title">
                 7-Day Free Trial, Then $49/Month
               </h2>
             </div>
-            <div className="jl-pricing-side">
+            <p className="jl-lede-text">
+              One authoritative membership. No hidden tiers, no conflicting plans. Unmetered gameplay with transparent infrastructure unit economics.
+            </p>
+          </div>
+
+          <div className="jl-pricing-presentation-card" data-testid="landing-pricing-card">
+            {/* Membership Header & Billing Toggle */}
+            <div className="jl-pricing-main-block">
+              <div className="jl-pricing-tier-badge">JOYSTICK OPERATOR MEMBERSHIP</div>
+
+              <div className="jl-pricing-cost-display">
+                <div className="jl-cost-large">
+                  {pricingBillingCycle === "monthly" ? "$49" : "$39"}
+                  <span className="jl-cost-period">/month</span>
+                </div>
+                <div className="jl-cost-annual-note">
+                  {pricingBillingCycle === "annual" ? "Billed annually at $468/year (saves $120 annually)" : "Billed monthly. Switch to annual for $468/year"}
+                </div>
+              </div>
+
+              {/* Cycle Toggle */}
+              <div className="jl-billing-toggle-row">
+                <button
+                  type="button"
+                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "monthly" ? "is-active" : ""}`}
+                  onClick={() => setPricingBillingCycle("monthly")}
+                >
+                  Monthly billing ($49/month)
+                </button>
+                <button
+                  type="button"
+                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "annual" ? "is-active" : ""}`}
+                  onClick={() => setPricingBillingCycle("annual")}
+                >
+                  Annual billing ($468/year · save 20%)
+                </button>
+              </div>
+
+              {/* Commercial Terms Pills */}
               <ul
                 className="jl-terms joystick-desktop__terms"
                 data-testid="landing-commercial-terms"
@@ -1780,9 +2477,10 @@ export default function JoystickLanding() {
                 <li className="joystick-terms-pill">Card required at signup</li>
                 <li className="joystick-terms-pill">Cancel anytime</li>
               </ul>
-              <div className="jl-cta-row">
+
+              <div className="jl-pricing-action-wrap">
                 <a
-                  className="jl-cta-button"
+                  className="jl-cta-button jl-pricing-btn"
                   href={START_PATH}
                   onClick={() =>
                     captureProductEvent("joystick_start_clicked", {
@@ -1792,48 +2490,84 @@ export default function JoystickLanding() {
                 >
                   Turn my work into a game →
                 </a>
+                <p
+                  className="joystick-checkout-closed jl-cta-microcopy"
+                  data-testid="landing-checkout-unavailable"
+                >
+                  Checkout is not open. This does not charge a card.
+                </p>
               </div>
-              <p
-                className="joystick-checkout-closed jl-cta-microcopy"
-                data-testid="landing-checkout-unavailable"
-              >
-                Checkout is not open. This does not charge a card.
-              </p>
             </div>
-          </div>
 
-          {/* Transparent Tier Architecture */}
-          <div className="jl-pricing-tiers-row">
-            <div className="jl-pricing-tier">
-              <div className="jl-tier-name">Explore</div>
-              <div className="jl-tier-price">Free</div>
-              <div className="jl-tier-desc">Sample worlds, no card required.</div>
+            {/* Intelligent Infrastructure & Token Rates Grid */}
+            <div className="jl-infrastructure-grid">
+              <div className="jl-infra-card">
+                <div className="jl-infra-header">
+                  <span className="jl-infra-tag">REASONING ENGINE</span>
+                  <strong className="jl-infra-spec">5M Tokens / mo</strong>
+                </div>
+                <p className="jl-infra-desc">
+                  Full context window evaluation of your customer histories, receipts, and route maps.
+                </p>
+                <div className="jl-infra-rate">
+                  <span>Overage rate:</span>
+                  <strong>$0.002 / 1k tokens (spend capped)</strong>
+                </div>
+              </div>
+
+              <div className="jl-infra-card">
+                <div className="jl-infra-header">
+                  <span className="jl-infra-tag">VOICE SYNTHESIS</span>
+                  <strong className="jl-infra-spec">1,500 Voice Mins / mo</strong>
+                </div>
+                <p className="jl-infra-desc">
+                  Ultra-low latency conversational audio for Claire&apos;s 7:30 AM morning dispatch and evening debrief calls.
+                </p>
+                <div className="jl-infra-rate">
+                  <span>Overage rate:</span>
+                  <strong>$0.038 / min (off by default)</strong>
+                </div>
+              </div>
+
+              <div className="jl-infra-card">
+                <div className="jl-infra-header">
+                  <span className="jl-infra-tag">DATA ISOLATION</span>
+                  <strong className="jl-infra-spec">Dedicated Tenant</strong>
+                </div>
+                <p className="jl-infra-desc">
+                  Private database instance per business. Strict tenant boundary isolation; zero cross-account model training.
+                </p>
+                <div className="jl-infra-rate">
+                  <span>Policy:</span>
+                  <strong>Your books train nothing</strong>
+                </div>
+              </div>
+
+              <div className="jl-infra-card">
+                <div className="jl-infra-header">
+                  <span className="jl-infra-tag">PUBLIC COHORT</span>
+                  <strong className="jl-infra-spec">Capped Run of 50</strong>
+                </div>
+                <p className="jl-infra-desc">
+                  Limited to 50 active businesses in the public launch. Direct founder engineering on your game mechanics.
+                </p>
+                <div className="jl-infra-rate">
+                  <span>Status:</span>
+                  <strong>41 of 50 cohort seats allocated</strong>
+                </div>
+              </div>
             </div>
-            <div className="jl-pricing-tier jl-tier-highlight">
-              <div className="jl-tier-name">JOYSTICK</div>
-              <div className="jl-tier-price">$79<span>/mo</span></div>
-              <div className="jl-tier-desc">Unmetered gameplay, $40 AI allowance, overage off by default.</div>
+
+            <div className="jl-pricing-punchline">
+              Companions aren’t a tier. You earn them by doing the work.
             </div>
-            <div className="jl-pricing-tier">
-              <div className="jl-tier-name">Commerce</div>
-              <div className="jl-tier-price">$119<span>/mo</span></div>
-              <div className="jl-tier-desc">Native orders, payments, and the customer app.</div>
-            </div>
-            <div className="jl-pricing-tier">
-              <div className="jl-tier-name">Workshop</div>
-              <div className="jl-tier-price">Custom</div>
-              <div className="jl-tier-desc">Custom game builds you approve one at a time.</div>
-            </div>
+            <p
+              className="jl-pricing-illustration"
+              data-testid="landing-examples-illustration"
+            >
+              All customer references on this page are illustrations.
+            </p>
           </div>
-          <div className="jl-pricing-punchline">
-            Companions aren’t a tier. You earn them.
-          </div>
-          <p
-            className="jl-pricing-illustration"
-            data-testid="landing-examples-illustration"
-          >
-            All customer references on this page are illustrations.
-          </p>
         </div>
       </section>
 
