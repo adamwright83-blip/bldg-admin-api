@@ -37,6 +37,7 @@
 .cc-line p { margin: 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cc-who { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cc-muted); }
 .cc-line-you { justify-self: end; background: var(--cc-you); }
+.cc-unanswered { font-size: 12px; font-weight: 600; color: var(--cc-err); }
 .cc-line-claire { justify-self: start; background: var(--cc-panel); border: 1px solid var(--cc-line); }
 
 .cc-dots { display: inline-flex; gap: 4px; padding: 6px 0; }

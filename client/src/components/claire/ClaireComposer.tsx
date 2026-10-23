@@ -6,6 +6,7 @@ import {
   claireComposerErrorCopy,
   claireComposerStorageKey,
   freshConversation,
+  markUnanswered,
   parseStoredConversation,
   serializeConversation,
   type ClaireComposerConversation,
@@ -92,9 +93,10 @@ export function ClaireComposer({
     if (!text || pending) return;
     const mine = epoch.current;
     const conversationId = conversation.conversationId;
+    const sentAt = Date.now();
     setDraft("");
     setError(null);
-    setConversation(c => ({ ...c, lines: [...c.lines, { who: "you", text, at: Date.now() }] }));
+    setConversation(c => ({ ...c, lines: [...c.lines, { who: "you", text, at: sentAt }] }));
     try {
       const r = await talk.mutateAsync({ utterance: text, conversationId });
       if (epoch.current !== mine) return;
@@ -105,6 +107,7 @@ export function ClaireComposer({
       );
     } catch (err) {
       if (epoch.current !== mine) return;
+      setConversation(c => (c.conversationId === conversationId ? markUnanswered(c, sentAt) : c));
       setError(
         claireComposerErrorCopy({
           code: err instanceof TRPCClientError ? (err.data?.code as string | undefined) : undefined,
@@ -148,6 +151,11 @@ export function ClaireComposer({
             <li key={`${line.at}-${i}`} className={`cc-line cc-line-${line.who}`} data-who={line.who}>
               <span className="cc-who">{line.who === "you" ? "You" : "Claire"}</span>
               <p>{line.text}</p>
+              {line.unanswered ? (
+                <small className="cc-unanswered" data-testid="claire-composer-unanswered">
+                  No reply arrived. Check before resending — it may have saved.
+                </small>
+              ) : null}
             </li>
           ))}
           {pending ? (

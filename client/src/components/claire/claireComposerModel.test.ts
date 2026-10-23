@@ -3,6 +3,7 @@ import {
   CLAIRE_COMPOSER_TTL_MS,
   claireComposerErrorCopy,
   freshConversation,
+  markUnanswered,
   parseStoredConversation,
   serializeConversation,
 } from "./claireComposerModel";
@@ -33,6 +34,15 @@ describe("claire composer conversation storage", () => {
       lines: [{ who: "claire", text: "ok", at: now }, { who: "system", text: "x", at: now }, null],
     });
     expect(parseStoredConversation(raw, now)?.lines).toEqual([{ who: "claire", text: "ok", at: now }]);
+  });
+
+  it("keeps the unanswered mark across a reload", () => {
+    const c = markUnanswered(
+      { ...freshConversation(now), lines: [{ who: "you" as const, text: "hi", at: now }, { who: "you" as const, text: "again", at: now + 5 }] },
+      now
+    );
+    const restored = parseStoredConversation(serializeConversation(c), now + 1000);
+    expect(restored?.lines.map(l => Boolean(l.unanswered))).toEqual([true, false]);
   });
 
   it("issues conversation ids the server accepts", () => {

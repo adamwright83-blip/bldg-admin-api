@@ -7,7 +7,13 @@
  * that both sides start fresh together. Nothing here is business truth.
  */
 
-export type ClaireComposerLine = { who: "you" | "claire"; text: string; at: number };
+export type ClaireComposerLine = {
+  who: "you" | "claire";
+  text: string;
+  at: number;
+  /** The request for this message failed; Claire may or may not have received it. */
+  unanswered?: boolean;
+};
 
 export type ClaireComposerConversation = {
   conversationId: string;
@@ -49,17 +55,27 @@ export function parseStoredConversation(raw: string | null, now: number): Claire
       return null;
     }
     if (now - value.startedAt >= CLAIRE_COMPOSER_TTL_MS) return null;
-    const lines = value.lines.filter(
-      (l): l is ClaireComposerLine =>
-        Boolean(l) &&
-        (l.who === "you" || l.who === "claire") &&
-        typeof l.text === "string" &&
-        typeof l.at === "number"
-    );
+    const lines = value.lines
+      .filter(
+        (l): l is ClaireComposerLine =>
+          Boolean(l) &&
+          (l.who === "you" || l.who === "claire") &&
+          typeof l.text === "string" &&
+          typeof l.at === "number"
+      )
+      .map(l => (l.unanswered === true ? { who: l.who, text: l.text, at: l.at, unanswered: true } : { who: l.who, text: l.text, at: l.at }));
     return { conversationId: value.conversationId, startedAt: value.startedAt, lines };
   } catch {
     return null;
   }
+}
+
+/** Marks the operator line sent at `at` as unanswered, so the log still says so after a reload. */
+export function markUnanswered(conversation: ClaireComposerConversation, at: number): ClaireComposerConversation {
+  return {
+    ...conversation,
+    lines: conversation.lines.map(l => (l.who === "you" && l.at === at ? { ...l, unanswered: true } : l)),
+  };
 }
 
 export function serializeConversation(conversation: ClaireComposerConversation): string {
