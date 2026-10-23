@@ -23,10 +23,13 @@ export function ClaireComposerSheet({ onTurn }: { onTurn?: () => void }) {
 
   if (typeof document === "undefined") return null;
 
+  // The sheet only hides when closed. Unmounting the composer mid-turn would drop
+  // Claire's reply (and its saved copy) even though the server may have acted on it.
   return createPortal(
-    open ? (
+    <>
       <div
         className="cc-scrim"
+        hidden={!open}
         onClick={e => {
           if (e.target === e.currentTarget) setOpen(false);
         }}
@@ -42,23 +45,24 @@ export function ClaireComposerSheet({ onTurn }: { onTurn?: () => void }) {
               ✕
             </button>
           </div>
-          <ClaireComposer variant="sheet" autoFocus onTurn={onTurn} />
+          <ClaireComposer variant="sheet" autoFocus={open} onTurn={onTurn} />
         </div>
       </div>
-    ) : (
-      <button
-        type="button"
-        className="cc-launcher"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        data-testid="claire-composer-launcher"
-      >
-        <span className="cc-launcher-face" aria-hidden>
-          ✦
-        </span>
-        Message Claire
-      </button>
-    ),
+      {open ? null : (
+        <button
+          type="button"
+          className="cc-launcher"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          data-testid="claire-composer-launcher"
+        >
+          <span className="cc-launcher-face" aria-hidden>
+            ✦
+          </span>
+          Message Claire
+        </button>
+      )}
+    </>,
     document.body
   );
 }

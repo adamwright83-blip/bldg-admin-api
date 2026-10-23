@@ -81,7 +81,8 @@ export function ClaireComposer({
   useEffect(() => {
     const log = logRef.current;
     if (log) log.scrollTop = log.scrollHeight;
-  }, [conversation.lines.length, pending]);
+    // autoFocus flips true when the Driver sheet reopens; a hidden log has no height to scroll.
+  }, [conversation.lines.length, pending, autoFocus]);
 
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();

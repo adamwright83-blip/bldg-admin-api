@@ -127,6 +127,7 @@
   justify-items: center;
   background: rgba(4, 18, 12, 0.45);
 }
+.cc-scrim[hidden] { display: none; }
 .cc-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
