@@ -140,6 +140,7 @@ const plan = createMitchProducerPlan({
 const coordinator = new MitchProducerCoordinator({
   tenantId,
   eventDriven: true,
+  smokeOnly: process.env.MITCH_EXECUTOR_SMOKE_ORDER === "true",
   store,
   service,
   dispatcher,
