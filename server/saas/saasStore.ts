@@ -1276,6 +1276,7 @@ export async function activateOnboardingOwner(input: {
       status: subscription.status,
       graceEndsAt: subscription.graceEndsAt,
       accessEndsAt: subscription.accessEndsAt,
+      trialEnd: subscription.trialEnd,
     })
   ) {
     throw new Error("Tenant subscription is not active for owner activation");

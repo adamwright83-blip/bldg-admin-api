@@ -81,6 +81,38 @@ describe("SaaS tenant contract", () => {
     expect(subscriptionAllowsLegacyDayforgeAccess("canceled")).toBe(false);
   });
 
+  it("denies a trialing subscription once trialEnd has passed", () => {
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    expect(
+      subscriptionAllowsLegacyDayforgeAccess({
+        status: "trialing",
+        now,
+        trialEnd: new Date("2026-02-08T00:00:00.000Z"),
+      })
+    ).toBe(true);
+    expect(
+      subscriptionAllowsLegacyDayforgeAccess({
+        status: "trialing",
+        now,
+        trialEnd: new Date("2026-01-31T00:00:00.000Z"),
+      })
+    ).toBe(false);
+    expect(
+      subscriptionAllowsLegacyDayforgeAccess({
+        status: "trialing",
+        now,
+        trialEnd: now,
+      })
+    ).toBe(false);
+    expect(
+      subscriptionAllowsLegacyDayforgeAccess({
+        status: "trialing",
+        now,
+        trialEnd: null,
+      })
+    ).toBe(false);
+  });
+
   it("requires real capacity, radius, turnaround, store, and service data", () => {
     expect(onboardingConfigurationIsOperational(configuration)).toBe(true);
     expect(
