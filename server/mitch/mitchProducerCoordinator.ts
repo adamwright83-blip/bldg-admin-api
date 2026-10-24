@@ -40,6 +40,8 @@ export class MitchProducerCoordinator {
       bus: GitHubProducerBus;
       wakeProvider?: IMitchAgentWakeProvider;
       eventDriven?: boolean;
+      /** In opt-in executor smoke mode, never dispatch unrelated pending production orders. */
+      smokeOnly?: boolean;
       reviewerId?: string;
       gameId: string;
       gameTitle: string;
@@ -54,7 +56,10 @@ export class MitchProducerCoordinator {
 
     const orders = await this.deps.store.listWorkOrders(this.deps.tenantId, this.deps.gameId);
     const pending = orders
-      .filter(order => order.status === "pending")
+      .filter(order =>
+        order.status === "pending" &&
+        (!this.deps.smokeOnly || order.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey)
+      )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
 
     const beforeDispatch = await this.deps.reasoning.inspectProductionState(this.deps.tenantId, this.deps.gameId);
@@ -79,6 +84,15 @@ export class MitchProducerCoordinator {
       this.deps.tenantId,
       this.deps.gameId
     );
+
+    if (
+      this.deps.smokeOnly &&
+      inspection.incompleteMilestone?.milestoneKey !== KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    )
+      return { action: "idle", reason: "Executor smoke mode cannot act on another milestone" };
+
+    if (this.deps.smokeOnly && inspection.nextBoundedOutcome.recommendedAction === "dispatch_fix")
+      return { action: "idle", reason: "Executor smoke mode cannot create unrelated fix work" };
 
     if (inspection.nextBoundedOutcome.recommendedAction === "dispatch_fix") {
       const existingActive = orders.find(order =>
@@ -115,6 +129,9 @@ export class MitchProducerCoordinator {
       await this.requestAdamDecision(buildId, "Formal gameplay QA passed. Final creative acceptance remains Adam's decision.");
       return { action: "creative_acceptance_requested", buildId };
     }
+
+    if (this.deps.smokeOnly)
+      return { action: "idle", reason: "One-off executor smoke is awaiting review or manual intervention" };
 
     const failed = orders
       .filter(order =>
