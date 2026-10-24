@@ -118,7 +118,9 @@ describe("Mitch executor smoke order", () => {
       smokeOnly: false,
       gameId,
       gameTitle: "Boreslay",
-      seedProductionWork: plan(false).seed,
+      // Isolate dispatch filtering from the ordinary install-duel seed path:
+      // disabling smoke mode is allowed to resume normal production work.
+      seedProductionWork: async () => ({ state: { lifecycleState: "implementing" } }),
     });
     expect((await coordinator.runOnce()).action).toBe("idle");
     expect((await store.getWorkOrder(tenantId, pendingSmoke.id))?.status).toBe("pending");
