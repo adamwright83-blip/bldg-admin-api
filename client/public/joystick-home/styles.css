@@ -81,3 +81,14 @@ footer{flex-wrap:wrap;gap:12px 20px;padding:14px 0 26px}footer nav{margin-left:0
 .moments .closing{justify-self:start}
 @media(max-width:1100px){.moment{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4%}.moment-copy p:not(.moment-number){font-size:16px}}
 @media(max-width:760px){.moments{padding:28px 0 32px;gap:34px}.moment{display:block}.moment-copy{margin-bottom:16px}.moment h2{font-size:27px;letter-spacing:-.7px}.moment-copy p:not(.moment-number){font-size:15.5px;line-height:1.7;max-width:none}.captures{grid-template-columns:1fr;gap:14px}.hud{max-width:none}.moment-caption{max-width:none}.proof{padding-left:16px}.proof p{font-size:22px}.proof footer{font-size:14px}.moments .closing{width:100%;justify-self:stretch}}
+
+/* The page picks up the companion on stage: headline rule + active companion tab */
+:root{--companion:var(--rust)}
+body[data-companion="mara"]{--companion:#2a4fc0}
+body[data-companion="rook"]{--companion:#6b7518}
+body[data-companion="sable"]{--companion:#b8174a}
+body[data-companion="luma"]{--companion:#0a7f8c}
+.little-rule{background:var(--companion);transition:background-color .6s ease}
+.cast-names [aria-pressed="true"]{color:var(--companion);border-color:var(--companion);transition:color .6s ease,border-color .6s ease,background-color .6s ease}
+@media(max-width:760px){.cast-names [aria-pressed="true"]{background:var(--companion);border-color:var(--companion);color:var(--paper)}}
+@media(prefers-reduced-motion:reduce){.little-rule,.cast-names [aria-pressed="true"]{transition:none}}
