@@ -8,6 +8,9 @@
   <meta name="description" content="A little escape. A real way forward. Discover adventures built around your business, with unexpected companions and real opportunities.">
   <link rel="preload" as="image" href="/joystick-home/assets/acting/mara.webp">
   <link rel="preload" as="image" href="/joystick-home/assets/acting/prop-mara.webp">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/rook.webp" fetchpriority="low">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/sable.webp" fetchpriority="low">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/luma.webp" fetchpriority="low">
   <link rel="icon" type="image/svg+xml" href="/joystick-home/favicon.svg">
   <link rel="stylesheet" href="/joystick-home/styles.css">
   <script src="/joystick-home/app.js" defer></script>
@@ -22,7 +25,13 @@
       <a href="#adventures">The worlds</a>
       <button data-open-about>About</button>
       <button class="nav-play" data-play>Play a sample <span aria-hidden="true">↗</span></button>
+      <button class="nav-menu" id="nav-menu" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
     </nav>
+    <div class="mobile-menu" id="mobile-menu" hidden>
+      <a href="#adventures" data-menu-item>The worlds</a>
+      <button data-open-about data-menu-item>About</button>
+      <button class="nav-play" data-play data-menu-item>Play a sample <span aria-hidden="true">↗</span></button>
+    </div>
   </header>
   <main>
     <section class="hero" aria-labelledby="hero-title">
@@ -32,6 +41,7 @@
           <span class="little-rule" aria-hidden="true"></span>
           <p>A little escape. A real way forward.</p>
           <div class="invitation-action"><button class="primary" data-play>Let’s play <span aria-hidden="true">↗</span></button><small>No account needed.</small></div>
+          <p class="founder-note"><span class="glyph" aria-hidden="true">↳</span><span><strong>Founder-reported:</strong> two past customers reordered after outreach made through this game.</span></p>
         </div>
       </div>
       <div class="theatre" aria-label="Four unexpected companions, each with a little surprise">
@@ -41,7 +51,8 @@
           <div class="laser" aria-hidden="true"></div>
           <span class="smoke puff-a" aria-hidden="true"></span><span class="smoke puff-b" aria-hidden="true"></span><span class="smoke puff-c" aria-hidden="true"></span>
         </div>
-        <div class="cast-controls" aria-label="Choose a companion">
+        <div class="cast-controls" role="group" aria-labelledby="cast-label">
+          <span class="section-label" id="cast-label">Companions</span>
           <div class="cast-names"><button data-cast="0" aria-pressed="true">Mara</button><button data-cast="1" aria-pressed="false">Rook</button><button data-cast="2" aria-pressed="false">Sable</button><button data-cast="3" aria-pressed="false">Luma</button></div>
           <button id="pause" class="motion-control" aria-label="Pause character animation" aria-pressed="false"><span aria-hidden="true">Ⅱ</span></button>
           <button id="replay" class="motion-control" aria-label="Replay this character’s reveal"><span aria-hidden="true">↻</span></button>
@@ -49,9 +60,12 @@
       </div>
     </section>
     <section class="adventures" id="adventures" aria-label="Explore the games">
-      <div class="tabs" role="tablist" aria-label="Choose an adventure">
+      <div class="tabs-row">
+        <span class="section-label" id="worlds-label">Worlds</span>
+        <div class="tabs" role="tablist" aria-labelledby="worlds-label">
         <button id="tab-cozy" role="tab" aria-selected="true" aria-controls="panel-cozy" tabindex="0" data-world="cozy"><span>01</span> Lantern City</button>
         <button id="tab-road" role="tab" aria-selected="false" aria-controls="panel-road" tabindex="-1" data-world="road"><span>02</span> Trailblazer</button>
+        </div>
       </div>
       <div class="adventure-panel" id="panel-cozy" role="tabpanel" aria-labelledby="tab-cozy" tabindex="0">
         <div><p class="eyebrow">WHAT YOU’RE ACTUALLY PLAYING</p><h2>Help a porcupine. Catch up with a customer.</h2><p class="explanation">A neighbor needs a favor. Their animal friend turns out to be a real customer who hasn’t ordered in 60 days. A little conversation later, you’re putting your own touch on a text you’d probably never have sent.</p></div>
@@ -62,8 +76,20 @@
         <button class="text-link" data-play="road">Play a sample <span aria-hidden="true">↗</span></button>
       </div>
     </section>
-    <p class="founder-note"><span aria-hidden="true">↳</span> Founder-reported: two past customers reordered after outreach made through this game.</p>
+    <section class="how" aria-labelledby="how-label">
+      <p class="eyebrow" id="how-label">HOW IT WORKS</p>
+      <ol>
+        <li><b>01</b>Joystick looks through your customer history and business records for opportunities.</li>
+        <li><b>02</b>It builds a little adventure around taking the next step.</li>
+        <li><b>03</b>You review the real messages and choose the real actions.</li>
+      </ol>
+      <div class="closing"><button class="primary" data-play>Let’s play <span aria-hidden="true">↗</span></button><small>No account needed.</small></div>
+    </section>
   </main>
+  <footer>
+    <span class="foot-brand">Joystick</span><span>A business you can play.</span>
+    <nav aria-label="Footer navigation"><a href="#adventures">The worlds</a><button data-open-about>About</button><button class="nav-play" data-play>Play a sample <span aria-hidden="true">↗</span></button></nav>
+  </footer>
 </div>
 <dialog id="sample-dialog" aria-labelledby="sample-title">
   <button class="close-dialog" aria-label="Close sample">×</button>
