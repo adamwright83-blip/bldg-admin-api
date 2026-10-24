@@ -399,14 +399,14 @@ jobs:
   fast-browser:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    # World runs three browser specs after DB/bootstrap/build; other budgets stay 5m.
+    # World runs five browser specs after DB/bootstrap/build; allow its full proof to finish.
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: fast-smoke-world
-            timeout: 15
+            timeout: 25
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/worldSmoke.spec.ts
