@@ -1,6 +1,55 @@
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { getDb } from "../db";
 import type { MitchWorkOrder } from "../../shared/mitchContracts";
 import type { MitchProductionService } from "./mitchService";
 import type { IMitchProductionStore } from "./mitchStore";
+
+
+/**
+ * Serializes opt-in smoke seeding from the initial milestone registration through
+ * the final order insert. The local FIFO covers concurrent tick callbacks in one
+ * worker; MySQL GET_LOCK covers separate Railway replicas/processes.
+ *
+ * The advisory lock belongs to the connection reserved by this transaction.
+ * Always release it on that same connection, including when the seed fails.
+ * No protected code path or normal Mitch producer plan is affected when the
+ * smoke flag is off.
+ */
+const localSmokeLocks = new Map<string, Promise<void>>();
+export async function withExecutorSmokeSeedLock<T>(
+  input: { tenantId: string; gameId: string; enabled: boolean },
+  seed: () => Promise<T>
+): Promise<T> {
+  if (!input.enabled) return seed();
+
+  const identity = JSON.stringify([input.tenantId, input.gameId]);
+  const lockName = `mitch-smoke:${createHash("sha256").update(identity).digest("hex").slice(0, 48)}`;
+  const previous = localSmokeLocks.get(lockName) ?? Promise.resolve();
+  let releaseLocal: () => void = () => {};
+  const current = new Promise<void>(resolve => { releaseLocal = resolve; });
+  localSmokeLocks.set(lockName, current);
+  await previous;
+  try {
+    const db = await getDb();
+    if (!db) return await seed(); // In-memory unit test. Durable worker fails closed in its store.
+    return await db.transaction(async tx => {
+      const [acquisition] = await tx.select({ acquired: sql<number>`GET_LOCK(${lockName}, 15)` });
+      if (Number(acquisition?.acquired) !== 1)
+        throw new Error("Mitch executor smoke seed lock unavailable; no order was created");
+      try {
+        return await seed();
+      } finally {
+        const [release] = await tx.select({ released: sql<number>`RELEASE_LOCK(${lockName})` });
+        if (Number(release?.released) !== 1)
+          throw new Error("Mitch executor smoke seed lock release failed");
+      }
+    });
+  } finally {
+    releaseLocal();
+    if (localSmokeLocks.get(lockName) === current) localSmokeLocks.delete(lockName);
+  }
+}
 
 /**
  * A deliberately trivial, bounded work order used to prove the executor →
