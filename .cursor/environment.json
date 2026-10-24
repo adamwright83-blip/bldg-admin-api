@@ -1,0 +1,13 @@
+{
+  "name": "laundry-butler",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "bash .cursor/mysql-up.sh; set -a; . ./.env; set +a; pnpm dev",
+      "description": "Ensures MySQL is up, then runs the Express + tRPC API and Vite/React dev server on http://localhost:3000 (env sourced from ./.env)."
+    }
+  ]
+}
