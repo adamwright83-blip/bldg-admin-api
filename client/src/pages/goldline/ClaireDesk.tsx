@@ -5,6 +5,7 @@ import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms } from "./claireDesk/OpenComms";
+import { ClaireComposer } from "@/components/claire/ClaireComposer";
 import { DaphnePresentationConsent } from "./claireDesk/DaphnePresentationConsent";
 import { callSheetWithheldCopy } from "./claireDesk/callSheetFreshness";
 import "./claireDesk/claireDesk.css";
@@ -375,6 +376,7 @@ export default function ClaireDesk() {
         <div className="cd-portrait" aria-hidden>C</div>
         <p className="cd-name">CLAIRE <small>Chief of staff</small></p>
         {claireLine ? <p className="cd-says" data-testid="claire-desk-says">“{claireLine}”</p> : null}
+        <ClaireComposer variant="desk" onTurn={refresh} />
         {m?.recentChange ? <p className="cd-small">Latest change: {m.recentChange}</p> : null}
         {m?.rationale ? (
           <details className="cd-why" data-testid="claire-desk-why">

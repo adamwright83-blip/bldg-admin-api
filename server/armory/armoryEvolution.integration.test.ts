@@ -484,8 +484,11 @@ describe.skipIf(!runDatabaseGate)("Armory Evolution", () => {
       missionId,
       outcomeKind: "account_won",
       outcomeReference: randomUUID(),
-      // A window that closed before the usage was recorded.
-      windowMs: 1,
+      // Observed ten minutes later with a one-minute window, so the window opens well after
+      // the usage. usedAt comes from MySQL's clock (CURRENT_TIMESTAMP) and the window from
+      // Node's; a 1ms window let any skew between the two flip the result.
+      observedAt: new Date(Date.now() + 10 * 60_000),
+      windowMs: 60_000,
     });
     expect(associated).toBe(0);
   });
