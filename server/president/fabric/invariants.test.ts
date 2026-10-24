@@ -62,8 +62,8 @@ const DOMAIN_PROTECTED_RE =
 const APPROVED_MITCH_EXECUTOR_SMOKE_SHA256: Readonly<Record<string, string>> = {
   "server/mitch/executorSmokeOrder.ts": "b1760841ad8ccd4368d132bcab45bfca79d908fdd5135cbd40df3ccd6393935d",
   "server/mitch/mitchProducerPlans.ts": "ab57c627b58687c54ef3f89008a3b0fb0246ffa0d4be7ba5ad37ba24d7eab466",
-  "server/mitch/mitchProducerCoordinator.ts": "e683d131d470bf31b95746e2bff58c8fe7e10926fd4c4d5c24bf8e87b75ce204",
-  "server/mitch/producerWorkerMain.ts": "da2e37ec60e9599c7435044932520b0beaadcc47021a97eb1c674df7e37eef18",
+  "server/mitch/mitchProducerCoordinator.ts": "3e0535205721f7087e08f94f62b6332b74b454779622248b743648d4f0d2f2f3",
+  "server/mitch/producerWorkerMain.ts": "001d82948e8954d7776265cb022dc3b2c8f060da4159725fdc843ba63717f19e",
 };
 
 function mitchExecutorSmokeSha256(file: string): string | null {
