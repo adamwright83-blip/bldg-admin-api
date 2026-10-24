@@ -7,7 +7,7 @@ import {
   SMALL_COMFORTS_GAME_ID,
   seedSmallComfortsProducerWork,
 } from "./smallComfortsProduction";
-import { seedExecutorSmokeOrder } from "./executorSmokeOrder";
+import { seedExecutorSmokeOrder, withExecutorSmokeSeedLock } from "./executorSmokeOrder";
 import type { MitchProductionService } from "./mitchService";
 import type { IMitchProductionStore } from "./mitchStore";
 
@@ -53,7 +53,11 @@ export function createMitchProducerPlan(input: {
   return {
     gameId: "kingdom.boreslay",
     gameTitle: "Boreslay",
-    seed: async () => {
+    seed: async () => withExecutorSmokeSeedLock({
+      tenantId: input.tenantId,
+      gameId: "kingdom.boreslay",
+      enabled: input.executorSmokeOrder === true,
+    }, async () => {
       const state = await seedKingdomTwoProductionState({
         tenantId: input.tenantId,
         store: input.store,
@@ -142,6 +146,6 @@ export function createMitchProducerPlan(input: {
         ],
       });
       return { state, workOrder };
-    },
+    }),
   };
 }
