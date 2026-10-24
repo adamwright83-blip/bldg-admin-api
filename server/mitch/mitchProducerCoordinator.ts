@@ -58,7 +58,9 @@ export class MitchProducerCoordinator {
     const pending = orders
       .filter(order =>
         order.status === "pending" &&
-        (!this.deps.smokeOnly || order.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey)
+        (this.deps.smokeOnly
+          ? order.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+          : order.milestoneKey !== KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey)
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
 
