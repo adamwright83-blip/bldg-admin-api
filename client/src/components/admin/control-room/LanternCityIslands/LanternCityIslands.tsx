@@ -47,12 +47,15 @@ const day = (iso?: string) => {
 export default function LanternCityIslands({
   onOpenCustomer,
   onNavigate,
+  onReviewCustomers,
   showUtilityDock = true,
   showBrand = true,
   driverCurrentStop = null,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
+  /** Product shells may route to their own customer destination. */
+  onReviewCustomers?: () => void;
   /** Commercial members get the world without Laundry Butler admin shortcuts. */
   showUtilityDock?: boolean;
   /** The admin world shell owns all top-left scene chrome when this board is embedded there. */
@@ -109,7 +112,6 @@ export default function LanternCityIslands({
     loading: !usingSample && !atlas.data,
     error: atlas.isError && !usingSample,
     customers: allCustomers,
-    statusCounts: (atlas.data as { statusCounts?: Record<string, number> } | undefined)?.statusCounts,
   });
   // Floor buttons only for buildings this business has customers in, not the owner's towers for everyone.
   const ownBuildings = useMemo(
@@ -342,9 +344,8 @@ export default function LanternCityIslands({
             {mapping.kind === "unmapped"
               ? `${mapping.total} ${mapping.total === 1 ? "customer is" : "customers are"} on record, but none has a map location yet, so no island can open. This is a mapping gap, not an empty business.`
               : `${mapping.unlocated} of ${mapping.total} customers have no map location yet and are not shown.`}
-            {mapping.failed > 0 ? ` ${mapping.failed} address lookups failed.` : ""}
             {" "}
-            <button type="button" onClick={() => onNavigate?.("/customers")}>Review customers</button>
+            <button type="button" onClick={() => onReviewCustomers ? onReviewCustomers() : onNavigate?.("/customers")}>Review customers</button>
           </div>
         </div>
       ) : null}
