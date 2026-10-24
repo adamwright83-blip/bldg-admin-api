@@ -80,7 +80,10 @@ export function createMitchProducerPlan(input: {
           baseBranch: input.baseBranch,
           baseSha: input.baseSha,
         });
-        if (smoke) return { state, workOrder: smoke };
+        // Smoke mode is isolated from the install-duel production lane.
+        // On later ticks (or after smoke failure), do not fall through and mint
+        // a different work order while this one-off probe is enabled.
+        return { state, workOrder: smoke };
       }
 
       const orders = await input.store.listWorkOrders(
