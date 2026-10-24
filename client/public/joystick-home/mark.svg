@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <title>Joystick mark</title>
+  <path d="M32 10H53.847A28 28 0 0 0 86 47.35V64A26 26 0 0 1 60 90H32A26 26 0 0 1 6 64V36A26 26 0 0 1 32 10Z" fill="#252620"/>
+  <circle cx="82" cy="18" r="16" fill="#e6b944"/>
+</svg>
