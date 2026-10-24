@@ -175,7 +175,7 @@
   }
   function cozyDraft() {
     content('A little hello. In your own words.', '<p>“It’s been a busy fall,” says Marisol. “Good to see you around again.”</p><p>Take a moment to make this note sound like you.</p>');
-    const label = document.createElement('label'); label.htmlFor = 'draft-message'; label.textContent = 'YOUR MESSAGE TO AIMEE';
+    const label = document.createElement('label'); label.htmlFor = 'draft-message'; label.textContent = 'YOUR MESSAGE TO MARISOL';
     const textarea = document.createElement('textarea'); textarea.id = 'draft-message'; textarea.maxLength = 500; textarea.value = draft;
     actions.append(label, textarea);
     const timeLabel = document.createElement('label'); timeLabel.htmlFor = 'sample-time'; timeLabel.textContent = 'WHEN WOULD YOU LIKE IT TO GO?';
