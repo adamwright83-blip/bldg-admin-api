@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import mysql, { type Pool } from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import { strategicPlanningHorizon } from "../../shared/weeklyMissionReadiness";
+import { addDaysYmd, strategicPlanningHorizon, weekStartMonday } from "../../shared/weeklyMissionReadiness";
 import { workThreadCandidateId } from "../../shared/workThread";
 import { decideGoalCycle } from "../agents/persistentOperator/decisionEngine";
 import { GoalCycleStore } from "../agents/persistentOperator/goalCycleStore";
@@ -38,7 +38,8 @@ import {
  *
  * Time: only `Date` is faked, so every component (preparation, Mission
  * Director, the decision engine) reads one clock, starting at the next 09:00
- * in Los Angeles. Timers and the database run in real time; due occurrences
+ * in Los Angeles on the next Monday, so the simulated next day is always a
+ * business day. Timers and the database run in real time; due occurrences
  * are made due explicitly.
  */
 const describeMysql = process.env.DATABASE_URL ? describe : describe.skip;
@@ -46,20 +47,29 @@ const HOUR = 3_600_000;
 const SILVER_LAKE_WIN_BACK = "strategy:v1:laundry_fluff_fold:retention:lapsed_customers:area=silver_lake";
 const ZONE = "America/Los_Angeles";
 
-function nextMorningInLosAngeles(): Date {
-  const now = new Date();
-  const nine = fromZonedTime(`${formatInTimeZone(now, ZONE, "yyyy-MM-dd")}T09:00:00`, ZONE);
-  return nine.getTime() > now.getTime() ? nine : fromZonedTime(`${formatInTimeZone(new Date(now.getTime() + 24 * HOUR), ZONE, "yyyy-MM-dd")}T09:00:00`, ZONE);
+function nextMondayMorningInLosAngeles(): Date {
+  const today = formatInTimeZone(new Date(), ZONE, "yyyy-MM-dd");
+  const nextMonday = addDaysYmd(weekStartMonday(today), 7);
+  return fromZonedTime(`${nextMonday}T09:00:00`, ZONE);
+}
+
+/** Match preparation's active planning week; Friday evening and weekends roll forward. */
+function activeProposalWeekStart(now: Date, timeZone: string): string {
+  return strategicPlanningHorizon({
+    businessDate: formatInTimeZone(now, timeZone, "yyyy-MM-dd"),
+    localTime: formatInTimeZone(now, timeZone, "HH:mm"),
+  }).weekStart;
 }
 const advance = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms));
-/** The week preparation plans for right now: on a weekend that is already next week, not this Monday's. */
-const planningWeekStart = () =>
-  strategicPlanningHorizon({
-    businessDate: formatInTimeZone(new Date(), ZONE, "yyyy-MM-dd"),
-    localTime: formatInTimeZone(new Date(), ZONE, "HH:mm"),
-  }).weekStart;
 
 describeMysql("Work Thread identity on MySQL", () => {
+  it("looks up the active proposal week rather than the calendar week at the Friday cutoff and on weekends", () => {
+    expect(activeProposalWeekStart(new Date("2026-10-22T16:00:00Z"), ZONE)).toBe("2026-10-19");
+    expect(activeProposalWeekStart(new Date("2026-10-24T01:00:00Z"), ZONE)).toBe("2026-10-26");
+    expect(activeProposalWeekStart(new Date("2026-10-24T16:00:00Z"), ZONE)).toBe("2026-10-26");
+    expect(activeProposalWeekStart(new Date("2026-10-25T16:00:00Z"), ZONE)).toBe("2026-10-26");
+  });
+
   let sql: mysql.Connection;
   let iso: Awaited<ReturnType<typeof createIsolatedGoalCycleDb>>;
   let queue: Pool;
@@ -74,7 +84,7 @@ describeMysql("Work Thread identity on MySQL", () => {
   }, 120_000);
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
-    vi.setSystemTime(nextMorningInLosAngeles());
+    vi.setSystemTime(nextMondayMorningInLosAngeles());
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -205,7 +215,8 @@ describeMysql("Work Thread identity on MySQL", () => {
     expect(await threadsOf(t.tenantId)).toHaveLength(1);
 
     // 6. The operator revises the proposed item's wording, then approves the revision.
-    const proposal = (await latestStrategicProposal(t.identity, planningWeekStart())) ?? (await latestStrategicProposal(t.identity, (await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone, now: new Date() })).weekStart));
+    const weekStart = weekStartMonday(formatInTimeZone(new Date(), t.zone, "yyyy-MM-dd"));
+    const proposal = (await latestStrategicProposal(t.identity, weekStart)) ?? (await latestStrategicProposal(t.identity, (await prepareStrategicProposal({ identity: t.identity, timeZone: t.zone, now: new Date() })).weekStart));
     const strategyItem = proposal!.items.find(item => item.planId.startsWith("strategic_diagnosis:"))!;
     expect(strategyItem).toMatchObject({ candidateId: workThreadCandidateId(threadId), workThreadId: threadId });
     const revised = await reviseStrategicProposal({
@@ -246,10 +257,12 @@ describeMysql("Work Thread identity on MySQL", () => {
     expect(objectives[0]).toMatchObject({ id: first.objectiveId, status: "accepted", latestDecisionId: sixth.decisionId, workThreadId: threadId });
     expect(await threadsOf(t.tenantId)).toHaveLength(1);
     // While that approved execution is open, the opportunity is not proposed again.
-    const afterApproval = (await latestStrategicProposal(t.identity, planningWeekStart()))!;
-    expect(afterApproval.id).not.toBe(revised.id);
-    expect(afterApproval.items.some(item => item.planId.startsWith("strategic_diagnosis:"))).toBe(false);
-    expect(afterApproval.uncertainty.join(" ")).toContain("is already approved and still open on the Day Line");
+    const activeWeek = activeProposalWeekStart(new Date(), t.zone);
+    const afterApproval = await latestStrategicProposal(t.identity, activeWeek);
+    expect(afterApproval, `No proposal persisted for active planning week ${activeWeek}`).not.toBeNull();
+    expect(afterApproval!.id).not.toBe(revised.id);
+    expect(afterApproval!.items.some(item => item.planId.startsWith("strategic_diagnosis:"))).toBe(false);
+    expect(afterApproval!.uncertainty.join(" ")).toContain("is already approved and still open on the Day Line");
   }, 240_000);
 
   it("distinct customer actions and distinct experiments stay distinct, even in the same neighborhood with the same action type", async () => {
