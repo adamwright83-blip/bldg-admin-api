@@ -43,6 +43,23 @@ describe("Mitch executor smoke order", () => {
     expect(smoke[0].requiredArtifact).toBe("client/src/components/boreslay-rally/rallyScoring.test.ts");
   });
 
+  it("serializes simultaneous producer ticks into exactly one smoke order and milestone", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => plan(true).seed())
+    );
+    const milestones = (await store.listMilestones(tenantId, gameId)).filter(
+      m => m.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    );
+    const smokeOrders = (await store.listWorkOrders(tenantId, gameId)).filter(
+      o => o.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    );
+    expect(milestones).toHaveLength(1);
+    expect(smokeOrders).toHaveLength(1);
+    expect(smokeOrders[0].milestoneId).toBe(milestones[0].id);
+    expect(results.filter(r => r.workOrder?.id === smokeOrders[0].id)).toHaveLength(1);
+    expect(smokeOrders[0].status).toBe("pending");
+  });
+
   it("does not recreate the order after it has failed", async () => {
     await plan(true).seed();
     const [order] = await store.listWorkOrders(tenantId, gameId);
