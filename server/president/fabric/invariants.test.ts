@@ -60,7 +60,7 @@ const DOMAIN_PROTECTED_RE =
  * file bytes may pass. A follow-up edit requires re-review and a new digest.
  */
 const APPROVED_MITCH_EXECUTOR_SMOKE_SHA256: Readonly<Record<string, string>> = {
-  "server/mitch/executorSmokeOrder.ts": "b1760841ad8ccd4368d132bcab45bfca79d908fdd5135cbd40df3ccd6393935d",
+  "server/mitch/executorSmokeOrder.ts": "a02e5c4ebb59dcbb7f6b8d7247253ecf9efe4b22371117e8d6f20edc7f70a08a",
   "server/mitch/mitchProducerPlans.ts": "ab57c627b58687c54ef3f89008a3b0fb0246ffa0d4be7ba5ad37ba24d7eab466",
   "server/mitch/mitchProducerCoordinator.ts": "55f4a4fc6d8758404f643f87a334be5006f37f3b124b9c060a00c5eb52ffa149",
   "server/mitch/producerWorkerMain.ts": "001d82948e8954d7776265cb022dc3b2c8f060da4159725fdc843ba63717f19e",
