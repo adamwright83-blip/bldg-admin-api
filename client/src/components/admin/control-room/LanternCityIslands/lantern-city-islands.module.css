@@ -597,3 +597,29 @@
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* customers exist but some or all lack a map location: say so over the map, never imply an empty business */
+.mappingNotice {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 6;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(26, 20, 12, 0.88);
+  color: #fff4dc;
+  font: 600 14px/1.4 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.mappingNotice button {
+  margin-left: 6px;
+  font: inherit;
+  color: #f7b733;
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}

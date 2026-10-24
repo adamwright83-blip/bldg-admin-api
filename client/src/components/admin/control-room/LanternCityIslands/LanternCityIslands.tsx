@@ -4,6 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   canonicalLanternTerritory,
   isLiveLanternCustomer,
+  lanternMappingState,
   type GeographicCustomer,
 } from "../customerGeography";
 import { normalizeTerritoryName } from "@shared/lanternTerritories";
@@ -46,12 +47,15 @@ const day = (iso?: string) => {
 export default function LanternCityIslands({
   onOpenCustomer,
   onNavigate,
+  onReviewCustomers,
   showUtilityDock = true,
   showBrand = true,
   driverCurrentStop = null,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
+  /** Product shells may route to their own customer destination. */
+  onReviewCustomers?: () => void;
   /** Commercial members get the world without Laundry Butler admin shortcuts. */
   showUtilityDock?: boolean;
   /** The admin world shell owns all top-left scene chrome when this board is embedded there. */
@@ -104,6 +108,11 @@ export default function LanternCityIslands({
     [atlas.data, usingSample],
   );
   const customers = useMemo(() => allCustomers.filter(isLiveLanternCustomer), [allCustomers]);
+  const mapping = lanternMappingState({
+    loading: !usingSample && !atlas.data,
+    error: atlas.isError && !usingSample,
+    customers: allCustomers,
+  });
   // Floor buttons only for buildings this business has customers in, not the owner's towers for everyone.
   const ownBuildings = useMemo(
     () => buildingsWithResidents(allCustomers.map(c => c.address ?? c.location?.canonicalAddress ?? "").filter(Boolean)),
@@ -211,7 +220,11 @@ export default function LanternCityIslands({
             {stats && atlas.data && !atlas.isError ? (
               <div className={styles.stats}>
                 <div className={styles.pill}><i className={styles.dot} /><b>{stats.lanterns}</b>&nbsp;mapped lanterns</div>
-                <div className={styles.pill}>{customers.length} located customers · {Math.max(0, customers.length - stats.lanterns)} outside mapped islands</div>
+                {mapping.kind === "no_customers" ? null : (
+                  <div className={styles.pill}>
+                    {allCustomers.length} {allCustomers.length === 1 ? "customer" : "customers"} · {customers.length} located · {Math.max(0, customers.length - stats.lanterns)} outside mapped islands
+                  </div>
+                )}
                 <div className={styles.pill}>Islands open&nbsp;<b>{stats.open} of {stats.islands}</b></div>
               </div>
             ) : null}
@@ -312,7 +325,7 @@ export default function LanternCityIslands({
       {showUtilityDock && mode === "explore" && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
-          <button type="button" onClick={() => onNavigate?.("/customers")}>Located customers <b className={styles.count}>{customers.length}</b></button>
+          <button type="button" onClick={() => onNavigate?.("/customers")}>{mapping.kind === "unmapped" || mapping.kind === "partial" ? "Customers" : "Located customers"} <b className={styles.count}>{mapping.kind === "unmapped" || mapping.kind === "partial" ? allCustomers.length : customers.length}</b></button>
           <button type="button" onClick={() => onNavigate?.("/operations")}>Active orders</button>
         </nav>
       ) : null}
@@ -322,6 +335,17 @@ export default function LanternCityIslands({
         <div className={styles.loading} role="alert" data-lantern-state="atlas-unavailable">
           <div>Customer geography is unavailable. Your world could not be loaded.
             <button type="button" onClick={() => void atlas.refetch()}>Try again</button>
+          </div>
+        </div>
+      ) : null}
+      {mapping.kind === "unmapped" || mapping.kind === "partial" ? (
+        <div className={styles.mappingNotice} role="status" data-lantern-state={`mapping-${mapping.kind}`}>
+          <div>
+            {mapping.kind === "unmapped"
+              ? `${mapping.total} ${mapping.total === 1 ? "customer is" : "customers are"} on record, but none has a map location yet, so no island can open. This is a mapping gap, not an empty business.`
+              : `${mapping.unlocated} of ${mapping.total} customers have no map location yet and are not shown.`}
+            {" "}
+            <button type="button" onClick={() => onReviewCustomers ? onReviewCustomers() : onNavigate?.("/customers")}>Review customers</button>
           </div>
         </div>
       ) : null}
