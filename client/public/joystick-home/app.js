@@ -145,7 +145,7 @@
 
   // Illustrative browser-local sample. No messaging, CRM, or calendar APIs.
   const sample = $('sample-dialog'), about = $('about-dialog');
-  let sampleWorld = 'cozy', draft = 'Hey Aimee! Hope your fall is going well. If you need a hand with laundry again, I’d love to help. — Adam';
+  let sampleWorld = 'cozy', draft = 'Hey Marisol! Hope your fall is going well. If you need a hand with laundry again, I’d love to help. — Adam';
   const story = $('sample-story'), actions = $('sample-actions');
   function button(label, handler, className = 'choice') {
     const b = document.createElement('button'); b.className = className; b.textContent = label; b.addEventListener('click', handler); actions.appendChild(b); return b;
@@ -170,11 +170,11 @@
     });
   }
   function cozyFriend() {
-    content('“You should meet my friend.”', '<p>Hazel puts the finishing touch on her apology. A fox in a blue hat wanders over.</p><p>“Aimee! This is the person who saved me from another neighborhood meeting.”</p><p>In your own game, this is where a real past customer becomes part of the story. In this sample, Aimee hasn’t ordered laundry service in 82 days.</p>');
+    content('“You should meet my friend.”', '<p>Hazel puts the finishing touch on her apology. A fox in a blue hat wanders over.</p><p>“Marisol! This is the person who saved me from another neighborhood meeting.”</p><p>In your own game, this is where a real past customer becomes part of the story. In this sample, Marisol hasn’t ordered laundry service in 82 days.</p>');
     button('Have a little catch-up.', cozyDraft, 'primary');
   }
   function cozyDraft() {
-    content('A little hello. In your own words.', '<p>“It’s been a busy fall,” says Aimee. “Good to see you around again.”</p><p>Take a moment to make this note sound like you.</p>');
+    content('A little hello. In your own words.', '<p>“It’s been a busy fall,” says Marisol. “Good to see you around again.”</p><p>Take a moment to make this note sound like you.</p>');
     const label = document.createElement('label'); label.htmlFor = 'draft-message'; label.textContent = 'YOUR MESSAGE TO AIMEE';
     const textarea = document.createElement('textarea'); textarea.id = 'draft-message'; textarea.maxLength = 500; textarea.value = draft;
     actions.append(label, textarea);
