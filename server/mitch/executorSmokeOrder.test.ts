@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMitchProducerPlan } from "./mitchProducerPlans";
 import { KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE } from "./executorSmokeOrder";
 import { KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING } from "./kingdomTwoProduction";
+import { MitchGameDispatcher } from "./mitchDispatcher";
+import { MitchProducerCoordinator } from "./mitchProducerCoordinator";
+import { MitchQaService } from "./mitchQaService";
+import type { GitHubProducerBus } from "./githubProducerBus";
 import { MitchProductionReasoningService } from "./mitchReasoningService";
 import { MitchProductionService } from "./mitchService";
 import { MitchProductionStore } from "./mitchStore";
@@ -69,6 +73,33 @@ describe("Mitch executor smoke order", () => {
       o => o.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
     );
     expect(smoke).toHaveLength(1);
+  });
+
+  it("does not fall through to duel work or automatically retry a failed one-off smoke", async () => {
+    await plan(true).seed();
+    const initial = (await store.listWorkOrders(tenantId, gameId)).find(
+      o => o.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    )!;
+    await store.failWorkOrder({ tenantId, workOrderId: initial.id, error: "executor failed" });
+
+    const nextTick = await plan(true).seed();
+    expect(nextTick.workOrder).toBeNull();
+    const coordinator = new MitchProducerCoordinator({
+      tenantId,
+      store,
+      service,
+      dispatcher: new MitchGameDispatcher(store),
+      reasoning: new MitchProductionReasoningService(store),
+      qa: new MitchQaService(store),
+      bus: {} as GitHubProducerBus,
+      gameId,
+      gameTitle: "Boreslay",
+      seedProductionWork: plan(true).seed,
+    });
+    expect((await coordinator.runOnce()).action).toBe("idle");
+    const all = await store.listWorkOrders(tenantId, gameId);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ id: initial.id, status: "failed" });
   });
 
   it("never unblocks or creates work for the human-blocked business binding milestone", async () => {
