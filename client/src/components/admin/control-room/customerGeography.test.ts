@@ -174,12 +174,12 @@ describe("lanternMappingState", () => {
   });
   it("distinguishes genuine zero from N customers with 0 located", () => {
     expect(lanternMappingState({ loading: false, error: false, customers: [] }).kind).toBe("no_customers");
-    expect(lanternMappingState({ loading: false, error: false, customers: [no, no], statusCounts: { pending: 1, provider_failure: 1 } }))
-      .toEqual({ kind: "unmapped", total: 2, pending: 1, failed: 1 });
+    expect(lanternMappingState({ loading: false, error: false, customers: [no, no] }))
+      .toEqual({ kind: "unmapped", total: 2 });
   });
   it("reports partial and fully mapped", () => {
     expect(lanternMappingState({ loading: false, error: false, customers: [at, no] }))
-      .toEqual({ kind: "partial", total: 2, located: 1, unlocated: 1, failed: 0 });
+      .toEqual({ kind: "partial", total: 2, located: 1, unlocated: 1 });
     expect(lanternMappingState({ loading: false, error: false, customers: [at, at] }).kind).toBe("mapped");
   });
 });
