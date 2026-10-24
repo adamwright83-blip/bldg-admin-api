@@ -14,6 +14,7 @@ import { MitchQaService } from "./mitchQaService";
 import type { IMitchProductionStore } from "./mitchStore";
 import type { IMitchAgentWakeProvider } from "./mitchAgentWake";
 import { buildMitchGameDirectorBrief } from "./mitchGameDirector";
+import { KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE } from "./executorSmokeOrder";
 
 export type MitchProducerCoordinatorResult =
   | { action: "dispatch_sent"; workOrderId: string }
@@ -116,7 +117,10 @@ export class MitchProducerCoordinator {
     }
 
     const failed = orders
-      .filter(order => order.status === "failed" && order.attemptCount < order.maxAttempts)
+      .filter(order =>
+        order.milestoneKey !== KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey &&
+        order.status === "failed" && order.attemptCount < order.maxAttempts
+      )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
     if (failed && orders.filter(order => order.milestoneId === failed.milestoneId && order.status === "failed").length < failed.maxAttempts) {
       const retry = await this.retryFailedOrder(failed);
