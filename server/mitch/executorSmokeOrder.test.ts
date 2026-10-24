@@ -102,6 +102,28 @@ describe("Mitch executor smoke order", () => {
     expect(all[0]).toMatchObject({ id: initial.id, status: "failed" });
   });
 
+  it("does not dispatch a leftover smoke order after smoke mode is switched off", async () => {
+    await plan(true).seed();
+    const pendingSmoke = (await store.listWorkOrders(tenantId, gameId)).find(
+      o => o.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    )!;
+    const coordinator = new MitchProducerCoordinator({
+      tenantId,
+      store,
+      service,
+      dispatcher: new MitchGameDispatcher(store),
+      reasoning: new MitchProductionReasoningService(store),
+      qa: new MitchQaService(store),
+      bus: {} as GitHubProducerBus,
+      smokeOnly: false,
+      gameId,
+      gameTitle: "Boreslay",
+      seedProductionWork: plan(false).seed,
+    });
+    expect((await coordinator.runOnce()).action).toBe("idle");
+    expect((await store.getWorkOrder(tenantId, pendingSmoke.id))?.status).toBe("pending");
+  });
+
   it("does not dispatch an unrelated pending order when the production worker is smoke-only", async () => {
     await plan(true).seed();
     const smokeOrder = (await store.listWorkOrders(tenantId, gameId)).find(
