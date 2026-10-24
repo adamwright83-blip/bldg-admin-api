@@ -102,6 +102,45 @@ describe("Mitch executor smoke order", () => {
     expect(all[0]).toMatchObject({ id: initial.id, status: "failed" });
   });
 
+  it("does not dispatch an unrelated pending order when the production worker is smoke-only", async () => {
+    await plan(true).seed();
+    const smokeOrder = (await store.listWorkOrders(tenantId, gameId)).find(
+      o => o.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    )!;
+    await store.failWorkOrder({ tenantId, workOrderId: smokeOrder.id, error: "one-off smoke failed" });
+    const oldPending = await service.createWorkOrder({
+      tenantId,
+      gameId,
+      milestoneKey: "k2_install_boreslay_duel_progression",
+      title: "Unrelated installation",
+      desiredPlayerVisibleResult: "No real business effect",
+      acceptanceCriteria: ["A human approves this separately"],
+      canonConstraints: ["No auto main merge"],
+      relevantDependencies: ["client/src/components/boreslay-rally/RallyDemo.tsx"],
+      realBusinessEvidenceConstraints: ["Do not fabricate sales"],
+      baseBranch: "main",
+      baseSha,
+      requiredArtifact: "client/src/components/boreslay-rally/RallyDemo.tsx",
+      requiredTests: ["pnpm check"],
+    });
+
+    const coordinator = new MitchProducerCoordinator({
+      tenantId,
+      store,
+      service,
+      dispatcher: new MitchGameDispatcher(store),
+      reasoning: new MitchProductionReasoningService(store),
+      qa: new MitchQaService(store),
+      bus: {} as GitHubProducerBus,
+      smokeOnly: true,
+      gameId,
+      gameTitle: "Boreslay",
+      seedProductionWork: plan(true).seed,
+    });
+    expect((await coordinator.runOnce()).action).toBe("idle");
+    expect((await store.getWorkOrder(tenantId, oldPending.id))?.status).toBe("pending");
+  });
+
   it("never unblocks or creates work for the human-blocked business binding milestone", async () => {
     await plan(true).seed();
     const binding = await store.getMilestone(tenantId, gameId, KINGDOM_TWO_MILESTONE_AUTHOR_BUSINESS_BINDING.milestoneKey);
