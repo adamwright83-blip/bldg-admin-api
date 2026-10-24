@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -52,6 +53,23 @@ const ROOT = resolve(__dirname, "../../..");
  */
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
+
+/**
+ * Explicitly reviewed Mitch executor smoke implementation (#705). Every
+ * protected implementation path remains denied by default; only these exact
+ * file bytes may pass. A follow-up edit requires re-review and a new digest.
+ */
+const APPROVED_MITCH_EXECUTOR_SMOKE_SHA256: Readonly<Record<string, string>> = {
+  "server/mitch/executorSmokeOrder.ts": "b1760841ad8ccd4368d132bcab45bfca79d908fdd5135cbd40df3ccd6393935d",
+  "server/mitch/mitchProducerPlans.ts": "ab57c627b58687c54ef3f89008a3b0fb0246ffa0d4be7ba5ad37ba24d7eab466",
+  "server/mitch/mitchProducerCoordinator.ts": "e683d131d470bf31b95746e2bff58c8fe7e10926fd4c4d5c24bf8e87b75ce204",
+  "server/mitch/producerWorkerMain.ts": "da2e37ec60e9599c7435044932520b0beaadcc47021a97eb1c674df7e37eef18",
+};
+
+function mitchExecutorSmokeSha256(file: string): string | null {
+  const filePath = join(ROOT, file);
+  return existsSync(filePath) ? createHash("sha256").update(readFileSync(filePath)).digest("hex") : null;
+}
 
 const PAYMENT_RECONCILIATION_ROUTER_ADDITIONS = [
   "  ignoreReconciliationRow,",
@@ -168,7 +186,8 @@ function invariant28ForbiddenHits(
   files: readonly string[],
   routersDiff: string,
   customerOrderTruthDiff = "",
-  geographyRouterDiff = ""
+  geographyRouterDiff = "",
+  mitchDigest: (file: string) => string | null = mitchExecutorSmokeSha256
 ): string[] {
   return files.filter(file => {
     if (file.endsWith(".test.ts")) return false;
@@ -178,6 +197,8 @@ function invariant28ForbiddenHits(
     if (file === "server/geography/geographicTruthRouter.ts") {
       return !additionOnly(geographyRouterDiff, LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS);
     }
+    const approvedMitchDigest = APPROVED_MITCH_EXECUTOR_SMOKE_SHA256[file];
+    if (approvedMitchDigest) return mitchDigest(file) !== approvedMitchDigest;
     return true;
   });
 }
@@ -930,6 +951,13 @@ describe("static safety (10, 28)", () => {
         `${LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS.split("\n").map(line => `+${line}`).join("\n")}\n-  geocodePending: legacyAdminRoleProcedure`
       )
     ).toEqual(["server/geography/geographicTruthRouter.ts"]);
+    // The Mitch opt-in executor smoke change is the exact reviewed content.
+    // A replaced file, an unknown Mitch file, or a missing file stays forbidden.
+    const smokePath = "server/mitch/executorSmokeOrder.ts";
+    expect(invariant28ForbiddenHits([smokePath], routersDiff)).toEqual([]);
+    expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => "0".repeat(64))).toEqual([smokePath]);
+    expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => null)).toEqual([smokePath]);
+    expect(invariant28ForbiddenHits(["server/mitch/unreviewedChange.ts"], routersDiff)).toEqual(["server/mitch/unreviewedChange.ts"]);
     expect(invariant28ForbiddenHits(diff, routersDiff, customerOrderTruthDiff, geographyRouterDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.
