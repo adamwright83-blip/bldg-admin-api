@@ -93,7 +93,7 @@
     $('pause').firstElementChild.textContent = paused ? '▷' : 'Ⅱ';
   }
   castButtons.forEach((button, i) => button.addEventListener('click', () => {
-    setActor(i); elapsed = paused ? 4900 : 0; lastTime = null; paint(elapsed); resumeIfNeeded();
+    setActor(i); elapsed = paused ? 4900 : 280; lastTime = null; paint(elapsed); resumeIfNeeded();
   }));
   $('pause').addEventListener('click', () => { paused = !paused; updatePauseControl(); resumeIfNeeded(); });
   $('replay').addEventListener('click', () => { elapsed = 0; paused = false; lastTime = null; updatePauseControl(); paint(0); resumeIfNeeded(); });
@@ -214,8 +214,17 @@
     button('Replay this sample', roadIntro, 'secondary');
   }
   document.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => startSample(b.dataset.play || world)));
-  document.querySelector('[data-open-about]').onclick = () => { about.showModal(); resumeIfNeeded(); };
+  document.querySelectorAll('[data-open-about]').forEach(b => b.addEventListener('click', () => { about.showModal(); resumeIfNeeded(); }));
   $('about-play').onclick = () => { about.close(); startSample(world); };
   document.querySelectorAll('.close-dialog').forEach(b => b.onclick = () => b.closest('dialog').close());
   [sample, about].forEach(dialog => { dialog.addEventListener('close', resumeIfNeeded); });
+
+  // Small-screen menu: the header's three links behind one 44px pill.
+  const menuButton = $('nav-menu'), menu = $('mobile-menu');
+  function setMenu(open) { menu.hidden = !open; menuButton.setAttribute('aria-expanded', String(open)); }
+  menuButton.addEventListener('click', () => setMenu(menu.hidden));
+  menu.querySelectorAll('[data-menu-item]').forEach(item => item.addEventListener('click', () => setMenu(false)));
+  document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== menuButton) setMenu(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { setMenu(false); menuButton.focus(); } });
+  matchMedia('(min-width: 761px)').addEventListener('change', e => { if (e.matches) setMenu(false); });
 })();
