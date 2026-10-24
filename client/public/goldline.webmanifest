@@ -1,7 +1,7 @@
 {
   "name": "JOYSTICK",
   "short_name": "JOYSTICK",
-  "description": "A real playable action-adventure game whose save file is the real business.",
+  "description": "A business you can play.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
