@@ -319,9 +319,9 @@ export type LanternMappingState =
   /** The business genuinely has no customers on record. Zero is true here. */
   | { kind: "no_customers" }
   /** Customers exist but none has a location yet: a data gap, never "zero customers". */
-  | { kind: "unmapped"; total: number; pending: number; failed: number }
+  | { kind: "unmapped"; total: number }
   /** Some customers are on the map, some are not. */
-  | { kind: "partial"; total: number; located: number; unlocated: number; failed: number }
+  | { kind: "partial"; total: number; located: number; unlocated: number }
   | { kind: "mapped"; total: number; located: number };
 
 /**
@@ -332,20 +332,15 @@ export function lanternMappingState(input: {
   loading: boolean;
   error: boolean;
   customers: ReadonlyArray<Pick<GeographicCustomer, "location">>;
-  statusCounts?: Record<string, number> | null;
 }): LanternMappingState {
   if (input.error) return { kind: "error" };
   if (input.loading) return { kind: "loading" };
   const total = input.customers.length;
   if (total === 0) return { kind: "no_customers" };
   const located = input.customers.filter(c => c.location).length;
-  const failed =
-    (input.statusCounts?.provider_failure ?? 0) +
-    (input.statusCounts?.transient_failure ?? 0) +
-    (input.statusCounts?.ambiguous ?? 0);
   if (located === 0) {
-    return { kind: "unmapped", total, pending: input.statusCounts?.pending ?? 0, failed };
+    return { kind: "unmapped", total };
   }
-  if (located < total) return { kind: "partial", total, located, unlocated: total - located, failed };
+  if (located < total) return { kind: "partial", total, located, unlocated: total - located };
   return { kind: "mapped", total, located };
 }
