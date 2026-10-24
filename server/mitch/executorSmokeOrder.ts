@@ -34,13 +34,13 @@ export async function withExecutorSmokeSeedLock<T>(
     const db = await getDb();
     if (!db) return await seed(); // In-memory unit test. Durable worker fails closed in its store.
     return await db.transaction(async tx => {
-      const [acquisition] = await tx.select({ acquired: sql<number>`GET_LOCK(${lockName}, 15)` }.execute();
+      const [acquisition] = await tx.select({ acquired: sql<number>`GET_LOCK(${lockName}, 15)` }).execute();
       if (Number(acquisition?.acquired) !== 1)
         throw new Error("Mitch executor smoke seed lock unavailable; no order was created");
       try {
         return await seed();
       } finally {
-        const [release] = await tx.select({ released: sql<number>`RELEASE_LOCK(${lockName})` }.execute();
+        const [release] = await tx.select({ released: sql<number>`RELEASE_LOCK(${lockName})` }).execute();
         if (Number(release?.released) !== 1)
           throw new Error("Mitch executor smoke seed lock release failed");
       }
