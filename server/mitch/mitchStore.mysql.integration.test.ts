@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { MitchGameDispatcher } from "./mitchDispatcher";
 import { MitchQaService } from "./mitchQaService";
 import { MitchProductionService } from "./mitchService";
+import { createMitchProducerPlan } from "./mitchProducerPlans";
+import { KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE } from "./executorSmokeOrder";
 import { MitchProductionStore } from "./mitchStore";
 
 describe("Mitch native producer MySQL durability", () => {
@@ -112,4 +114,34 @@ describe("Mitch native producer MySQL durability", () => {
     expect(reloadedAudit.some(event => event.eventType === "mitch_implementation_returned")).toBe(true);
     expect(reloadedAudit.some(event => event.eventType === "mitch_gameplay_qa_failed")).toBe(true);
   }, 30_000);
+  it("persists only one executor smoke order across concurrent durable producer stores", async () => {
+    const tenantId = `tenant-mitch-smoke-${randomUUID().slice(0, 8)}`;
+    const gameId = "kingdom.boreslay";
+    const baseSha = "cf9e4166e566e691f16598bfada5f5ffbe0cc04e";
+    const plans = Array.from({ length: 4 }, () => {
+      const store = new MitchProductionStore(false, true);
+      return createMitchProducerPlan({
+        tenantId,
+        gameId,
+        store,
+        service: new MitchProductionService(store),
+        baseSha,
+        executorSmokeOrder: true,
+      });
+    });
+
+    await Promise.all(plans.map(plan => plan.seed()));
+
+    const fresh = new MitchProductionStore(false, true);
+    const milestones = (await fresh.listMilestones(tenantId, gameId)).filter(
+      m => m.milestoneKey === KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey
+    );
+    const orders = await fresh.listWorkOrders(tenantId, gameId);
+    expect(milestones).toHaveLength(1);
+    expect(orders).toHaveLength(1);
+    expect(orders[0].milestoneId).toBe(milestones[0].id);
+    expect(orders[0].milestoneKey).toBe(KINGDOM_TWO_EXECUTOR_SMOKE_MILESTONE.milestoneKey);
+    expect(orders[0].status).toBe("pending");
+  }, 60_000);
+
 });
