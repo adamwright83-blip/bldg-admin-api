@@ -29,6 +29,7 @@
   function setActor(index) {
     current = index;
     scene.dataset.character = names[index];
+    document.body.dataset.companion = names[index];
     pose.style.backgroundImage = 'url("/joystick-home/assets/acting/' + names[index] + '.webp")';
     performer.setAttribute('aria-label', descriptions[index]);
     castButtons.forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
