@@ -36,6 +36,7 @@ import { trpc } from "@/lib/trpc";
 import { centsToDollars } from "@shared/pricing";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import type { CommercialMission } from "@shared/commercialMission";
+import { missionOffersBothCompletionPaths } from "@shared/missionCompletionPath";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 import TerritoryLeaderboard from "./TerritoryLeaderboard";
@@ -1028,6 +1029,9 @@ function MobileCommandCenter({
   const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
   const [buildMissionOpen, setBuildMissionOpen] = React.useState(false);
   const [journalOpen, setJournalOpen] = React.useState(false);
+  const [directReady, setDirectReady] = React.useState<Record<number, true>>({});
+  const [directError, setDirectError] = React.useState<string | null>(null);
+  const completeDirect = trpc.system.field.completeMissionDirectly.useMutation();
   const [deviceScale, setDeviceScale] = React.useState(1);
   const totalStops = orders.length + salesMissions.length;
   const searchNear = orders[0]?.address || "Los Angeles, CA";
@@ -1167,14 +1171,20 @@ function MobileCommandCenter({
               const diamond = mission.opportunity.evidence?.find(item => item.source === "driver_sales_diamond");
               const coldCall = builder?.missionType === "cold_call";
               const Icon = coldCall ? PhoneCall : Building2;
-              const href = ["game_ready", "game_active"].includes(mission.status)
+              const offerBothPaths =
+                missionOffersBothCompletionPaths(mission.status) &&
+                !directReady[mission.id];
+              const href = offerBothPaths
                 ? `/boreslay-rally?missionId=${mission.id}`
                 : `/driver/sales-mission/${mission.id}`;
               return (
-                <a
+                <div
                   key={mission.id}
+                  className="flex items-stretch border-t border-violet-200 bg-white"
+                >
+                <a
                   href={href}
-                  className="flex min-h-[clamp(118px,17vw,166px)] items-start gap-[clamp(14px,2.4vw,26px)] border-t border-violet-200 bg-white px-[clamp(16px,3vw,34px)] py-[clamp(18px,3vw,30px)] text-left active:bg-violet-50"
+                  className="flex min-h-[clamp(118px,17vw,166px)] min-w-0 flex-1 items-start gap-[clamp(14px,2.4vw,26px)] px-[clamp(16px,3vw,34px)] py-[clamp(18px,3vw,30px)] text-left active:bg-violet-50"
                 >
                   <span className="flex h-[clamp(56px,7.5vw,74px)] w-[clamp(56px,7.5vw,74px)] shrink-0 items-center justify-center rounded-full bg-violet-700 text-white shadow-[0_7px_18px_rgba(109,40,217,.24)]">
                     <Icon className="h-[clamp(27px,3.7vw,37px)] w-[clamp(27px,3.7vw,37px)]" strokeWidth={2.5} />
@@ -1189,14 +1199,49 @@ function MobileCommandCenter({
                     <strong className="mt-2 block text-[clamp(20px,2.8vw,28px)] font-extrabold leading-tight text-[#111827]">{mission.account.name}</strong>
                     <span className="mt-1 block truncate text-[clamp(16px,2.2vw,22px)] text-[#667085]">{mission.account.address}</span>
                     <span className="mt-1.5 block text-[clamp(13px,1.8vw,18px)] font-black uppercase tracking-[.1em] text-violet-700">
-                      {["game_ready", "game_active"].includes(mission.status) ? "Play to unlock" : "Mission ready"}
+                      {offerBothPaths ? "Play to unlock" : "Mission ready"}
                     </span>
                     {diamond ? <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-fuchsia-100 px-2.5 py-1 text-[clamp(12px,1.6vw,16px)] font-black text-fuchsia-800"><Sparkles className="h-4 w-4 fill-fuchsia-300" /> Diamond loaded</span> : null}
                   </span>
                   <ChevronRight className="mt-8 h-[clamp(25px,3.3vw,33px)] w-[clamp(25px,3.3vw,33px)] shrink-0 text-violet-500" />
                 </a>
+                {offerBothPaths ? (
+                  <button
+                    type="button"
+                    className="m-[clamp(12px,2vw,18px)] shrink-0 self-center rounded-full bg-violet-700 px-4 py-3 text-[clamp(12px,1.6vw,16px)] font-black uppercase tracking-[.08em] text-white"
+                    disabled={completeDirect.isPending}
+                    onClick={async () => {
+                      setDirectError(null);
+                      try {
+                        await completeDirect.mutateAsync({
+                          missionId: mission.id,
+                          expectedVersion: mission.version,
+                          requestId: crypto.randomUUID(),
+                        });
+                        setDirectReady(current => ({
+                          ...current,
+                          [mission.id]: true,
+                        }));
+                      } catch (cause) {
+                        setDirectError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "Could not complete this mission."
+                        );
+                      }
+                    }}
+                  >
+                    Do this quickly
+                  </button>
+                ) : null}
+                </div>
               );
             })}
+            {directError ? (
+              <p role="alert" className="px-[clamp(16px,3vw,34px)] py-3 text-sm font-semibold text-red-700">
+                {directError}
+              </p>
+            ) : null}
           </section>
         ) : null}
       </main>
