@@ -8,6 +8,7 @@ import { hasRealDecision } from "../silverLake3d/reunionQuests";
 import { createCozyMusic } from "../silverLake3d/cozyMusic";
 import { createZombieLoungeMusic } from "./zombieLoungeMusic";
 import { createCenturyParkEast, ERRAND_SLOTS, type CpeHandle, type ErrandPhase, type Interaction, type ItemKind, type PromptId, type Vibe } from "./cpeRuntime";
+import { THUMB_RECTS } from "./cpeCctv";
 import { centuryParkEastTowerHref } from "./centuryParkEastEntry";
 import styles from "./century-park-east-3d.module.css";
 
@@ -90,6 +91,13 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
   const [dogs, setDogs] = useState({ carried: 0, saved: 0, total: 12 });
   const [charges, setCharges] = useState(0);
   const [climbing, setClimbing] = useState<number | null>(null);
+  const [camera, setCamera] = useState<{ id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null>(null);
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    if (!camera) return;
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [camera]);
   const [floorIdx, setFloorIdx] = useState(0);
   const [trapped, setTrapped] = useState(0);
   const [party, setParty] = useState(false);
@@ -262,6 +270,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
       onFloor: f => setFloorIdx(f),
       onBubble: b => setBubble(b),
       onClimb: c => setClimbing(c === null ? null : Math.round(c * 20) / 20),
+      onCamera: c => setCamera(c),
     })
       .then(h => {
         if (cancelled) {
@@ -448,6 +457,20 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
           <button type="button" className={styles.hudButton} onClick={exit}>Back to the tower</button>
         </div>
       </header>
+
+      {camera && ready && !party ? (
+        <div className={styles.monitors} aria-hidden data-testid="century-park-east-monitors" data-camera={camera.id}>
+          <div className={styles.camLabel}>
+            <span className={styles.rec}>● REC</span> CAM {camera.id} · {["GROUND FLOOR", "AMENITY FLOOR", "ROOF"][camera.floor]} · {camera.label}
+          </div>
+          <div className={styles.camClock}>{clock.toTimeString().slice(0, 8)} · {clock.toISOString().slice(0, 10)}</div>
+          {camera.thumbs.map((t, i) => (
+            <div key={t.id} className={styles.thumbLabel} style={{ left: `${THUMB_RECTS[i].x * 100}%`, top: `calc(${THUMB_RECTS[i].y * 100}% - 18px)`, width: `${THUMB_RECTS[i].w * 100}%` }}>
+              CAM {t.id} · {t.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {prompt && ready && !dialogue && !deskOpen && choiceSlot === null && !knockedOut ? (
         <button type="button" className={styles.prompt} onClick={() => runtimeRef.current?.interact()} data-testid="century-park-east-prompt" data-prompt={prompt.id}>

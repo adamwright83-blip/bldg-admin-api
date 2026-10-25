@@ -29,6 +29,7 @@ import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, ROPE_LANDING_DX, WIDTH
 export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
 import { INK_SETS, createPrintPass } from "./cpePrint";
+import { createCctv, type Cctv } from "./cpeCctv";
 import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
@@ -60,6 +61,8 @@ export type CpeCallbacks = {
   onBubble?: (b: { who: string; text: string } | null) => void;
   /** climbing a rope: how far up (0..1), or null when she's not on one */
   onClimb?: (progress: number | null) => void;
+  /** zombie night: which security camera the monitor is on, and the small feeds beside it; null on cozy night */
+  onCamera?: (c: { id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null) => void;
 };
 
 export type CpeHandle = {
@@ -771,12 +774,21 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     gradeWarm = zombieNight ? 0 : 1;
     inks = zombieNight ? INK_SETS.zombie : INK_SETS.cozy;
     printRef?.setInks(inks);
+    if (cctvRef) {
+      if (zombieNight) {
+        cctvRef.follow(floor, pos.x);
+        cctvRef.boot();
+        const a = cctvRef.active;
+        callbacks.onCamera?.({ id: a.id, label: a.label, floor: a.floor, thumbs: cctvRef.thumbs.map(t => ({ id: t.id, label: t.label })) });
+      } else callbacks.onCamera?.(null);
+    }
     for (const p of set.pools) (p.material as THREE.MeshBasicMaterial).color.set(zombieNight ? 0x8fa8d8 : 0xffffff);
     pMat.size = 0.16;
   }
   let gradeWarm = 1;
   let inks = INK_SETS.cozy;
   let printRef: ReturnType<typeof createPrintPass> | null = null;
+  let cctvRef: Cctv | null = null;
   applyVibe();
 
   // ---------------------------------------------------------------- input
@@ -1081,6 +1093,16 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   print.setInks(inks);
   printRef = print;
   composer.addPass(print);
+  // zombie night is watched on the concierge's monitors (cpeCctv.ts); software GL keeps the plain dollhouse
+  const cctv: Cctv | null = softwareGl ? null : createCctv(renderer, scene, renderer.getPixelRatio());
+  cctvRef = cctv;
+  disposers.push(() => cctv?.dispose());
+  const reportCamera = () => {
+    if (!cctv || vibe !== "zombie") return callbacks.onCamera?.(null);
+    const a = cctv.active;
+    callbacks.onCamera?.({ id: a.id, label: a.label, floor: a.floor, thumbs: cctv.thumbs.map(t => ({ id: t.id, label: t.label })) });
+  };
+
   disposers.push(() => composerTarget.dispose());
   function resize() {
     const w = container.clientWidth || window.innerWidth;
@@ -1092,6 +1114,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     }
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
+    cctvRef?.setSize(w, h);
     camera.aspect = w / h;
     camera.fov = w < h ? 46 : 27;
     camera.updateProjectionMatrix();
@@ -1209,12 +1232,16 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     heroShadow.scale.setScalar(THREE.MathUtils.lerp(1, 0.6, flat));
     hero.mixer.update(frozen ? 0 : dt);
 
+    // ---- which picture: the printed dollhouse, or the monitors on zombie night (the party is always the dollhouse)
+    const onMonitors = vibe === "zombie" && !finaleAt && !!cctv;
+    const liveCamera = onMonitors && cctv ? cctv.active.cam : camera;
+
     // ---- errand markers and items
     needy.forEach((n, i) => {
       const ph = errandPhase[i];
       n.mark.visible = ph === "need" || ph === "carrying" || ph === "waiting";
       n.mark.position.y = fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08;
-      n.mark.lookAt(camera.position);
+      n.mark.lookAt(liveCamera.position);
       present(n.p, ERRAND_SLOTS[i].x, ERRAND_SLOTS[i].floor, dt);
       if (finaleAt) n.p.play("Dance_Loop");
       else n.p.play(ph === "done" ? "Yes" : ph === "need" || ph === "carrying" ? "Idle_Talking_Loop" : "Idle_Loop", 0.3, ph === "done");
@@ -1465,8 +1492,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
-    print.tick(elapsed);
-    composer.render();
+    if (onMonitors && cctv) {
+      if (cctv.follow(floor, pos.x)) reportCamera();
+      cctv.render(elapsed, dt);
+    } else {
+      print.tick(elapsed);
+      composer.render();
+    }
   }
   renderer.setAnimationLoop(frame);
 
