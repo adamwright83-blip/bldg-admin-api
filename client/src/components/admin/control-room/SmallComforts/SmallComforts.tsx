@@ -7,6 +7,7 @@ import {
 import { Game } from "./game/game";
 import { Sound } from "./game/audio";
 import { SMALL_COMFORTS_MARKUP } from "./markup";
+import { ChapterStageCanvas } from "./ChapterStageCanvas";
 import {
   CHAPTER_CARDS,
   SCRAP_COURSES,
@@ -212,6 +213,91 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
     setStory(prev => stepChapter2(prev, { type: "shave_stroke", x, y }));
   };
 
+  // Direct spatial tap/drag on the live 2.5D stage canvas
+  const handleStageTap = (nx: number, ny: number) => {
+    setStory(prev => {
+      if (prev.showingChapterCard) return prev;
+      if (prev.activeChapter === 1) {
+        if (prev.ch1.step === "free_biscuit") {
+          return stepChapter1(prev, { type: "pull_zipper_tooth" });
+        }
+        if (prev.ch1.step === "place_bottle_cap") {
+          return stepChapter1(prev, { type: "place_bottle_cap" });
+        }
+        if (prev.ch1.step === "aim_shoelace_sling") {
+          return stepChapter1(prev, { type: "fire_shoelace_sling", tension: slingDraft });
+        }
+        if (prev.ch1.step === "stack_eggshell_stairs") {
+          return stepChapter1(prev, { type: "stack_eggshell" });
+        }
+        if (prev.ch1.step === "whoopee_launchpad") {
+          if (!prev.ch1.whoopeePlaced) {
+            return stepChapter1(prev, { type: "place_whoopee_cushion" });
+          }
+          return stepChapter1(prev, { type: "biscuit_cannonball" });
+        }
+        if (prev.ch1.step === "toaster_finale") {
+          return stepChapter1(prev, { type: "pull_toaster_lever" });
+        }
+        if (prev.ch1.step === "complete") {
+          return selectChapter(prev, 2);
+        }
+      }
+      if (prev.activeChapter === 2) {
+        if (prev.ch2.step === "this_is_a_sign_wake") {
+          return stepChapter2(prev, { type: "speak_this_is_a_sign" });
+        }
+        if (prev.ch2.step === "phone_pinball") {
+          const target = nx < 0.36 ? "accept" : nx < 0.66 ? "voicemail" : "speaker";
+          return stepChapter2(prev, { type: "hit_pinball_bumper", target });
+        }
+        if (prev.ch2.step === "complete") {
+          return selectChapter(prev, 3);
+        }
+      }
+      if (prev.activeChapter === 3) {
+        if (prev.ch3.step === "load_spoon") {
+          return stepChapter3(prev, { type: "load_scrap_spoon" });
+        }
+        if (prev.ch3.step === "wait_for_inhale") {
+          return stepChapter3(prev, { type: "launch_spoon" });
+        }
+        if (prev.ch3.step === "choking_onset") {
+          return stepChapter3(prev, { type: "transition_to_chapter_4" });
+        }
+      }
+      if (prev.activeChapter === 4) {
+        if (
+          prev.ch4.beat !== "6_one_armed_heimlich_sync" &&
+          prev.ch4.beat !== "7_triumphant_expulsion" &&
+          prev.ch4.beat !== "complete"
+        ) {
+          return stepChapter4(prev, { type: "advance_intro_beat" });
+        }
+        if (prev.ch4.beat === "6_one_armed_heimlich_sync") {
+          return stepChapter4(prev, { type: "mouse_jump" });
+        }
+        if (prev.ch4.beat === "7_triumphant_expulsion") {
+          return completeChapter4Finale(prev);
+        }
+        if (prev.ch4.beat === "complete") {
+          return selectChapter(prev, 1);
+        }
+      }
+      void ny;
+      return prev;
+    });
+  };
+
+  const handleStageDrag = (nx: number, ny: number, isDown: boolean) => {
+    if (!isDown) return;
+    if (story.activeChapter === 2 && story.ch2.step === "beard_shave") {
+      const bx = Math.max(0, Math.min(1, (nx - 0.25) / 0.5));
+      const by = Math.max(0, Math.min(1, (ny - 0.42) / 0.28));
+      setStory(prev => stepChapter2(prev, { type: "shave_stroke", x: bx, y: by }));
+    }
+  };
+
   return (
     <div
       ref={root}
@@ -253,6 +339,16 @@ export default function SmallComforts({ onExit }: { onExit: () => void }) {
           />
         ) : null}
       </div>
+
+      {/* Live 2.5D Illustrated Cutout & Mouse Slapstick Stage Canvas */}
+      {!studio3DOpen && !story.showingChapterCard ? (
+        <ChapterStageCanvas
+          story={story}
+          slingDraft={slingDraft}
+          onCanvasTap={handleStageTap}
+          onCanvasDrag={handleStageDrag}
+        />
+      ) : null}
 
       {/* Primary Lantern City exit button (kept as the only <button> so plate.getByRole("button") in smoke tests resolves unambiguously) */}
       <button type="button" className="scp-exit" onClick={onExit}>

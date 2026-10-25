@@ -119,6 +119,12 @@ test("Small Comforts Chapters 1-4 play through Breakfast in Bed, This Is a Sign,
   await page.getByTestId("sc-ch4-jump-sync").click();
   await expect(page.getByTestId("sc-ch4-shard-syllable")).toContainText("FA-LA-FREE!");
   await maybeSnap(page, "06-ch4-heimlich-singing-glass-shards.png");
+  if (CAPTURE_DIR) {
+    await page.setViewportSize({ width: 960, height: 680 });
+    await page.waitForTimeout(120);
+    await maybeSnap(page, "06b-ch4-heimlich-wide-stage.png");
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
   await page.getByTestId("sc-ch4-jump-sync").click();
   await expect(page.getByTestId("sc-ch4-shard-syllable")).toContainText("OO-WAH-BREEZE!");
   await page.getByTestId("sc-ch4-jump-sync").click();
