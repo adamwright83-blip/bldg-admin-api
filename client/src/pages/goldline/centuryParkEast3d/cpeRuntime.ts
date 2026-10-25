@@ -25,7 +25,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, ROPE_LANDING_DX, WIDTH, fy, hitsCollider, staticColliders, type Collider } from "./cpeLayout";
+import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, WIDTH, fy, hitsCollider, ropeLanding, staticColliders, type Collider } from "./cpeLayout";
 export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
 import { INK_SETS, createPrintPass } from "./cpePrint";
@@ -1288,6 +1288,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   function frame() {
     renderer.info.reset();
     const dt = Math.min(0.05, clock.getDelta());
+    // A React overlay pauses play. Rendering a costly software-WebGL scene behind the opaque shotgun desk
+    // starves its real-time buttons and fuse; preserve the last frame instead until play resumes.
+    if (paused) return;
     elapsed += dt;
     const now = performance.now();
     const frozen = paused;
@@ -1324,7 +1327,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
           climb = null; // let go
           callbacks.onClimb?.(null);
         } else if (climb.s.h >= FLOOR_H - 0.45) {
-          climb.mantle = { t: 0, from: new THREE.Vector3(r.x, fy(r.floor) + climb.s.h, r.z + 0.18), to: new THREE.Vector3(r.x + ROPE_LANDING_DX, top, r.z) };
+          const landing = ropeLanding(r);
+          climb.mantle = { t: 0, from: new THREE.Vector3(r.x, fy(r.floor) + climb.s.h, r.z + 0.18), to: new THREE.Vector3(landing.x, top, landing.z) };
           hero.play("Jump_Land", 0.1, true);
           sounds.creak(0.8);
         } else {
@@ -1761,7 +1765,10 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
-    if (onMonitors && cctv) {
+    if (softwareGl) {
+      // SwiftShader has no GPU: avoid four full-screen post passes so simulation and input stay responsive.
+      renderer.render(scene, camera);
+    } else if (onMonitors && cctv) {
       if (cctv.follow(floor, pos.x)) reportCamera();
       cctv.render(elapsed, dt);
     } else {
