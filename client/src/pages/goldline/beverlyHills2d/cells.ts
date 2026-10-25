@@ -151,7 +151,12 @@ export type PropId =
   | "rope"
   | "tunnel"
   | "hole"
-  | "ghost";
+  | "ghost"
+  | "hose"
+  | "trough"
+  | "hay"
+  | "branch"
+  | "can";
 export const PROPS: Record<PropId, [string, Rect]> = {
   fountain: ["07-courtyard-near-alpha", [0, 0, 490, 440]],
   stairs: ["07-courtyard-near-alpha", [0, 470, 575, 530]],
@@ -167,4 +172,10 @@ export const PROPS: Record<PropId, [string, Rect]> = {
   tunnel: ["10-ranch-near-alpha", [970, 290, 565, 350]],
   hole: ["11-distortion-alpha", [0, 0, 1190, 585]],
   ghost: ["11-distortion-alpha", [975, 245, 560, 730]],
+  // The Lost Creek: drawings already on the approved sheets, each one a single connected shape inside its box
+  hose: ["07-courtyard-near-alpha", [1233, 477, 285, 210]],
+  trough: ["10-ranch-near-alpha", [918, 52, 588, 246]],
+  hay: ["10-ranch-near-alpha", [18, 354, 464, 236]],
+  branch: ["10-ranch-near-alpha", [25, 624, 509, 303]],
+  can: ["10-ranch-near-alpha", [1288, 615, 191, 190]],
 };
