@@ -1,5 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
+import { outreachSubmission } from "../../shared/beverlyHillsOutreach";
 import {
   legacyDayforgeMissionFieldProcedure,
   legacyDayforgeTenantAdminProcedure,
@@ -111,6 +112,18 @@ export const goldlineWorldRouter = router({
   beverlyHillsProspects: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     const { loadBeverlyHillsProspects } = await import("../experience/lanternCity/beverlyHillsProspects");
     return loadBeverlyHillsProspects(ctx.tenantId);
+  }),
+  beverlyHillsOutreach: legacyDayforgeTenantOperatorProcedure.query(async ({ctx}) => {
+    const {loadBeverlyOutreach}=await import("../experience/lanternCity/beverlyHillsOutreach");
+    return loadBeverlyOutreach(ctx.tenantId,ctx.user.openId,["owner","admin"].includes(ctx.legacyDayforgeMembership.role));
+  }),
+  submitBeverlyHillsOutreach: legacyDayforgeTenantOperatorProcedure.input(outreachSubmission).mutation(async ({ctx,input}) => {
+    const {submitBeverlyOutreach}=await import("../experience/lanternCity/beverlyHillsOutreach");
+    return submitBeverlyOutreach(ctx.tenantId,ctx.user.openId,input);
+  }),
+  reviewBeverlyHillsOutreach: legacyDayforgeTenantAdminProcedure.input(z.object({id:z.string().uuid(),decision:z.enum(["verified","rejected"]),note:z.string().trim().min(12).max(2000)})).mutation(async ({ctx,input}) => {
+    const {reviewBeverlyOutreach}=await import("../experience/lanternCity/beverlyHillsOutreach");
+    return reviewBeverlyOutreach(ctx.tenantId,ctx.user.openId,input);
   }),
   getNeighborhoodMemory: legacyDayforgeTenantOperatorProcedure
     .input(

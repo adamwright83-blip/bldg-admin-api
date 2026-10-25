@@ -135,7 +135,7 @@ export default function LanternCityIslands({
             openSilverLake3D("silver-lake");
             return;
           }
-          // Beverly Hills is the commercial level: the velvet rope, and the real prospects behind it
+          // Beverly Hills: The Other Rodeo, a painted animal adventure with a real outreach journal.
           if (modeRef.current === "explore" && info?.name === "Beverly Hills") {
             openBeverlyHills3D();
             return;

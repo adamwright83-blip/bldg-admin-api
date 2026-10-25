@@ -10803,3 +10803,15 @@ export const clairePreparedItems = mysqlTable(
 );
 
 export type ClairePreparedItemRow = typeof clairePreparedItems.$inferSelect;
+
+/** Beverly Hills outreach reports. Fiction rewards require a separate administrator's evidence review. */
+export const beverlyHillsOutreach = mysqlTable('beverly_hills_outreach', {
+  id: varchar('id',{length:36}).notNull(), tenantId: varchar('tenant_id',{length:64}).notNull(),
+  prospectId: varchar('prospect_id',{length:191}).notNull(), address: varchar('address',{length:512}).notNull(),
+  operatorId: varchar('operator_id',{length:191}).notNull(), performedOn: varchar('performed_on',{length:10}).notNull(),
+  hangerId: varchar('hanger_id',{length:100}).notNull(), count: int('hanger_count').notNull(),
+  permission: text('permission_note').notNull(), evidenceUrl: text('evidence_url').notNull(), notes: text('notes').notNull(),
+  status: varchar('status',{length:20}).notNull().default('submitted'),
+  reviewerId: varchar('reviewer_id',{length:191}), reviewNote: text('review_note'), reviewedAt: timestamp('reviewed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, t => [primaryKey({columns:[t.tenantId,t.id]})]);
