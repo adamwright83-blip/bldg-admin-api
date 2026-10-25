@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { freshAdventure, restoreAdventure, CHAPTERS, hop, interact, prompt, throwToy, tick, VIEW, WIDTH, type Adventure } from "./adventure";
+import { freshAdventure, restoreAdventure, chargeThrow, hop, interact, placeOf, prompt, releaseThrow, side, tick, HOME_WIDTH, VIEW, WIDTH, type Adventure } from "./adventure";
 import { H, loadArt, paint, type Art } from "./paint";
 import { createSound } from "./sound";
 import { OutreachJournal } from "./OutreachJournal";
 import { HerdRound } from "./HerdRound";
 import styles from "./other-rodeo.module.css";
 import { useDialogFocus } from "./useDialogFocus";
-const SAVE = "joystick.other-rodeo.fiction.v2";
+const SAVE = "joystick.other-rodeo.fiction.v3";
 export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -50,16 +50,18 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       setSaved(false);
     }
   }
-  function act(kind: "interact" | "throw" | "hop") {
-    if (!playing.current) return;
+  function act(kind: "interact" | "charge" | "release" | "hop") {
+    if (!playing.current) {
+      // a throw wound up before a pause still lets go
+      if (kind === "release") state.current.player.charge = null;
+      return;
+    }
     let did = false;
     if (kind === "interact") did = interact(state.current);
-    else if (kind === "throw") did = throwToy(state.current);
+    else if (kind === "charge") chargeThrow(state.current);
+    else if (kind === "release") did = releaseThrow(state.current);
     else hop(state.current);
-    if (did) {
-      sound.current?.cue();
-      persist();
-    }
+    if (did) persist();
     setView({ ...state.current });
   }
   const actions = useRef(act);
@@ -125,14 +127,18 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
         }
         snapshot.current.getContext("2d")!.drawImage(c, 0, 0, VIEW, H);
         lastChapter.current = s.chapter;
-        camera.current = 0;
+        camera.current = Math.max(0, Math.min((s.chapter === "home" ? HOME_WIDTH : WIDTH) - VIEW, s.player.x - 560));
         setChapterCard(true);
         persist();
         if (cardTimer.current) clearTimeout(cardTimer.current);
         cardTimer.current = setTimeout(() => setChapterCard(false), 2800);
       }
       if (playing.current) tick(s, dt, { dx, dy });
-      const target = Math.max(0, Math.min(WIDTH - VIEW, s.player.x - 560));
+      // every verb has its own sound: the sim asks, the page plays
+      for (const cue of s.cues) sound.current?.play(cue);
+      s.cues = [];
+      const width = s.chapter === "home" ? HOME_WIDTH : WIDTH;
+      const target = Math.max(0, Math.min(width - VIEW, s.player.x - 560));
       camera.current += (target - camera.current) * (1 - Math.exp(-dt * 5));
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = Math.round(VIEW * dpr),
@@ -149,6 +155,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           reduced: preferences.current.reduced,
           restored: preferences.current.restored,
           snapshot: s.tear ? snapshot.current : null,
+          clock: now / 1000,
         });
       void lastTear;
       ui += dt;
@@ -188,11 +195,14 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       keys.current.add(e.code);
       if (!e.repeat) {
         if (e.code === "KeyE") actions.current("interact");
-        if (e.code === "KeyF") actions.current("throw");
+        if (e.code === "KeyF") actions.current("charge");
         if (e.code === "Space") actions.current("hop");
       }
     };
-    const up = (e: KeyboardEvent) => keys.current.delete(e.code);
+    const up = (e: KeyboardEvent) => {
+      keys.current.delete(e.code);
+      if (e.code === "KeyF") actions.current("release");
+    };
     const blur = () => {
       keys.current.clear();
       setPaused(true);
@@ -224,8 +234,19 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     cardTimer.current = setTimeout(() => setChapterCard(false), 2800);
   }
   const p = prompt(view);
-  const chapter = CHAPTERS[view.chapter];
+  const place = placeOf(view);
   const item = view.player.item;
+  const charging = view.player.charge !== null;
+  // hold to throw: press winds up, release lets go
+  const holdToThrow = {
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      act("charge");
+    },
+    onPointerUp: () => act("release"),
+    onPointerCancel: () => act("release"),
+    onLostPointerCapture: () => act("release"),
+  };
   const touch = (code: string) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -242,20 +263,29 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       className={styles.root}
       data-testid="beverly-hills-2d"
       data-chapter={view.chapter}
-      data-stairs={view.flags.stairs}
-      data-gate={view.flags.gate}
-      data-water={view.flags.water}
-      data-tether={view.flags.tether}
+      data-side={side(view.player.x)}
+      data-fountain={Math.round(view.water.F * 100)}
+      data-ford={Math.round(view.water.ford * 100)}
+      data-channel={Math.round(view.water.channel * 100)}
+      data-trough={Math.round(view.water.hw * 100)}
+      data-hose={view.hose}
+      data-sluice={view.sluice}
+      data-trust={view.calf.trust}
       data-rescued={view.flags.rescued}
+      data-yielded={view.flags.yielded}
+      data-ended={view.flags.ended}
       data-item={item ?? "none"}
       data-boxer={view.boxer.state}
       data-player-x={Math.round(view.player.x)}
+      data-player-d={view.player.d.toFixed(2)}
       data-boxer-x={Math.round(view.boxer.x)}
+      data-calf-x={Math.round(view.calf.x)}
+      data-calf-ledge={view.calf.ledge}
     >
       <div className={styles.stage}>
         <canvas
           ref={canvas}
-          aria-label="The Other Rodeo. Walk with the arrow keys or WASD (up and down walk deeper into the picture), Space to hop, E to act, F to throw what you carry."
+          aria-label="The Other Rodeo. Walk with the arrow keys or WASD (up and down walk deeper into the picture), Space to hop, E to act, hold F to wind up a throw and let go to throw."
         />
       </div>
       <header className={styles.hud}>
@@ -316,18 +346,18 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
               <br />A city with room for another past.
             </p>
             <div className={styles.titleButtons}>
+              <button className={styles.primary} onClick={begin}>
+                {saved ? "Continue the afternoon" : "Follow your nose"}{" "}
+                <span>→</span>
+              </button>
               <button
-                className={styles.primary}
                 onClick={() => {
                   begin();
                   setRoundUp(true);
                 }}
                 data-testid="start-round-up"
               >
-                Round up the herd <span>→</span>
-              </button>
-              <button onClick={begin}>
-                {saved ? "Continue the afternoon" : "Follow your nose"}
+                Round up the herd
               </button>
             </div>
             <small>Headphones welcome · Progress saved on this device</small>
@@ -340,14 +370,14 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       {started && ready && !roundUp && (
         <>
           <div className={styles.chapter}>
-            <div>{chapter.place}</div>
+            <div>{place}</div>
           </div>
-          {chapterCard && (
-            <div className={styles.chapterCard}>
-              <span>{chapter.place}</span>
+          {(view.card || chapterCard) && !view.tear && (
+            <div className={styles.chapterCard} data-testid="chapter-card">
+              <span>{view.card?.text ?? place}</span>
             </div>
           )}
-          {!paused && !journal && view.chapter !== "home" && (
+          {!paused && !journal && !view.flags.ended && (
             <>
               <div className={styles.actionDock}>
                 {p && (
@@ -359,10 +389,10 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
                     {p.label}
                   </button>
                 )}
-                {item && item !== "rope" && (
-                  <button onClick={() => act("throw")}>
+                {item && view.chapter === "creek" && (
+                  <button {...holdToThrow} aria-pressed={charging}>
                     <kbd>F</kbd>
-                    Throw the {item}
+                    {charging ? "Let go to throw" : `Hold to throw the ${item}`}
                   </button>
                 )}
               </div>
@@ -370,7 +400,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
                 <span>← → ↑ ↓ Walk</span>
                 <span>Space Hop</span>
                 <span>E Act</span>
-                <span>F Throw</span>
+                <span>Hold F Throw</span>
               </div>
               <div className={styles.touch}>
                 <button aria-label="Walk left" {...touch("ArrowLeft")}>
@@ -389,7 +419,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
               </div>
             </>
           )}
-          {view.chapter === "home" && !journal && !chapterCard && !view.tear && (
+          {view.chapter === "home" && view.flags.ended && !journal && !view.tear && (
             <div className={styles.homeNote}>
               <button className={styles.primary} onClick={() => setRoundUp(true)}>
                 Round up the herd →

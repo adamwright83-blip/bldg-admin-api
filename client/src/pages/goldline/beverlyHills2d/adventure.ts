@@ -117,7 +117,8 @@ export const SPOTS = {
   ball: { x: 470, d: 0.62 },
   fountain: { x: 850, d: 0.3 },
   hose: { x: 960, d: 0.46 },
-  drain: { x: 1500, d: 0.5 },
+  /** in front of the stairs, so the grate is never hidden behind them */
+  drain: { x: 1500, d: 0.62 },
   hedge: { x: 120, d: 0.15 },
   pots: { x: 1180, d: 0.2 },
   stairs: { x: 1660, d: 0.42 },
@@ -134,7 +135,8 @@ export const SPOTS = {
   can: { x: R + 1420, d: 0.7 },
   /** the oak limb that falls across the courtyard doorway after the rescue */
   branch: { x: 930, d: 0.35 },
-  home: { pool: 420, oak: 940, elevator: 1610 },
+  /** the overlap painting, fitted to the screen as it always was: the pool, the oak, the elevator */
+  home: { pool: 300, oak: 640, elevator: 1080 },
 } as const;
 
 /** the painted creek bed (the herd's CREEK diagonal), the old channel, and the hole the pasture fell into */
@@ -241,7 +243,7 @@ export function restoreAdventure(raw: string | null): Adventure {
   }
 }
 
-export const HOME_WIDTH = 1900;
+export const HOME_WIDTH = VIEW;
 const clampX = (x: number) => Math.max(70, Math.min(WIDTH - 70, x));
 const clamp01 = (d: number) => Math.max(0, Math.min(1, d));
 const approach = (n: number, target: number, step: number) => n + Math.sign(target - n) * Math.min(Math.abs(target - n), step);
