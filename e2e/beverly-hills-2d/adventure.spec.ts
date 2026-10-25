@@ -87,6 +87,9 @@ test("journal submission stays pending, does not add orders or grow a ranch plot
   );
   await page.goto("/growth/lantern-city?level=beverly-hills");
   await page.getByRole("button", { name: "Continue the afternoon" }).click();
+  await expect(
+    page.getByRole("button", { name: "Return to Lantern City", exact: true })
+  ).toBeVisible();
   const hud = page.locator("header");
   expect((await hud.boundingBox())!.height).toBeLessThan(100);
   await page.getByRole("button", { name: "Open Claire’s field notes" }).click();

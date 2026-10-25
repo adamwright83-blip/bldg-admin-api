@@ -268,6 +268,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       <header className={styles.hud}>
         <button
           className={styles.city}
+          aria-label="Return to Lantern City"
           onClick={() => {
             persist();
             onExit();
