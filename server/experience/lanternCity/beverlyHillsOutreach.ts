@@ -6,6 +6,7 @@ import {
   addressKey,
   apartmentProspect,
   BEVERLY_HANGER_ID,
+  laDate,
   plotsFromOrders,
   validateReview,
   type OutreachRecord,
@@ -29,10 +30,10 @@ export async function loadBeverlyOutreach(
     .select()
     .from(beverlyHillsOutreach)
     .where(eq(beverlyHillsOutreach.tenantId, tenantId));
-  // Separate read model: exact recorded addresses, no campaign attribution or invented conversions.
-  // Separate read model: each non-cancelled order's exact recorded address and pickup date. No campaign attribution.
+  // Separate read model: each non-cancelled order's exact recorded address and the date it was placed (its
+  // creation time, not its pickup date). No campaign attribution, no invented conversions.
   const orderRows = await db
-    .select({ address: orders.address, pickupDate: orders.pickupDate })
+    .select({ address: orders.address, createdAt: orders.createdAt })
     .from(orders)
     .where(and(eq(orders.tenantId, tenantId), ne(orders.status, "cancelled")));
   const byAddress = new Map<string, number>();
@@ -48,7 +49,10 @@ export async function loadBeverlyOutreach(
       recordedOrders: byAddress.get(addressKey(p.address!)) ?? 0,
     })),
     records: records as OutreachRecord[],
-    restoredPlots: plotsFromOrders(records as OutreachRecord[], orderRows),
+    restoredPlots: plotsFromOrders(
+      records as OutreachRecord[],
+      orderRows.map(row => ({ address: row.address, placedOn: laDate(row.createdAt) }))
+    ),
     hangerId: BEVERLY_HANGER_ID,
   };
 }

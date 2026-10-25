@@ -57,21 +57,33 @@ describe("Beverly Hills evidence boundary", () => {
   });
 });
 
-import { plotsFromOrders } from "./beverlyHillsOutreach";
-describe("ranch plots grow from orders after a drop", () => {
+import { laDate, plotsFromOrders } from "./beverlyHillsOutreach";
+describe("ranch plots grow from orders placed after a drop", () => {
   const rec = (id: string, address: string, performedOn: string, status: "submitted" | "verified" | "rejected" = "submitted") => ({ id, address, performedOn, status });
-  it("counts a drop once its building orders on or after the drop date, by exact address", () => {
+  it("counts a building once its address has an order placed on or after the drop date, by exact address", () => {
     const records = [rec("a", "100 Example St", "2026-10-01"), rec("b", "200 Example St", "2026-10-01"), rec("c", "300 Example St", "2026-10-01", "rejected")];
     const orders = [
-      { address: "100 example st.", pickupDate: "2026-10-04" },
-      { address: "200 Example St", pickupDate: "2026-09-20" },
-      { address: "300 Example St", pickupDate: "2026-10-05" },
+      { address: "100 example st.", placedOn: "2026-10-04" },
+      { address: "200 Example St", placedOn: "2026-09-20" },
+      { address: "300 Example St", placedOn: "2026-10-05" },
     ];
     expect(plotsFromOrders(records, orders)).toBe(1);
   });
+  it("one order grows one plot, however many reports share its address", () => {
+    const records = [rec("a", "100 Example St", "2026-10-01"), rec("b", "100 Example St", "2026-10-02"), rec("c", "100 Example St.", "2026-10-03")];
+    expect(plotsFromOrders(records, [{ address: "100 Example St", placedOn: "2026-10-04" }])).toBe(1);
+  });
+  it("an order placed before the first drop never counts, whatever its pickup date", () => {
+    const records = [rec("a", "100 Example St", "2026-10-01")];
+    expect(plotsFromOrders(records, [{ address: "100 Example St", placedOn: "2026-09-28T23:30:00.000Z" }])).toBe(0);
+  });
   it("never more than six", () => {
     const records = Array.from({ length: 9 }, (_, i) => rec(String(i), `${i} Example St`, "2026-10-01"));
-    const orders = records.map(r => ({ address: r.address, pickupDate: "2026-10-02" }));
+    const orders = records.map(r => ({ address: r.address, placedOn: "2026-10-02" }));
     expect(plotsFromOrders(records, orders)).toBe(6);
+  });
+  it("reads an order's placement as a Los Angeles calendar date", () => {
+    expect(laDate(new Date("2026-10-02T05:30:00.000Z"))).toBe("2026-10-01");
+    expect(laDate("not a date")).toBe("");
   });
 });
