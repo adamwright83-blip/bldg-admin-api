@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EARLY, GRAB_PENALTY, KNOT, PULL, PULL_DUR, REST_AFTER, grabbed, isResting, press, startClimb, tick, type ClimbState } from "./climbMachine";
+import { EARLY, GRAB_PENALTY, KNOT, PULL, PULL_DUR, REST_AFTER, grabbed, isResting, plannedHeight, press, startClimb, tick, type ClimbState } from "./climbMachine";
 
 const run = (s: ClimbState, seconds: number, step = 1 / 60) => {
   for (let t = 0; t < seconds; t += step) s = tick(s, step);
@@ -30,6 +30,16 @@ describe("the rope (Jusant hands)", () => {
     expect(s.target).toBeCloseTo(PULL, 3); // one pull running, one queued; the target is the running one
     s = run(s, PULL_DUR * 2 + 0.05);
     expect(s.h).toBeCloseTo(PULL * 2, 3); // the queued pull happened, nothing else
+  });
+
+  it("the planned height counts the queued pull, and never goes down while she hangs", () => {
+    let s = startClimb(0.15);
+    for (let i = 0; i < 4; i++) s = press(s, "next");
+    expect(plannedHeight(s)).toBeCloseTo(0.15 + PULL * 2, 3);
+    const planned = plannedHeight(s);
+    s = run(s, 3);
+    expect(s.h).toBeCloseTo(planned, 3);
+    expect(plannedHeight(s)).toBeCloseTo(planned, 3);
   });
 
   it("a press late enough in a pull chains straight into the next one", () => {

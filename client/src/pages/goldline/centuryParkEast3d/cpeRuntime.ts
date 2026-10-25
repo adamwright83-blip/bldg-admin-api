@@ -30,7 +30,7 @@ export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
 import { INK_SETS, createPrintPass } from "./cpePrint";
 import { createCctv, type Cctv } from "./cpeCctv";
-import { PULL_DUR, grabbed as climbGrabbed, isResting, press as climbPress2, startClimb as newClimb, tick as climbTick, type ClimbState, type Hand } from "./climbMachine";
+import { PULL_DUR, grabbed as climbGrabbed, isResting, plannedHeight, press as climbPress2, startClimb as newClimb, tick as climbTick, type ClimbState, type Hand } from "./climbMachine";
 import { createCpeSounds } from "./cpeSounds";
 import { activeTrade, deviceName } from "./cpeTrade";
 import { label as labelTexture } from "./cpeTextures";
@@ -672,6 +672,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     return { g, body, i, wrecked: false, shake: 0, claimed: false, name: deviceName(pack, i) };
   });
   const wreckedCount = () => deviceMeshes.filter(d => d.wrecked).length;
+  let zombieHaste = 1;
   let roomWreckedTold = false;
 
   // ---------------------------------------------------------------- dogs
@@ -1048,7 +1049,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   const reportClimb = () => {
     if (!climb) return callbacks.onClimb?.(null);
-    callbacks.onClimb?.({ progress: climb.s.target / FLOOR_H, stamina: climb.s.stamina, resting: isResting(climb.s) });
+    callbacks.onClimb?.({ progress: plannedHeight(climb.s) / FLOOR_H, stamina: climb.s.stamina, resting: isResting(climb.s) });
   };
   function startClimb(i: number) {
     const r = ropes[i];
@@ -1460,6 +1461,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
               z.device = next.i;
             } else z.state = "harmless";
           } else if (z.state === "riding") {
+            z.t -= dt * (zombieHaste - 1);
             if (z.t <= 0) {
               z.floor = roomFloor;
               z.pos.set((ELEV_X0 + ELEV_X1) / 2, fy(roomFloor), -2.4);
@@ -1474,7 +1476,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
               z.t = 1.4;
             } else {
               const nz = THREE.MathUtils.lerp(z.pos.z, -2.4, Math.min(1, dt * 2));
-              moveTo(z.pos, z.floor, z.pos.x + Math.sign(ddx) * 2.2 * dt, nz, 0.25);
+              moveTo(z.pos, z.floor, z.pos.x + Math.sign(ddx) * 2.2 * zombieHaste * dt, nz, 0.25);
             }
           } else {
             // on the room's floor: to the front of the device
@@ -1485,7 +1487,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
               z.t = 3.2;
             } else {
               const len = Math.hypot(ddx, ddz) || 1;
-              moveTo(z.pos, z.floor, z.pos.x + (ddx / len) * 2.2 * dt, z.pos.z + (ddz / len) * 2.2 * dt, 0.25);
+              moveTo(z.pos, z.floor, z.pos.x + (ddx / len) * 2.2 * zombieHaste * dt, z.pos.z + (ddz / len) * 2.2 * zombieHaste * dt, 0.25);
             }
           }
         } else if (z.state === "wrecking") {
@@ -1786,7 +1788,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     ready: true,
     ropes: ROPES,
     state: () => ({
-      climbing: climb ? climb.s.target / FLOOR_H : null,
+      climbing: climb ? plannedHeight(climb.s) / FLOOR_H : null,
       stamina: climb ? climb.s.stamina : null,
       floor,
       x: pos.x,
@@ -1850,6 +1852,10 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     chip,
     wake,
     fuseOut,
+    /** for a test on a slow renderer: chipped zombies walk and ride four times faster; the wreck itself is unchanged */
+    hurry() {
+      zombieHaste = 4;
+    },
     /** what one frame costs: draw calls and triangles, plus which quality tier this device landed in */
     perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs?.length ?? 0, softwareGl, highQuality, shadows }),
   };

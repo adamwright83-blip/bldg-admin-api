@@ -20,6 +20,7 @@ type Hook = {
   ropes: { floor: number; x: number; z: number }[];
   taze(slot: number): void;
   wake(slot: number): void;
+  hurry(): void;
 };
 
 const call = <K extends keyof Hook>(page: Page, fn: K, ...args: unknown[]) =>
@@ -148,10 +149,11 @@ test.describe("Lantern City → Century Park East", () => {
     expect(high).toBeGreaterThan(0.2);
     const spent = (await call(page, "state")).stamina ?? 1;
     expect(spent).toBeLessThan(1);
+    // software GL runs the game clock at a fraction of wall time, so the rest is given room to arrive
     await page.waitForTimeout(1500);
     expect((await call(page, "state")).climbing ?? 0).toBeGreaterThanOrEqual(high - 0.001);
-    await expect.poll(async () => (await call(page, "state")).stamina ?? 0, { timeout: 5_000 }).toBeGreaterThan(spent);
-    await expect(page.getByTestId("century-park-east-climb")).toHaveAttribute("data-resting", "yes");
+    await expect(page.getByTestId("century-park-east-climb")).toHaveAttribute("data-resting", "yes", { timeout: 20_000 });
+    await expect.poll(async () => (await call(page, "state")).stamina ?? 0, { timeout: 20_000 }).toBeGreaterThan(spent);
     // keep pulling all the way up (alternating hands, like the game asks)
     await expect
       .poll(
@@ -161,7 +163,7 @@ test.describe("Lantern City → Century Park East", () => {
           await page.keyboard.press("KeyD");
           return (await call(page, "state")).floor;
         },
-        { timeout: 40_000, intervals: [120] }
+        { timeout: 90_000, intervals: [120] }
       )
       .toBe(1);
     await expect(page.getByTestId("century-park-east-climb")).toHaveCount(0);
@@ -184,7 +186,7 @@ test.describe("Lantern City → Century Park East", () => {
           await page.keyboard.press("KeyD");
           return (await call(page, "state")).floor;
         },
-        { timeout: 40_000, intervals: [120] }
+        { timeout: 90_000, intervals: [120] }
       )
       .toBe(2);
     const landed = await call(page, "state");
@@ -271,7 +273,8 @@ test.describe("Lantern City → Century Park East", () => {
     await page.getByTestId("century-park-east-fire").click();
     await expect(gun).toHaveCount(0, { timeout: 10_000 });
     await expect.poll(async () => (await call(page, "state")).zombies[slot].state).toBe("chipped");
-    await expect.poll(async () => (await call(page, "state")).wrecked, { timeout: 150_000, intervals: [500] }).toBeGreaterThan(0);
+    await call(page, "hurry"); // the walk to the laundry room, not the wreck, is what a software renderer can't afford
+    await expect.poll(async () => (await call(page, "state")).wrecked, { timeout: 120_000, intervals: [500] }).toBeGreaterThan(0);
     await expect(page.getByTestId("century-park-east-wreck")).toContainText("1/4");
     // the next resident is up (a real decision moved the chain), and the chipped one never chases again
     await expect(open).not.toHaveAttribute("data-slot", String(slot));

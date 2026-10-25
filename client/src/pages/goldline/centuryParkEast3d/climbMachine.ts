@@ -85,3 +85,10 @@ export function grabbed(s: ClimbState): ClimbState {
 }
 
 export const isResting = (s: ClimbState): boolean => !s.pull && s.idle >= REST_AFTER;
+
+/** the height she will reach once the running pull and the one queued behind it have both landed */
+export function plannedHeight(s: ClimbState): number {
+  if (!s.queued) return s.target;
+  const full = s.queued === s.next;
+  return s.target + (full ? PULL : PULL * 0.5);
+}
