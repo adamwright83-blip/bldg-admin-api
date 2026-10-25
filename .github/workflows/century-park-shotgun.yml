@@ -1,0 +1,45 @@
+name: Century Park shotgun persistence
+on:
+  pull_request:
+    paths:
+      - "server/experience/centuryParkShotgun/**"
+      - "shared/centuryParkShotgun*.ts"
+      - ".github/workflows/century-park-shotgun.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-mechanic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cpe_shotgun_disposable
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec vitest run server/experience/centuryParkShotgun/shotgun.test.ts
+      - run: node scripts/migrate.mjs
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/cpe_shotgun_disposable
+      - run: pnpm exec vitest run --config vitest.integration.config.ts server/experience/centuryParkShotgun/shotgun.mysql.integration.test.ts
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/cpe_shotgun_disposable
+          ALLOW_TEST_DB: "1"
+          CPE_SHOTGUN_DISPOSABLE_DB: "1"
