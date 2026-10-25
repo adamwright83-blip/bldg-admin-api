@@ -32,13 +32,14 @@ import { INK_SETS, createPrintPass } from "./cpePrint";
 import { createCctv, type Cctv } from "./cpeCctv";
 import { PULL_DUR, grabbed as climbGrabbed, isResting, press as climbPress2, startClimb as newClimb, tick as climbTick, type ClimbState, type Hand } from "./climbMachine";
 import { createCpeSounds } from "./cpeSounds";
+import { activeTrade, deviceName } from "./cpeTrade";
 import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
 export type ItemKind = "robot_vacuum" | "garment_bag" | "leash" | "suitcase" | "package" | "yoga_mat" | "cake" | "spare_key";
 export type ErrandPhase = "locked" | "need" | "carrying" | "waiting" | "done";
 export type ErrandView = { slot: number; phase: ErrandPhase };
-export type PromptId = "talk" | "quiet" | "item" | "elevator" | "closet" | "extinguisher" | "pump" | "concierge" | "rope_up" | "rope_down" | "climb";
+export type PromptId = "talk" | "quiet" | "item" | "elevator" | "closet" | "extinguisher" | "pump" | "concierge" | "rope_up" | "rope_down" | "climb" | "shotgun";
 export type Interaction =
   | { kind: "talk"; slot: number }
   | { kind: "quiet"; index: number }
@@ -50,7 +51,13 @@ export type Interaction =
   | { kind: "concierge" }
   | { kind: "rope_top"; floor: number }
   | { kind: "rope_fell" }
-  | { kind: "out_of_foam" };
+  | { kind: "out_of_foam" }
+  /** zombie night: the dormant resident's zombie is stunned; thirty seconds to program the shotgun */
+  | { kind: "tazed"; slot: number }
+  | { kind: "shotgun"; slot: number }
+  | { kind: "chipped"; slot: number; device: string }
+  | { kind: "device_wrecked"; device: string; wrecked: number; total: number }
+  | { kind: "room_wrecked" };
 
 export type CpeCallbacks = {
   onProgress?: (p: number) => void;
@@ -76,6 +83,12 @@ export type CpeHandle = {
   jump(): void;
   /** on the rope: that hand pulls */
   climbHand(hand: Hand): void;
+  /** the shotgun fired: that slot's zombie takes the chip and goes for the trade room */
+  chip(slot: number): void;
+  /** the operator put the gun down ("not now"): the zombie wakes dazed, nothing else happens */
+  wake(slot: number): void;
+  /** the fuse ran out with the gun still open: the zombie bites */
+  fuseOut(slot: number): void;
   setSprint(on: boolean): void;
   /** after a knockout: wake up in the lobby, whole again */
   respawn(): void;
@@ -113,14 +126,16 @@ const QUIET_SLOTS: { floor: number; x: number; z: number; anim: string; base: nu
   { floor: 2, x: 25, z: -1.4, anim: "Idle_Talking_Loop", base: 0 },
 ];
 
+/** eight zombies, one per errand slot: on zombie night each is the dormant resident of that slot */
 const ZOMBIE_SPAWNS: { floor: number; x: number; z: number; base: number }[] = [
-  { floor: 0, x: 35, z: -2.4, base: 2 },
-  { floor: 0, x: 4, z: -3.0, base: 2 },
+  { floor: 0, x: 24, z: -2.4, base: 2 },
   { floor: 1, x: 3.5, z: -2.6, base: 2 },
-  { floor: 1, x: 22.5, z: -2.0, base: 3 },
-  { floor: 1, x: 14.5, z: -3.2, base: 2 },
+  { floor: 1, x: 32, z: -2.0, base: 3 },
+  { floor: 0, x: 35, z: -2.4, base: 2 },
   { floor: 2, x: 17, z: -2.4, base: 2 },
-  { floor: 2, x: 6, z: -3.0, base: 0 },
+  { floor: 1, x: 14.5, z: -3.2, base: 2 },
+  { floor: 2, x: 31, z: -2.6, base: 0 },
+  { floor: 0, x: 4, z: -3.0, base: 2 },
 ];
 
 const CLOSETS: { floor: number; x: number }[] = [
@@ -564,7 +579,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     return p;
   });
 
-  type ZState = "wander" | "chase" | "dazed" | "lured" | "trapped" | "dance";
+  type ZState = "wander" | "chase" | "dazed" | "lured" | "trapped" | "dance" | "stunned" | "chipped" | "riding" | "wrecking" | "harmless";
   const zombies = ZOMBIE_SPAWNS.map((s, i) => {
     const p = person(bases[s.base], true);
     p.root.position.set(s.x, fy(s.floor), s.z);
@@ -611,8 +626,53 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       upL: p.root.getObjectByName("upperarm_l"),
       upR: p.root.getObjectByName("upperarm_r"),
       spine: p.root.getObjectByName("spine_02"),
+      eyeMat,
+      /** the device a chipped zombie is heading for */
+      device: -1,
     };
   });
+
+  // ---------------------------------------------------------------- the trade room's devices (what the chipped zombies destroy)
+  const pack = activeTrade();
+  const roomY = fy(pack.room.floor);
+  const deviceMeshes = pack.devices.map((d, i) => {
+    const g = new THREE.Group();
+    const body = new THREE.Group();
+    g.add(body);
+    if (pack.device.kind === "washer") {
+      const faces = [materialFor("white"), materialFor("white"), materialFor("solid|#d8dde3"), materialFor("white"), materialFor("washer"), materialFor("white")];
+      const m = new THREE.Mesh(new THREE.BoxGeometry(d.w, d.h, d.d), faces);
+      m.position.y = d.h / 2;
+      body.add(m);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(d.w + 0.02, 0.06, d.d + 0.02), materialFor("solid|#d8dde3"));
+      top.position.y = d.h + 0.03;
+      body.add(top);
+    } else if (pack.device.kind === "toilet") {
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.42, 16), materialFor("white"));
+      bowl.position.set(0, 0.21, 0.15);
+      const tank = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.2), materialFor("white"));
+      tank.position.set(0, 0.6, -0.25);
+      const seat = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.05, 8, 20), materialFor("white"));
+      seat.rotation.x = Math.PI / 2;
+      seat.position.set(0, 0.44, 0.15);
+      body.add(bowl, tank, seat);
+    } else {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.04), materialFor("white"));
+      plate.position.set(0, 1.0, 0);
+      const holes = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.05), materialFor("solid|#2b2f36"));
+      holes.position.set(0, 1.0, 0.01);
+      body.add(plate, holes);
+    }
+    body.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+      (o as THREE.Mesh).receiveShadow = shadows;
+    });
+    g.position.set(d.x, roomY, d.z);
+    world.add(g);
+    return { g, body, i, wrecked: false, shake: 0, claimed: false, name: deviceName(pack, i) };
+  });
+  const wreckedCount = () => deviceMeshes.filter(d => d.wrecked).length;
+  let roomWreckedTold = false;
 
   // ---------------------------------------------------------------- dogs
   function makeDog(b: Breed) {
@@ -908,8 +968,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       if (near(r.floor, r.x, r.z, 1.15)) return { id: "rope_up", label: `Climb the rope to the ${FLOORS[r.floor + 1].name.toLowerCase()}`, act: () => startClimb(i) };
       if (near(r.floor + 1, r.x, r.z, 1.15)) return { id: "rope_down", label: `Slide down to the ${FLOORS[r.floor].name.toLowerCase()}`, act: () => slideDown(i) };
     }
-    // the errand that's open: talk to its giver, pick up its item
-    for (let i = 0; i < ERRAND_SLOTS.length; i++) {
+    // zombie night: a stunned dormant resident within reach is the shotgun's moment
+    if (vibe === "zombie")
+      for (let i = 0; i < ERRAND_SLOTS.length; i++) {
+        const z = zombies[i];
+        if (z && z.state === "stunned" && isHot(i) && z.floor === floor && Math.hypot(pos.x - z.pos.x, pos.z - z.pos.z) < 2.0)
+          return { id: "shotgun", label: "Program the shotgun", act: () => callbacks.onInteract?.({ kind: "shotgun", slot: i }) };
+      }
+    // the errand that's open: talk to its giver, pick up its item (cozy night; on zombie night the residents are the zombies)
+    for (let i = 0; vibe !== "zombie" && i < ERRAND_SLOTS.length; i++) {
       const s = ERRAND_SLOTS[i];
       const ph = errandPhase[i];
       if ((ph === "need" || ph === "carrying" || ph === "waiting") && near(s.floor, s.x, s.z, 1.7))
@@ -1027,6 +1094,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     callbacks.onFloor?.(next);
     callbacks.onInteract?.({ kind: "elevator", floor: next });
   }
+  /** zombie night: the zombie whose dormant resident is the open slot is the one the shotgun can chip */
+  const isHot = (i: number) => vibe === "zombie" && i < ERRAND_SLOTS.length && (errandPhase[i] === "need" || errandPhase[i] === "carrying" || errandPhase[i] === "waiting");
+  const settled = (z: (typeof zombies)[number]) => z.state === "chipped" || z.state === "riding" || z.state === "wrecking" || z.state === "harmless" || z.state === "trapped";
   function spray() {
     if (paused || finaleAt || climb) return;
     if (charges <= 0) {
@@ -1035,20 +1105,56 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     }
     charges -= 1;
     callbacks.onCharges?.(charges);
-    const col = vibe === "zombie" ? new THREE.Color("#f4f7ff") : new THREE.Color("#d9b8ff");
+    const zombieNight = vibe === "zombie";
+    const col = zombieNight ? new THREE.Color("#bfe8ff") : new THREE.Color("#d9b8ff");
     const from = new THREE.Vector3(pos.x + facing * 0.5, pos.y + 1.1, pos.z);
-    for (let k = 0; k < 70; k++) emit(from, new THREE.Vector3(facing * (4 + Math.random() * 3), 0.6, 0), 1.6, col, 0.9);
+    // the tazer is a short bright arc; the mist is a cloud
+    for (let k = 0; k < (zombieNight ? 40 : 70); k++) emit(from, new THREE.Vector3(facing * (zombieNight ? 9 + Math.random() * 4 : 4 + Math.random() * 3), zombieNight ? 0.2 : 0.6, 0), zombieNight ? 0.5 : 1.6, col, zombieNight ? 0.35 : 0.9);
     hero.play("Interact", 0.1, true);
     setTimeout(() => hero.current === "Interact" && hero.play("Idle_Loop"), 600);
-    for (const z of zombies) {
-      if (z.floor !== floor || z.state === "trapped") continue;
+    zombies.forEach((z, i) => {
+      if (z.floor !== floor || settled(z)) return;
       const dx = z.pos.x - pos.x;
-      if (Math.sign(dx) === facing && Math.abs(dx) < 4.2 && Math.abs(z.pos.z - pos.z) < 1.8) {
+      if (Math.sign(dx) !== facing || Math.abs(dx) > 4.2 || Math.abs(z.pos.z - pos.z) > 1.8) return;
+      if (zombieNight && isHot(i)) {
+        // stunned: thirty seconds on the ground, the shotgun's window
+        z.state = "stunned";
+        z.t = 30;
+        z.sprayed = false;
+        callbacks.onInteract?.({ kind: "tazed", slot: i });
+      } else {
         z.state = "dazed";
         z.t = 2.2;
         z.sprayed = true;
       }
-    }
+    });
+  }
+  function chip(slot: number) {
+    const z = zombies[slot];
+    if (!z || settled(z)) return;
+    const device = deviceMeshes.find(d => !d.wrecked && !d.claimed) ?? deviceMeshes.find(d => !d.wrecked);
+    if (!device) return;
+    device.claimed = true;
+    z.device = device.i;
+    z.state = "chipped";
+    z.t = 0;
+    z.stars.visible = false;
+    z.eyeMat.color.set(0x6fd0ff);
+    callbacks.onInteract?.({ kind: "chipped", slot, device: device.name });
+  }
+  function wake(slot: number) {
+    const z = zombies[slot];
+    if (!z || z.state !== "stunned") return;
+    z.state = "dazed";
+    z.t = 3;
+  }
+  function fuseOut(slot: number) {
+    const z = zombies[slot];
+    if (!z || z.state !== "stunned") return;
+    invuln = 0;
+    bite(z);
+    z.state = "dazed";
+    z.t = 3;
   }
   function jump() {
     if (climb) return climbHand("next");
@@ -1303,7 +1409,10 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     needy.forEach((n, i) => {
       const ph = errandPhase[i];
       n.mark.visible = ph === "need" || ph === "carrying" || ph === "waiting";
-      n.mark.position.y = fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08;
+      if (vibe === "zombie" && zombies[i]) {
+        n.mark.position.set(zombies[i].pos.x, zombies[i].pos.y + 2.3 + Math.sin(elapsed * 3 + i) * 0.08, zombies[i].pos.z);
+        n.mark.visible = n.mark.visible && !settled(zombies[i]);
+      } else n.mark.position.set(ERRAND_SLOTS[i].x, fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08, ERRAND_SLOTS[i].z);
       n.mark.lookAt(liveCamera.position);
       present(n.p, ERRAND_SLOTS[i].x, ERRAND_SLOTS[i].floor, dt);
       if (finaleAt) n.p.play("Dance_Loop");
@@ -1335,13 +1444,85 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         z.state = "dance";
         z.p.play("Dance_Loop");
       } else if (!frozen) {
-        if (z.state === "wander") {
+        if (z.state === "stunned") {
+          // on the ground, twitching; when the thirty seconds are up it gets up angry
+          if (z.t <= 0) {
+            z.state = "chase";
+            z.t = 0;
+          }
+        } else if (z.state === "chipped" || z.state === "riding") {
+          const device = deviceMeshes[z.device];
+          const roomFloor = pack.room.floor;
+          if (!device || device.wrecked) {
+            const next = deviceMeshes.find(d => !d.wrecked && !d.claimed);
+            if (next) {
+              next.claimed = true;
+              z.device = next.i;
+            } else z.state = "harmless";
+          } else if (z.state === "riding") {
+            if (z.t <= 0) {
+              z.floor = roomFloor;
+              z.pos.set((ELEV_X0 + ELEV_X1) / 2, fy(roomFloor), -2.4);
+              z.state = "chipped";
+            }
+          } else if (z.floor !== roomFloor) {
+            // to the elevator on its own floor, then ride
+            const ex = (ELEV_X0 + ELEV_X1) / 2;
+            const ddx = ex - z.pos.x;
+            if (Math.abs(ddx) < 0.4) {
+              z.state = "riding";
+              z.t = 1.4;
+            } else {
+              const nz = THREE.MathUtils.lerp(z.pos.z, -2.4, Math.min(1, dt * 2));
+              moveTo(z.pos, z.floor, z.pos.x + Math.sign(ddx) * 2.2 * dt, nz, 0.25);
+            }
+          } else {
+            // on the room's floor: to the front of the device
+            const tx = device.g.position.x, tz = device.g.position.z + 1.05;
+            const ddx = tx - z.pos.x, ddz = tz - z.pos.z;
+            if (Math.hypot(ddx, ddz) < 0.35) {
+              z.state = "wrecking";
+              z.t = 3.2;
+            } else {
+              const len = Math.hypot(ddx, ddz) || 1;
+              moveTo(z.pos, z.floor, z.pos.x + (ddx / len) * 2.2 * dt, z.pos.z + (ddz / len) * 2.2 * dt, 0.25);
+            }
+          }
+        } else if (z.state === "wrecking") {
+          const device = deviceMeshes[z.device];
+          if (device) {
+            device.shake = 1;
+            if (Math.random() < 0.5) emit(new THREE.Vector3(device.g.position.x + (Math.random() - 0.5) * 0.8, device.g.position.y + 0.6 + Math.random() * 0.6, device.g.position.z + 0.5), new THREE.Vector3((Math.random() - 0.5) * 2, 1.5 + Math.random(), 0.6), 0.8, new THREE.Color("#f4f7ff"), 1.1);
+            if (z.t <= 0 && !device.wrecked) {
+              device.wrecked = true;
+              device.body.rotation.z = (device.i % 2 ? 1 : -1) * 0.22;
+              device.body.position.y = -0.1;
+              device.body.traverse(o => {
+                const m = o as THREE.Mesh;
+                if (m.isMesh) m.material = Array.isArray(m.material) ? m.material.map(() => materialFor("solid|#6a6670|0.9")) : materialFor("solid|#6a6670|0.9");
+              });
+              for (let k = 0; k < 40; k++) emit(new THREE.Vector3(device.g.position.x, device.g.position.y + 0.8, device.g.position.z + 0.4), new THREE.Vector3((Math.random() - 0.5) * 4, 2 + Math.random() * 3, 1), 1.2, new THREE.Color("#ffe08a"), 1.4);
+              z.state = "harmless";
+              callbacks.onInteract?.({ kind: "device_wrecked", device: device.name, wrecked: wreckedCount(), total: deviceMeshes.length });
+              if (wreckedCount() === deviceMeshes.length && !roomWreckedTold) {
+                roomWreckedTold = true;
+                callbacks.onInteract?.({ kind: "room_wrecked" });
+              }
+            }
+          } else z.state = "harmless";
+        } else if (z.state === "harmless") {
+          // chipped and spent: it wanders and never chases again
+          const nx = z.pos.x + z.dir * 0.5 * dt;
+          if (blocked(z.floor, nx, z.pos.z, 0.3) || nx < 1 || nx > WIDTH - 1) z.dir *= -1;
+          else z.pos.x = nx;
+        } else if (z.state === "wander") {
           const nx = z.pos.x + z.dir * 0.7 * dt;
           if (blocked(z.floor, nx, z.pos.z, 0.3) || (z.floor === SPA.floor && nx > SPA.x0 - 0.5) || nx < 1 || nx > WIDTH - 1) z.dir *= -1;
           else z.pos.x = nx;
           z.pos.z += Math.sin(elapsed * 0.7 + z.phase) * 0.25 * dt;
           z.pos.z = THREE.MathUtils.clamp(z.pos.z, -DEPTH + 0.6, -0.6);
           if (sameFloor && dist < 6 && now >= ridingUntil && now >= calmUntil && now >= armedAt && !(floor === SPA.floor && pos.x > SPA.x0)) z.state = "chase";
+          if (vibe === "zombie" && !isHot(zombies.indexOf(z)) && zombies.indexOf(z) < ERRAND_SLOTS.length && errandPhase[zombies.indexOf(z)] === "done") z.state = "harmless";
         } else if (z.state === "chase") {
           if (!sameFloor || dist > 9 || (floor === SPA.floor && pos.x > SPA.x0)) z.state = "wander";
           else if (dist > 0.05) {
@@ -1382,17 +1563,21 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         }
       }
       // pose: a slow shuffle with arms out (or a sleepwalker's drift)
-      const moving = z.state === "wander" || z.state === "chase" || z.state === "lured";
-      z.p.play(z.state === "dance" ? "Dance_Loop" : z.state === "dazed" ? "Idle_No_Loop" : moving ? "Walk_Loop" : "Idle_Loop", 0.3);
+      const moving = z.state === "wander" || z.state === "chase" || z.state === "lured" || z.state === "chipped" || z.state === "harmless";
+      z.p.play(z.state === "dance" ? "Dance_Loop" : z.state === "dazed" || z.state === "stunned" ? "Idle_No_Loop" : z.state === "wrecking" ? "Interact" : moving ? "Walk_Loop" : "Idle_Loop", 0.3);
       const act = z.p.actions.get("Walk_Loop");
-      if (act) act.timeScale = z.state === "chase" ? 0.85 : 0.5;
+      if (act) act.timeScale = z.state === "chase" ? 0.85 : z.state === "chipped" ? 1.3 : 0.5;
       z.p.root.position.copy(z.pos);
-      const face = z.state === "wander" ? (z.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan2(dx, dz);
+      // stunned: flat out on its back, twitching
+      z.p.root.rotation.x = z.state === "stunned" ? -Math.PI / 2 + Math.sin(elapsed * 30) * 0.03 : 0;
+      z.p.root.position.y = z.state === "stunned" ? z.pos.y + 0.12 : z.pos.y;
+      const devX = z.device >= 0 ? deviceMeshes[z.device]?.g.position.x ?? z.pos.x : z.pos.x;
+      const face = z.state === "wander" || z.state === "harmless" ? (z.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : z.state === "chipped" ? (devX >= z.pos.x ? Math.PI / 2 : -Math.PI / 2) : z.state === "wrecking" ? Math.PI : Math.atan2(dx, dz);
       if (z.state !== "trapped" && z.state !== "dance") z.p.root.rotation.y += (face - z.p.root.rotation.y) * Math.min(1, dt * 4);
       const shown = z.state !== "trapped" || (z.floor === floor && Math.sin(elapsed * 3 + z.phase) > 0.6);
       present(z.p, z.pos.x, z.floor, frozen ? 0 : dt);
       z.p.root.visible = z.p.root.visible && shown;
-      if (z.p.root.visible && z.state !== "dance") {
+      if (z.p.root.visible && z.state !== "dance" && z.state !== "harmless" && z.state !== "chipped" && z.state !== "wrecking") {
         if (z.upL) z.upL.rotation.x -= 1.15;
         if (z.upR) z.upR.rotation.x -= 1.15;
         if (z.spine) z.spine.rotation.x += 0.22;
@@ -1404,7 +1589,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         z.face.visible = z.p.root.visible;
         for (const c of z.face.children) c.visible = (c.name === "eye") === (vibe === "zombie");
       }
-      z.stars.visible = z.state === "dazed";
+      z.stars.visible = z.state === "dazed" || z.state === "stunned";
+      if (z.state === "stunned") z.stars.visible = Math.sin(elapsed * 40) > -0.2;
       z.stars.position.set(z.pos.x, z.pos.y + 2.05, z.pos.z);
       z.stars.rotation.y += dt * 5;
       z.shadow.position.set(z.pos.x, z.pos.y + 0.02, z.pos.z);
@@ -1478,6 +1664,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     if (lastBubble && now - lastBubble > 2600) {
       lastBubble = 0;
       callbacks.onBubble?.(null);
+    }
+
+    // ---- the devices: shaking while chewed, smoking once wrecked
+    for (const d of deviceMeshes) {
+      d.shake = Math.max(0, d.shake - dt * 2);
+      d.g.rotation.z = d.shake > 0 ? Math.sin(elapsed * 40) * 0.05 * d.shake : 0;
+      if (d.wrecked && Math.random() < 0.12) emit(new THREE.Vector3(d.g.position.x + (Math.random() - 0.5) * 0.4, d.g.position.y + 0.9, d.g.position.z), new THREE.Vector3(0, 0.6 + Math.random() * 0.4, 0.1), 0.25, new THREE.Color("#8a8a90"), 1.6);
     }
 
     // ---- closets swing
@@ -1606,6 +1799,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       saved: savedDogs,
       trapped: closets.filter(c => c.locked).length,
       zombies: zombies.map(z => ({ floor: z.floor, x: z.pos.x, z: z.pos.z, state: z.state })),
+      devices: deviceMeshes.map(d => ({ name: d.name, wrecked: d.wrecked })),
+      wrecked: wreckedCount(),
       vibe,
     }),
     teleport(f: number, x: number, z: number) {
@@ -1640,6 +1835,19 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     },
     closets: CLOSETS,
     dogs: DOG_SPOTS,
+    /** zombie night, for a test: stand her by that slot's zombie and taze it */
+    taze(slot: number) {
+      const z = zombies[slot];
+      if (!z) return;
+      floor = z.floor;
+      pos.set(z.pos.x - 1.2, fy(z.floor), z.pos.z);
+      facing = 1;
+      charges = Math.max(charges, 1);
+      spray();
+    },
+    chip,
+    wake,
+    fuseOut,
     /** what one frame costs: draw calls and triangles, plus which quality tier this device landed in */
     perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs?.length ?? 0, softwareGl, highQuality, shadows }),
   };
@@ -1684,6 +1892,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     climbHand(hand) {
       climbHand(hand);
     },
+    chip,
+    wake,
+    fuseOut,
     setSprint(on) {
       sprintHeld = on;
     },

@@ -724,8 +724,8 @@
     font-size: 11px;
   }
   .camClock {
-    top: auto;
-    bottom: 22%;
+    top: 52%;
+    right: 2.2%;
     font-size: 11px;
   }
   .thumbLabel {
@@ -757,5 +757,330 @@
 @media (pointer: fine) {
   .hands {
     display: none;
+  }
+}
+
+/* the chipping shotgun: the desk on zombie night. A monitor, not a letter: mono, phosphor, a fuse across the top. */
+.shotgun {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(6, 26, 12, 0.55), rgba(6, 26, 12, 0.92));
+  font-family: var(--mono);
+  color: var(--phosphor);
+}
+
+.gun {
+  width: min(880px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: rgba(4, 18, 9, 0.96);
+  border: 2px solid var(--phosphor);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgba(157, 255, 176, 0.25), 0 0 40px rgba(157, 255, 176, 0.2);
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.fuse {
+  height: 10px;
+  border: 1px solid var(--phosphor);
+  background: rgba(157, 255, 176, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.fuse span {
+  display: block;
+  height: 100%;
+  background: #ff5a4a;
+  box-shadow: 0 0 12px rgba(255, 90, 74, 0.9);
+  transition: width 120ms linear;
+}
+
+.fuse.hot span {
+  animation: blink 0.35s steps(2, start) infinite;
+}
+
+.gunHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gunTitle {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gunSeconds {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #ff5a4a;
+  text-shadow: 0 0 10px rgba(255, 90, 74, 0.8);
+}
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12px;
+  color: rgba(157, 255, 176, 0.75);
+  border-top: 1px dashed rgba(157, 255, 176, 0.3);
+  border-bottom: 1px dashed rgba(157, 255, 176, 0.3);
+  padding: 6px 0;
+}
+
+.readout b {
+  color: var(--phosphor);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 14px;
+}
+
+.rail {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.rail button {
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(157, 255, 176, 0.35);
+  background: transparent;
+  color: rgba(157, 255, 176, 0.7);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.rail button[aria-current="step"] {
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+  background: rgba(157, 255, 176, 0.1);
+}
+
+.rail button.done {
+  color: var(--phosphor);
+}
+
+.rail small {
+  display: block;
+  font-size: 10.5px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.pane {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.paneTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.choices {
+  display: grid;
+  gap: 6px;
+}
+
+.choice {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 12px;
+  border: 1px solid rgba(157, 255, 176, 0.45);
+  background: rgba(157, 255, 176, 0.04);
+  color: var(--phosphor);
+  cursor: pointer;
+  border-radius: 3px;
+  display: grid;
+  gap: 2px;
+}
+
+.choice:hover,
+.choice:focus-visible {
+  background: rgba(157, 255, 176, 0.14);
+  outline: none;
+}
+
+.choice[aria-pressed="true"] {
+  background: var(--phosphor);
+  color: var(--tube);
+}
+
+.choice[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.choice small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.sight {
+  display: grid;
+  grid-template-columns: 36px repeat(12, 1fr);
+  gap: 2px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sight .h {
+  text-align: center;
+  opacity: 0.7;
+}
+
+.sight .d {
+  opacity: 0.7;
+  padding-top: 4px;
+}
+
+.sight button {
+  height: 24px;
+  border: 1px solid rgba(157, 255, 176, 0.3);
+  background: rgba(157, 255, 176, 0.05);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 2px;
+}
+
+.sight button[data-last="yes"] {
+  background: rgba(255, 181, 71, 0.35);
+  border-color: #ffb547;
+}
+
+.sight button[aria-pressed="true"] {
+  background: var(--phosphor);
+  box-shadow: 0 0 10px rgba(157, 255, 176, 0.8);
+}
+
+.aimNote {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.textWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.gun textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  border: 1px solid var(--phosphor);
+  background: rgba(157, 255, 176, 0.06);
+  color: var(--phosphor);
+  border-radius: 3px;
+}
+
+.gunFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.fire {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 12px 26px;
+  border: 2px solid #ff5a4a;
+  background: #ff5a4a;
+  color: #1a0604;
+  border-radius: 3px;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(255, 90, 74, 0.6);
+}
+
+.fire[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.notNow {
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(157, 255, 176, 0.5);
+  background: transparent;
+  color: var(--phosphor);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.warn {
+  color: #ff5a4a;
+  font-size: 12px;
+}
+
+.roomBanner {
+  position: absolute;
+  left: 50%;
+  top: 14%;
+  transform: translateX(-50%) rotate(-1.5deg);
+  z-index: 4;
+  padding: 14px 24px;
+  border: 3px solid #ff5a4a;
+  background: rgba(4, 18, 9, 0.95);
+  color: #ff5a4a;
+  font-family: var(--mono);
+  font-size: clamp(16px, 2.6vw, 26px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(255, 90, 74, 0.7);
+  max-width: min(720px, 90vw);
+  animation: pop 400ms ease-out;
+}
+
+@media (max-width: 640px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .rail small {
+    display: none;
+  }
+  .sight {
+    grid-template-columns: 30px repeat(12, 1fr);
+    font-size: 8px;
+  }
+  .sight button {
+    height: 18px;
   }
 }

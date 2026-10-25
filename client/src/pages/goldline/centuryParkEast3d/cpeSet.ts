@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { DEPTH, DOOR_Z0, DOOR_Z1, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROOF_POOL, SLAB, WIDTH, fy, type Room } from "./cpeLayout";
 import * as T from "./cpeTextures";
+import { activeTrade } from "./cpeTrade";
 
 type Face = "px" | "nx" | "py" | "ny" | "pz" | "nz";
 type Faces = Partial<Record<Face, string | null>>;
@@ -448,12 +449,8 @@ function dress(k: Kit, r: Room, f: number, y: number, ceiling: number) {
       break;
     }
     case "laundry": {
-      for (let i = 0; i < 4; i++) {
-        const x0 = 0.6 + i * 1.6, x1 = 1.9 + i * 1.6;
-        under(k, y, x0, x1, BACK + 0.1, BACK + 1.0, 0.25);
-        k.box(x0, x1, y, y + 1.1, BACK + 0.1, BACK + 1.0, "white", { faces: { pz: "washer" }, fit: true });
-        k.box(x0, x1, y + 1.1, y + 1.16, BACK + 0.08, BACK + 1.02, "solid|#d8dde3");
-      }
+      // the devices themselves (washers, or a plumber's toilets, an electrician's outlets) are the runtime's: it wrecks them
+      for (const d of activeTrade().devices) under(k, y, d.x - d.w / 2, d.x + d.w / 2, d.z - d.d / 2, d.z + d.d / 2, 0.25);
       // detergent shelf
       k.box(0.5, 7.1, y + 1.75, y + 1.8, BACK + 0.08, BACK + 0.45, "white");
       const bottles = ["#3b6ea8", "#e0a22f", "#2f8f8a", "#d9534f", "#ff9ec4", "#8fe36a"];
@@ -465,7 +462,7 @@ function dress(k: Kit, r: Room, f: number, y: number, ceiling: number) {
       k.sphere(8.2, y + 1.26, BACK + 0.55, 0.24, "fabric|#f4efe6", [1, 0.5, 1]);
       k.sphere(8.1, y + 1.32, BACK + 0.5, 0.15, "fabric|#9ad3e8", [1, 0.5, 1]);
       for (let i = 0; i < 4; i++) k.box(7.15, 7.75, y + 0.9 + i * 0.08, y + 0.98 + i * 0.08, BACK + 0.3, BACK + 0.85, `fabric|${["#f4efe6", "#9ad3e8", "#ffd6e0", "#e7ffd8"][i]}`);
-      k.plaque(4.5, y + 3.25, 2.2, 0.5, BACK + 0.02, "label|LAUNDRY|#b9c6cf|#1f2a3a");
+      k.plaque(4.5, y + 3.25, 2.2, 0.5, BACK + 0.02, `label|${activeTrade().room.sign}|#b9c6cf|#1f2a3a`);
       pendant(k, 2.5, -2.6, ceiling);
       pendant(k, 6.5, -2.6, ceiling);
       break;

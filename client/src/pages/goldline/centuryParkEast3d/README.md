@@ -1,10 +1,33 @@
 # Lantern City — Century Park East (the building as a game)
 
 The tower's shared floors opened like a dollhouse: three storeys cut open at the front, dusk through the back windows,
-the city behind. Eight building characters each need something found; bringing it back opens the Letter Desk for a
-real resident quiet 45+ days (the Silver Lake rails, scoped to 2160/2170 Century Park East). Cozy night or zombie
-night is the player's choice and is remembered. Entry: the tower view's **Play the building**, or
-`/growth/lantern-city?level=century-park-east`.
+the city behind. Entry: the tower view's **Play the building**, or `/growth/lantern-city?level=century-park-east`.
+The building has two nights, the player's choice, remembered:
+
+- **Cozy night is printed.** The 1965 brochure: the frame is separated into four ink plates (mustard, terracotta,
+  teal, umber), screened into halftone dots at their own angles, laid over cream paper with a little misregistration,
+  grain and an ink line (`cpePrint.ts`). Eight building characters each need something found; bringing it back opens
+  the Letter Desk for a real resident quiet 45+ days (the Silver Lake rails, scoped to 2160/2170 Century Park East).
+- **Zombie night is watched from the concierge's monitors.** One security camera per room, a CRT tube, three live
+  feeds along the bottom, a cut on every room change (`cpeCctv.ts`). The zombies are the dormant residents. Taze one
+  (F) and it is down for thirty seconds; in that window **program the chipping shotgun** (E), which is the real
+  outreach in four decisions, none of them "approve a draft": what you remember about them (a fact from the
+  record), why they went quiet (a diagnosis, recorded as a prediction and scored when the record moves), what goes in
+  the shell (an offer with a cost, three shells a night), and when it lands (a sight over the hour they used to
+  order). Fire schedules the text for that hour through the same rails as Silver Lake; the chip takes and the zombie
+  shuffles off to the laundry room to wreck a washer. Four washers down and every resident in the building needs the
+  business (`shotgunMachine.ts`, `ShotgunDesk.tsx`, `cpeTrade.ts`). "Not now" wakes it; the fuse running out is a bite.
+  The real name only ever appears on the gun, never on a zombie or in the HUD; nothing from the game may enter the
+  text (`textIsClean`).
+
+**The rope** is modelled on Jusant: each hand is a key (A and D, or two touch buttons), alternating pulls climb, the
+same hand twice is a half pull, a press too early in a pull is queued once so mashing is not climbing, gripping costs
+stamina and hanging still rests it back, a zombie at the ankle drops her to the last knot. The hand-over-hand clip is
+scrubbed by metres climbed, the body swings with each pull, the camera comes in and up, and the top is a mantle onto
+the floor with a landing squash and a thud (`climbMachine.ts`, `cpeSounds.ts`).
+
+**Trade packs.** The room the zombies wreck, its devices, verbs and lines come from `cpeTrade.ts`; `ACTIVE_TRADE` is
+the one line that re-skins the building for a plumber (toilets) or an electrician (outlets).
 
 ## Code map
 
@@ -15,6 +38,11 @@ night is the player's choice and is remembered. Entry: the tower view's **Play t
 | `cpeLayout.ts` | the building's measurements, room plan, ropes and every static collider, shared by the runtime, the set and the unit test |
 | `cpeSet.ts` | what the building looks like: the cut shell, every room's furniture, the street, the parallax city |
 | `cpeTextures.ts` | every surface, painted on canvas when the level opens (wallpaper, floors, mailboxes, skyline…) |
+| `cpePrint.ts` | cozy night's brochure: four ink plates, halftone screens, paper |
+| `cpeCctv.ts` | zombie night's monitor wall: a camera per room, the CRT tube, three live feeds |
+| `climbMachine.ts` / `cpeSounds.ts` | the rope (pure, tested) and the body's sounds |
+| `shotgunMachine.ts` / `ShotgunDesk.tsx` | the chipping shotgun: four decisions, the text, the fuse, shells, the chip ledger |
+| `cpeTrade.ts` | the trade pack: what gets wrecked, and the one line to re-skin for another trade |
 | `zombieLoungeMusic.ts` | the zombie-night score (the cozy one is Silver Lake's) |
 | `e2e/goldline-smoke/centuryParkEast.spec.ts` | CI: errand → Letter Desk, closet trap, dog tower, paper bite, ropes, nothing written |
 
