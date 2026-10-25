@@ -1,0 +1,621 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: #241e32;
+  color: #fff7e2;
+  font-family: Inter, Arial, sans-serif;
+  overflow: hidden;
+  isolation: isolate;
+  outline: none;
+}
+.root * {
+  box-sizing: border-box;
+}
+.root button,
+.root a,
+.root input,
+.root select,
+.root textarea {
+  font: inherit;
+}
+.root button {
+  cursor: pointer;
+  border: 1px solid #fff6df45;
+  background: #30253b9c;
+  color: inherit;
+  border-radius: 999px;
+  padding: 12px 20px;
+  transition:
+    background 0.18s,
+    transform 0.18s;
+}
+.root button:hover {
+  background: #584261;
+}
+.root button:focus-visible,
+.root a:focus-visible {
+  outline: 3px solid #fbe1a3;
+  outline-offset: 4px;
+}
+.root button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.hud {
+  position: absolute;
+  inset: 22px 28px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 3;
+  pointer-events: none;
+}
+.hud > * {
+  pointer-events: auto;
+}
+.hud .city {
+  background: #30253b80;
+  backdrop-filter: blur(10px);
+}
+.wordmark {
+  font-size: 10px;
+  letter-spacing: 3px;
+  font-weight: 700;
+  text-shadow: 0 2px 10px #30253b;
+}
+.wordmark span {
+  margin: 0 10px;
+  opacity: 0.5;
+}
+.titleShade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #201b31df, #201b3180 35%, transparent 72%);
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+.titleContent {
+  margin-left: 9vw;
+  max-width: 600px;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  line-height: 1.7;
+}
+.titleContent h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(70px, 8vw, 132px);
+  font-weight: 400;
+  letter-spacing: -5px;
+  line-height: 0.88;
+  margin: 30px 0;
+}
+.titleContent h1 i {
+  color: #f4d58f;
+  font-weight: 400;
+}
+.titleContent p {
+  font-size: 18px;
+  line-height: 1.7;
+  color: #fff2d7d9;
+  margin-bottom: 30px;
+}
+.root .primary {
+  background: #f8dfab;
+  color: #3b2c3a;
+  border: 1px solid #f8dfab;
+  font-weight: 600;
+  padding: 16px 24px;
+  box-shadow: 0 8px 30px #2b1b2e20;
+}
+.root .primary:hover {
+  background: #fff0ce;
+  transform: translateY(-2px);
+}
+.primary span {
+  margin-left: 35px;
+}
+.titleContent small {
+  display: block;
+  font-size: 11px;
+  margin-top: 20px;
+  opacity: 0.65;
+}
+.titleContent progress {
+  accent-color: #f8dfab;
+  width: 260px;
+  height: 5px;
+}
+.titleFoot {
+  position: absolute;
+  bottom: 30px;
+  left: 9vw;
+  font-size: 10px;
+  letter-spacing: 3px;
+}
+.titleFoot span {
+  opacity: 0.5;
+  margin-left: 25px;
+}
+.chapter {
+  position: absolute;
+  top: 100px;
+  left: 35px;
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  text-shadow: 0 2px 8px #30253b;
+}
+.chapter > span {
+  font-size: 10px;
+  border-right: 1px solid #fff6df60;
+  padding-right: 14px;
+  color: #f5d79e;
+}
+.chapter small {
+  display: block;
+  font-family: Georgia, serif;
+  font-size: 19px;
+  margin-top: 5px;
+}
+.chapterCard {
+  position: absolute;
+  top: 24%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  animation: chapterIn 3.2s both;
+  text-shadow: 0 3px 20px #29203c;
+}
+.chapterCard span {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.chapterCard h2 {
+  font-family: Georgia, serif;
+  font-size: clamp(28px, 4vw, 52px);
+  font-weight: 400;
+  margin-top: 15px;
+}
+.actionDock {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+.root .interact {
+  background: #fff0d9;
+  color: #3a2b47;
+  box-shadow: 0 5px 30px #3a2b4733;
+}
+.root kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 25px;
+  height: 25px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  margin-right: 10px;
+  font-size: 11px;
+}
+.controls {
+  position: absolute;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  font-size: 10px;
+  white-space: nowrap;
+  letter-spacing: 0.4px;
+  text-shadow: 0 2px 5px #201b31;
+}
+.controls button {
+  font-size: 10px;
+  padding: 9px 13px;
+}
+.touch {
+  position: absolute;
+  bottom: 25px;
+  left: 25px;
+  display: none;
+  gap: 8px;
+  touch-action: none;
+}
+.touch button {
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  font-size: 18px;
+  touch-action: none;
+  user-select: none;
+}
+.hint {
+  position: absolute;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 520px;
+  width: 85%;
+  background: #30263be8;
+  border: 1px solid #f0d8b855;
+  border-radius: 16px;
+  padding: 20px 45px 20px 24px;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  line-height: 1.6;
+}
+.hint button {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  border: 0;
+  padding: 3px 8px;
+}
+.homeNote {
+  position: absolute;
+  top: 22%;
+  left: 7%;
+  max-width: 390px;
+  text-shadow: 0 2px 15px #382b39;
+}
+.homeNote h2 {
+  font-family: Georgia, serif;
+  font-size: clamp(38px, 4.3vw, 66px);
+  line-height: 1.03;
+  font-weight: 400;
+  margin: 20px 0;
+}
+.homeNote p {
+  margin-bottom: 24px;
+}
+.homeNote small {
+  display: block;
+  margin-top: 15px;
+}
+.modalShade {
+  position: absolute;
+  inset: 0;
+  background: #211b32a8;
+  backdrop-filter: blur(8px);
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 25px;
+}
+.pause {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+  padding: 30px;
+  background: #30263bf5;
+  border: 1px solid #fff2d73a;
+  border-radius: 25px;
+  max-height: 95vh;
+  overflow: auto;
+}
+.pause h2 {
+  font-family: Georgia, serif;
+  font-size: 35px;
+  font-weight: 400;
+  margin: 5px 0 20px;
+}
+.pause small {
+  font-size: 11px;
+  line-height: 1.6;
+  opacity: 0.7;
+}
+.journal {
+  width: min(760px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: #f9f0de;
+  color: #3c3545;
+  border-radius: 20px;
+  padding: 48px;
+  position: relative;
+  box-shadow: 0 30px 100px #15102070;
+}
+.journal h2 {
+  font-family: Georgia, serif;
+  font-size: 42px;
+  font-weight: 400;
+  line-height: 1.1;
+  margin: 15px 0;
+}
+.journal .close {
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  color: #3c3545;
+  background: none;
+  border: 0;
+  font-size: 23px;
+  padding: 0 10px;
+}
+.journal p {
+  font-size: 13px;
+  line-height: 1.75;
+}
+.journal .lede {
+  font-size: 16px;
+  color: #746578;
+}
+.missionRibbon {
+  display: flex;
+  gap: 20px;
+  border-top: 1px solid #b2a68f55;
+  border-bottom: 1px solid #b2a68f55;
+  padding: 25px 0;
+  margin: 25px 0;
+}
+.missionRibbon > span {
+  font-family: Georgia, serif;
+  font-size: 35px;
+  color: #88719d;
+}
+.missionRibbon strong {
+  font-size: 16px;
+}
+.missionRibbon p {
+  margin-bottom: 0;
+}
+.journal label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+.journal input,
+.journal textarea,
+.journal select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #c9bda8;
+  background: #fffaf0;
+  border-radius: 8px;
+  padding: 12px;
+  color: #3c3545;
+  font-size: 14px;
+}
+.journal textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+.journal a {
+  color: #665184;
+  font-size: 12px;
+}
+.building {
+  background: #eae2d4;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 15px 0;
+}
+.building p {
+  margin: 6px 0;
+}
+.building small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.building a {
+  display: inline-block;
+  margin-top: 12px;
+}
+.journal summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 15px 0;
+}
+.formPair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+.journal .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+.check input {
+  width: 18px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.journal button {
+  background: #554363;
+  color: #fff5df;
+  font-size: 12px;
+}
+.journal .primary {
+  background: #554363;
+  color: #fff5df;
+  border-color: #554363;
+  margin: 10px 0;
+}
+.orderNote {
+  border-top: 1px solid #b2a68f55;
+  padding-top: 20px;
+  margin: 25px 0;
+}
+.orderNote strong {
+  font-size: 13px;
+}
+.orderNote p {
+  font-size: 11px;
+  color: #766b7b;
+}
+.journal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 30px;
+}
+.journal footer small {
+  font-size: 9px;
+}
+.report {
+  padding: 20px 0;
+  border-bottom: 1px solid #b2a68f55;
+}
+.report strong {
+  font-size: 13px;
+}
+.report button {
+  margin-right: 8px;
+}
+.report small {
+  display: block;
+}
+.notice {
+  padding: 12px;
+  border: 1px solid #ac976b;
+}
+.root [role="alert"] {
+  color: #a63738;
+}
+.root button:active {
+  transform: translateY(1px);
+}
+@keyframes chapterIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (pointer: coarse) {
+  .touch {
+    display: flex;
+  }
+  .controls {
+    left: auto;
+    right: 20px;
+    transform: none;
+  }
+  .controls > span {
+    display: none;
+  }
+  .actionDock {
+    bottom: 95px;
+  }
+}
+@media (max-width: 700px) {
+  .hud {
+    inset: 15px 15px auto;
+  }
+  .wordmark {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .city span {
+    display: none;
+  }
+  .chapter {
+    left: 20px;
+    top: 80px;
+  }
+  .chapter small {
+    font-size: 15px;
+  }
+  .titleContent {
+    margin-left: 8vw;
+  }
+  .titleContent h1 {
+    font-size: 72px;
+  }
+  .titleContent p {
+    font-size: 15px;
+  }
+  .titleFoot span {
+    display: none;
+  }
+  .controls {
+    gap: 9px;
+    font-size: 8px;
+  }
+  .journal {
+    padding: 30px 22px;
+  }
+  .journal h2 {
+    font-size: 32px;
+  }
+  .modalShade {
+    padding: 12px;
+  }
+  .homeNote {
+    top: 22%;
+    left: 8%;
+  }
+  .homeNote h2 {
+    font-size: 40px;
+  }
+  .actionDock {
+    max-width: 95%;
+    white-space: normal;
+  }
+  .actionDock button {
+    font-size: 11px;
+    padding: 10px;
+  }
+  .chapterCard h2 {
+    font-size: 26px;
+  }
+  .formPair {
+    grid-template-columns: 1fr;
+  }
+  .touch {
+    bottom: 18px;
+    left: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .chapterCard {
+    display: none;
+  }
+}

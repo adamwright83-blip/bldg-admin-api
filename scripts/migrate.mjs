@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Evidence-only Beverly Hills ledger. Does not create orders or business activity.
+const beverlyOutreachDdl = await readFile(new URL("../drizzle/0147_beverly_hills_outreach.sql", import.meta.url), "utf8");
+for (const statement of beverlyOutreachDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Beverly Hills outreach evidence");
+}
+
 // Strategy proposals are required durable preparation; no business rows backfilled.
 const strategicDdl = await readFile(new URL("../drizzle/0128_claire_strategic_preparation.sql", import.meta.url), "utf8");
 // Existing tenant/authority tables are created later in this boot; extensions are
