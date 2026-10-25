@@ -62,26 +62,41 @@ export function validateReview(
 }
 
 /**
- * The ranch grows from the business, not from paperwork: one plot for each recorded drop (not rejected) whose building
- * has a non-cancelled order with a pickup on or after the drop date. Matched on the exact recorded address. This is
- * "a customer ordered after your visit", never "your hanger caused it".
+ * The ranch grows from the business, not from paperwork: one plot per visited building (never per report) whose
+ * address has a non-cancelled order PLACED on or after the earliest recorded drop there. Matched on the exact
+ * recorded address; the order's placement date is its creation date, never its pickup date (a pickup booked for
+ * next week can belong to an order placed last month). This is "a customer ordered after your visit", never "your
+ * hanger caused it".
  */
 export function plotsFromOrders(
   records: Pick<OutreachRecord, "id" | "address" | "performedOn" | "status">[],
-  orders: { address: string; pickupDate: string }[]
+  orders: { address: string; placedOn: string }[]
 ): number {
   const byAddress = new Map<string, string[]>();
   for (const o of orders) {
     const k = addressKey(o.address);
     const list = byAddress.get(k) ?? [];
-    list.push(o.pickupDate);
+    list.push(o.placedOn.slice(0, 10));
     byAddress.set(k, list);
   }
-  let n = 0;
+  const firstDrop = new Map<string, string>();
   for (const r of records) {
     if (r.status === "rejected") continue;
-    const dates = byAddress.get(addressKey(r.address)) ?? [];
-    if (dates.some(d => d.slice(0, 10) >= r.performedOn)) n++;
+    const k = addressKey(r.address);
+    const prev = firstDrop.get(k);
+    if (!prev || r.performedOn < prev) firstDrop.set(k, r.performedOn);
+  }
+  let n = 0;
+  for (const [k, drop] of firstDrop) {
+    const dates = byAddress.get(k) ?? [];
+    if (dates.some(d => d >= drop)) n++;
   }
   return Math.min(6, n);
+}
+
+/** a timestamp as a Los Angeles calendar date, the way drop dates are recorded */
+export function laDate(at: Date | string | null | undefined): string {
+  const d = at instanceof Date ? at : new Date(at ?? NaN);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 }
