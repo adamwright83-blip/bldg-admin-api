@@ -1,4 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { parseJoystickExperience, type JoystickExperience } from "../../shared/joystickSelectedExperience";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 import {
@@ -452,6 +453,8 @@ export async function saveJoystickOnboardingIdentity(input: {
   contactName: string;
   ownerEmail: string;
   timeZone: string;
+  /** The world chosen on the homepage; null when the visitor arrived without one. */
+  selectedExperience?: JoystickExperience | null;
 }) {
   const session = await requireOnboardingSession(input);
   const answers = joystickDraftAnswers(session);
@@ -470,8 +473,12 @@ export async function saveJoystickOnboardingIdentity(input: {
     throw new Error("Business and owner identity are required before checkout");
   }
   const slug = joystickTechnicalSlug(businessName, session.id);
-  const configuration: SaasTenantOnboardingConfiguration & { kind: "joystick_generic" } = {
+  const configuration: SaasTenantOnboardingConfiguration & {
+    kind: "joystick_generic";
+    selectedExperience: JoystickExperience | null;
+  } = {
     kind: "joystick_generic",
+    selectedExperience: parseJoystickExperience(input.selectedExperience),
     businessName,
     slug,
     contactName,
