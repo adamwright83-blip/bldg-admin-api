@@ -8,7 +8,7 @@
  * blocks movement sits exactly on a collider the runtime already declares, so dressing can change without the game.
  */
 import * as THREE from "three";
-import { DEPTH, DOOR_Z0, DOOR_Z1, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, SLAB, WIDTH, fy, type Room } from "./cpeLayout";
+import { DEPTH, DOOR_Z0, DOOR_Z1, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROOF_POOL, SLAB, WIDTH, fy, type Room } from "./cpeLayout";
 import * as T from "./cpeTextures";
 
 type Face = "px" | "nx" | "py" | "ny" | "pz" | "nz";
@@ -530,14 +530,16 @@ function dress(k: Kit, r: Room, f: number, y: number, ceiling: number) {
     }
     case "pool": {
       // a raised plunge pool with tiled coping; the water is the runtime's (it moves)
-      under(k, y, 5.75, 18.25, -4.85, -1.75, 0.3);
-      k.box(5.75, 18.25, y, y + 0.32, -4.85, -1.75, "floor|tiles|#cfc6b8", { faces: { py: null }, tile: 0.5 });
+      // the pool sits on its collider exactly; the laundry rope's hole and landing are west of it
+      const P = ROOF_POOL;
+      under(k, y, P.x0, P.x1, P.z0, P.z1, 0.3);
+      k.box(P.x0, P.x1, y, y + 0.32, P.z0, P.z1, "floor|tiles|#cfc6b8", { faces: { py: null }, tile: 0.5 });
       // coping: a ring, so the water shows; the basin under the water is deep blue
-      k.box(5.75, 18.25, y + 0.32, y + 0.4, -4.85, -4.55, "floor|tiles|#e4ddd0", { tile: 0.5 });
-      k.box(5.75, 18.25, y + 0.32, y + 0.4, -2.05, -1.75, "floor|tiles|#e4ddd0", { tile: 0.5 });
-      k.box(5.75, 6.05, y + 0.32, y + 0.4, -4.55, -2.05, "floor|tiles|#e4ddd0", { tile: 0.5 });
-      k.box(17.95, 18.25, y + 0.32, y + 0.4, -4.55, -2.05, "floor|tiles|#e4ddd0", { tile: 0.5 });
-      k.box(6.05, 17.95, y + 0.2, y + 0.3, -4.55, -2.05, "solid|#0e5a84|0.6");
+      k.box(P.x0, P.x1, y + 0.32, y + 0.4, P.z0, P.z0 + 0.3, "floor|tiles|#e4ddd0", { tile: 0.5 });
+      k.box(P.x0, P.x1, y + 0.32, y + 0.4, P.z1 - 0.3, P.z1, "floor|tiles|#e4ddd0", { tile: 0.5 });
+      k.box(P.x0, P.x0 + 0.3, y + 0.32, y + 0.4, P.z0 + 0.3, P.z1 - 0.3, "floor|tiles|#e4ddd0", { tile: 0.5 });
+      k.box(P.x1 - 0.3, P.x1, y + 0.32, y + 0.4, P.z0 + 0.3, P.z1 - 0.3, "floor|tiles|#e4ddd0", { tile: 0.5 });
+      k.box(P.x0 + 0.3, P.x1 - 0.3, y + 0.2, y + 0.3, P.z0 + 0.3, P.z1 - 0.3, "solid|#0e5a84|0.6");
       // loungers, umbrellas, a side table
       lounger(k, y, 2, -4.6, -3.0, "#3f5f7a");
       lounger(k, y, 3.6, -4.6, -3.0, "#d9534f");
@@ -551,7 +553,7 @@ function dress(k: Kit, r: Room, f: number, y: number, ceiling: number) {
         k.box(x, x + 1.5, y, y + 0.5, BACK + 0.15, BACK + 0.75, "pot|#8a7a6a");
         k.sphere(x + 0.75, y + 0.85, BACK + 0.45, 0.55, "leaf|#4f8a3c", [1.3, 0.75, 1]);
       }
-      k.add(new THREE.TorusGeometry(0.42, 0.14, 10, 20), "fabric|#ff9ec4", 10.5, y + 0.44, -2.0, { rx: Math.PI / 2 });
+      k.add(new THREE.TorusGeometry(0.42, 0.14, 10, 20), "fabric|#ff9ec4", 10.5, y + 0.44, ROOF_POOL.z1 - 0.25, { rx: Math.PI / 2 });
       // a cabana by the lounge wall
       k.box(21.4, 24.6, y + 2.6, y + 2.7, -2.4, -0.6, "fabric|#f4efe6");
       for (const px of [21.5, 24.5]) for (const pz of [-2.3, -0.7]) k.cyl(px, y + 1.3, pz, 0.04, 0.04, 2.6, "white", 8);
@@ -753,9 +755,9 @@ export function buildSet(world: THREE.Group, scene: THREE.Scene, opts: { softwar
 
   // the water
   const waterMat = materialFor("water") as THREE.MeshStandardMaterial;
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(11.9, 2.5), waterMat);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(ROOF_POOL.x1 - ROOF_POOL.x0 - 0.35, ROOF_POOL.z1 - ROOF_POOL.z0 - 0.35), waterMat);
   water.rotation.x = -Math.PI / 2;
-  water.position.set(12, fy(2) + 0.34, -3.3);
+  water.position.set((ROOF_POOL.x0 + ROOF_POOL.x1) / 2, fy(2) + 0.34, (ROOF_POOL.z0 + ROOF_POOL.z1) / 2);
   water.receiveShadow = opts.shadows;
   world.add(water);
   own.push(water);

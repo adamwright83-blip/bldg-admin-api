@@ -12,14 +12,15 @@ night is the player's choice and is remembered. Entry: the tower view's **Play t
 | --- | --- |
 | `CenturyParkEast3D.tsx` | HUD, dialogue, the errand chain, the Letter Desk mount; knows the customers |
 | `cpeRuntime.ts` | the game: input, collisions, zombies, dogs, ropes, items, camera, post, test hook `window.__centuryParkEast` |
-| `cpeLayout.ts` | the building's measurements and room plan, shared by the runtime and the set |
+| `cpeLayout.ts` | the building's measurements, room plan, ropes and every static collider, shared by the runtime, the set and the unit test |
 | `cpeSet.ts` | what the building looks like: the cut shell, every room's furniture, the street, the parallax city |
 | `cpeTextures.ts` | every surface, painted on canvas when the level opens (wallpaper, floors, mailboxes, skyline…) |
 | `zombieLoungeMusic.ts` | the zombie-night score (the cozy one is Silver Lake's) |
 | `e2e/goldline-smoke/centuryParkEast.spec.ts` | CI: errand → Letter Desk, closet trap, dog tower, paper bite, ropes, nothing written |
 
-The runtime owns gameplay and declares every collider; the set draws furniture on exactly those footprints, so the
-look can change without touching the game. No external model or texture files: the cast comes from Beverly Hills
+Colliders are pure data in `cpeLayout.ts`; the runtime blocks movement with them, the set draws furniture on exactly
+those footprints, and `cpeLayout.test.ts` flood-fills them to prove every rope lands somewhere she can walk away from
+(the roof pool once swallowed the laundry rope's landing). No external model or texture files: the cast comes from Beverly Hills
 (`/assets/goldline/beverly-hills-3d/cast/`), everything else is procedural.
 
 ## Rendering

@@ -159,6 +159,38 @@ test.describe("Lantern City → Century Park East", () => {
     await expect(prompt).toHaveAttribute("data-prompt", "rope_down", { timeout: 15_000 });
     await prompt.click();
     await expect.poll(async () => (await call(page, "state")).floor, { timeout: 10_000 }).toBe(0);
+
+    // the laundry-room rope up to the roof: she must land where she can walk, not inside the pool (regression, #710)
+    await call(page, "teleport", ropes[1].floor, ropes[1].x + 0.6, ropes[1].z);
+    await expect(prompt).toHaveAttribute("data-prompt", "rope_up", { timeout: 15_000 });
+    await prompt.click();
+    await expect
+      .poll(
+        async () => {
+          for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+          return (await call(page, "state")).floor;
+        },
+        { timeout: 30_000, intervals: [50] }
+      )
+      .toBe(2);
+    const landed = await call(page, "state");
+    const walk = async (key: string, ms: number) => {
+      await page.keyboard.down(key);
+      await page.waitForTimeout(ms);
+      await page.keyboard.up(key);
+      return call(page, "state");
+    };
+    // off the hole toward the front of the deck, then east along the pool, then back west: none of it may stick
+    const forward = await walk("KeyS", 400);
+    expect(forward.z).toBeGreaterThan(landed.z + 0.4);
+    const east = await walk("KeyD", 700);
+    expect(east.x).toBeGreaterThan(forward.x + 1.0);
+    const west = await walk("KeyA", 1000);
+    expect(west.x).toBeLessThan(east.x - 1.0);
+    expect(west.floor).toBe(2);
+    // and she can get back to the hole to slide down
+    await call(page, "teleport", 2, ropes[1].x + 0.6, ropes[1].z);
+    await expect(prompt).toHaveAttribute("data-prompt", "rope_down", { timeout: 15_000 });
     expect(errors).toEqual([]);
   });
 });

@@ -25,7 +25,8 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { DEPTH, DOOR_Z0, DOOR_Z1, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, WIDTH, fy } from "./cpeLayout";
+import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, ROPE_LANDING_DX, WIDTH, fy, hitsCollider, staticColliders, type Collider } from "./cpeLayout";
+export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
 import { label as labelTexture } from "./cpeTextures";
 
@@ -121,14 +122,6 @@ const CLOSETS: { floor: number; x: number }[] = [
   { floor: 1, x: 26.0 },
   { floor: 2, x: 24.8 },
 ];
-/**
- * Fire-station holes: a round hole in the ceiling with a knotted rope hanging through it, one per floor that has a
- * floor above. Climbing is a struggle (mash to climb, stop and you slip); sliding down is quick.
- */
-export const ROPES: { floor: number; x: number; z: number }[] = [
-  { floor: 0, x: 13.2, z: -1.6 }, // the mailroom, up to the gym
-  { floor: 1, x: 6.6, z: -1.7 }, // the laundry room, up to the pool deck
-];
 const CLIMB_PER_PRESS = 0.42;
 const CLIMB_SLIP = 0.55; // metres a second, while she isn't pulling
 const CLOSET_HW = 1.0;
@@ -185,7 +178,7 @@ function lam(color: string | number, emissive = 0): THREE.MeshStandardMaterial {
   return m;
 }
 
-type Box = { floor: number; x0: number; x1: number; z0: number; z1: number };
+type Box = Collider;
 
 export async function createCenturyParkEast(container: HTMLElement, castBase: string, callbacks: CpeCallbacks = {}): Promise<CpeHandle> {
   const disposers: (() => void)[] = [];
@@ -306,30 +299,16 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   disposers.push(() => set.dispose());
   const { lamps, windows, emergency } = set;
   set.waterMat.map?.repeat.set(5, 1.2);
+  // walls, partitions and furniture block movement; the list is pure data (cpeLayout.ts) so a unit test can walk it
+  solids.push(...staticColliders());
   FLOORS.forEach((fl, f) => {
-    solid(f, -5, 0.25, -10, 10);
-    solid(f, WIDTH - 0.25, WIDTH + 5, -10, 10);
-    for (const r of fl.rooms) {
-      if (r.x1 < WIDTH) {
-        solid(f, r.x1 - 0.15, r.x1 + 0.15, -DEPTH - 1, DOOR_Z0);
-        solid(f, r.x1 - 0.15, r.x1 + 0.15, DOOR_Z1, 2);
-      }
-    }
     // the elevator's floor indicator: lit, over the doors
     const ind = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: labelTexture(["G", "A", "R"][f], "#1b1626", "#ffcf7a") }));
     ind.position.set((ELEV_X0 + ELEV_X1) / 2, fy(f) + 3.1, -DEPTH + 0.37);
     world.add(ind);
   });
 
-  // ---------------------------------------------------------------- furniture colliders (the furniture itself is drawn by the set)
-  // ground floor
-  solid(0, 2.4, 7.2, -4.9, -4.2); // package shelving
-  solid(0, 8.4, 14.6, -4.9, -4.5); // mailbox wall
-  solid(0, 19.5, 24.5, -3.9, -3.0); // the concierge desk
-  solid(0, 17.4, 18.6, -4.6, -3.6); // the lobby armchair
-  solid(0, 30.6, 33.2, -4.6, -3.4); // sofas
-  solid(0, 34.4, 37.4, -4.6, -3.4);
-  solid(0, 32.6, 34.6, -2.6, -1.6); // coffee table
+  // ---------------------------------------------------------------- the barricade and the gameplay props
   // the barricade in the mailroom (zombie night): parcels piled at the mailroom door, a plank nailed across
   const barricade = new THREE.Group();
   for (let i = 0; i < 9; i++) {
@@ -341,18 +320,6 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   plank.rotation.z = -0.12;
   plank.castShadow = shadows;
   world.add(barricade);
-  // amenity floor
-  for (let i = 0; i < 4; i++) solid(1, 0.6 + i * 1.6, 1.9 + i * 1.6, -4.9, -4.0); // washers
-  solid(1, 7.0, 8.8, -4.9, -4.0); // the folding table
-  solid(1, 10.2, 12.4, -4.6, -3.6); // treadmills
-  solid(1, 13.2, 15.4, -4.6, -3.6);
-  solid(1, 16.2, 17.6, -4.9, -4.3); // weight rack
-  // roof: the pool with its coping, the cabana's sofa, the lounge's sofa and bar
-  solid(2, 5.75, 18.25, -4.85, -1.75);
-  solid(2, 21.7, 24.3, -2.2, -1.1);
-  solid(2, 30.6, 33.6, -4.6, -3.4);
-  solid(2, 34.6, 37.4, -4.8, -4.0);
-
   // closets: a cupboard against the back wall with a door that swings, and a broom leaning beside it
   const closets = CLOSETS.map(c => {
     const y = fy(c.floor);
@@ -880,7 +847,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   // ---------------------------------------------------------------- collisions
   function blocked(f: number, x: number, z: number, r = 0.3): boolean {
     if (z > -0.35 || z < -DEPTH + 0.35) return true;
-    for (const b of solids) if (b.floor === f && x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1) return true;
+    for (const b of solids) if (b.floor === f && hitsCollider(b, x, z, r)) return true;
     for (const c of closets) if (c.floor === f && c.locked && Math.abs(x - c.x) < CLOSET_HW + r && z < CLOSET_Z + r) return true;
     return false;
   }
@@ -1162,7 +1129,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       } else if (climb.h >= FLOOR_H - 0.35) {
         // up through the hole and onto the floor above
         floor = r.floor + 1;
-        pos.set(r.x + 0.9, fy(floor), r.z);
+        pos.set(r.x + ROPE_LANDING_DX, fy(floor), r.z);
         climb = null;
         vy = 0;
         hero.play("Idle_Loop", 0.2);
