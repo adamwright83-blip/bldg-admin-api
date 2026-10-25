@@ -775,7 +775,7 @@ export function buildSet(world: THREE.Group, scene: THREE.Scene, opts: { softwar
   const mid = layer(1, 330, 82, -88);
   const nearL = layer(2, 210, 52, -46);
   // the ground the city stands on, fading into the same haze
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 400), new THREE.MeshBasicMaterial({ color: 0x1a1630 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 400), new THREE.MeshBasicMaterial({ color: 0x6a6480 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(WIDTH / 2, -1.31, -120);
   scene.add(ground);

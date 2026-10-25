@@ -28,6 +28,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, ROPE_LANDING_DX, WIDTH, fy, hitsCollider, staticColliders, type Collider } from "./cpeLayout";
 export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
+import { INK_SETS, createPrintPass } from "./cpePrint";
 import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
@@ -768,10 +769,14 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     scene.background = new THREE.Color(zombieNight ? "#141022" : "#1d1830");
     (scene.fog as THREE.Fog).color.set(zombieNight ? 0x1a2238 : 0x2a2350);
     gradeWarm = zombieNight ? 0 : 1;
+    inks = zombieNight ? INK_SETS.zombie : INK_SETS.cozy;
+    printRef?.setInks(inks);
     for (const p of set.pools) (p.material as THREE.MeshBasicMaterial).color.set(zombieNight ? 0x8fa8d8 : 0xffffff);
     pMat.size = 0.16;
   }
   let gradeWarm = 1;
+  let inks = INK_SETS.cozy;
+  let printRef: ReturnType<typeof createPrintPass> | null = null;
   applyVibe();
 
   // ---------------------------------------------------------------- input
@@ -1071,6 +1076,11 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   });
   composer.addPass(grade);
   composer.addPass(new OutputPass());
+  // the brochure: the finished frame is separated into ink plates and screened onto paper (cpePrint.ts)
+  const print = createPrintPass(renderer.getPixelRatio());
+  print.setInks(inks);
+  printRef = print;
+  composer.addPass(print);
   disposers.push(() => composerTarget.dispose());
   function resize() {
     const w = container.clientWidth || window.innerWidth;
@@ -1455,6 +1465,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
+    print.tick(elapsed);
     composer.render();
   }
   renderer.setAnimationLoop(frame);
