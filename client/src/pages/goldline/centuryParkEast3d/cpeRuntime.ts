@@ -485,6 +485,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   const items = ERRAND_SLOTS.map((s, i) => {
     const g = itemMesh(s.item);
+    g.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+    });
     g.position.set(s.itemX, fy(s.itemFloor), s.itemZ);
     g.visible = false;
     world.add(g);
@@ -717,6 +720,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   const dogs = BREEDS.map((b, i) => {
     const d = makeDog(b);
+    d.root.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+    });
     const spot = DOG_SPOTS[i];
     d.root.position.set(spot.x, fy(spot.floor), spot.z);
     d.root.rotation.y = i % 2 ? 0.6 : -0.6;
