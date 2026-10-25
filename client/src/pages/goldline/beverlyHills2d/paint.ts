@@ -1,19 +1,15 @@
-import { CHAPTERS, prompt, type Adventure } from "./adventure";
+/**
+ * The painter. What makes a cutout belong to a painting: it stands on the painting's own ground (a depth band, not a
+ * line), it scales with depth, it is drawn in depth order with the props, its shadow falls the way the painting's
+ * shadows fall (upper-left sun, hard violet shadow to the lower right), it takes a little of the scene's light, and
+ * something painted stands in front of it. Then the acting: breathing, a walk cycle that stays a walk, a squash on
+ * landing, and reaction portraits from the sheets' expression rows when something happens between the animals.
+ */
+import { BOXER, CALF, COYOTE, PROPS, TERRIER, type Mood, type PropId, type Rect, type Sheet } from "./cells";
+import { CHAPTERS, GROUND, SPOTS, VIEW, WIDTH, inWater, type Adventure, type Chapter } from "./adventure";
+
 export const ASSET_BASE = "/assets/goldline/beverly-hills-2d/";
-const FILES = [
-  "02-terrier-sheet",
-  "03-boxer-sheet",
-  "04-calf-sheet",
-  "05-courtyard-far",
-  "06-courtyard-mid",
-  "07-courtyard-near-alpha",
-  "08-ranch-far",
-  "09-ranch-mid",
-  "10-ranch-near-alpha",
-  "11-distortion-alpha",
-  "13-overlap",
-  "12-coyote-sheet-alpha",
-];
+const FILES = ["02-terrier-sheet", "03-boxer-sheet", "04-calf-sheet", "05-courtyard-far", "06-courtyard-mid", "07-courtyard-near-alpha", "08-ranch-far", "09-ranch-mid", "10-ranch-near-alpha", "11-distortion-alpha", "12-coyote-sheet-alpha", "13-overlap"];
 export type Art = Record<string, HTMLImageElement>;
 export async function loadArt(onProgress: (n: number) => void): Promise<Art> {
   let n = 0;
@@ -33,485 +29,510 @@ export async function loadArt(onProgress: (n: number) => void): Promise<Art> {
   );
   return Object.fromEntries(entries);
 }
-type Rect = [number, number, number, number];
-const terrier: Rect[] = [
-  [10, 153, 245, 220],
-  [257, 157, 270, 216],
-  [523, 170, 266, 200],
-  [776, 163, 306, 182],
-  [1047, 179, 225, 194],
-  [1280, 170, 242, 198],
-  [29, 415, 217, 250],
-  [270, 560, 326, 104],
-  [622, 547, 315, 114],
-  [956, 446, 272, 227],
-];
-const boxer: Rect[] = [
-  [36, 106, 290, 243],
-  [328, 125, 323, 224],
-  [670, 129, 241, 220],
-  [885, 131, 230, 217],
-  [1084, 131, 232, 218],
-  [1280, 130, 245, 219],
-  [12, 533, 443, 139],
-  [441, 377, 345, 300],
-  [821, 398, 329, 284],
-  [1174, 452, 348, 231],
-];
-const calf: Rect[] = [
-  [20, 87, 310, 269],
-  [337, 92, 339, 265],
-  [638, 92, 326, 265],
-  [945, 91, 316, 264],
-  [1238, 91, 291, 265],
-  [19, 414, 447, 230],
-  [503, 469, 283, 185],
-  [802, 408, 350, 255],
-];
-// Atlas cells overlap in bounding-box space. Clip to the connected alpha silhouette
-// so a neighboring animal's nose never enters a walk cycle. Source pixels are untouched.
-const silhouettes = new WeakMap<HTMLImageElement, Map<string, Path2D>>();
-function silhouette(image: HTMLImageElement, r: Rect): Path2D {
-  let cache = silhouettes.get(image);
-  if (!cache) {
-    cache = new Map();
-    silhouettes.set(image, cache);
-  }
-  const key = r.join(",");
-  const cached = cache.get(key);
-  if (cached) return cached;
-  const sheet = document.createElement("canvas");
-  sheet.width = r[2];
-  sheet.height = r[3];
-  const ctx = sheet.getContext("2d")!;
-  ctx.drawImage(image, ...r, 0, 0, r[2], r[3]);
-  const pixels = ctx.getImageData(0, 0, r[2], r[3]).data;
-  const w = r[2],
-    h = r[3],
-    seen = new Uint8Array(w * h);
-  let largest: number[] = [];
-  for (let i = 0; i < w * h; i++) {
-    if (seen[i] || pixels[i * 4 + 3] < 32) continue;
-    const group = [i];
-    seen[i] = 1;
-    for (let j = 0; j < group.length; j++) {
-      const n = group[j],
-        x = n % w;
-      for (const next of [
-        x > 0 ? n - 1 : -1,
-        x < w - 1 ? n + 1 : -1,
-        n - w,
-        n + w,
-      ])
-        if (
-          next >= 0 &&
-          next < w * h &&
-          !seen[next] &&
-          pixels[next * 4 + 3] >= 32
-        ) {
-          seen[next] = 1;
-          group.push(next);
-        }
-    }
-    if (group.length > largest.length) largest = group;
-  }
-  const mask = new Uint8Array(w * h);
-  for (const n of largest) mask[n] = 1;
-  const path = new Path2D();
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      if (!mask[y * w + x]) continue;
-      const from = x;
-      while (x + 1 < w && mask[y * w + x + 1]) x++;
-      path.rect(from - 0.6, y - 0.6, x - from + 2.2, 2.2);
-    }
-  cache.set(key, path);
-  return path;
-}
-export const PROPS = {
-  fountain: ["07-courtyard-near-alpha", [0, 0, 490, 440]],
-  stairs: ["07-courtyard-near-alpha", [0, 470, 575, 530]],
-  ball: ["07-courtyard-near-alpha", [610, 765, 210, 170]],
-  stick: ["07-courtyard-near-alpha", [825, 775, 350, 170]],
-  hedge: ["07-courtyard-near-alpha", [410, 25, 560, 230]],
-  pots: ["07-courtyard-near-alpha", [920, 390, 300, 300]],
-  gate: ["10-ranch-near-alpha", [0, 0, 925, 300]],
-  sluice: ["10-ranch-near-alpha", [480, 265, 530, 375]],
-  grass: ["10-ranch-near-alpha", [525, 635, 300, 335]],
-  beans: ["10-ranch-near-alpha", [820, 640, 460, 330]],
-  rope: ["10-ranch-near-alpha", [1260, 815, 275, 190]],
-  tunnel: ["10-ranch-near-alpha", [970, 290, 565, 350]],
-  hole: ["11-distortion-alpha", [0, 0, 1190, 585]],
-  ghost: ["11-distortion-alpha", [975, 245, 560, 730]],
-} satisfies Record<string, [string, Rect]>;
-function region(
-  c: CanvasRenderingContext2D,
-  art: Art,
-  key: string,
-  r: Rect,
-  x: number,
-  y: number,
-  w: number,
-  h: number
-) {
-  c.drawImage(art[key], ...r, x, y, w, h);
-}
-function prop(
-  c: CanvasRenderingContext2D,
-  art: Art,
-  id: keyof typeof PROPS,
-  x: number,
-  ground: number,
-  w: number,
-  alpha = 1
-) {
-  const [key, r] = PROPS[id];
-  const h = (w * r[3]) / r[2];
-  c.save();
-  c.globalAlpha = alpha;
-  if (id === "ghost") {
-    c.beginPath();
-    c.moveTo(x - w * 0.48, ground);
-    c.lineTo(x - w * 0.48, ground - h * 0.35);
-    c.lineTo(x - w * 0.33, ground - h * 0.4);
-    c.lineTo(x - w * 0.33, ground - h * 0.64);
-    c.lineTo(x - w * 0.15, ground - h * 0.7);
-    c.lineTo(x - w * 0.15, ground - h * 0.95);
-    c.lineTo(x + w * 0.1, ground - h);
-    c.lineTo(x + w * 0.3, ground - h * 0.93);
-    c.lineTo(x + w * 0.3, ground - h * 0.78);
-    c.lineTo(x + w * 0.48, ground - h * 0.72);
-    c.lineTo(x + w * 0.48, ground);
-    c.closePath();
-    c.clip();
-  }
-  if (id === "fountain") {
-    c.beginPath();
-    c.moveTo(x - w / 2, ground - h);
-    c.lineTo(x - w / 2 + w * 0.78, ground - h);
-    c.lineTo(x - w / 2 + w * 0.78, ground - h * 0.48);
-    c.lineTo(x + w / 2, ground - h * 0.48);
-    c.lineTo(x + w / 2, ground);
-    c.lineTo(x - w / 2, ground);
-    c.closePath();
-    c.clip();
-  }
-  if (id === "stairs") {
-    c.beginPath();
-    c.moveTo(x - w / 2, ground - h);
-    c.lineTo(x - w / 2 + w * 0.81, ground - h);
-    c.lineTo(x - w / 2 + w * 0.81, ground - h * 0.56);
-    c.lineTo(x + w / 2, ground - h * 0.56);
-    c.lineTo(x + w / 2, ground);
-    c.lineTo(x - w / 2, ground);
-    c.closePath();
-    c.clip();
-  }
-  region(c, art, key, r, x - w / 2, ground - h, w, h);
-  c.restore();
-}
-function animal(
-  c: CanvasRenderingContext2D,
-  art: Art,
-  who: "terrier" | "boxer" | "calf",
-  frame: number,
-  x: number,
-  y: number,
-  face: number,
-  time: number,
-  moving: boolean,
-  perspective = 1
-) {
-  const frames = who === "terrier" ? terrier : who === "boxer" ? boxer : calf;
-  const r = frames[frame] ?? frames[0];
-  const key =
-    who === "terrier"
-      ? "02-terrier-sheet"
-      : who === "boxer"
-        ? "03-boxer-sheet"
-        : "04-calf-sheet";
-  // Fixed pixels-to-world scale preserves model proportions across irregular animation cells.
-  const scale =
-    (who === "terrier" ? 0.48 : who === "boxer" ? 0.65 : 0.66) * perspective;
-  const w = r[2] * scale,
-    h = r[3] * scale;
-  c.save();
-  c.fillStyle = "#49306555";
-  c.beginPath();
-  c.ellipse(x, y + 3, w * 0.37, 10, 0, 0, Math.PI * 2);
-  c.fill();
-  c.translate(
-    x,
-    y - (moving ? Math.abs(Math.sin(time * 13)) * 3 : Math.sin(time * 2) * 1.5)
-  );
-  c.scale(face > 0 ? -1 : 1, 1);
-  c.translate(-w / 2, -h);
-  c.scale(scale, scale);
-  c.clip(silhouette(art[key], r));
-  region(c, art, key, r, 0, 0, r[2], r[3]);
-  c.restore();
-}
-function marker(
-  c: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  time: number,
-  label = ""
-) {
-  c.save();
-  c.translate(x, y + Math.sin(time * 3) * 4);
-  c.strokeStyle = "#fff8dc";
-  c.lineWidth = 2;
-  c.fillStyle = "#3d355caa";
-  c.beginPath();
-  c.arc(0, 0, 17, 0, Math.PI * 2);
-  c.fill();
-  c.stroke();
-  c.fillStyle = "#fff8dc";
-  c.textAlign = "center";
-  c.font = "600 15px sans-serif";
-  c.fillText(label || "·", 0, 5);
-  c.restore();
-}
-export function paint(
-  c: CanvasRenderingContext2D,
-  art: Art,
-  s: Adventure,
-  cam: number,
-  moving: boolean,
-  reduced: boolean,
-  restored: number
-) {
-  const W = 1280,
-    H = 800,
-    G = 667,
-    t = reduced ? 0 : s.time;
-  c.clearRect(0, 0, W, H);
-  if (s.chapter === "home") {
-    c.drawImage(art["13-overlap"], 0, 0, 1536, 1024, 0, -27, W, 854);
-    // Soft living detail over the final painting: petals drift while the family rests.
-    for (let i = 0; i < restored; i++)
-      prop(c, art, "beans", 865 + i * 65, 785, 95);
-    petals(c, t, restored ? 50 : 22, W, H);
-    return;
-  }
-  const courtyard = s.chapter === "courtyard";
-  c.fillStyle = courtyard ? "#6ab9e7" : "#5bace3";
-  c.fillRect(0, 0, W, H);
-  c.drawImage(
-    art[courtyard ? "05-courtyard-far" : "08-ranch-far"],
-    -cam * 0.08,
-    -140,
-    1600,
-    1067
-  );
-  if (s.chapter === "distortion") {
-    prop(
-      c,
-      art,
-      "ghost",
-      950 - cam * 0.15,
-      570,
-      280,
-      0.35 + Math.sin(t * 0.5) * 0.08
-    );
-  }
-  c.drawImage(
-    art[courtyard ? "06-courtyard-mid" : "09-ranch-mid"],
-    -cam * 0.2,
-    -363,
-    1900,
-    1267
-  );
-  c.save();
-  c.translate(-cam, 0);
-  if (courtyard) {
-    prop(c, art, "hedge", 70, G + 5, 260);
-    prop(c, art, "fountain", 820, G + 12, 310);
-    prop(c, art, "pots", 1130, G + 8, 150);
-    prop(c, art, "stairs", 1700, G + 35, 370);
-    if (!s.item && !s.chase) prop(c, art, "ball", s.toy ?? 480, G + 3, 36);
-    marker(c, 1690, 430, t, s.passage ? "↓" : "?");
-  } else if (s.chapter === "pasture") {
-    for (let i = 0; i < 3; i++)
-      animal(
-        c,
-        art,
-        "calf",
-        7,
-        1150 + i * 270,
-        490 + i * 8,
-        i % 2 ? 1 : -1,
-        t,
-        false,
-        0.43
-      );
-    const cr: Rect = s.spooked ? [0, 0, 420, 345] : [0, 345, 420, 290];
-    c.save();
-    c.translate(s.coyote - cam * 0.0, 610);
-    c.scale(s.spooked ? -0.48 : 0.48, 0.48);
-    c.translate(-cr[2] / 2, -cr[3]);
-    c.clip(silhouette(art["12-coyote-sheet-alpha"], cr));
-    region(c, art, "12-coyote-sheet-alpha", cr, 0, 0, cr[2], cr[3]);
-    c.restore();
-    for (let i = 0; i < restored; i++)
-      prop(c, art, "beans", 2200 + i * 90, G + 7, 110);
 
-    if (!s.gate) prop(c, art, "gate", 1550, G + 5, 460);
-    else {
-      c.save();
-      c.globalAlpha = 0.65;
-      prop(c, art, "gate", 1480, G + 5, 160);
-      c.restore();
-    }
-    prop(c, art, "sluice", 2010, G + 30, 255);
-    prop(c, art, "tunnel", 85, G + 40, 255);
-    if (!s.gate && !s.item && !s.chase)
-      prop(c, art, "stick", s.toy ?? 1250, G + 10, 100);
-    if (!s.water) {
-      c.fillStyle = "#5fafd6bb";
-      c.beginPath();
-      c.moveTo(1750, G + 8);
-      c.lineTo(1905, G + 8);
-      c.lineTo(1960, 800);
-      c.lineTo(1690, 800);
-      c.fill();
-      c.strokeStyle = "#c9f7ee";
-      c.lineWidth = 3;
-      for (let i = 0; i < 8; i++) {
-        const y = G + 25 + i * 17;
-        c.beginPath();
-        c.moveTo(1750 + Math.sin(t * 2 + i) * 10, y);
-        c.lineTo(1900 + Math.sin(t * 2 + i) * 10, y);
-        c.stroke();
+export const H = 800;
+export const PAINT_SCALE = WIDTH / 1536; // the mid paintings are 1536 wide; the world is one painting wide at 1x
+export const PAINT_Y = -363;
+
+// ------------------------------------------------------------------ sheet cells as clean sprites
+// Each cell is cut once into its own canvas, clipped to its largest connected shape so a neighbouring drawing's
+// nose never comes along, with the sun's warmth and a touch of the scene's colour multiplied in.
+const cut = new Map<string, HTMLCanvasElement>();
+export function sprite(art: Art, file: string, r: Rect): HTMLCanvasElement {
+  const key = `${file}|${r.join(",")}`;
+  const hit = cut.get(key);
+  if (hit) return hit;
+  const [x, y, w, h] = r;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d")!;
+  g.drawImage(art[file], x, y, w, h, 0, 0, w, h);
+  const img = g.getImageData(0, 0, w, h);
+  const d = img.data;
+  const seen = new Uint8Array(w * h);
+  let best: number[] = [];
+  for (let i = 0; i < w * h; i++) {
+    if (seen[i] || d[i * 4 + 3] < 24) continue;
+    const grp = [i];
+    seen[i] = 1;
+    for (let j = 0; j < grp.length; j++) {
+      const n = grp[j], px = n % w;
+      for (const m of [px > 0 ? n - 1 : -1, px < w - 1 ? n + 1 : -1, n - w, n + w]) if (m >= 0 && m < w * h && !seen[m] && d[m * 4 + 3] >= 24) {
+        seen[m] = 1;
+        grp.push(m);
       }
     }
-    for (let x = 2260; x < 2860; x += 180)
-      prop(c, art, "beans", x, G + 12, 160);
-    if (s.water) {
-      prop(c, art, "hole", 2790, G + 170, 420, 0.9);
-      prop(c, art, "ghost", 2540, 480, 230, 0.38);
-    }
-    if (s.metCalf)
-      animal(
-        c,
-        art,
-        "calf",
-        Math.abs(s.calf - (s.boxer - 135)) > 20
-          ? 1 + (Math.floor(t * 6) % 4)
-          : 0,
-        s.calf,
-        G,
-        Math.sign(s.boxer - s.calf),
-        t,
-        true
-      );
-    else animal(c, art, "calf", 0, s.calf, G, -1, t, false);
-    if (!s.metCalf) marker(c, 1080, 440, t, "♡");
-    if (s.gate && !s.water) marker(c, 2010, 420, t, "↻");
-  } else {
-    prop(c, art, "hole", 1460, 870, 850);
-    prop(c, art, "sluice", 1070, G + 20, 240);
-    if (!s.item && !s.tether) prop(c, art, "rope", 400, G + 5, 90);
-    // Solid ledge advances upward with the opened waterway; animals are never hurt.
-    const ledgeY = s.water ? G : 750;
-    c.fillStyle = "#778383";
-    c.fillRect(1330, ledgeY, 330, 27);
-    c.fillStyle = "#b5c5b1";
-    c.fillRect(1330, ledgeY, 330, 7);
-    if (s.water) {
-      c.fillStyle = "#6dbbc3aa";
-      c.fillRect(1310, ledgeY + 27, 375, 130);
-    }
-    animal(c, art, "calf", s.rescued ? 0 : 6, s.calf, ledgeY, -1, t, false);
-    if (s.tether) {
-      c.strokeStyle = "#b98646";
-      c.lineWidth = 6;
-      c.beginPath();
-      c.moveTo(s.boxer + 70, G - 90);
-      c.quadraticCurveTo(870, G - 20, s.x - 35, G - 44 - s.jump);
-      c.stroke();
-    }
-    marker(
-      c,
-      s.tether ? 1070 : 700,
-      s.tether ? 430 : 550,
-      t,
-      s.tether ? "↻" : "∞"
-    );
+    if (grp.length > best.length) best = grp;
   }
-  const boxerMoving = s.chase > 0 || Math.abs(s.boxer - (s.x - 160)) > 25;
-  const boxerFace =
-    s.chase && s.toy !== null
-      ? Math.sign(s.toy - s.boxer)
-      : s.chapter === "pasture" && !s.water && s.boxer > 1680
-        ? -1
-        : Math.sign(s.x - s.boxer);
-  animal(
-    c,
-    art,
-    "boxer",
-    s.tether ? 7 : boxerMoving ? 1 + (Math.floor(t * 7) % 5) : 0,
-    s.boxer,
-    G,
-    boxerFace,
-    t,
-    boxerMoving && !s.tether
-  );
-  if (s.chase && s.toy !== null)
-    prop(
-      c,
-      art,
-      courtyard ? "ball" : "stick",
-      Math.abs(s.boxer - s.toy) < 40 ? s.boxer + boxerFace * 70 : s.toy,
-      Math.abs(s.boxer - s.toy) < 40 ? G - 75 : G + 3,
-      courtyard ? 34 : 80
-    );
-  const playerFrame =
-    s.jump > 0
-      ? 3
-      : moving
-        ? 1 + (Math.floor(t * 9) % 5)
-        : s.metCalf && !s.gate && s.memory > 0 && s.chapter === "pasture"
-          ? 7
-          : 0;
-  animal(c, art, "terrier", playerFrame, s.x, G - s.jump, s.facing, t, moving);
-  if (s.item)
-    prop(
-      c,
-      art,
-      s.item,
-      s.x + s.facing * 51,
-      G - 24 - s.jump,
-      s.item === "ball" ? 27 : s.item === "rope" ? 55 : 65
-    );
-  if (s.rescued) {
-    marker(c, s.x + 45, G - 180, t, "♡");
-  }
-  // Foreground silhouettes use the painted asset sheet, with stronger parallax.
-  if (!courtyard)
-    for (let x = 100; x < CHAPTERS[s.chapter].width; x += 370)
-      prop(c, art, "grass", x + Math.sin(t + x) * 2, 850, 160);
-  const p = prompt(s);
-  if (p) marker(c, s.x, G - 150 - s.jump, t, "E");
-  c.restore();
-  petals(c, t, courtyard ? 30 : 12, W, H);
+  const keep = new Uint8Array(w * h);
+  for (const n of best) keep[n] = 1;
+  for (let i = 0; i < w * h; i++) if (!keep[i]) d[i * 4 + 3] = 0;
+  g.putImageData(img, 0, 0);
+  cut.set(key, c);
+  return c;
 }
-function petals(
-  c: CanvasRenderingContext2D,
-  t: number,
-  n: number,
-  w: number,
-  h: number
-) {
+
+// ------------------------------------------------------------------ the ground
+type Stage = { top: number; bottom: number };
+const stage = (ch: Chapter): Stage => ({ top: GROUND[ch][0], bottom: GROUND[ch][1] });
+const groundY = (st: Stage, d: number) => st.top + d * (st.bottom - st.top);
+export const depthScale = (d: number) => 0.62 + 0.42 * d;
+
+/** a hard-edged violet shadow cast to the lower right, the way every shadow in the paintings is cast */
+export function shadow(c: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number, alpha = 0.34) {
+  c.save();
+  c.translate(x + w * 0.16 + lift * 0.3, y + 2);
+  c.scale(1, 0.26);
+  c.fillStyle = `rgba(74, 44, 120, ${alpha * (1 - lift / 300)})`;
+  c.beginPath();
+  c.ellipse(0, 0, w * 0.5, w * 0.5, -0.18, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+type Drawn = { d: number; draw: () => void };
+
+const tints = new WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>();
+function tinted(sp: HTMLCanvasElement, tint: string): HTMLCanvasElement {
+  let byTint = tints.get(sp);
+  if (!byTint) tints.set(sp, (byTint = new Map()));
+  const hit = byTint.get(tint);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = sp.width;
+  c.height = sp.height;
+  const g = c.getContext("2d")!;
+  g.drawImage(sp, 0, 0);
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = tint;
+  g.fillRect(0, 0, c.width, c.height);
+  byTint.set(tint, c);
+  return c;
+}
+
+export function drawSprite(c: CanvasRenderingContext2D, art: Art, sheet: Sheet, r: Rect, x: number, y: number, scale: number, face: 1 | -1, opt: { breathe?: number; squash?: number; tint?: string; alpha?: number; tongue?: number; time?: number } = {}) {
+  const sp = sprite(art, sheet.file, r);
+  const w = r[2] * scale, h = r[3] * scale;
+  c.save();
+  c.globalAlpha = opt.alpha ?? 1;
+  c.translate(x, y);
+  // the body breathes: a slow stretch from the feet; a landing squashes it. The sheets face left, so facing
+  // right (face 1) is the mirror image.
+  const sq = opt.squash ?? 0, br = opt.breathe ?? 0;
+  c.scale((1 + sq * 0.12) * -face, 1 - sq * 0.1 + br);
+  // the warm light is baked into a copy of the sprite, never washed over the canvas: a source-atop fill on the
+  // stage would paint a pale box over the painting behind the animal
+  c.drawImage(opt.tint ? tinted(sp, opt.tint) : sp, -w / 2, -h, w, h);
+  // a panting tongue that swings with the trot
+  if (opt.tongue) {
+    const t = opt.time ?? 0;
+    const mx = -w / 2 + sheet.mouth[0] * w + w * 0.05, my = -h + sheet.mouth[1] * h + h * 0.06;
+    const len = h * 0.13 * opt.tongue;
+    c.translate(mx, my);
+    c.rotate(0.25 + Math.sin(t * 15) * 0.28);
+    c.fillStyle = "#e0566e";
+    c.beginPath();
+    c.moveTo(-len * 0.18, 0);
+    c.lineTo(len * 0.18, 0);
+    c.quadraticCurveTo(len * 0.26, len * 0.9, 0, len);
+    c.quadraticCurveTo(-len * 0.26, len * 0.9, -len * 0.18, 0);
+    c.fill();
+    c.strokeStyle = "rgba(140, 30, 60, 0.6)";
+    c.lineWidth = Math.max(1, len * 0.06);
+    c.beginPath();
+    c.moveTo(0, len * 0.15);
+    c.lineTo(0, len * 0.7);
+    c.stroke();
+  }
+  c.restore();
+}
+
+export function propSprite(art: Art, id: PropId) {
+  const [file, r] = PROPS[id];
+  return { sp: sprite(art, file, r), r };
+}
+
+// ------------------------------------------------------------------ the frame
+export type Frame = {
+  cam: number;
+  moving: boolean;
+  reduced: boolean;
+  restored: number;
+  /** the picture of the previous scene, for the tear */
+  snapshot: HTMLCanvasElement | null;
+};
+
+/** the flood, painted once: three feathered layers, faded in at the top so it has no ruled edge */
+let flood: { key: string; canvas: HTMLCanvasElement } | null = null;
+function floodLayer(x0: number, x1: number, top: number, bot: number) {
+  const key = `${x0},${x1},${top},${bot}`;
+  if (flood?.key === key) return flood.canvas;
+  const ox = x0 - 120, oy = top - 40;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(x1 - x0 + 240);
+  canvas.height = Math.ceil(bot - oy);
+  const g = canvas.getContext("2d")!;
+  g.translate(-ox, -oy);
+  const layer = (pad: number, alpha: number, rgb: string) => {
+    const lg = g.createLinearGradient(x0 - 60 - pad, 0, x1 + 60 + pad, 0);
+    lg.addColorStop(0, `rgba(${rgb}, 0)`);
+    lg.addColorStop(0.22, `rgba(${rgb}, ${alpha})`);
+    lg.addColorStop(0.78, `rgba(${rgb}, ${alpha})`);
+    lg.addColorStop(1, `rgba(${rgb}, 0)`);
+    g.fillStyle = lg;
+    g.beginPath();
+    g.moveTo(x0 - pad, top - 20);
+    g.lineTo(x1 + pad, top - 20);
+    g.lineTo(x1 + 60 + pad, bot);
+    g.lineTo(x0 - 60 - pad, bot);
+    g.fill();
+  };
+  layer(30, 0.22, "70, 52, 70");
+  layer(0, 0.48, "84, 160, 200");
+  layer(-30, 0.3, "160, 220, 232");
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = "destination-in";
+  const fade = g.createLinearGradient(0, 0, 0, 90);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(1, "rgba(0,0,0,1)");
+  g.fillStyle = fade;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  flood = { key, canvas };
+  return canvas;
+}
+
+export function paint(c: CanvasRenderingContext2D, art: Art, s: Adventure, f: Frame) {
+  const t = f.reduced ? 0 : s.time;
+  c.clearRect(0, 0, VIEW, H);
+  if (s.chapter === "home") {
+    c.drawImage(art["13-overlap"], 0, 0, 1536, 1024, 0, -27, VIEW, 854);
+    for (let i = 0; i < f.restored; i++) {
+      const { sp, r } = propSprite(art, "beans");
+      c.drawImage(sp, 860 + i * 66, 735, 96, (96 * r[3]) / r[2]);
+    }
+    petals(c, t, f.restored ? 46 : 20);
+    tear(c, s, f);
+    return;
+  }
+  const ch = s.chapter;
+  const courtyard = ch === "courtyard";
+  const st = stage(ch);
+  const tint = courtyard ? "rgba(255, 214, 150, 0.1)" : "rgba(255, 196, 90, 0.12)";
+
+  // far: sky and the far distance, slow parallax
+  c.fillStyle = courtyard ? "#6ab9e7" : "#5bace3";
+  c.fillRect(0, 0, VIEW, H);
+  c.drawImage(art[courtyard ? "05-courtyard-far" : "08-ranch-far"], -f.cam * 0.12, -140, 1600, 1067);
+  if (ch === "distortion") {
+    const { sp, r } = propSprite(art, "ghost");
+    c.save();
+    c.globalAlpha = 0.32 + Math.sin(t * 0.6) * 0.07;
+    c.drawImage(sp, 1120 - f.cam * 0.18, 300, 230, (230 * r[3]) / r[2]);
+    c.restore();
+  }
+  // the painting: the set itself, scrolls with the world (its ground is the ground)
+  c.drawImage(art[courtyard ? "06-courtyard-mid" : "09-ranch-mid"], -f.cam, PAINT_Y, 1536 * PAINT_SCALE, 1024 * PAINT_SCALE);
+
+  c.save();
+  c.translate(-f.cam, 0);
+  const list: Drawn[] = [];
+  const prop = (id: PropId, x: number, d: number, w: number, opt: { alpha?: number; sway?: number; yOff?: number } = {}) => {
+    const { sp, r } = propSprite(art, id);
+    const sc = depthScale(d);
+    const ww = w * sc, hh = (ww * r[3]) / r[2];
+    const y = groundY(st, d) + (opt.yOff ?? 0);
+    list.push({
+      d,
+      draw: () => {
+        c.save();
+        c.globalAlpha = opt.alpha ?? 1;
+        const sx = opt.sway ? Math.sin(t * 1.3 + x) * opt.sway : 0;
+        c.transform(1, 0, sx, 1, 0, 0);
+        c.drawImage(sp, x - ww / 2 - sx * y, y - hh, ww, hh);
+        c.restore();
+      },
+    });
+  };
+  const animal = (sheet: Sheet, r: Rect, x: number, d: number, face: 1 | -1, lift: number, opt: { breathe?: number; squash?: number; alpha?: number; scaleMul?: number; tintOverride?: string; tongue?: number } = {}) => {
+    const sc = depthScale(d) * (sheet.height / sheet.stand[3]) * (opt.scaleMul ?? 1);
+    const y = groundY(st, d);
+    list.push({
+      d: d + 0.001,
+      draw: () => {
+        shadow(c, x, y, r[2] * sc * 0.9, lift, opt.alpha === undefined ? 0.34 : opt.alpha * 0.34);
+        drawSprite(c, art, sheet, r, x, y - lift, sc, face, { breathe: opt.breathe, squash: opt.squash, tint: opt.tintOverride ?? tint, alpha: opt.alpha, tongue: opt.tongue, time: t });
+      },
+    });
+  };
+  const walkFrame = (sheet: Sheet, rate: number) => sheet.walk[Math.floor(t * rate) % sheet.walk.length];
+  const breathe = (phase: number) => Math.sin(t * 2.1 + phase) * 0.012;
+
+  // ---- the set dressing, in depth
+  if (courtyard) {
+    prop("hedge", SPOTS.courtyard.hedge.x, SPOTS.courtyard.hedge.d, 300);
+    prop("fountain", SPOTS.courtyard.fountain.x, SPOTS.courtyard.fountain.d, 330);
+    prop("pots", SPOTS.courtyard.pots.x, SPOTS.courtyard.pots.d, 160);
+    prop("stairs", SPOTS.courtyard.stairs.x, SPOTS.courtyard.stairs.d, 380, { yOff: 26 });
+    // something painted in front of her: a second hedge and pots at the front edge
+    prop("hedge", 70, 1.1, 300, { alpha: 1 });
+    prop("pots", 1840, 1.1, 190);
+  } else if (ch === "pasture") {
+    prop("tunnel", SPOTS.pasture.tunnel.x, SPOTS.pasture.tunnel.d, 260, { yOff: 30 });
+    prop("gate", SPOTS.pasture.gate.x + (s.flags.gate ? -70 : 0), SPOTS.pasture.gate.d, s.flags.gate ? 190 : 470, { alpha: s.flags.gate ? 0.7 : 1 });
+    prop("sluice", SPOTS.pasture.sluice.x, SPOTS.pasture.sluice.d, 240, { yOff: 20 });
+    for (let i = 0; i < f.restored; i++) prop("beans", 1600 + i * 80, 0.12, 110);
+    // the cows, at the back of the meadow: three different animals doing three different things, slowly
+    const cows: [Rect, number, number, 1 | -1][] = [[CALF.poses.lie, 1240, 0.04, -1]];
+    for (const [r, x, d, face] of cows) animal(CALF, r, x, d, face, 0, { scaleMul: 1.05, alpha: 0.92, breathe: breathe(x), tintOverride: "rgba(255, 190, 90, 0.2)" });
+    // the water, while it is high
+    if (!s.flags.water) {
+      list.push({
+        d: 0.35,
+        draw: () => {
+          c.save();
+          // high water spilling over the painted creek: feathered at the banks so it sits in the painting
+          const x0 = SPOTS.pasture.waterX0, x1 = SPOTS.pasture.waterX1, top = groundY(st, 0.2), bot = st.bottom + 30;
+          c.drawImage(floodLayer(x0, x1, top, bot), x0 - 120, top - 40);
+          c.lineCap = "round";
+          for (let i = 0; i < 18; i++) {
+            const k = (i * 0.137 + t * 0.07) % 1;
+            const y = top + (bot - 30 - top) * k;
+            const across = 0.15 + ((i * 0.618) % 0.7);
+            const xm = x0 + (x1 - x0) * across + 60 * k * (across - 0.5) * 2;
+            const a = Math.max(0, Math.sin(k * Math.PI) * (0.45 + 0.45 * Math.sin(t * 3 + i * 1.7)));
+            c.strokeStyle = `rgba(255, 252, 236, ${a * 0.85})`;
+            c.lineWidth = 1.6 + k * 1.8;
+            c.beginPath();
+            c.moveTo(xm - 8 - k * 8, y);
+            c.lineTo(xm + 8 + k * 8, y);
+            c.stroke();
+          }
+          c.restore();
+        },
+      });
+    }
+    // front grass: what stands in front of the animals
+    for (let x = 80; x < WIDTH; x += 300) prop("grass", x, 1.05 + ((x / 300) % 2) * 0.03, 170, { sway: 0.03 });
+  } else {
+    prop("sluice", SPOTS.distortion.sluice.x, SPOTS.distortion.sluice.d, 230, { yOff: 20 });
+    // the tear in the ground, and the garage under it
+    const { sp, r } = propSprite(art, "hole");
+    list.push({
+      d: 0.3,
+      draw: () => {
+        const w = 720, hh = (w * r[3]) / r[2];
+        c.drawImage(sp, SPOTS.distortion.hole.x - w / 2, groundY(st, 0.75) - hh + 120, w, hh);
+      },
+    });
+    // the concrete ledge inside the hole, rising with the water
+    const ledgeLift = s.flags.water ? 0 : 92;
+    list.push({
+      d: 0.45,
+      draw: () => {
+        const y = groundY(st, SPOTS.distortion.ledge.d) + ledgeLift;
+        c.fillStyle = "#6f7a86";
+        c.fillRect(SPOTS.distortion.ledge.x - 150, y, 300, 24);
+        c.fillStyle = "#aeb9b4";
+        c.fillRect(SPOTS.distortion.ledge.x - 150, y, 300, 6);
+        if (s.flags.water) {
+          c.fillStyle = "rgba(110, 190, 200, 0.6)";
+          c.fillRect(SPOTS.distortion.ledge.x - 180, y + 24, 360, 120);
+        }
+      },
+    });
+    if (s.flags.tether) {
+      list.push({
+        d: 0.56,
+        draw: () => {
+          c.strokeStyle = "#b98646";
+          c.lineWidth = 5;
+          c.beginPath();
+          c.moveTo(s.boxer.x + 70, groundY(st, s.boxer.d) - 70);
+          c.quadraticCurveTo((s.boxer.x + s.player.x) / 2, groundY(st, 0.58) - 10, s.player.x - 30 * s.player.face, groundY(st, s.player.d) - 40 - s.player.jump);
+          c.stroke();
+        },
+      });
+    }
+    for (let x = 60; x < WIDTH; x += 320) prop("grass", x, 1.06, 160, { sway: 0.03 });
+  }
+
+  // ---- toys on the ground
+  if (s.toy) {
+    const id: PropId = s.toy.kind;
+    prop(id, s.toy.x, s.toy.d, id === "ball" ? 34 : id === "stick" ? 95 : 70, { yOff: 2 });
+  }
+
+  // ---- the animals
+  const p = s.player, b = s.boxer, k = s.calf;
+  const landing = p.jump === 0 && p.vy < -20 ? 0 : 0;
+  // terrier
+  const terrierPose = p.jump > 0 ? TERRIER.poses.jump : p.moving ? walkFrame(TERRIER, 10) : s.inserts.some(i => i.who === "terrier" && i.mood === "jealous" && i.t < 1.4) ? TERRIER.poses.lie : TERRIER.stand;
+  const happy = s.inserts.some(i => i.who === "terrier" && (i.mood === "delighted" || i.mood === "tender"));
+  const panting = p.moving || happy || p.wet > 0.2;
+  animal(TERRIER, terrierPose, p.x, p.d, p.face, p.jump, { breathe: p.moving ? 0 : breathe(0) * (panting ? 2.5 : 1), squash: landing, tongue: panting && p.jump === 0 && terrierPose !== TERRIER.poses.lie ? 1 : 0 });
+  if (p.item) {
+    const id: PropId = p.item;
+    const sc = depthScale(p.d);
+    list.push({
+      d: p.d + 0.002,
+      draw: () => {
+        const { sp, r } = propSprite(art, id);
+        const w = (id === "ball" ? 30 : id === "stick" ? 80 : 60) * sc;
+        c.drawImage(sp, p.x + p.face * 36 * sc - w / 2, groundY(st, p.d) - p.jump - 46 * sc - (w * r[3]) / r[2] / 2, w, (w * r[3]) / r[2]);
+      },
+    });
+  }
+  // boxer
+  const boxerPose =
+    b.state === "sleep" ? BOXER.poses.sleep
+    : b.state === "charge" ? BOXER.poses.charge
+    : b.item === "ball" ? BOXER.poses.carry
+    : b.item && b.moving ? walkFrame(BOXER, 8)
+    : b.state === "settle" ? BOXER.poses.sleep
+    : b.moving ? walkFrame(BOXER, 8)
+    : BOXER.stand;
+  animal(BOXER, boxerPose, b.x, b.d, b.face, 0, { breathe: b.moving ? 0 : breathe(1.3) * (b.state === "sleep" ? 1.6 : 1) });
+  if (b.item && b.item !== "ball" && b.state !== "sleep") {
+    const id: PropId = b.item;
+    const sc = depthScale(b.d);
+    list.push({
+      d: b.d + 0.002,
+      draw: () => {
+        const { sp, r } = propSprite(art, id);
+        const w = (id === "stick" ? 90 : 64) * sc;
+        c.drawImage(sp, b.x + b.face * 62 * sc - w / 2, groundY(st, b.d) - 78 * sc - (w * r[3]) / r[2] / 2, w, (w * r[3]) / r[2]);
+      },
+    });
+  }
+  // calf
+  if (ch === "pasture" || ch === "distortion") {
+    const nuzzling = ch === "pasture" && k.met && !k.moving && Math.abs(k.x - b.x) < 180;
+    const calfPose = k.ledge ? (s.flags.water ? CALF.stand : CALF.poses.scared) : k.moving ? walkFrame(CALF, 6) : nuzzling ? CALF.poses.nuzzle : CALF.stand;
+    const calfLift = k.ledge ? -(s.flags.water ? 0 : 92) : 0;
+    animal(CALF, calfPose, k.x, k.d, k.ledge ? -1 : k.face, calfLift, { breathe: breathe(2.2) });
+  }
+  // coyote
+  if (ch === "distortion" && s.coyote.state !== "hidden" && s.coyote.state !== "gone") {
+    const co = s.coyote;
+    animal(COYOTE, co.state === "flee" ? walkFrame(COYOTE, 12) : COYOTE.poses.slink, co.x, co.d, co.face, 0, { breathe: breathe(3) });
+  }
+
+  list.sort((a, b2) => a.d - b2.d);
+  for (const item of list) item.draw();
+  c.restore();
+
+  // the wet terrier drips a little
+  if (p.wet > 0.2 && !f.reduced) {
+    c.save();
+    c.fillStyle = "rgba(120, 190, 220, 0.7)";
+    for (let i = 0; i < 4; i++) {
+      const y = groundY(st, p.d) - 30 + ((t * 90 + i * 37) % 60);
+      c.beginPath();
+      c.arc(p.x - f.cam + (i - 1.5) * 12, y, 2.2, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+  }
+
+  petals(c, t, courtyard ? 26 : 10);
+  inserts(c, art, s);
+  tear(c, s, f);
+}
+
+// ------------------------------------------------------------------ the acting: reaction portraits
+const INSERT_SHEET = { terrier: TERRIER, boxer: BOXER, calf: CALF } as const;
+function inserts(c: CanvasRenderingContext2D, art: Art, s: Adventure) {
+  s.inserts.forEach((ins, n) => {
+    const sheet = INSERT_SHEET[ins.who];
+    const r = sheet.heads[ins.mood] ?? sheet.heads.neutral ?? sheet.stand;
+    const sp = sprite(art, sheet.file, r);
+    const k = ins.t;
+    const pop = k < 0.18 ? k / 0.18 : k > 1.3 ? Math.max(0, 1 - (k - 1.3) / 0.3) : 1;
+    const ease = 1 - Math.pow(1 - pop, 3);
+    const size = 150;
+    const x = ins.who === "terrier" ? 190 : ins.who === "boxer" ? 640 : 1090;
+    const y = 150 + n * 6;
+    c.save();
+    c.translate(x, y);
+    c.scale(ease, ease);
+    // a little acting on top of the portrait: a shake for the angry ones, a tilt for the baffled, a pant for delight
+    let rot = 0, sy = 1;
+    if (ins.mood === "jealous" || ins.mood === "irritated") rot = Math.sin(k * 60) * 0.05 * (1 - k / 1.6);
+    if (ins.mood === "confused") rot = Math.sin(k * 3) * 0.12;
+    if (ins.mood === "delighted") sy = 1 + Math.abs(Math.sin(k * 22)) * 0.05;
+    if (ins.mood === "afraid" || ins.mood === "startled") rot = Math.sin(k * 90) * 0.03;
+    if (ins.mood === "tender" || ins.mood === "trusting") rot = Math.sin(k * 2.5) * 0.04;
+    c.rotate(rot);
+    c.scale(1, sy);
+    // the portrait sits in a torn paper circle, like a thought
+    c.fillStyle = "#fff6e6";
+    c.beginPath();
+    for (let a = 0; a <= 24; a++) {
+      const ang = (a / 24) * Math.PI * 2;
+      const rr = size / 2 + 8 + Math.sin(ang * 7 + ins.id) * 4;
+      c.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr);
+    }
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "rgba(74, 44, 120, 0.35)";
+    c.lineWidth = 2;
+    c.stroke();
+    c.beginPath();
+    c.arc(0, 0, size / 2, 0, Math.PI * 2);
+    c.clip();
+    const sc = size / Math.max(r[2], r[3]);
+    const w = r[2] * sc * 1.15, h = r[3] * sc * 1.15;
+    c.drawImage(sp, -w / 2, -h / 2 + 6, w, h);
+    c.restore();
+  });
+}
+
+// ------------------------------------------------------------------ the paper tear between scenes
+function tear(c: CanvasRenderingContext2D, s: Adventure, f: Frame) {
+  if (!s.tear || !f.snapshot) return;
+  const k = 1 - Math.pow(1 - s.tear.t, 2);
+  const edge = VIEW + 120 - k * (VIEW + 300);
+  c.save();
+  c.beginPath();
+  c.moveTo(-10, -10);
+  c.lineTo(edge, -10);
+  for (let y = -10; y <= H + 10; y += 14) c.lineTo(edge + Math.sin(y * 0.11 + s.tear.t * 2) * 16 + Math.sin(y * 0.37) * 7, y);
+  c.lineTo(-10, H + 10);
+  c.closePath();
+  c.clip();
+  c.drawImage(f.snapshot, 0, 0, VIEW, H);
+  c.restore();
+  // the torn white edge, with the fibres of the paper
+  c.save();
+  c.strokeStyle = "#fff8ea";
+  c.lineWidth = 9;
+  c.lineJoin = "round";
+  c.beginPath();
+  for (let y = -10; y <= H + 10; y += 14) {
+    const x = edge + Math.sin(y * 0.11 + s.tear.t * 2) * 16 + Math.sin(y * 0.37) * 7;
+    if (y === -10) c.moveTo(x, y);
+    else c.lineTo(x, y);
+  }
+  c.stroke();
+  c.strokeStyle = "rgba(74, 44, 120, 0.25)";
+  c.lineWidth = 2;
+  c.stroke();
+  c.restore();
+}
+
+export function petals(c: CanvasRenderingContext2D, t: number, n: number) {
   c.save();
   for (let i = 0; i < n; i++) {
-    const x = ((i * 173.3 + t * (9 + (i % 5))) % (w + 30)) - 15;
-    const y = ((i * 97.7 + t * (11 + (i % 3))) % (h + 40)) - 20;
-    c.fillStyle = i % 2 ? "#ba85dcb0" : "#efb5dfb0";
+    const x = ((i * 173.3 + t * (9 + (i % 5))) % (VIEW + 30)) - 15;
+    const y = ((i * 97.7 + t * (11 + (i % 3))) % (H + 40)) - 20;
+    c.fillStyle = i % 2 ? "rgba(186, 133, 220, 0.7)" : "rgba(239, 181, 223, 0.7)";
     c.beginPath();
     c.ellipse(x, y, 3.5, 1.8, t + i, 0, Math.PI * 2);
     c.fill();
   }
   c.restore();
 }
+
+export const placeName = (ch: Chapter) => CHAPTERS[ch].place;
+export const isWet = inWater;

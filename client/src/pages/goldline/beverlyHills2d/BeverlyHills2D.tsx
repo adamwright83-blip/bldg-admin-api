@@ -1,22 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  freshAdventure,
-  restoreAdventure,
-  CHAPTERS,
-  hint,
-  hop,
-  interact,
-  prompt,
-  throwToy,
-  tick,
-  type Adventure,
-} from "./adventure";
-import { loadArt, paint, type Art } from "./paint";
+import { freshAdventure, restoreAdventure, CHAPTERS, hop, interact, prompt, throwToy, tick, VIEW, WIDTH, type Adventure } from "./adventure";
+import { H, loadArt, paint, type Art } from "./paint";
 import { createSound } from "./sound";
 import { OutreachJournal } from "./OutreachJournal";
+import { HerdRound } from "./HerdRound";
 import styles from "./other-rodeo.module.css";
 import { useDialogFocus } from "./useDialogFocus";
-const SAVE = "joystick.other-rodeo.fiction.v1";
+const SAVE = "joystick.other-rodeo.fiction.v2";
 export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -24,6 +14,8 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
   const art = useRef<Art | null>(null);
   const keys = useRef(new Set<string>());
   const camera = useRef(0);
+  const snapshot = useRef<HTMLCanvasElement | null>(null);
+  const lastTear = useRef<number>(-1);
   const sound = useRef<ReturnType<typeof createSound> | null>(null);
   const [ready, setReady] = useState(false),
     [progress, setProgress] = useState(0),
@@ -32,10 +24,10 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     [paused, setPaused] = useState(false),
     [journal, setJournal] = useState(false),
     [music, setMusic] = useState(true),
-    [showHint, setShowHint] = useState(false),
     [saved, setSaved] = useState(false);
   const [view, setView] = useState<Adventure>(state.current);
   const [restored, setRestored] = useState(0);
+  const [roundUp, setRoundUp] = useState(false);
   const [reduced, setReduced] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
@@ -47,7 +39,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     undefined
   );
   const playing = useRef(false);
-  playing.current = started && !paused && !journal;
+  playing.current = started && !paused && !journal && !roundUp;
   const preferences = useRef({ reduced, restored });
   preferences.current = { reduced, restored };
   function persist() {
@@ -118,42 +110,47 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const s = state.current;
-      const direction =
+      const dx =
         (keys.current.has("ArrowRight") || keys.current.has("KeyD") ? 1 : 0) -
         (keys.current.has("ArrowLeft") || keys.current.has("KeyA") ? 1 : 0);
-      if (playing.current) tick(s, dt, direction);
-      const target = Math.max(
-        0,
-        Math.min(CHAPTERS[s.chapter].width - 1280, s.x - 480)
-      );
-      camera.current += (target - camera.current) * (1 - Math.exp(-dt * 6));
+      const dy =
+        (keys.current.has("ArrowDown") || keys.current.has("KeyS") ? 1 : 0) -
+        (keys.current.has("ArrowUp") || keys.current.has("KeyW") ? 1 : 0);
+      // the scene is about to be torn away: keep its last picture for the tear
       if (s.chapter !== lastChapter.current) {
+        if (!snapshot.current) {
+          snapshot.current = document.createElement("canvas");
+          snapshot.current.width = VIEW;
+          snapshot.current.height = H;
+        }
+        snapshot.current.getContext("2d")!.drawImage(c, 0, 0, VIEW, H);
         lastChapter.current = s.chapter;
         camera.current = 0;
         setChapterCard(true);
-        setShowHint(false);
         persist();
         if (cardTimer.current) clearTimeout(cardTimer.current);
-        cardTimer.current = setTimeout(() => setChapterCard(false), 3200);
+        cardTimer.current = setTimeout(() => setChapterCard(false), 2800);
       }
+      if (playing.current) tick(s, dt, { dx, dy });
+      const target = Math.max(0, Math.min(WIDTH - VIEW, s.player.x - 560));
+      camera.current += (target - camera.current) * (1 - Math.exp(-dt * 5));
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.round(1280 * dpr),
-        h = Math.round(800 * dpr);
+      const w = Math.round(VIEW * dpr),
+        h = Math.round(H * dpr);
       if (c.width !== w || c.height !== h) {
         c.width = w;
         c.height = h;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (art.current)
-        paint(
-          ctx,
-          art.current,
-          s,
-          camera.current,
-          Boolean(direction) && playing.current,
-          preferences.current.reduced,
-          preferences.current.restored
-        );
+        paint(ctx, art.current, s, {
+          cam: camera.current,
+          moving: Boolean(dx || dy) && playing.current,
+          reduced: preferences.current.reduced,
+          restored: preferences.current.restored,
+          snapshot: s.tear ? snapshot.current : null,
+        });
+      void lastTear;
       ui += dt;
       save += dt;
       if (ui > 0.1) {
@@ -173,16 +170,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     const down = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.matches("input,textarea,select")) return;
       if (
-        [
-          "ArrowLeft",
-          "ArrowRight",
-          "Space",
-          "KeyA",
-          "KeyD",
-          "KeyE",
-          "KeyF",
-          "Escape",
-        ].includes(e.code)
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "KeyA", "KeyD", "KeyW", "KeyS", "KeyE", "KeyF", "Escape"].includes(e.code)
       )
         e.preventDefault();
       if (e.code === "Escape") {
@@ -233,10 +221,11 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     setPaused(false);
     root.current?.focus();
     setChapterCard(true);
-    cardTimer.current = setTimeout(() => setChapterCard(false), 3200);
+    cardTimer.current = setTimeout(() => setChapterCard(false), 2800);
   }
   const p = prompt(view);
   const chapter = CHAPTERS[view.chapter];
+  const item = view.player.item;
   const touch = (code: string) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -253,16 +242,20 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
       className={styles.root}
       data-testid="beverly-hills-2d"
       data-chapter={view.chapter}
-      data-gate={view.gate}
-      data-water={view.water}
-      data-tether={view.tether}
-      data-item={view.item ?? "none"}
-      data-player-x={Math.round(view.x)}
+      data-stairs={view.flags.stairs}
+      data-gate={view.flags.gate}
+      data-water={view.flags.water}
+      data-tether={view.flags.tether}
+      data-rescued={view.flags.rescued}
+      data-item={item ?? "none"}
+      data-boxer={view.boxer.state}
+      data-player-x={Math.round(view.player.x)}
+      data-boxer-x={Math.round(view.boxer.x)}
     >
       <div className={styles.stage}>
         <canvas
           ref={canvas}
-          aria-label="The Other Rodeo. Move with A and D or arrow keys, Space to hop, E to investigate, F to throw."
+          aria-label="The Other Rodeo. Walk with the arrow keys or WASD (up and down walk deeper into the picture), Space to hop, E to act, F to throw what you carry."
         />
       </div>
       <header className={styles.hud}>
@@ -322,10 +315,21 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
               Two dogs. One lost calf.
               <br />A city with room for another past.
             </p>
-            <button className={styles.primary} onClick={begin}>
-              {saved ? "Continue the afternoon" : "Follow your nose"}{" "}
-              <span>→</span>
-            </button>
+            <div className={styles.titleButtons}>
+              <button
+                className={styles.primary}
+                onClick={() => {
+                  begin();
+                  setRoundUp(true);
+                }}
+                data-testid="start-round-up"
+              >
+                Round up the herd <span>→</span>
+              </button>
+              <button onClick={begin}>
+                {saved ? "Continue the afternoon" : "Follow your nose"}
+              </button>
+            </div>
             <small>Headphones welcome · Progress saved on this device</small>
           </div>
           <div className={styles.titleFoot}>
@@ -333,25 +337,14 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           </div>
         </div>
       ) : null}
-      {started && ready && (
+      {started && ready && !roundUp && (
         <>
           <div className={styles.chapter}>
-            <span>
-              {String(Object.keys(CHAPTERS).indexOf(view.chapter) + 1).padStart(
-                2,
-                "0"
-              )}{" "}
-              / 04
-            </span>
-            <div>
-              {chapter.place}
-              <small>{chapter.title}</small>
-            </div>
+            <div>{chapter.place}</div>
           </div>
           {chapterCard && (
             <div className={styles.chapterCard}>
               <span>{chapter.place}</span>
-              <h2>{chapter.title}</h2>
             </div>
           )}
           {!paused && !journal && view.chapter !== "home" && (
@@ -366,69 +359,47 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
                     {p.label}
                   </button>
                 )}
-                {view.item && (
-                  <button
-                    onClick={() => act("throw")}
-                    disabled={view.item === "rope"}
-                  >
-                    <kbd>{view.item === "rope" ? "∞" : "F"}</kbd>
-                    {view.item === "rope"
-                      ? "Rope in your teeth"
-                      : `Throw ${view.item}`}
+                {item && item !== "rope" && (
+                  <button onClick={() => act("throw")}>
+                    <kbd>F</kbd>
+                    Throw the {item}
                   </button>
                 )}
               </div>
               <div className={styles.controls}>
-                <span>← → Move</span>
+                <span>← → ↑ ↓ Walk</span>
                 <span>Space Hop</span>
-                <span>E Investigate</span>
+                <span>E Act</span>
                 <span>F Throw</span>
-                <button onClick={() => setShowHint(h => !h)}>
-                  A little nudge?
-                </button>
               </div>
               <div className={styles.touch}>
-                <button aria-label="Move left" {...touch("ArrowLeft")}>
+                <button aria-label="Walk left" {...touch("ArrowLeft")}>
                   ←
                 </button>
-                <button aria-label="Move right" {...touch("ArrowRight")}>
+                <button aria-label="Walk deeper" {...touch("ArrowUp")}>
+                  ↑
+                </button>
+                <button aria-label="Walk nearer" {...touch("ArrowDown")}>
+                  ↓
+                </button>
+                <button aria-label="Walk right" {...touch("ArrowRight")}>
                   →
                 </button>
                 <button onClick={() => act("hop")}>Hop</button>
               </div>
             </>
           )}
-          {showHint && (
-            <div className={styles.hint} role="status">
-              {hint(view)}
-              <button
-                onClick={() => setShowHint(false)}
-                aria-label="Close hint"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {view.chapter === "home" && !journal && !chapterCard && (
+          {view.chapter === "home" && !journal && !chapterCard && !view.tear && (
             <div className={styles.homeNote}>
-              <div className={styles.eyebrow}>
-                Some things are better together.
-              </div>
-              <h2>
-                There was room
-                <br />
-                all along.
-              </h2>
-              <p>The afternoon can wait.</p>
-              <button
-                className={styles.primary}
-                onClick={() => setJournal(true)}
-              >
+              <button className={styles.primary} onClick={() => setRoundUp(true)}>
+                Round up the herd →
+              </button>
+              <button onClick={() => setJournal(true)}>
                 Open Claire’s field notes ↗
               </button>
               {restored > 0 && (
                 <small>
-                  {restored} ranch plots restored by verified visits
+                  {restored} ranch plots restored by new customers at buildings you visited
                 </small>
               )}
             </div>
@@ -496,6 +467,18 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           )}
         </>
       )}
+      {roundUp && ready && art.current ? (
+        <HerdRound
+          art={art.current}
+          extraCows={restored}
+          reduced={reduced}
+          sound={music}
+          onExit={() => {
+            setRoundUp(false);
+            root.current?.focus();
+          }}
+        />
+      ) : null}
       {journal && (
         <OutreachJournal
           onClose={() => {
