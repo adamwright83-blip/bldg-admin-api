@@ -629,6 +629,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       eyeMat,
       /** the device a chipped zombie is heading for */
       device: -1,
+      /** seconds a chipped zombie has made no headway: past a second it walks through whatever is in the way */
+      stuck: 0,
     };
   });
 
@@ -947,6 +949,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   function moveTo(p: THREE.Vector3, f: number, nx: number, nz: number, r = 0.3) {
     if (!blocked(f, nx, p.z, r)) p.x = nx;
     if (!blocked(f, p.x, nz, r)) p.z = nz;
+  }
+  /** a chipped zombie's walk: around the furniture when it can, straight through it once it has been stuck a second
+   *  (the chip has one errand; a sofa must never leave the player's decision unpaid) */
+  function beeline(z: { pos: THREE.Vector3; floor: number; stuck: number }, nx: number, nz: number, dt: number) {
+    const bx = z.pos.x, bz = z.pos.z;
+    if (z.stuck > 1) z.pos.set(nx, z.pos.y, nz);
+    else moveTo(z.pos, z.floor, nx, nz, 0.25);
+    const want = Math.hypot(nx - bx, nz - bz), got = Math.hypot(z.pos.x - bx, z.pos.z - bz);
+    z.stuck = got < want * 0.3 ? z.stuck + dt : Math.max(0, z.stuck - dt * 0.5);
   }
 
   // ---------------------------------------------------------------- prompts and interaction
@@ -1480,7 +1491,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
               z.t = 1.4;
             } else {
               const nz = THREE.MathUtils.lerp(z.pos.z, -2.4, Math.min(1, dt * 2));
-              moveTo(z.pos, z.floor, z.pos.x + Math.sign(ddx) * 2.2 * zombieHaste * dt, nz, 0.25);
+              beeline(z, z.pos.x + Math.sign(ddx) * 2.2 * zombieHaste * dt, nz, dt);
             }
           } else {
             // on the room's floor: to the front of the device
@@ -1491,7 +1502,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
               z.t = 3.2;
             } else {
               const len = Math.hypot(ddx, ddz) || 1;
-              moveTo(z.pos, z.floor, z.pos.x + (ddx / len) * 2.2 * zombieHaste * dt, z.pos.z + (ddz / len) * 2.2 * zombieHaste * dt, 0.25);
+              beeline(z, z.pos.x + (ddx / len) * 2.2 * zombieHaste * dt, z.pos.z + (ddz / len) * 2.2 * zombieHaste * dt, dt);
             }
           }
         } else if (z.state === "wrecking") {
