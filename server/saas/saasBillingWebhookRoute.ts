@@ -1,5 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import express from "express";
+import { screenPaidLifecycleWebhook } from "./paidCustomerLifecycle";
 import { processLegacyDayforgeBillingWebhook } from "./saasBilling";
 
 export function registerLegacyDayforgeBillingWebhookRoute(app: express.Express) {
@@ -8,6 +9,13 @@ export function registerLegacyDayforgeBillingWebhookRoute(app: express.Express) 
     express.raw({ type: "application/json", limit: "1mb" }),
     async (req, res) => {
       try {
+        const screened = screenPaidLifecycleWebhook({
+          rawBody: req.body,
+          signature: req.headers["stripe-signature"],
+        });
+        if (!screened.proceed) {
+          return res.status(screened.httpStatus).json(screened.body);
+        }
         const result = await processLegacyDayforgeBillingWebhook({
           rawBody: req.body,
           signature: req.headers["stripe-signature"],

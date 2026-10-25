@@ -30,6 +30,13 @@ import {
   startSaasOnboarding,
 } from "./saasStore";
 import { runTenantImport } from "./tenantImportService";
+import { hasTenantEntitlement } from "./tenantAccess";
+import {
+  assertNewBusinessIdentity,
+  assertTestModeCheckoutKey,
+  PAID_WORKSPACE_CLOSED_MESSAGE,
+  PAID_WORKSPACE_ENTITLEMENT,
+} from "./paidCustomerLifecycle";
 import { JOYSTICK_PREPAY_QUESTION_KEYS } from "../../shared/goldlineOnboarding";
 
 const locationSchema = z.object({
@@ -94,6 +101,19 @@ function publicOnboarding(
     planKey: session.planKey,
     expiresAt: session.expiresAt.toISOString(),
   };
+}
+
+async function requirePaidWorkspaceAccess(tenantId: string): Promise<void> {
+  const allowed = await hasTenantEntitlement({
+    tenantId,
+    entitlement: PAID_WORKSPACE_ENTITLEMENT,
+  });
+  if (!allowed) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: PAID_WORKSPACE_CLOSED_MESSAGE,
+    });
+  }
 }
 
 function publicError(error: unknown): never {
@@ -224,6 +244,7 @@ export const saasRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
+        assertNewBusinessIdentity(input);
         return publicOnboarding(await saveJoystickOnboardingIdentity(input));
       } catch (error) {
         publicError(error);
@@ -295,6 +316,7 @@ export const saasRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
+        assertTestModeCheckoutKey(process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY);
         return await createLegacyDayforgeSubscriptionCheckout(input);
       } catch (error) {
         publicError(error);
@@ -338,16 +360,20 @@ export const saasRouter = router({
       }
     }),
 
-  me: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
-    tenantId: ctx.tenantId,
-    membership: ctx.legacyDayforgeMembership,
-    configuration: await getTenantConfiguration(ctx.tenantId),
-    billing: await getTenantBillingSummary(ctx.tenantId),
-  })),
+  me: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+    await requirePaidWorkspaceAccess(ctx.tenantId);
+    return {
+      tenantId: ctx.tenantId,
+      membership: ctx.legacyDayforgeMembership,
+      configuration: await getTenantConfiguration(ctx.tenantId),
+      billing: await getTenantBillingSummary(ctx.tenantId),
+    };
+  }),
 
-  members: legacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
-    listTenantMembers(ctx.tenantId)
-  ),
+  members: legacyDayforgeTenantAdminProcedure.query(async ({ ctx }) => {
+    await requirePaidWorkspaceAccess(ctx.tenantId);
+    return listTenantMembers(ctx.tenantId);
+  }),
 
   invite: legacyDayforgeTenantAdminProcedure
     .input(
@@ -356,19 +382,22 @@ export const saasRouter = router({
         role: z.enum(["admin", "operator", "field"]),
       })
     )
-    .mutation(({ ctx, input }) =>
-      createTenantInvite({
+    .mutation(async ({ ctx, input }) => {
+      await requirePaidWorkspaceAccess(ctx.tenantId);
+      return createTenantInvite({
         tenantId: ctx.tenantId,
         actorOpenId: ctx.user.openId,
         ...input,
-      })
-    ),
+      });
+    }),
 
   billingPortal: legacyDayforgeTenantAdminProcedure
     .input(z.object({ requestId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      createLegacyDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      assertTestModeCheckoutKey(process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY);
+      await requirePaidWorkspaceAccess(ctx.tenantId);
+      return createLegacyDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input });
+    }),
 
   importCsv: legacyDayforgeTenantOperatorProcedure
     .input(
@@ -379,13 +408,14 @@ export const saasRouter = router({
         reportType: z.enum(["orders_sales", "orders_revenue"]),
       })
     )
-    .mutation(({ ctx, input }) =>
-      runTenantImport({
+    .mutation(async ({ ctx, input }) => {
+      await requirePaidWorkspaceAccess(ctx.tenantId);
+      return runTenantImport({
         tenantId: ctx.tenantId,
         providerKey: input.providerKey,
         sourceFileName: input.sourceFileName,
         payload: input.payload,
         options: { reportType: input.reportType },
-      })
-    ),
+      });
+    }),
 });

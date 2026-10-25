@@ -17,6 +17,11 @@ import { getSessionCookieOptions } from "../_core/cookies";
 import { isAllowedAdminOrigin } from "../_core/corsConfig";
 import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
+import {
+  decidePaidLogin,
+  PAID_WORKSPACE_ENTITLEMENT,
+} from "./paidCustomerLifecycle";
+import { hasTenantEntitlement } from "./tenantAccess";
 
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("legacy-dayforge-invalid-password", 12);
 
@@ -142,6 +147,22 @@ export function registerLegacyDayforgeSaasAuthRoute(app: express.Express) {
     }
 
     const account = matches[0]!;
+
+    // Every successful password re-checks the subscription. This route does not
+    // record first versus returning; that would need a credential column.
+    const entitled = await hasTenantEntitlement({
+      tenantId: account.tenantId,
+      entitlement: PAID_WORKSPACE_ENTITLEMENT,
+    });
+    const decision = decidePaidLogin({
+      membershipActive: Boolean(account.membershipActive),
+      tenantStatus: account.tenantStatus,
+      entitlementAllows: entitled,
+      priorSuccessfulLogin: false,
+    });
+    if (!decision.allow) {
+      return res.status(decision.httpStatus).json({ error: decision.error });
+    }
 
     await db
       .update(legacyDayforgeSaasUserCredentials)
