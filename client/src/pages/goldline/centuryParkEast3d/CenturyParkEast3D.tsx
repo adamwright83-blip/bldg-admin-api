@@ -90,7 +90,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
   const [knockedOut, setKnockedOut] = useState(false);
   const [dogs, setDogs] = useState({ carried: 0, saved: 0, total: 12 });
   const [charges, setCharges] = useState(0);
-  const [climbing, setClimbing] = useState<number | null>(null);
+  const [climbing, setClimbing] = useState<{ progress: number; stamina: number; resting: boolean } | null>(null);
   const [camera, setCamera] = useState<{ id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null>(null);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
@@ -269,7 +269,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
       onCharges: n => setCharges(n),
       onFloor: f => setFloorIdx(f),
       onBubble: b => setBubble(b),
-      onClimb: c => setClimbing(c === null ? null : Math.round(c * 20) / 20),
+      onClimb: c => setClimbing(c),
       onCamera: c => setCamera(c),
     })
       .then(h => {
@@ -478,11 +478,18 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
         </button>
       ) : null}
 
-      <div className={styles.touchButtons}>
-        <button type="button" onClick={() => runtimeRef.current?.spray()}>{z ? "Spray" : "Mist"}</button>
-        <button type="button" onPointerDown={() => runtimeRef.current?.setSprint(true)} onPointerUp={() => runtimeRef.current?.setSprint(false)} onPointerLeave={() => runtimeRef.current?.setSprint(false)}>Run</button>
-        <button type="button" onClick={() => runtimeRef.current?.jump()}>Hop</button>
-      </div>
+      {climbing ? (
+        <div className={`${styles.touchButtons} ${styles.hands}`} data-testid="century-park-east-hands">
+          <button type="button" className={styles.hand} onPointerDown={() => runtimeRef.current?.climbHand("L")} aria-label="Left hand">L</button>
+          <button type="button" className={styles.hand} onPointerDown={() => runtimeRef.current?.climbHand("R")} aria-label="Right hand">R</button>
+        </div>
+      ) : (
+        <div className={styles.touchButtons}>
+          <button type="button" onClick={() => runtimeRef.current?.spray()}>{z ? "Taze" : "Mist"}</button>
+          <button type="button" onPointerDown={() => runtimeRef.current?.setSprint(true)} onPointerUp={() => runtimeRef.current?.setSprint(false)} onPointerLeave={() => runtimeRef.current?.setSprint(false)}>Run</button>
+          <button type="button" onClick={() => runtimeRef.current?.jump()}>Hop</button>
+        </div>
+      )}
       {ready && !dialogue && !deskOpen ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD to walk</span>
@@ -493,11 +500,11 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
         </div>
       ) : null}
 
-      {climbing !== null ? (
-        <div className={styles.climbMeter} role="status" data-testid="century-park-east-climb">
-          <b>{z ? "Climb! The zombie is right behind you." : "Climb! Keep pulling."}</b>
-          <div className={styles.climbBar}><span style={{ width: `${Math.round(climbing * 100)}%` }} /></div>
-          <small>Tap E, Space or the button fast. Stop and you slip. S lets go.</small>
+      {climbing ? (
+        <div className={`${styles.climbMeter} ${climbing.stamina < 0.25 ? styles.tired : ""}`} role="status" data-testid="century-park-east-climb" data-resting={climbing.resting ? "yes" : "no"}>
+          <b>{climbing.resting ? "Resting. Grip coming back." : climbing.stamina < 0.25 ? "Arms burning. Hang still a moment." : z ? "Hand over hand. Don't look down." : "Hand over hand."}</b>
+          <div className={styles.climbBar} aria-label="Grip"><span style={{ width: `${Math.round(climbing.stamina * 100)}%` }} /></div>
+          <small>A and D are your hands; alternate them. Hold still to rest. S lets go.</small>
         </div>
       ) : null}
 

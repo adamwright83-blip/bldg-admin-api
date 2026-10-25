@@ -30,6 +30,8 @@ export { ROPES };
 import { buildSet, materialFor } from "./cpeSet";
 import { INK_SETS, createPrintPass } from "./cpePrint";
 import { createCctv, type Cctv } from "./cpeCctv";
+import { PULL_DUR, grabbed as climbGrabbed, isResting, press as climbPress2, startClimb as newClimb, tick as climbTick, type ClimbState, type Hand } from "./climbMachine";
+import { createCpeSounds } from "./cpeSounds";
 import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
@@ -59,8 +61,8 @@ export type CpeCallbacks = {
   onCharges?: (n: number) => void;
   onFloor?: (floor: number) => void;
   onBubble?: (b: { who: string; text: string } | null) => void;
-  /** climbing a rope: how far up (0..1), or null when she's not on one */
-  onClimb?: (progress: number | null) => void;
+  /** on a rope: how far up (0..1), how much grip she has left, whether she's resting; null when she's not on one */
+  onClimb?: (c: { progress: number; stamina: number; resting: boolean } | null) => void;
   /** zombie night: which security camera the monitor is on, and the small feeds beside it; null on cozy night */
   onCamera?: (c: { id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null) => void;
 };
@@ -72,6 +74,8 @@ export type CpeHandle = {
   interact(): void;
   spray(): void;
   jump(): void;
+  /** on the rope: that hand pulls */
+  climbHand(hand: Hand): void;
   setSprint(on: boolean): void;
   /** after a knockout: wake up in the lobby, whole again */
   respawn(): void;
@@ -126,8 +130,6 @@ const CLOSETS: { floor: number; x: number }[] = [
   { floor: 1, x: 26.0 },
   { floor: 2, x: 24.8 },
 ];
-const CLIMB_PER_PRESS = 0.42;
-const CLIMB_SLIP = 0.55; // metres a second, while she isn't pulling
 const CLOSET_HW = 1.0;
 const CLOSET_Z = -3.3; // the closet's door plane; inside is z < CLOSET_Z
 
@@ -745,8 +747,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   let flatTarget = 0;
   let flip = 1;
   let charges = 3; // she arrives with a few sprays; the wall extinguishers refill
-  // on a rope: which one, and how far up (metres above its floor)
-  let climb: { rope: number; h: number } | null = null;
+  // on a rope: which one, the climb itself (climbMachine.ts), the sway she has, and the mantle over the lip at the top
+  type Mantle = { t: number; from: THREE.Vector3; to: THREE.Vector3 };
+  let climb: { rope: number; s: ClimbState; sway: number; swayV: number; pulls: number; mantle: Mantle | null } | null = null;
+  let landSquash = 0;
+  const sounds = createCpeSounds();
+  disposers.push(() => sounds.dispose());
+  const clipLength = (name: string) => heroG.animations.find(a => a.name === name)?.duration ?? 1;
   let sprintHeld = false;
   let ridingUntil = 0;
   let finaleAt = 0;
@@ -795,8 +802,16 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
     keys.add(e.code);
+    if (climb && !e.repeat) {
+      // on the rope the keys are hands: A/left is the left hand, D/right the right, anything else the next one due
+      if (e.code === "KeyA" || e.code === "ArrowLeft") return climbHand("L");
+      if (e.code === "KeyD" || e.code === "ArrowRight") return climbHand("R");
+      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "KeyE" || e.code === "Space") {
+        e.preventDefault();
+        return climbHand("next");
+      }
+    }
     if (e.code === "KeyE" || e.code === "Enter") interact();
-    if (climb && !e.repeat && (e.code === "KeyW" || e.code === "ArrowUp")) climbPress();
     if (e.code === "KeyF") spray();
     if (e.code === "Space") {
       e.preventDefault();
@@ -886,7 +901,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const near = (f: number, x: number, z: number, d: number) => f === floor && Math.hypot(pos.x - x, pos.z - z) < d;
   function findPrompt(): typeof prompt {
     if (performance.now() < ridingUntil || finaleAt) return null;
-    if (climb) return { id: "climb", label: "Climb! Keep tapping", act: () => climbPress() };
+    if (climb) return { id: "climb", label: "Hand over hand: A, D (or tap)", act: () => climbHand("next") };
     // the ropes come first, so a neighbour standing nearby never hides the way up or down
     for (let i = 0; i < ropes.length; i++) {
       const r = ropes[i];
@@ -925,7 +940,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   function interact() {
     if (paused) return;
-    if (climb) return climbPress();
+    if (climb) return climbHand("next");
     if (prompt) prompt.act();
   }
   function pickUpItem(i: number) {
@@ -964,21 +979,35 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     flatTarget = 0;
     callbacks.onInteract?.({ kind: "pump" });
   }
+  const reportClimb = () => {
+    if (!climb) return callbacks.onClimb?.(null);
+    callbacks.onClimb?.({ progress: climb.s.target / FLOOR_H, stamina: climb.s.stamina, resting: isResting(climb.s) });
+  };
   function startClimb(i: number) {
     const r = ropes[i];
-    climb = { rope: i, h: 0.15 };
+    climb = { rope: i, s: newClimb(0.15), sway: 0, swayV: 0, pulls: 0, mantle: null };
     armedAt = Math.min(armedAt, performance.now());
     pos.set(r.x, fy(r.floor) + 0.15, r.z + 0.18);
     vy = 0;
     heading = Math.PI; // facing the rope, back to us
+    // the clip is one metre of hand-over-hand; it is scrubbed by how far she has climbed, never played on its own
     hero.play("ClimbUp_1m", 0.12);
-    callbacks.onClimb?.(climb.h / FLOOR_H);
-  }
-  function climbPress() {
-    if (!climb || paused) return;
-    climb.h += CLIMB_PER_PRESS;
     const act = hero.actions.get("ClimbUp_1m");
-    if (act) act.timeScale = 1.6;
+    if (act) act.paused = true;
+    sounds.creak(0.3);
+    reportClimb();
+  }
+  function climbHand(hand: Hand | "next") {
+    if (!climb || paused || climb.mantle) return;
+    const before = climb.s.pulls;
+    climb.s = climbPress2(climb.s, hand);
+    if (climb.s.pulls > before) {
+      const h = climb.s.pull?.hand ?? "R";
+      climb.swayV += (h === "L" ? 1 : -1) * 1.1;
+      sounds.creak(0.4 + (1 - climb.s.stamina) * 0.6);
+      if (climb.s.stamina < 0.35) sounds.grunt();
+    }
+    reportClimb();
   }
   function slideDown(i: number) {
     const r = ropes[i];
@@ -1022,16 +1051,22 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     }
   }
   function jump() {
-    if (climb) return climbPress();
+    if (climb) return climbHand("next");
     if (paused || pos.y > fy(floor) + 0.02) return;
     vy = 4.6;
   }
   function bite(z: (typeof zombies)[number]) {
     if (climb) {
-      // grabbed by the ankle: she lets go of the rope
-      climb = null;
-      callbacks.onClimb?.(null);
+      // grabbed by the ankle: she drops to the last knot and keeps hold; it costs her grip, not a life
+      climb.s = climbGrabbed(climb.s);
+      climb.swayV += 2.2;
+      invuln = 2.5;
+      sounds.slide();
+      reportClimb();
       callbacks.onInteract?.({ kind: "rope_fell" });
+      z.state = "dazed";
+      z.t = 2.5;
+      return;
     }
     bites += 1;
     invuln = 5;
@@ -1150,30 +1185,54 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     const now = performance.now();
     const frozen = paused;
 
-    // ---- her
+    // ---- her, on the rope
     if (climb && !frozen) {
       const r = ropes[climb.rope];
-      climb.h = Math.max(0.15, climb.h - CLIMB_SLIP * dt);
-      const act = hero.actions.get("ClimbUp_1m");
-      if (act) act.timeScale = Math.max(0.15, act.timeScale - dt * 2.5);
-      if (keys.has("KeyS") || keys.has("ArrowDown")) {
-        climb = null; // let go
-        callbacks.onClimb?.(null);
-      } else if (climb.h >= FLOOR_H - 0.35) {
-        // up through the hole and onto the floor above
-        floor = r.floor + 1;
-        pos.set(r.x + ROPE_LANDING_DX, fy(floor), r.z);
-        climb = null;
-        vy = 0;
-        hero.play("Idle_Loop", 0.2);
-        for (const d of carriedDogs) dogs[d].floor = floor;
-        callbacks.onClimb?.(null);
-        callbacks.onFloor?.(floor);
-        callbacks.onInteract?.({ kind: "rope_top", floor });
+      const top = fy(r.floor + 1);
+      if (climb.mantle) {
+        // over the lip: an arc from the hole to the landing, a land, a squash
+        const m = climb.mantle;
+        m.t = Math.min(1, m.t + dt / 0.55);
+        const k = m.t;
+        const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        pos.lerpVectors(m.from, m.to, ease);
+        pos.y += Math.sin(k * Math.PI) * 0.45;
+        heading = Math.PI / 2;
+        if (m.t >= 1) {
+          floor = r.floor + 1;
+          pos.copy(m.to);
+          climb = null;
+          vy = 0;
+          landSquash = 1;
+          sounds.thud();
+          hero.play("Idle_Loop", 0.25);
+          for (const d of carriedDogs) dogs[d].floor = floor;
+          callbacks.onClimb?.(null);
+          callbacks.onFloor?.(floor);
+          callbacks.onInteract?.({ kind: "rope_top", floor });
+        }
       } else {
-        pos.set(r.x + Math.sin(elapsed * 2.2) * 0.04, fy(r.floor) + climb.h, r.z + 0.18);
-        heading = Math.PI;
-        callbacks.onClimb?.(climb.h / FLOOR_H);
+        climb.s = climbTick(climb.s, dt);
+        if (keys.has("KeyS") || keys.has("ArrowDown")) {
+          climb = null; // let go
+          callbacks.onClimb?.(null);
+        } else if (climb.s.h >= FLOOR_H - 0.45) {
+          climb.mantle = { t: 0, from: new THREE.Vector3(r.x, fy(r.floor) + climb.s.h, r.z + 0.18), to: new THREE.Vector3(r.x + ROPE_LANDING_DX, top, r.z) };
+          hero.play("Jump_Land", 0.1, true);
+          sounds.creak(0.8);
+        } else {
+          // the body hangs off the rope and swings with each pull; the clip is scrubbed by the metres climbed
+          climb.swayV -= climb.sway * 22 * dt + climb.swayV * 4.5 * dt;
+          climb.sway += climb.swayV * dt;
+          pos.set(r.x + climb.sway * 0.05, fy(r.floor) + climb.s.h, r.z + 0.18);
+          heading = Math.PI;
+          const act = hero.actions.get("ClimbUp_1m");
+          if (act) {
+            const len = clipLength("ClimbUp_1m");
+            act.time = (((climb.s.h - 0.15) % 1) + 1) % 1 * len;
+          }
+          if (Math.floor(elapsed * 4) !== Math.floor((elapsed - dt) * 4)) reportClimb();
+        }
       }
     }
     if (!climb && !frozen && !finaleAt && now >= ridingUntil) {
@@ -1222,8 +1281,12 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     flat += (flatTarget - flat) * Math.min(1, dt * 7);
     flip = Math.min(1, flip + dt * 9);
     paper.position.copy(pos);
-    paper.scale.set(1, 1, THREE.MathUtils.lerp(1, 0.05, flat));
-    paper.rotation.z = flat > 0.5 && ["Walk_Loop", "Sprint_Loop"].includes(hero.current) ? Math.sin(elapsed * 11) * 0.06 : 0;
+    landSquash = Math.max(0, landSquash - dt * 4.5);
+    const squash = Math.sin(Math.min(1, landSquash) * Math.PI) * 0.12;
+    const pullK = climb?.s.pull ? climb.s.pull.t / PULL_DUR : 0;
+    const stretch = climb && !climb.mantle ? Math.sin(pullK * Math.PI) * 0.05 : 0;
+    paper.scale.set(1 + squash * 0.6, 1 - squash + stretch, THREE.MathUtils.lerp(1, 0.05, flat));
+    paper.rotation.z = climb && !climb.mantle ? climb.sway * 0.14 : flat > 0.5 && ["Walk_Loop", "Sprint_Loop"].includes(hero.current) ? Math.sin(elapsed * 11) * 0.06 : 0;
     hero.root.position.set(0, 0, 0);
     hero.root.rotation.y = heading;
     hero.root.scale.set(flat > 0.5 ? Math.abs(flip) : 1, 1, 1);
@@ -1478,15 +1541,26 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     if (!frozen) setPrompt(findPrompt());
 
     // ---- camera: a dollhouse shot of her floor; the party pulls back to the whole building
+    // on the rope the camera comes in and looks up with her (gesture focus); the dollhouse shot returns at the top
+    const onRope = !!climb && !finaleAt;
+    const wantFov = finaleAt ? (camera.aspect < 1 ? 46 : 27) : onRope ? (camera.aspect < 1 ? 40 : 23) : camera.aspect < 1 ? 46 : 27;
+    if (Math.abs(camera.fov - wantFov) > 0.05) {
+      camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 3);
+      camera.updateProjectionMatrix();
+    }
     const goal = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.6), 62)
-      : camera.aspect < 1
+      : onRope
+        ? new THREE.Vector3(ropes[climb!.rope].x + 0.4, pos.y + 1.5, camera.aspect < 1 ? 7.8 : 8.4)
+        : camera.aspect < 1
         ? new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 2, WIDTH - 2), Math.max(fy(floor), pos.y - 1.2) + 3.9, 10.5)
         : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), Math.max(fy(floor), pos.y - 1.2) + 3.5, 12.4);
     // on a phone the card covers the top third: aim above her so the floor sits in the open middle
     const look = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.5), -2.5)
-      : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.35), -2.6);
+      : onRope
+        ? new THREE.Vector3(ropes[climb!.rope].x, pos.y + 0.9, -2.0)
+        : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.35), -2.6);
     camPos.lerp(goal, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camLook.lerp(look, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camera.position.copy(camPos);
@@ -1519,7 +1593,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     ready: true,
     ropes: ROPES,
     state: () => ({
-      climbing: climb ? climb.h / FLOOR_H : null,
+      climbing: climb ? climb.s.target / FLOOR_H : null,
+      stamina: climb ? climb.s.stamina : null,
       floor,
       x: pos.x,
       z: pos.z,
@@ -1606,12 +1681,16 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     interact,
     spray,
     jump,
+    climbHand(hand) {
+      climbHand(hand);
+    },
     setSprint(on) {
       sprintHeld = on;
     },
     respawn() {
       climb = null;
       callbacks.onClimb?.(null);
+      landSquash = 0;
       bites = 0;
       flatTarget = 0;
       flat = 0;

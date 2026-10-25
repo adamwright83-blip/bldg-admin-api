@@ -732,3 +732,30 @@
     font-size: 8.5px;
   }
 }
+
+/* on the rope, the touch buttons become her two hands */
+.hands {
+  display: flex;
+  right: 14px;
+  left: 14px;
+  justify-content: space-between;
+  bottom: 22px;
+}
+
+.hand {
+  width: 96px;
+  height: 96px;
+  font-size: 34px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.climbMeter.tired .climbBar span {
+  background: #ff5a4a;
+}
+
+@media (pointer: fine) {
+  .hands {
+    display: none;
+  }
+}

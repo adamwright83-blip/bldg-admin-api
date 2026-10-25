@@ -10,7 +10,7 @@ import { resetGoldlineProofWorld } from "./proofWorld";
 
 type Hook = {
   ready: boolean;
-  state(): { floor: number; carried: number; saved: number; trapped: number; flat: number; prompt: string | null; charges: number; climbing: number | null };
+  state(): { floor: number; carried: number; saved: number; trapped: number; flat: number; prompt: string | null; charges: number; climbing: number | null; stamina: number | null };
   teleport(f: number, x: number, z: number): void;
   calm(): void;
   bite(): void;
@@ -113,7 +113,7 @@ test.describe("Lantern City → Century Park East", () => {
     expect(errors).toEqual([]);
   });
 
-  test("ropes: climb up through the fire-station hole, slip if you stop, slide back down; the spray works from the start", async ({ page }) => {
+  test("ropes: hand over hand up through the fire-station hole, rest to get grip back, slide back down; the spray works from the start", async ({ page }) => {
     test.setTimeout(240_000);
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
@@ -137,19 +137,26 @@ test.describe("Lantern City → Century Park East", () => {
     await expect(prompt).toHaveAttribute("data-prompt", "rope_up", { timeout: 15_000 });
     await prompt.click();
     await expect(page.getByTestId("century-park-east-climb")).toBeVisible();
-    // pulling climbs; stopping slips
+    // pulling climbs and costs grip; hanging still never slips, and the grip comes back
     for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
     const high = (await call(page, "state")).climbing ?? 0;
     expect(high).toBeGreaterThan(0.2);
-    await expect.poll(async () => (await call(page, "state")).climbing ?? 0, { timeout: 5_000 }).toBeLessThan(high);
-    // keep pulling all the way up
+    const spent = (await call(page, "state")).stamina ?? 1;
+    expect(spent).toBeLessThan(1);
+    await page.waitForTimeout(1500);
+    expect((await call(page, "state")).climbing ?? 0).toBeGreaterThanOrEqual(high - 0.001);
+    await expect.poll(async () => (await call(page, "state")).stamina ?? 0, { timeout: 5_000 }).toBeGreaterThan(spent);
+    await expect(page.getByTestId("century-park-east-climb")).toHaveAttribute("data-resting", "yes");
+    // keep pulling all the way up (alternating hands, like the game asks)
     await expect
       .poll(
         async () => {
-          for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+          await page.keyboard.press("KeyA");
+          await page.waitForTimeout(120);
+          await page.keyboard.press("KeyD");
           return (await call(page, "state")).floor;
         },
-        { timeout: 30_000, intervals: [50] }
+        { timeout: 40_000, intervals: [120] }
       )
       .toBe(1);
     await expect(page.getByTestId("century-park-east-climb")).toHaveCount(0);
@@ -167,10 +174,12 @@ test.describe("Lantern City → Century Park East", () => {
     await expect
       .poll(
         async () => {
-          for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+          await page.keyboard.press("KeyA");
+          await page.waitForTimeout(120);
+          await page.keyboard.press("KeyD");
           return (await call(page, "state")).floor;
         },
-        { timeout: 30_000, intervals: [50] }
+        { timeout: 40_000, intervals: [120] }
       )
       .toBe(2);
     const landed = await call(page, "state");
