@@ -31,14 +31,14 @@ export async function loadArt(onProgress: (n: number) => void): Promise<Art> {
 }
 
 export const H = 800;
-const PAINT_SCALE = WIDTH / 1536; // the mid paintings are 1536 wide; the world is one painting wide at 1x
-const PAINT_Y = -363;
+export const PAINT_SCALE = WIDTH / 1536; // the mid paintings are 1536 wide; the world is one painting wide at 1x
+export const PAINT_Y = -363;
 
 // ------------------------------------------------------------------ sheet cells as clean sprites
 // Each cell is cut once into its own canvas, clipped to its largest connected shape so a neighbouring drawing's
 // nose never comes along, with the sun's warmth and a touch of the scene's colour multiplied in.
 const cut = new Map<string, HTMLCanvasElement>();
-function sprite(art: Art, file: string, r: Rect): HTMLCanvasElement {
+export function sprite(art: Art, file: string, r: Rect): HTMLCanvasElement {
   const key = `${file}|${r.join(",")}`;
   const hit = cut.get(key);
   if (hit) return hit;
@@ -77,10 +77,10 @@ function sprite(art: Art, file: string, r: Rect): HTMLCanvasElement {
 type Stage = { top: number; bottom: number };
 const stage = (ch: Chapter): Stage => ({ top: GROUND[ch][0], bottom: GROUND[ch][1] });
 const groundY = (st: Stage, d: number) => st.top + d * (st.bottom - st.top);
-const depthScale = (d: number) => 0.62 + 0.42 * d;
+export const depthScale = (d: number) => 0.62 + 0.42 * d;
 
 /** a hard-edged violet shadow cast to the lower right, the way every shadow in the paintings is cast */
-function shadow(c: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number, alpha = 0.34) {
+export function shadow(c: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number, alpha = 0.34) {
   c.save();
   c.translate(x + w * 0.16 + lift * 0.3, y + 2);
   c.scale(1, 0.26);
@@ -93,7 +93,25 @@ function shadow(c: CanvasRenderingContext2D, x: number, y: number, w: number, li
 
 type Drawn = { d: number; draw: () => void };
 
-function drawSprite(c: CanvasRenderingContext2D, art: Art, sheet: Sheet, r: Rect, x: number, y: number, scale: number, face: 1 | -1, opt: { breathe?: number; squash?: number; tint?: string; alpha?: number; tongue?: number; time?: number } = {}) {
+const tints = new WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>();
+function tinted(sp: HTMLCanvasElement, tint: string): HTMLCanvasElement {
+  let byTint = tints.get(sp);
+  if (!byTint) tints.set(sp, (byTint = new Map()));
+  const hit = byTint.get(tint);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = sp.width;
+  c.height = sp.height;
+  const g = c.getContext("2d")!;
+  g.drawImage(sp, 0, 0);
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = tint;
+  g.fillRect(0, 0, c.width, c.height);
+  byTint.set(tint, c);
+  return c;
+}
+
+export function drawSprite(c: CanvasRenderingContext2D, art: Art, sheet: Sheet, r: Rect, x: number, y: number, scale: number, face: 1 | -1, opt: { breathe?: number; squash?: number; tint?: string; alpha?: number; tongue?: number; time?: number } = {}) {
   const sp = sprite(art, sheet.file, r);
   const w = r[2] * scale, h = r[3] * scale;
   c.save();
@@ -103,13 +121,9 @@ function drawSprite(c: CanvasRenderingContext2D, art: Art, sheet: Sheet, r: Rect
   // right (face 1) is the mirror image.
   const sq = opt.squash ?? 0, br = opt.breathe ?? 0;
   c.scale((1 + sq * 0.12) * -face, 1 - sq * 0.1 + br);
-  c.drawImage(sp, -w / 2, -h, w, h);
-  if (opt.tint) {
-    c.globalCompositeOperation = "source-atop";
-    c.fillStyle = opt.tint;
-    c.fillRect(-w / 2, -h, w, h);
-    c.globalCompositeOperation = "source-over";
-  }
+  // the warm light is baked into a copy of the sprite, never washed over the canvas: a source-atop fill on the
+  // stage would paint a pale box over the painting behind the animal
+  c.drawImage(opt.tint ? tinted(sp, opt.tint) : sp, -w / 2, -h, w, h);
   // a panting tongue that swings with the trot
   if (opt.tongue) {
     const t = opt.time ?? 0;
@@ -134,7 +148,7 @@ function drawSprite(c: CanvasRenderingContext2D, art: Art, sheet: Sheet, r: Rect
   c.restore();
 }
 
-function propSprite(art: Art, id: PropId) {
+export function propSprite(art: Art, id: PropId) {
   const [file, r] = PROPS[id];
   return { sp: sprite(art, file, r), r };
 }
@@ -467,7 +481,7 @@ function tear(c: CanvasRenderingContext2D, s: Adventure, f: Frame) {
   c.restore();
 }
 
-function petals(c: CanvasRenderingContext2D, t: number, n: number) {
+export function petals(c: CanvasRenderingContext2D, t: number, n: number) {
   c.save();
   for (let i = 0; i < n; i++) {
     const x = ((i * 173.3 + t * (9 + (i % 5))) % (VIEW + 30)) - 15;

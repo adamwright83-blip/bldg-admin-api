@@ -658,3 +658,297 @@
 .touch button[aria-label="Walk nearer"] {
   width: 56px;
 }
+
+/* ---------------------------------------------------------------- the Round-Up */
+.roundUp {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #241e32;
+}
+
+.ruHud {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 78px);
+  left: 28px;
+  right: 28px;
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 440px) 1fr;
+  align-items: start;
+  gap: 16px;
+  pointer-events: none;
+  z-index: 3;
+  font-family: Georgia, serif;
+  text-shadow: 0 2px 12px #2b1b2e;
+}
+
+.ruCount b {
+  font-size: 54px;
+  line-height: 0.9;
+  color: #ffd56a;
+  font-variant-numeric: tabular-nums;
+}
+
+.ruCount span {
+  font-size: 20px;
+  margin-left: 8px;
+}
+
+.ruCount small {
+  display: block;
+  font-family: Inter, Arial, sans-serif;
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+
+.ruClock {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  font-family: Inter, Arial, sans-serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ruTrack {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffd56a, #f2a35b 55%, #8a5aa8 85%, #3b2a5a);
+  box-shadow: 0 2px 10px #2b1b2e66;
+}
+
+.ruSun {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: #fff1c2;
+  box-shadow: 0 0 14px 4px #ffd56aaa;
+}
+
+.ruBest {
+  justify-self: end;
+  font-family: Inter, Arial, sans-serif;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.ruBanner {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  z-index: 4;
+  font-family: Georgia, serif;
+  font-size: clamp(34px, 5vw, 64px);
+  font-style: italic;
+  color: #ffd56a;
+  text-shadow: 0 4px 20px #2b1b2e, 0 0 2px #2b1b2e;
+  pointer-events: none;
+  animation: ruPop 1.5s ease-out both;
+}
+
+@keyframes ruPop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  22% {
+    transform: translateX(-50%) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+}
+
+.ruIntro {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  text-align: center;
+  max-width: min(640px, 90vw);
+  pointer-events: none;
+  animation: ruIntro 1.9s ease-out both;
+}
+
+.ruIntro h2 {
+  font-family: Georgia, serif;
+  font-size: clamp(32px, 5vw, 58px);
+  font-weight: 400;
+  margin: 0 0 10px;
+  text-shadow: 0 4px 22px #2b1b2e;
+}
+
+.ruIntro p {
+  font-size: 16px;
+  text-shadow: 0 2px 12px #2b1b2e;
+}
+
+@keyframes ruIntro {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%);
+  }
+  15%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.ruResults {
+  background: #fff6e6;
+  color: #3b2c3a;
+  border-radius: 22px;
+  padding: 28px 30px 24px;
+  width: min(460px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  box-shadow: 0 20px 60px #1a1226aa;
+}
+
+.ruResults h2 {
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.ruResults p {
+  margin: 0;
+  color: #6b5a6a;
+}
+
+.ruResults button:not(.primary) {
+  background: transparent;
+  color: #3b2c3a;
+  border-color: #3b2c3a33;
+}
+
+.ruStars {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 54px;
+  line-height: 1;
+}
+
+.ruStars span {
+  color: #e2d6c4;
+}
+
+.ruStars .ruStarOn {
+  color: #f2b33d;
+  text-shadow: 0 2px 0 #b07a1c;
+  animation: ruStar 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes ruStar {
+  from {
+    transform: scale(0) rotate(-40deg);
+  }
+  to {
+    transform: scale(1) rotate(0);
+  }
+}
+
+.ruNewBest {
+  font-weight: 700;
+  color: #b07a1c !important;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.ruTouch {
+  left: max(16px, env(safe-area-inset-left, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.ruPad {
+  display: grid;
+  grid-template-areas: ". up ." "left down right";
+  gap: 6px;
+}
+
+.ruActs {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.ruTouch .ruActs button {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+}
+
+.ruTouch .ruActs button[aria-label="Bark"] {
+  width: 92px;
+  height: 92px;
+  background: #ffd56a;
+  color: #3b2c3a;
+  font-weight: 700;
+}
+
+.titleButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .ruHud {
+    grid-template-columns: 1fr 1fr;
+    top: calc(env(safe-area-inset-top, 0px) + 70px);
+    left: 14px;
+    right: 14px;
+  }
+  .ruClock {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .ruCount b {
+    font-size: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ruBanner,
+  .ruIntro,
+  .ruStars .ruStarOn {
+    animation-duration: 0.01s;
+  }
+}
+
+.ruClock small,
+.ruBest {
+  background: #241e32a8;
+  border-radius: 999px;
+  padding: 4px 12px;
+  text-shadow: none;
+}

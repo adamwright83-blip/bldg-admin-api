@@ -64,8 +64,13 @@ export async function playOtherRodeo(page: Page) {
   // the pasture: the calf picks him; he steals the latch rope and drags the gate open
   await go(1000);
   await act();
-  await go(1330);
-  await act();
+  // a held arrow key can carry her past the rope; walk back and try again, as a player would
+  for (let i = 0; i < 6 && (await root.getAttribute("data-item")) !== "rope"; i++) {
+    await go(1330);
+    await act();
+    await page.waitForTimeout(300);
+  }
+  await expect(root).toHaveAttribute("data-item", "rope");
   await toTheBoxer("data-gate");
   // he will not cross the water; she does, and pulls the sluice
   await go(1790);

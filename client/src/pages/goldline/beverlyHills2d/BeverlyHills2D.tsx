@@ -3,6 +3,7 @@ import { freshAdventure, restoreAdventure, CHAPTERS, hop, interact, prompt, thro
 import { H, loadArt, paint, type Art } from "./paint";
 import { createSound } from "./sound";
 import { OutreachJournal } from "./OutreachJournal";
+import { HerdRound } from "./HerdRound";
 import styles from "./other-rodeo.module.css";
 import { useDialogFocus } from "./useDialogFocus";
 const SAVE = "joystick.other-rodeo.fiction.v2";
@@ -26,6 +27,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     [saved, setSaved] = useState(false);
   const [view, setView] = useState<Adventure>(state.current);
   const [restored, setRestored] = useState(0);
+  const [roundUp, setRoundUp] = useState(false);
   const [reduced, setReduced] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
@@ -37,7 +39,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
     undefined
   );
   const playing = useRef(false);
-  playing.current = started && !paused && !journal;
+  playing.current = started && !paused && !journal && !roundUp;
   const preferences = useRef({ reduced, restored });
   preferences.current = { reduced, restored };
   function persist() {
@@ -313,10 +315,21 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
               Two dogs. One lost calf.
               <br />A city with room for another past.
             </p>
-            <button className={styles.primary} onClick={begin}>
-              {saved ? "Continue the afternoon" : "Follow your nose"}{" "}
-              <span>→</span>
-            </button>
+            <div className={styles.titleButtons}>
+              <button
+                className={styles.primary}
+                onClick={() => {
+                  begin();
+                  setRoundUp(true);
+                }}
+                data-testid="start-round-up"
+              >
+                Round up the herd <span>→</span>
+              </button>
+              <button onClick={begin}>
+                {saved ? "Continue the afternoon" : "Follow your nose"}
+              </button>
+            </div>
             <small>Headphones welcome · Progress saved on this device</small>
           </div>
           <div className={styles.titleFoot}>
@@ -324,7 +337,7 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           </div>
         </div>
       ) : null}
-      {started && ready && (
+      {started && ready && !roundUp && (
         <>
           <div className={styles.chapter}>
             <div>{chapter.place}</div>
@@ -378,10 +391,10 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           )}
           {view.chapter === "home" && !journal && !chapterCard && !view.tear && (
             <div className={styles.homeNote}>
-              <button
-                className={styles.primary}
-                onClick={() => setJournal(true)}
-              >
+              <button className={styles.primary} onClick={() => setRoundUp(true)}>
+                Round up the herd →
+              </button>
+              <button onClick={() => setJournal(true)}>
                 Open Claire’s field notes ↗
               </button>
               {restored > 0 && (
@@ -454,6 +467,18 @@ export default function BeverlyHills2D({ onExit }: { onExit: () => void }) {
           )}
         </>
       )}
+      {roundUp && ready && art.current ? (
+        <HerdRound
+          art={art.current}
+          extraCows={restored}
+          reduced={reduced}
+          sound={music}
+          onExit={() => {
+            setRoundUp(false);
+            root.current?.focus();
+          }}
+        />
+      ) : null}
       {journal && (
         <OutreachJournal
           onClose={() => {
