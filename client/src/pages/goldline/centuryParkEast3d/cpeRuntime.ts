@@ -23,6 +23,11 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { DEPTH, DOOR_Z0, DOOR_Z1, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, WIDTH, fy } from "./cpeLayout";
+import { buildSet, materialFor } from "./cpeSet";
+import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
 export type ItemKind = "robot_vacuum" | "garment_bag" | "leash" | "suitcase" | "package" | "yoga_mat" | "cake" | "spare_key";
@@ -69,48 +74,7 @@ export type CpeHandle = {
   dispose(): void;
 };
 
-// ------------------------------------------------------------------ the building (metres)
-const FLOOR_H = 4.4;
-const WALL_H = 3.5;
-const DEPTH = 5;
-const DOOR_Z0 = -3.4;
-const DOOR_Z1 = -1.3;
-const ELEV_X0 = 27;
-const ELEV_X1 = 30;
-const WIDTH = 38;
-
-type Room = { name: string; x0: number; x1: number; wall: string; floor: string; open?: boolean };
-const FLOORS: { name: string; rooms: Room[] }[] = [
-  {
-    name: "Ground floor",
-    rooms: [
-      { name: "Package room", x0: 0, x1: 8, wall: "#c8674e", floor: "#8a6a52" },
-      { name: "Mailroom", x0: 8, x1: 15, wall: "#8fa68a", floor: "#6f6a5e" },
-      { name: "Lobby", x0: 15, x1: 27, wall: "#e2d2b6", floor: "#c9b9a2" },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Leasing lounge", x0: 30, x1: 38, wall: "#4f7b86", floor: "#b89a74" },
-    ],
-  },
-  {
-    name: "Amenity floor",
-    rooms: [
-      { name: "Laundry room", x0: 0, x1: 9, wall: "#b9c6cf", floor: "#9aa7b0" },
-      { name: "Gym", x0: 9, x1: 18, wall: "#d9a55b", floor: "#40434a" },
-      { name: "Closet hall", x0: 18, x1: 27, wall: "#7d5a78", floor: "#c9b49a" },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Dog spa", x0: 30, x1: 38, wall: "#d9a9a0", floor: "#b9a596" },
-    ],
-  },
-  {
-    name: "Roof",
-    rooms: [
-      { name: "Pool deck", x0: 0, x1: 27, wall: "#5f6f52", floor: "#d6c4a6", open: true },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Sky lounge", x0: 30, x1: 38, wall: "#3e3550", floor: "#8a6a52" },
-    ],
-  },
-];
-const fy = (floor: number) => floor * FLOOR_H;
+// ------------------------------------------------------------------ the building (metres): see cpeLayout.ts
 
 /** the eight errands: who asks (a building character), what's lost, and where it is */
 export const ERRAND_SLOTS: { floor: number; x: number; z: number; item: ItemKind; itemFloor: number; itemX: number; itemZ: number }[] = [
@@ -202,70 +166,20 @@ const DOG_SPOTS: { floor: number; x: number; z: number }[] = [
   { floor: 1, x: 12, z: -1.0 }, // on a treadmill
   { floor: 1, x: 25.8, z: -1.0 },
   { floor: 2, x: 2, z: -1.2 },
-  { floor: 2, x: 10.5, z: -4.1 }, // on a pool float (edge)
+  { floor: 2, x: 10.5, z: -1.5 }, // on a pool float, at the near edge where she can reach it
   { floor: 2, x: 21, z: -4.2 },
   { floor: 2, x: 37, z: -4.0 },
 ];
 const SPA = { floor: 1, x0: 30.4, x1: 38 };
 
 // ------------------------------------------------------------------ helpers
-function skylineTexture(): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 2048;
-  c.height = 512;
-  const g = c.getContext("2d")!;
-  const sky = g.createLinearGradient(0, 0, 0, 512);
-  sky.addColorStop(0, "#2a2350");
-  sky.addColorStop(0.45, "#7a4f86");
-  sky.addColorStop(0.75, "#e88f7a");
-  sky.addColorStop(1, "#ffcf98");
-  g.fillStyle = sky;
-  g.fillRect(0, 0, 2048, 512);
-  let s = 7;
-  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 70; i++) {
-    const w = 40 + r() * 90, h = 120 + r() * 360, x = r() * 2048;
-    g.fillStyle = `rgba(${40 + r() * 20}, ${30 + r() * 15}, ${70 + r() * 25}, 0.96)`;
-    g.fillRect(x, 512 - h, w, h);
-    for (let wy = 512 - h + 10; wy < 500; wy += 14)
-      for (let wx = x + 6; wx < x + w - 6; wx += 11) if (r() < 0.35) {
-        g.fillStyle = r() < 0.8 ? "rgba(255, 214, 150, 0.9)" : "rgba(180, 220, 255, 0.8)";
-        g.fillRect(wx, wy, 5, 7);
-      }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function labelTexture(text: string, bg: string, fg: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 128;
-  const g = c.getContext("2d")!;
-  g.fillStyle = bg;
-  g.fillRect(0, 0, 512, 128);
-  g.fillStyle = fg;
-  let size = 54;
-  g.font = `600 ${size}px Georgia, serif`;
-  while (size > 18 && g.measureText(text).width > 480) {
-    size -= 2;
-    g.font = `600 ${size}px Georgia, serif`;
-  }
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillText(text, 256, 68);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-const mats = new Map<string, THREE.MeshLambertMaterial>();
-function lam(color: string | number, emissive = 0): THREE.MeshLambertMaterial {
+/** a lit, slightly matte surface for the small things the game moves (items, dogs, the closet doors, the ropes) */
+const mats = new Map<string, THREE.MeshStandardMaterial>();
+function lam(color: string | number, emissive = 0): THREE.MeshStandardMaterial {
   const key = `${color}|${emissive}`;
   let m = mats.get(key);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive });
+    m = new THREE.MeshStandardMaterial({ color, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive, roughness: 0.78, metalness: 0 });
     mats.set(key, m);
   }
   return m;
@@ -283,7 +197,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.3;
+  renderer.toneMappingExposure = 1.12;
   renderer.domElement.setAttribute("data-testid", "century-park-east-canvas");
   renderer.domElement.style.touchAction = "none";
   container.appendChild(renderer.domElement);
@@ -297,6 +211,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       return false;
     }
   })();
+  // three tiers: software GL (CI) draws flat and small; a phone gets shadows; a desktop GPU gets a sharper shadow map.
+  // Contact darkening in the corners is painted into the set (see cpeSet.ts) instead of a screen-space pass: an
+  // occlusion pass cost more than the whole rest of the frame on an M1.
+  // `?cpeTier=phone|flat` forces a lower tier so a capture script can price each effect on the same machine.
+  const forcedTier = new URLSearchParams(window.location.search).get("cpeTier");
+  const highQuality = !softwareGl && !coarse && forcedTier !== "phone" && forcedTier !== "flat";
+  const shadows = !softwareGl && forcedTier !== "flat";
+  renderer.shadowMap.enabled = shadows;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   disposers.push(() => {
     renderer.setAnimationLoop(null);
     renderer.dispose();
@@ -305,7 +228,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#1d1830");
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 400);
+  scene.fog = new THREE.Fog(0x2a2350, 40, 170);
+  // a soft studio environment so painted surfaces and brass pick up a little reflected light
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  pmrem.dispose();
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.28;
+  disposers.push(() => envRT.dispose());
+  const camera = new THREE.PerspectiveCamera(27, 1, 0.5, 400);
 
   // ---------------------------------------------------------------- loading
   const loader = new GLTFLoader();
@@ -329,14 +260,31 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const clips = animsG.animations;
 
   // ---------------------------------------------------------------- lights
-  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x4a3a58, 1.9);
+  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x4a3a58, 0.85);
   scene.add(hemi);
+  // the key light comes in over the cut like a lamp held up to a dollhouse; it follows her floor so the shadow map
+  // only ever covers one storey and stays sharp
   const key = new THREE.DirectionalLight(0xfff0dc, 1.6);
-  key.position.set(-8, 30, 30);
+  key.castShadow = shadows;
+  key.shadow.mapSize.set(highQuality ? 2048 : 1024, highQuality ? 2048 : 1024);
+  const kc = key.shadow.camera as THREE.OrthographicCamera;
+  kc.left = -24;
+  kc.right = 24;
+  kc.top = 9;
+  kc.bottom = -7;
+  kc.near = 2;
+  kc.far = 70;
+  key.shadow.bias = -0.0005;
+  key.shadow.normalBias = 0.03;
+  key.shadow.radius = 2.5;
   scene.add(key);
+  scene.add(key.target);
+  const fill = new THREE.DirectionalLight(0xa9b8ff, 0.35);
+  fill.position.set(30, 14, 26);
+  scene.add(fill);
   const roomLights: THREE.PointLight[] = [];
   for (let i = 0; i < (softwareGl ? 2 : 5); i++) {
-    const l = new THREE.PointLight(0xffc27a, 9, 11, 1.6);
+    const l = new THREE.PointLight(0xffc27a, 7, 11, 1.6);
     scene.add(l);
     roomLights.push(l);
   }
@@ -353,132 +301,57 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   };
   const solid = (floor: number, x0: number, x1: number, z0: number, z1: number) => solids.push({ floor, x0, x1, z0, z1 });
 
-  const skyTex = skylineTexture();
-  const sky = new THREE.Mesh(new THREE.PlaneGeometry(260, 65), new THREE.MeshBasicMaterial({ map: skyTex, fog: false }));
-  sky.position.set(WIDTH / 2, 12, -60);
-  scene.add(sky);
-  // the street and the sidewalk in front of the building
-  box(-30, 70, -1.2, -0.3, 0.3, 14, lam("#3a3346"));
-  box(-120, 160, -40, -1.2, -70, 14, new THREE.MeshBasicMaterial({ color: 0x141022 }));
-  box(-30, 70, -0.3, -0.12, 0.3, 3.2, lam("#8f8a9c"));
-
-  const lamps: { mesh: THREE.Mesh; floor: number; x: number; base: number; phase: number }[] = [];
-  const windows: THREE.Mesh[] = [];
-  const glassMat = new THREE.MeshBasicMaterial({ color: 0x6a5f9a, transparent: true, opacity: 0.25 });
-  const lampMat = new THREE.MeshLambertMaterial({ color: 0xffe2b0, emissive: 0xffc27a, emissiveIntensity: 2.4 });
-  const emergencyMat = new THREE.MeshLambertMaterial({ color: 0xff3b3b, emissive: 0xff2020, emissiveIntensity: 2.2 });
-  const emergency: THREE.Mesh[] = [];
-  const shell = lam("#4b4258");
-  const band = lam("#3a3346");
-
+  // the set: the cut tower, every room dressed, the street and the city (cpeSet.ts); gameplay only keeps the colliders
+  const set = buildSet(world, scene, { softwareGl, shadows });
+  disposers.push(() => set.dispose());
+  const { lamps, windows, emergency } = set;
+  set.waterMat.map?.repeat.set(5, 1.2);
   FLOORS.forEach((fl, f) => {
-    const y = fy(f);
-    // slab under the floor, and the facade frame down each side
-    box(-0.6, WIDTH + 0.6, y - 0.42, y, -DEPTH - 0.4, 0.35, band);
-    box(-0.9, 0, y, y + FLOOR_H - 0.42, -DEPTH - 0.4, 0.35, shell);
-    box(WIDTH, WIDTH + 0.9, y, y + FLOOR_H - 0.42, -DEPTH - 0.4, 0.35, shell);
     solid(f, -5, 0.25, -10, 10);
     solid(f, WIDTH - 0.25, WIDTH + 5, -10, 10);
     for (const r of fl.rooms) {
-      box(r.x0, r.x1, y, y + 0.04, -DEPTH, 0.3, lam(r.floor));
-      if (!r.open) {
-        // back wall with a band of windows onto the dusk
-        box(r.x0, r.x1, y, y + WALL_H, -DEPTH - 0.25, -DEPTH, lam(r.wall));
-        const ww = r.x1 - r.x0;
-        const n = Math.max(1, Math.floor(ww / 3.2));
-        for (let i = 0; i < n; i++) {
-          if (r.name === "Elevator") break;
-          const cx = r.x0 + (ww * (i + 0.5)) / n;
-          const view = skyTex.clone();
-          view.repeat.set(0.07, 0.62);
-          view.offset.set(((cx + f * 9) / 60) % 0.93, 0.36);
-          view.needsUpdate = true;
-          const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(2.2, ww / n - 0.6), 1.7), new THREE.MeshBasicMaterial({ map: view, color: 0xffffff }));
-          win.position.set(cx, y + 1.95, -DEPTH + 0.02);
-          world.add(win);
-          windows.push(win);
-        }
-        // ceiling lamp
-        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 0.18, 14), lampMat.clone());
-        lamp.position.set((r.x0 + r.x1) / 2, y + WALL_H - 0.12, -2.4);
-        world.add(lamp);
-        lamps.push({ mesh: lamp, floor: f, x: (r.x0 + r.x1) / 2, base: 2.4, phase: Math.random() * 10 });
-        // the emergency strip that only shows on zombie night
-        const strip = new THREE.Mesh(new THREE.BoxGeometry(r.x1 - r.x0 - 0.4, 0.06, 0.06), emergencyMat);
-        strip.position.set((r.x0 + r.x1) / 2, y + WALL_H - 0.05, -DEPTH + 0.1);
-        world.add(strip);
-        emergency.push(strip);
-      } else {
-        // roof: a glass balustrade at the back and a string of bulbs
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(r.x1 - r.x0, 1.1, 0.06), glassMat);
-        rail.position.set((r.x0 + r.x1) / 2, y + 0.55, -DEPTH);
-        world.add(rail);
-        for (let x = r.x0 + 0.8; x < r.x1; x += 1.4) {
-          const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), lampMat.clone());
-          bulb.position.set(x, y + 3.0 + Math.sin(x * 0.9) * 0.15, -3.8);
-          world.add(bulb);
-          lamps.push({ mesh: bulb, floor: f, x, base: 2.0, phase: Math.random() * 10 });
-        }
-      }
-      // partition at the room's right edge, with a doorway (the elevator has sliding doors instead)
       if (r.x1 < WIDTH) {
-        const wallMat = lam(r.wall);
-        box(r.x1 - 0.12, r.x1 + 0.12, y, y + WALL_H, -DEPTH, DOOR_Z0, wallMat);
-        box(r.x1 - 0.12, r.x1 + 0.12, y, y + WALL_H, DOOR_Z1, -0.2, wallMat);
-        box(r.x1 - 0.12, r.x1 + 0.12, y + 2.6, y + WALL_H, DOOR_Z0, DOOR_Z1, wallMat);
         solid(f, r.x1 - 0.15, r.x1 + 0.15, -DEPTH - 1, DOOR_Z0);
         solid(f, r.x1 - 0.15, r.x1 + 0.15, DOOR_Z1, 2);
       }
     }
-    // elevator car: brushed doors and a floor indicator
-    box(ELEV_X0 + 0.3, ELEV_X1 - 0.3, y, y + 2.7, -DEPTH + 0.05, -DEPTH + 0.3, lam("#c9c4cf"));
+    // the elevator's floor indicator: lit, over the doors
     const ind = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: labelTexture(["G", "A", "R"][f], "#1b1626", "#ffcf7a") }));
-    ind.position.set((ELEV_X0 + ELEV_X1) / 2, y + 2.95, -DEPTH + 0.32);
+    ind.position.set((ELEV_X0 + ELEV_X1) / 2, fy(f) + 3.1, -DEPTH + 0.37);
     world.add(ind);
   });
-  // the building's name over the lobby
-  const nameplate = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.8), new THREE.MeshBasicMaterial({ map: labelTexture("CENTURY PARK EAST", "#2b2238", "#ffcf7a") }));
-  nameplate.position.set(21, 3.05, -DEPTH + 0.03);
-  world.add(nameplate);
 
-  // ---------------------------------------------------------------- furniture (scenery with colliders where it matters)
-  const furn = (f: number, x0: number, x1: number, h: number, z0: number, z1: number, color: string, collide = true) => {
-    const m = box(x0, x1, fy(f), fy(f) + h, z0, z1, lam(color));
-    if (collide) solid(f, x0, x1, z0, z1);
-    return m;
-  };
+  // ---------------------------------------------------------------- furniture colliders (the furniture itself is drawn by the set)
   // ground floor
-  for (let i = 0; i < 5; i++) furn(0, 0.6 + i * 1.2, 1.5 + i * 1.2, 0.6 + (i % 3) * 0.35, -4.9, -4.1, ["#c69a6b", "#a97e55", "#d8b384"][i % 3], false); // parcel stacks
-  furn(0, 2.4, 7.2, 0.9, -4.9, -4.2, "#7a5a3e");
-  furn(0, 8.4, 14.6, 2.2, -4.9, -4.5, "#a79f8c"); // mailbox wall
-  furn(0, 19.5, 24.5, 1.05, -3.9, -3.0, "#8a5a36"); // the concierge desk
-  box(19.4, 24.6, 1.05, 1.12, -3.95, -2.95, new THREE.MeshLambertMaterial({ color: 0xd9a548, emissive: 0x6a4a10, emissiveIntensity: 0.4 }));
-  furn(0, 30.6, 33.2, 0.75, -4.6, -3.4, "#d98f6b"); // sofa
-  furn(0, 34.4, 37.4, 0.75, -4.6, -3.4, "#d98f6b");
-  furn(0, 32.6, 34.6, 0.45, -2.6, -1.6, "#3e3550"); // coffee table
-  // the barricade in the mailroom (zombie night): boxes piled at the mailroom door
+  solid(0, 2.4, 7.2, -4.9, -4.2); // package shelving
+  solid(0, 8.4, 14.6, -4.9, -4.5); // mailbox wall
+  solid(0, 19.5, 24.5, -3.9, -3.0); // the concierge desk
+  solid(0, 17.4, 18.6, -4.6, -3.6); // the lobby armchair
+  solid(0, 30.6, 33.2, -4.6, -3.4); // sofas
+  solid(0, 34.4, 37.4, -4.6, -3.4);
+  solid(0, 32.6, 34.6, -2.6, -1.6); // coffee table
+  // the barricade in the mailroom (zombie night): parcels piled at the mailroom door, a plank nailed across
   const barricade = new THREE.Group();
-  for (let i = 0; i < 9; i++) box(9 + (i % 3) * 0.9, 9.85 + (i % 3) * 0.9, Math.floor(i / 3) * 0.7, 0.68 + Math.floor(i / 3) * 0.7, -2.6 + (i % 2) * 0.3, -1.6 + (i % 2) * 0.3, lam(["#c69a6b", "#a97e55", "#d8b384"][i % 3]), barricade);
+  for (let i = 0; i < 9; i++) {
+    const m = box(9 + (i % 3) * 0.9, 9.85 + (i % 3) * 0.9, Math.floor(i / 3) * 0.7, 0.68 + Math.floor(i / 3) * 0.7, -2.6 + (i % 2) * 0.3, -1.6 + (i % 2) * 0.3, materialFor(`parcel|${i % 3}`), barricade);
+    m.castShadow = shadows;
+    m.receiveShadow = shadows;
+  }
+  const plank = box(8.7, 11.9, 1.3, 1.5, -1.45, -1.35, materialFor("wood|#9a6a44"), barricade);
+  plank.rotation.z = -0.12;
+  plank.castShadow = shadows;
   world.add(barricade);
   // amenity floor
-  for (let i = 0; i < 4; i++) {
-    furn(1, 0.6 + i * 1.6, 1.9 + i * 1.6, 1.1, -4.9, -4.0, "#e8edf2"); // washers
-    const drum = new THREE.Mesh(new THREE.CircleGeometry(0.38, 20), new THREE.MeshLambertMaterial({ color: 0x5d7f9a, emissive: 0x29425a, emissiveIntensity: 0.6 }));
-    drum.position.set(1.25 + i * 1.6, fy(1) + 0.6, -3.99);
-    world.add(drum);
-  }
-  furn(1, 10.2, 12.4, 0.5, -4.6, -3.6, "#2b2f36"); // treadmills
-  furn(1, 13.2, 15.4, 0.5, -4.6, -3.6, "#2b2f36");
-  furn(1, 16.2, 17.6, 1.4, -4.9, -4.3, "#5a5f6a"); // weight rack
-  for (let x = 31; x < 37.5; x += 2.2) furn(1, x, x + 1.6, 0.35, -4.6, -3.6, "#9ad3e8", false); // grooming tubs
-  // roof: the pool, loungers and a cabana
-  const pool = new THREE.Mesh(new THREE.BoxGeometry(12, 0.08, 2.6), new THREE.MeshLambertMaterial({ color: 0x48c6e8, emissive: 0x1a7fa8, emissiveIntensity: 0.55 }));
-  pool.position.set(12, fy(2) + 0.06, -3.3);
-  world.add(pool);
-  solid(2, 6, 18, -4.6, -2.0);
-  for (let x = 2; x < 6; x += 1.6) furn(2, x, x + 0.8, 0.35, -4.6, -3.0, "#f4efe6", false);
-  furn(2, 30.6, 33.6, 0.75, -4.6, -3.4, "#7cc7a4");
-  furn(2, 34.6, 37.4, 1.0, -4.8, -4.0, "#2b2f36"); // the bar
+  for (let i = 0; i < 4; i++) solid(1, 0.6 + i * 1.6, 1.9 + i * 1.6, -4.9, -4.0); // washers
+  solid(1, 7.0, 8.8, -4.9, -4.0); // the folding table
+  solid(1, 10.2, 12.4, -4.6, -3.6); // treadmills
+  solid(1, 13.2, 15.4, -4.6, -3.6);
+  solid(1, 16.2, 17.6, -4.9, -4.3); // weight rack
+  // roof: the pool with its coping, the cabana's sofa, the lounge's sofa and bar
+  solid(2, 5.75, 18.25, -4.85, -1.75);
+  solid(2, 21.7, 24.3, -2.2, -1.1);
+  solid(2, 30.6, 33.6, -4.6, -3.4);
+  solid(2, 34.6, 37.4, -4.8, -4.0);
 
   // closets: a cupboard against the back wall with a door that swings, and a broom leaning beside it
   const closets = CLOSETS.map(c => {
@@ -492,13 +365,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     solid(c.floor, c.x + CLOSET_HW - 0.02, c.x + CLOSET_HW + 0.14, -DEPTH - 1, CLOSET_Z);
     const hinge = new THREE.Group();
     hinge.position.set(c.x - CLOSET_HW, y, CLOSET_Z);
-    const door = box(0, CLOSET_HW * 2, 0, 2.55, -0.06, 0, lam("#b07a4a"), hinge);
+    const door = box(0, CLOSET_HW * 2, 0, 2.55, -0.06, 0, materialFor("wood|#b07a4a"), hinge);
     door.position.x = CLOSET_HW;
+    door.castShadow = shadows;
+    door.receiveShadow = shadows;
+    // a panel line and a brass handle so it reads as a door, not a plank
+    box(0.12, CLOSET_HW * 2 - 0.12, 0.3, 2.25, -0.07, -0.06, materialFor("darkwood"), hinge).position.x = CLOSET_HW;
+    box(CLOSET_HW * 2 - 0.3, CLOSET_HW * 2 - 0.18, 1.15, 1.35, -0.1, -0.06, materialFor("brass"), hinge).position.x = CLOSET_HW;
     hinge.rotation.y = -1.9; // open
     g.add(hinge);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshBasicMaterial({ map: labelTexture("STORAGE", "#efe4d2", "#3a3346") }));
-    sign.position.set(c.x, y + 2.95, CLOSET_Z + 0.02);
-    g.add(sign);
     const broom = new THREE.Group();
     box(-0.025, 0.025, 0, 1.5, -0.025, 0.025, lam("#c99a5b"), broom);
     box(-0.16, 0.16, -0.05, 0.22, -0.06, 0.06, lam("#e2c46a"), broom);
@@ -622,14 +497,17 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   });
 
   // ---------------------------------------------------------------- people
-  type Person = { root: THREE.Object3D; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; current: string; play(name: string, fade?: number, once?: boolean): void; tint(c: THREE.Color | null): void };
+  type Person = { root: THREE.Object3D; meshes: THREE.Mesh[]; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; current: string; play(name: string, fade?: number, once?: boolean): void; tint(c: THREE.Color | null): void };
   function person(g: GLTF, clone: boolean): Person {
     const root = clone ? SkeletonUtils.clone(g.scene) : g.scene;
     const own: THREE.MeshStandardMaterial[] = [];
+    const meshes: THREE.Mesh[] = [];
     root.traverse(o => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       m.frustumCulled = false;
+      m.castShadow = shadows;
+      meshes.push(m);
       const mat = (m.material as THREE.MeshStandardMaterial).clone();
       mat.roughness = 0.8;
       m.material = mat;
@@ -640,6 +518,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     for (const c of clips) actions.set(c.name, mixer.clipAction(c));
     const p: Person = {
       root,
+      meshes,
       mixer,
       actions,
       current: "",
@@ -662,7 +541,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     world.add(root);
     return p;
   }
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
+  // a soft contact blob under everyone: the only shadow in software GL, a hint of one under real shadows
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: shadows ? 0.13 : 0.28, depthWrite: false });
   const blob = (r = 0.42) => {
     const m = new THREE.Mesh(new THREE.CircleGeometry(r, 20), shadowMat);
     m.rotation.x = -Math.PI / 2;
@@ -690,7 +570,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     p.root.position.set(s.x, fy(s.floor), s.z);
     p.root.rotation.y = 0.2;
     p.play("Idle_Loop");
-    p.tint(new THREE.Color().setHSL((i * 0.13) % 1, 0.18, 0.92));
+    // their own clothes, their own height; a tint over the whole texture used to wash the skin out too
+    p.root.scale.setScalar(0.96 + ((i * 7) % 5) * 0.025);
     const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: labelTexture("!", "#ffcf4a", "#3a2a10"), transparent: true }));
     mark.position.set(s.x, fy(s.floor) + 2.3, s.z);
     world.add(mark);
@@ -702,7 +583,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     p.root.position.set(s.x, fy(s.floor), s.z);
     p.root.rotation.y = s.anim === "Jog_Fwd_Loop" ? Math.PI / 2 : (i % 2 ? 0.4 : -0.4);
     p.play(s.anim);
-    p.tint(new THREE.Color().setHSL((0.55 + i * 0.07) % 1, 0.12, 0.88));
+    p.root.scale.setScalar(0.94 + ((i * 5) % 6) * 0.025);
     blob().position.set(s.x, fy(s.floor) + 0.02, s.z);
     return p;
   });
@@ -907,11 +788,17 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     for (const s of emergency) s.visible = zombieNight;
     barricade.visible = zombieNight;
     concierge.root.visible = zombieNight;
-    hemi.intensity = zombieNight ? 1.25 : 1.9;
+    hemi.intensity = zombieNight ? 0.55 : 0.85;
     hemi.color.set(zombieNight ? 0xcfe0ff : 0xfff0dc);
+    key.color.set(zombieNight ? 0xd8e4ff : 0xfff0dc);
+    key.intensity = zombieNight ? 1.15 : 1.6;
     scene.background = new THREE.Color(zombieNight ? "#141022" : "#1d1830");
+    (scene.fog as THREE.Fog).color.set(zombieNight ? 0x1a2238 : 0x2a2350);
+    gradeWarm = zombieNight ? 0 : 1;
+    for (const p of set.pools) (p.material as THREE.MeshBasicMaterial).color.set(zombieNight ? 0x8fa8d8 : 0xffffff);
     pMat.size = 0.16;
   }
+  let gradeWarm = 1;
   applyVibe();
 
   // ---------------------------------------------------------------- input
@@ -1180,11 +1067,38 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
 
   // ---------------------------------------------------------------- post
-  const composer = new EffectComposer(renderer);
+  const composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: softwareGl ? 0 : 4 });
+  const composer = new EffectComposer(renderer, composerTarget);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.45, 0.96);
+  // bloom only on what's actually a light (lamps, the sign), never on a white sofa in a bright room
+  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.5, 1.3);
   if (bloom) composer.addPass(bloom);
+  // the grade: a warm storybook night, or a cool green-tinged one; the runtime eases between them when the vibe flips
+  const grade = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uWarm: { value: 1 }, uVig: { value: 0.3 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uWarm; uniform float uVig; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec3 warm = c.rgb;
+        warm = mix(vec3(l), warm, 1.12);
+        warm = mix(warm, warm * vec3(1.05, 0.98, 0.9), smoothstep(0.4, 1.2, l));
+        warm += vec3(0.02, 0.0, 0.035) * (1.0 - smoothstep(0.0, 0.35, l));
+        vec3 cool = c.rgb;
+        cool = mix(vec3(l), cool, 0.82);
+        cool = mix(cool, cool * vec3(0.9, 1.02, 1.04), smoothstep(0.3, 1.2, l));
+        cool += vec3(0.0, 0.03, 0.025) * (1.0 - smoothstep(0.0, 0.4, l));
+        c.rgb = mix(cool, warm, uWarm);
+        vec2 d = vUv - 0.5;
+        c.rgb *= 1.0 - uVig * dot(d, d) * 1.7;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(grade);
   composer.addPass(new OutputPass());
+  disposers.push(() => composerTarget.dispose());
   function resize() {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
@@ -1196,7 +1110,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     camera.aspect = w / h;
-    camera.fov = w < h ? 46 : 30;
+    camera.fov = w < h ? 46 : 27;
     camera.updateProjectionMatrix();
   }
   resize();
@@ -1210,7 +1124,21 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const camLook = new THREE.Vector3(pos.x, 1.6, -2.5);
   let elapsed = 0;
   let lastBubble = 0;
+  // twenty skinned people cost more than the whole building: only the ones the camera can see are skinned and
+  // drawn, and only the ones on her floor cast a shadow. The party shows everyone.
+  const viewHalf = () => (camera.aspect < 1 ? 9 : 12);
+  const inView = (x: number, f: number) => !!finaleAt || (Math.abs(x - camLook.x) < viewHalf() && Math.abs(f - floor) <= 1);
+  const present = (p: Person, x: number, f: number, step: number) => {
+    const on = inView(x, f);
+    p.root.visible = on;
+    if (!on) return;
+    p.mixer.update(step);
+    const cast = shadows && f === floor;
+    for (const m of p.meshes) m.castShadow = cast;
+  };
+  renderer.info.autoReset = false;
   function frame() {
+    renderer.info.reset();
     const dt = Math.min(0.05, clock.getDelta());
     elapsed += dt;
     const now = performance.now();
@@ -1304,7 +1232,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       n.mark.visible = ph === "need" || ph === "carrying" || ph === "waiting";
       n.mark.position.y = fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08;
       n.mark.lookAt(camera.position);
-      n.p.mixer.update(dt);
+      present(n.p, ERRAND_SLOTS[i].x, ERRAND_SLOTS[i].floor, dt);
       if (finaleAt) n.p.play("Dance_Loop");
       else n.p.play(ph === "done" ? "Yes" : ph === "need" || ph === "carrying" ? "Idle_Talking_Loop" : "Idle_Loop", 0.3, ph === "done");
       const it = items[i];
@@ -1315,11 +1243,14 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         (it.glow.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(elapsed * 4) * 0.3;
       }
     });
-    for (const q of quiet) {
-      q.mixer.update(dt);
+    quiet.forEach((q, i) => {
+      present(q, QUIET_SLOTS[i].x, QUIET_SLOTS[i].floor, dt);
       if (finaleAt) q.play("Dance_Loop");
+    });
+    if (concierge.root.visible || vibe === "zombie" || finaleAt) {
+      concierge.mixer.update(dt);
+      for (const m of concierge.meshes) m.castShadow = shadows && floor === 0;
     }
-    concierge.mixer.update(dt);
 
     // ---- zombies (or sleepwalkers)
     for (const z of zombies) {
@@ -1385,9 +1316,10 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       z.p.root.position.copy(z.pos);
       const face = z.state === "wander" ? (z.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan2(dx, dz);
       if (z.state !== "trapped" && z.state !== "dance") z.p.root.rotation.y += (face - z.p.root.rotation.y) * Math.min(1, dt * 4);
-      z.p.root.visible = z.state !== "trapped" || (z.floor === floor && Math.sin(elapsed * 3 + z.phase) > 0.6);
-      z.p.mixer.update(frozen ? 0 : dt);
-      if (z.state !== "dance") {
+      const shown = z.state !== "trapped" || (z.floor === floor && Math.sin(elapsed * 3 + z.phase) > 0.6);
+      present(z.p, z.pos.x, z.floor, frozen ? 0 : dt);
+      z.p.root.visible = z.p.root.visible && shown;
+      if (z.p.root.visible && z.state !== "dance") {
         if (z.upL) z.upL.rotation.x -= 1.15;
         if (z.upR) z.upR.rotation.x -= 1.15;
         if (z.spine) z.spine.rotation.x += 0.22;
@@ -1508,7 +1440,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
 
     // ---- lamps: steady and warm, or flickering on zombie night; at the party, they pulse to the beat
     for (const l of lamps) {
-      const m = l.mesh.material as THREE.MeshLambertMaterial;
+      const m = l.mesh.material as THREE.MeshStandardMaterial;
       let k = l.base;
       if (finaleAt) k = l.base * (0.6 + 0.8 * Math.max(0, Math.sin(elapsed * 8.4 + l.x * 0.4)));
       else if (vibe === "zombie") k = l.base * (Math.sin(elapsed * 23 + l.phase * 7) > 0.93 || Math.sin(elapsed * 1.3 + l.phase) > 0.97 ? 0.15 : 0.85);
@@ -1525,6 +1457,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       l.color.set(vibe === "zombie" && !finaleAt ? 0xc8d8ff : 0xffc27a);
     });
 
+    // ---- the key light follows her floor; the water moves; the city slides; the grade eases toward the vibe
+    key.position.set(pos.x - 9, fy(floor) + 11, 16);
+    key.target.position.set(pos.x, fy(floor) + 1.2, -2.6);
+    set.waterMat.map?.offset.set(elapsed * 0.014, elapsed * 0.009);
+    set.parallax(camPos.x);
+    grade.uniforms.uWarm.value += (gradeWarm - grade.uniforms.uWarm.value) * Math.min(1, dt * 2.5);
+
     // ---- prompt
     if (!frozen) setPrompt(findPrompt());
 
@@ -1533,11 +1472,11 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       ? new THREE.Vector3(WIDTH / 2, fy(1.6), 62)
       : camera.aspect < 1
         ? new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 2, WIDTH - 2), Math.max(fy(floor), pos.y - 1.2) + 3.9, 10.5)
-        : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), Math.max(fy(floor), pos.y - 1.2) + 3.9, 13.5);
+        : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), Math.max(fy(floor), pos.y - 1.2) + 3.5, 12.4);
     // on a phone the card covers the top third: aim above her so the floor sits in the open middle
     const look = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.5), -2.5)
-      : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.45), -2.6);
+      : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.35), -2.6);
     camPos.lerp(goal, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camLook.lerp(look, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camera.position.copy(camPos);
@@ -1610,6 +1549,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     },
     closets: CLOSETS,
     dogs: DOG_SPOTS,
+    /** what one frame costs: draw calls and triangles, plus which quality tier this device landed in */
+    perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs?.length ?? 0, softwareGl, highQuality, shadows }),
   };
   (window as unknown as { __centuryParkEast?: typeof hook }).__centuryParkEast = hook;
   disposers.push(() => {
