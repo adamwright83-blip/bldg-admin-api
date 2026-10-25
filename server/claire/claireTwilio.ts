@@ -73,6 +73,7 @@ import {
   appendOperatorArtifactVoiceHistory,
   executeStandaloneOperatorArtifactVoiceRequest,
   isStandaloneOperatorArtifactVoiceRequest,
+  renderDaylineOperatorArtifact,
 } from "./operatorArtifactVoice";
 import {
   classifyOperatorMissionVoiceTurn,
@@ -108,6 +109,7 @@ import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { loadPersistedOperatorIdentity } from "../identity/operatorIdentityReadService";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
+import { businessDateFor, loadDayWork } from "./knowledge/operationsKnowledge";
 import {
   CLAIRE_XAI_TTS_PATH,
   claireXaiSpeechUrl,
@@ -1149,7 +1151,24 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               utterance: artifactCandidate,
               history: conversation.history ?? [],
             },
-            applyOperatorArtifactDecision
+            applyOperatorArtifactDecision,
+            {
+              resolveNamedArtifact: async _request => {
+                const now = new Date();
+                const timeZone =
+                  conversation.context.clock?.timeZone ?? getDashboardTimeZone();
+                const businessDate = businessDateFor("today", now, timeZone);
+                const work = await loadDayWork({
+                  tenantId: conversation.tenantId,
+                  operatorUserId: conversation.actorId,
+                  dayDirectorActorId: conversation.dayDirectorActorId,
+                  businessDate,
+                  now,
+                  timeZone,
+                });
+                return renderDaylineOperatorArtifact(work);
+              },
+            }
           );
 
         if (!artifactTurn) {

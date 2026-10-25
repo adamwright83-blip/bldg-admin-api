@@ -4,6 +4,7 @@ import type {
   OperatorArtifactDecisionResult,
 } from "./operatorArtifactDecision";
 import {
+  OPERATOR_ARTIFACT_DAYLINE_NO_SOURCE_SPEAK,
   OPERATOR_ARTIFACT_FAILED_SPEAK,
   OPERATOR_ARTIFACT_NO_SOURCE_SPEAK,
   OPERATOR_ARTIFACT_SENT_SPEAK,
@@ -13,6 +14,8 @@ import {
   executeStandaloneOperatorArtifactVoiceRequest,
   isStandaloneOperatorArtifactVoiceRequest,
   latestClaireArtifactText,
+  parseOperatorArtifactVoiceRequest,
+  renderDaylineOperatorArtifact,
 } from "./operatorArtifactVoice";
 
 const history = [
@@ -66,6 +69,135 @@ describe("operator artifact voice request", () => {
     "can you text Russell for me",
   ])("does not hijack other work or mixed turns: %s", utterance => {
     expect(isStandaloneOperatorArtifactVoiceRequest(utterance)).toBe(false);
+  });
+
+  it.each([
+    "text me my Dayline schedule",
+    "Claire, send me today's Day Line",
+    "Can you text me my schedule for today?",
+    "send today's plan to my phone",
+    "Can you send me a text with my day line schedule today?",
+  ])("recognizes a named Dayline artifact request: %s", utterance => {
+    expect(parseOperatorArtifactVoiceRequest(utterance)).toEqual({ kind: "dayline" });
+  });
+
+  it.each([
+    "text Dana my Dayline schedule",
+    "send today's plan to Russell",
+    "I need to text my schedule to Dana",
+  ])("does not route named Dayline artifacts to arbitrary people: %s", utterance => {
+    expect(parseOperatorArtifactVoiceRequest(utterance)).toBeNull();
+  });
+
+  it("renders the authoritative Day Line without inventing tasks", () => {
+    expect(
+      renderDaylineOperatorArtifact({
+        businessDate: "2026-09-22",
+        routeAvailable: true,
+        open: [
+          {
+            id: "route-1",
+            title: "Pickup at OPUS LA",
+            status: "open",
+            source: "route",
+            timing: "at 9:00 AM",
+            completedAt: null,
+          },
+          {
+            id: "day-director:1",
+            title: "Print sales collateral",
+            status: "open",
+            source: "day_line",
+            timing: null,
+            completedAt: null,
+          },
+        ],
+        completed: [
+          {
+            id: "day-director:2",
+            title: "Jetro pickup",
+            status: "completed",
+            source: "day_line",
+            timing: null,
+            completedAt: "2026-09-22T15:00:00.000Z",
+          },
+        ],
+      })
+    ).toBe(
+      "DAYLINE — 2026-09-22\n• Pickup at OPUS LA (at 9:00 AM)\n• Print sales collateral\n• Jetro pickup ✓"
+    );
+  });
+
+  it("warns when route coverage is unavailable instead of presenting a complete schedule", () => {
+    const rendered = renderDaylineOperatorArtifact({
+      businessDate: "2026-09-22",
+      routeAvailable: false,
+      open: [
+        {
+          id: "day-director:1",
+          title: "Print sales collateral",
+          status: "open",
+          source: "day_line",
+          timing: null,
+          completedAt: null,
+        },
+      ],
+      completed: [],
+    });
+
+    expect(rendered).toContain("Route stops unavailable");
+    expect(rendered).toContain("Print sales collateral");
+  });
+
+  it("resolves and sends a named Dayline artifact instead of reusing the previous Claire line", async () => {
+    const apply = vi.fn(
+      async (_decision: OperatorArtifactDecision): Promise<OperatorArtifactDecisionResult> =>
+        acceptedResult()
+    );
+    const resolveNamedArtifact = vi.fn(async () => "DAYLINE — 2026-09-22\n• Pickup at OPUS LA");
+
+    const outcome = await executeStandaloneOperatorArtifactVoiceRequest(
+      {
+        tenantId: "default",
+        operatorUserId: "operator-1",
+        utterance: "text me my Dayline schedule",
+        history,
+      },
+      apply,
+      { resolveNamedArtifact }
+    );
+
+    expect(resolveNamedArtifact).toHaveBeenCalledWith({ kind: "dayline" });
+    expect(outcome).toEqual({
+      speak: OPERATOR_ARTIFACT_SENT_SPEAK,
+      providerAccepted: true,
+      sourceText: "DAYLINE — 2026-09-22\n• Pickup at OPUS LA",
+    });
+    expect(apply.mock.calls[0]![0]).toMatchObject({
+      action: "send_operator_artifact",
+      artifact: {
+        kind: "plain_text",
+        text: "DAYLINE — 2026-09-22\n• Pickup at OPUS LA",
+      },
+    });
+  });
+
+  it("fails closed when a named Dayline artifact cannot be loaded", async () => {
+    const apply = vi.fn();
+    const outcome = await executeStandaloneOperatorArtifactVoiceRequest(
+      {
+        tenantId: "default",
+        operatorUserId: "operator-1",
+        utterance: "text me my Dayline schedule",
+        history,
+      },
+      apply as never,
+      { resolveNamedArtifact: async () => null }
+    );
+
+    expect(outcome?.speak).toBe(OPERATOR_ARTIFACT_DAYLINE_NO_SOURCE_SPEAK);
+    expect(outcome?.providerAccepted).toBe(false);
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it("uses the last substantive Claire line and skips its own send confirmation", () => {
