@@ -163,6 +163,45 @@ export type Frame = {
   snapshot: HTMLCanvasElement | null;
 };
 
+/** the flood, painted once: three feathered layers, faded in at the top so it has no ruled edge */
+let flood: { key: string; canvas: HTMLCanvasElement } | null = null;
+function floodLayer(x0: number, x1: number, top: number, bot: number) {
+  const key = `${x0},${x1},${top},${bot}`;
+  if (flood?.key === key) return flood.canvas;
+  const ox = x0 - 120, oy = top - 40;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(x1 - x0 + 240);
+  canvas.height = Math.ceil(bot - oy);
+  const g = canvas.getContext("2d")!;
+  g.translate(-ox, -oy);
+  const layer = (pad: number, alpha: number, rgb: string) => {
+    const lg = g.createLinearGradient(x0 - 60 - pad, 0, x1 + 60 + pad, 0);
+    lg.addColorStop(0, `rgba(${rgb}, 0)`);
+    lg.addColorStop(0.22, `rgba(${rgb}, ${alpha})`);
+    lg.addColorStop(0.78, `rgba(${rgb}, ${alpha})`);
+    lg.addColorStop(1, `rgba(${rgb}, 0)`);
+    g.fillStyle = lg;
+    g.beginPath();
+    g.moveTo(x0 - pad, top - 20);
+    g.lineTo(x1 + pad, top - 20);
+    g.lineTo(x1 + 60 + pad, bot);
+    g.lineTo(x0 - 60 - pad, bot);
+    g.fill();
+  };
+  layer(30, 0.22, "70, 52, 70");
+  layer(0, 0.48, "84, 160, 200");
+  layer(-30, 0.3, "160, 220, 232");
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = "destination-in";
+  const fade = g.createLinearGradient(0, 0, 0, 90);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(1, "rgba(0,0,0,1)");
+  g.fillStyle = fade;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  flood = { key, canvas };
+  return canvas;
+}
+
 export function paint(c: CanvasRenderingContext2D, art: Art, s: Adventure, f: Frame) {
   const t = f.reduced ? 0 : s.time;
   c.clearRect(0, 0, VIEW, H);
@@ -252,20 +291,21 @@ export function paint(c: CanvasRenderingContext2D, art: Art, s: Adventure, f: Fr
         d: 0.35,
         draw: () => {
           c.save();
-          c.fillStyle = "rgba(96, 176, 214, 0.55)";
-          c.beginPath();
-          c.moveTo(SPOTS.pasture.waterX0, groundY(st, 0.2));
-          c.lineTo(SPOTS.pasture.waterX1, groundY(st, 0.2));
-          c.lineTo(SPOTS.pasture.waterX1 + 60, st.bottom + 30);
-          c.lineTo(SPOTS.pasture.waterX0 - 60, st.bottom + 30);
-          c.fill();
-          c.strokeStyle = "rgba(220, 248, 240, 0.8)";
-          c.lineWidth = 2.5;
-          for (let i = 0; i < 9; i++) {
-            const y = groundY(st, 0.25 + i * 0.085);
+          // high water spilling over the painted creek: feathered at the banks so it sits in the painting
+          const x0 = SPOTS.pasture.waterX0, x1 = SPOTS.pasture.waterX1, top = groundY(st, 0.2), bot = st.bottom + 30;
+          c.drawImage(floodLayer(x0, x1, top, bot), x0 - 120, top - 40);
+          c.lineCap = "round";
+          for (let i = 0; i < 18; i++) {
+            const k = (i * 0.137 + t * 0.07) % 1;
+            const y = top + (bot - 30 - top) * k;
+            const across = 0.15 + ((i * 0.618) % 0.7);
+            const xm = x0 + (x1 - x0) * across + 60 * k * (across - 0.5) * 2;
+            const a = Math.max(0, Math.sin(k * Math.PI) * (0.45 + 0.45 * Math.sin(t * 3 + i * 1.7)));
+            c.strokeStyle = `rgba(255, 252, 236, ${a * 0.85})`;
+            c.lineWidth = 1.6 + k * 1.8;
             c.beginPath();
-            c.moveTo(SPOTS.pasture.waterX0 + Math.sin(t * 1.8 + i) * 12 - i * 5, y);
-            c.lineTo(SPOTS.pasture.waterX1 + Math.sin(t * 1.8 + i) * 12 + i * 5, y);
+            c.moveTo(xm - 8 - k * 8, y);
+            c.lineTo(xm + 8 + k * 8, y);
             c.stroke();
           }
           c.restore();
