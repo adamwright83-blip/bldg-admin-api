@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { beverlyHillsOutreach, orders } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { loadBeverlyHillsProspects } from "./beverlyHillsProspects";
@@ -6,7 +6,7 @@ import {
   addressKey,
   apartmentProspect,
   BEVERLY_HANGER_ID,
-  restoredPlots,
+  plotsFromOrders,
   validateReview,
   type OutreachRecord,
   type OutreachSubmission,
@@ -30,17 +30,13 @@ export async function loadBeverlyOutreach(
     .from(beverlyHillsOutreach)
     .where(eq(beverlyHillsOutreach.tenantId, tenantId));
   // Separate read model: exact recorded addresses, no campaign attribution or invented conversions.
-  const nativeOrders = await db
-    .select({ address: orders.address, count: sql<number>`count(*)` })
+  // Separate read model: each non-cancelled order's exact recorded address and pickup date. No campaign attribution.
+  const orderRows = await db
+    .select({ address: orders.address, pickupDate: orders.pickupDate })
     .from(orders)
-    .where(and(eq(orders.tenantId, tenantId), ne(orders.status, "cancelled")))
-    .groupBy(orders.address);
+    .where(and(eq(orders.tenantId, tenantId), ne(orders.status, "cancelled")));
   const byAddress = new Map<string, number>();
-  for (const row of nativeOrders)
-    byAddress.set(
-      addressKey(row.address),
-      (byAddress.get(addressKey(row.address)) ?? 0) + Number(row.count)
-    );
+  for (const row of orderRows) byAddress.set(addressKey(row.address), (byAddress.get(addressKey(row.address)) ?? 0) + 1);
   return {
     tenantId,
     operatorId,
@@ -52,7 +48,7 @@ export async function loadBeverlyOutreach(
       recordedOrders: byAddress.get(addressKey(p.address!)) ?? 0,
     })),
     records: records as OutreachRecord[],
-    restoredPlots: restoredPlots(records as OutreachRecord[]),
+    restoredPlots: plotsFromOrders(records as OutreachRecord[], orderRows),
     hangerId: BEVERLY_HANGER_ID,
   };
 }

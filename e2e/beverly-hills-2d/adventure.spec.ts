@@ -75,13 +75,13 @@ test("journal submission stays pending, does not add orders or grow a ranch plot
   });
   await page.addInitScript(() =>
     localStorage.setItem(
-      "joystick.other-rodeo.fiction.v1",
+      "joystick.other-rodeo.fiction.v2",
       JSON.stringify({
-        version: 1,
+        version: 2,
         chapter: "home",
-        x: 640,
-        rescued: true,
-        nuzzled: true,
+        flags: { stairs: true, gate: true, water: true, tether: true, rescued: true },
+        calf: { met: true },
+        player: { x: 640, d: 0.6 },
       })
     )
   );
@@ -108,9 +108,9 @@ test("journal submission stays pending, does not add orders or grow a ranch plot
     .fill("Fixture report for the permitted area.");
   await page.getByRole("checkbox").check();
   await page
-    .getByRole("button", { name: "Submit activity for review" })
+    .getByRole("button", { name: "Record this visit" })
     .click();
-  await expect(page.getByText("Awaiting review")).toBeVisible();
+  await expect(page.getByText("Visit recorded")).toBeVisible();
   expect(posted).toBe(true);
   await expect(page.getByText("0 of 6 ranch plots restored")).toBeVisible();
   await expect(

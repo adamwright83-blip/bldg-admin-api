@@ -56,3 +56,22 @@ describe("Beverly Hills evidence boundary", () => {
     expect(addressKey(" 123 N. Main, Street ")).toBe("123 n main street");
   });
 });
+
+import { plotsFromOrders } from "./beverlyHillsOutreach";
+describe("ranch plots grow from orders after a drop", () => {
+  const rec = (id: string, address: string, performedOn: string, status: "submitted" | "verified" | "rejected" = "submitted") => ({ id, address, performedOn, status });
+  it("counts a drop once its building orders on or after the drop date, by exact address", () => {
+    const records = [rec("a", "100 Example St", "2026-10-01"), rec("b", "200 Example St", "2026-10-01"), rec("c", "300 Example St", "2026-10-01", "rejected")];
+    const orders = [
+      { address: "100 example st.", pickupDate: "2026-10-04" },
+      { address: "200 Example St", pickupDate: "2026-09-20" },
+      { address: "300 Example St", pickupDate: "2026-10-05" },
+    ];
+    expect(plotsFromOrders(records, orders)).toBe(1);
+  });
+  it("never more than six", () => {
+    const records = Array.from({ length: 9 }, (_, i) => rec(String(i), `${i} Example St`, "2026-10-01"));
+    const orders = records.map(r => ({ address: r.address, pickupDate: "2026-10-02" }));
+    expect(plotsFromOrders(records, orders)).toBe(6);
+  });
+});

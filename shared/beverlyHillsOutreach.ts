@@ -60,3 +60,28 @@ export function validateReview(
       "A different administrator must review the supporting evidence."
     );
 }
+
+/**
+ * The ranch grows from the business, not from paperwork: one plot for each recorded drop (not rejected) whose building
+ * has a non-cancelled order with a pickup on or after the drop date. Matched on the exact recorded address. This is
+ * "a customer ordered after your visit", never "your hanger caused it".
+ */
+export function plotsFromOrders(
+  records: Pick<OutreachRecord, "id" | "address" | "performedOn" | "status">[],
+  orders: { address: string; pickupDate: string }[]
+): number {
+  const byAddress = new Map<string, string[]>();
+  for (const o of orders) {
+    const k = addressKey(o.address);
+    const list = byAddress.get(k) ?? [];
+    list.push(o.pickupDate);
+    byAddress.set(k, list);
+  }
+  let n = 0;
+  for (const r of records) {
+    if (r.status === "rejected") continue;
+    const dates = byAddress.get(addressKey(r.address)) ?? [];
+    if (dates.some(d => d.slice(0, 10) >= r.performedOn)) n++;
+  }
+  return Math.min(6, n);
+}

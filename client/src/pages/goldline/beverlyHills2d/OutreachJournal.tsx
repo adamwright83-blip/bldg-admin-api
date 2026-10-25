@@ -55,7 +55,7 @@ export function OutreachJournal({
       await submit.mutateAsync(input);
       requestId.current = crypto.randomUUID();
       setMessage(
-        "Report saved for review. The ranch grows after the evidence is verified."
+        "Visit saved. The ranch grows when someone at that building orders."
       );
       await refresh();
     } catch {
@@ -83,8 +83,8 @@ export function OutreachJournal({
         </div>
         <h2 id="journal-title">A place worth caring for.</h2>
         <p className={styles.lede}>
-          Help a real building discover Laundry Farm. Every verified visit
-          brings another little piece of the ranch back to life.
+          Help a real building discover Laundry Farm. When a new order comes
+          from a building you visited, another piece of the ranch comes back.
         </p>
         <div className={styles.missionRibbon}>
           <span>01</span>
@@ -229,7 +229,7 @@ export function OutreachJournal({
                     >
                       {submit.isPending
                         ? "Saving…"
-                        : "Submit activity for review"}
+                        : "Record this visit"}
                     </button>
                   </form>
                 </details>
@@ -248,8 +248,8 @@ export function OutreachJournal({
               </>
             )}
             <div className={styles.eyebrow}>
-              {data?.restoredPlots ?? 0} of 6 ranch plots restored · verified
-              activity only
+              {data?.restoredPlots ?? 0} of 6 ranch plots restored · a new order
+              at a building you visited
             </div>
             {data?.records.map(r => (
               <article className={styles.report} key={r.id}>
@@ -257,7 +257,7 @@ export function OutreachJournal({
                 <p>
                   {r.performedOn} · {r.count} hangers ·{" "}
                   <b>
-                    {r.status === "submitted" ? "Awaiting review" : r.status}
+                    {r.status === "submitted" ? "Visit recorded" : r.status}
                   </b>
                 </p>
                 <a href={r.evidenceUrl} target="_blank" rel="noreferrer">
