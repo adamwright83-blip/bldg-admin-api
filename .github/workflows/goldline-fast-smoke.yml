@@ -424,10 +424,16 @@ jobs:
               && pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
           - name: fast-smoke-beverly-hills
-            timeout: 25
+            timeout: 20
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/beverlyHills.spec.ts
+          # Century Park East runs three long specs (errands, the rope, zombie night) on software GL in two projects;
+          # it gets its own job and budget so neither tower's proof is cut short by the other's.
+          - name: fast-smoke-century-park-east
+            timeout: 35
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/centuryParkEast.spec.ts
           - name: fast-smoke-channel-382
             timeout: 15

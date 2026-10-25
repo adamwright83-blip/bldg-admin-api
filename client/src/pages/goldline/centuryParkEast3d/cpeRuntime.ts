@@ -23,12 +23,23 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, FLOOR_H, ROPES, WIDTH, fy, hitsCollider, ropeLanding, staticColliders, type Collider } from "./cpeLayout";
+export { ROPES };
+import { buildSet, materialFor } from "./cpeSet";
+import { INK_SETS, createPrintPass } from "./cpePrint";
+import { createCctv, type Cctv } from "./cpeCctv";
+import { PULL_DUR, grabbed as climbGrabbed, isResting, plannedHeight, press as climbPress2, startClimb as newClimb, tick as climbTick, type ClimbState, type Hand } from "./climbMachine";
+import { createCpeSounds } from "./cpeSounds";
+import { activeTrade, deviceName } from "./cpeTrade";
+import { label as labelTexture } from "./cpeTextures";
 
 export type Vibe = "cozy" | "zombie";
 export type ItemKind = "robot_vacuum" | "garment_bag" | "leash" | "suitcase" | "package" | "yoga_mat" | "cake" | "spare_key";
 export type ErrandPhase = "locked" | "need" | "carrying" | "waiting" | "done";
 export type ErrandView = { slot: number; phase: ErrandPhase };
-export type PromptId = "talk" | "quiet" | "item" | "elevator" | "closet" | "extinguisher" | "pump" | "concierge" | "rope_up" | "rope_down" | "climb";
+export type PromptId = "talk" | "quiet" | "item" | "elevator" | "closet" | "extinguisher" | "pump" | "concierge" | "rope_up" | "rope_down" | "climb" | "shotgun";
 export type Interaction =
   | { kind: "talk"; slot: number }
   | { kind: "quiet"; index: number }
@@ -40,7 +51,13 @@ export type Interaction =
   | { kind: "concierge" }
   | { kind: "rope_top"; floor: number }
   | { kind: "rope_fell" }
-  | { kind: "out_of_foam" };
+  | { kind: "out_of_foam" }
+  /** zombie night: the dormant resident's zombie is stunned; thirty seconds to program the shotgun */
+  | { kind: "tazed"; slot: number }
+  | { kind: "shotgun"; slot: number }
+  | { kind: "chipped"; slot: number; device: string }
+  | { kind: "device_wrecked"; device: string; wrecked: number; total: number }
+  | { kind: "room_wrecked" };
 
 export type CpeCallbacks = {
   onProgress?: (p: number) => void;
@@ -51,8 +68,10 @@ export type CpeCallbacks = {
   onCharges?: (n: number) => void;
   onFloor?: (floor: number) => void;
   onBubble?: (b: { who: string; text: string } | null) => void;
-  /** climbing a rope: how far up (0..1), or null when she's not on one */
-  onClimb?: (progress: number | null) => void;
+  /** on a rope: how far up (0..1), how much grip she has left, whether she's resting; null when she's not on one */
+  onClimb?: (c: { progress: number; stamina: number; resting: boolean } | null) => void;
+  /** zombie night: which security camera the monitor is on, and the small feeds beside it; null on cozy night */
+  onCamera?: (c: { id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null) => void;
 };
 
 export type CpeHandle = {
@@ -62,6 +81,14 @@ export type CpeHandle = {
   interact(): void;
   spray(): void;
   jump(): void;
+  /** on the rope: that hand pulls */
+  climbHand(hand: Hand): void;
+  /** the shotgun fired: that slot's zombie takes the chip and goes for the trade room */
+  chip(slot: number): void;
+  /** the operator put the gun down ("not now"): the zombie wakes dazed, nothing else happens */
+  wake(slot: number): void;
+  /** the fuse ran out with the gun still open: the zombie bites */
+  fuseOut(slot: number): void;
   setSprint(on: boolean): void;
   /** after a knockout: wake up in the lobby, whole again */
   respawn(): void;
@@ -69,48 +96,7 @@ export type CpeHandle = {
   dispose(): void;
 };
 
-// ------------------------------------------------------------------ the building (metres)
-const FLOOR_H = 4.4;
-const WALL_H = 3.5;
-const DEPTH = 5;
-const DOOR_Z0 = -3.4;
-const DOOR_Z1 = -1.3;
-const ELEV_X0 = 27;
-const ELEV_X1 = 30;
-const WIDTH = 38;
-
-type Room = { name: string; x0: number; x1: number; wall: string; floor: string; open?: boolean };
-const FLOORS: { name: string; rooms: Room[] }[] = [
-  {
-    name: "Ground floor",
-    rooms: [
-      { name: "Package room", x0: 0, x1: 8, wall: "#c8674e", floor: "#8a6a52" },
-      { name: "Mailroom", x0: 8, x1: 15, wall: "#8fa68a", floor: "#6f6a5e" },
-      { name: "Lobby", x0: 15, x1: 27, wall: "#e2d2b6", floor: "#c9b9a2" },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Leasing lounge", x0: 30, x1: 38, wall: "#4f7b86", floor: "#b89a74" },
-    ],
-  },
-  {
-    name: "Amenity floor",
-    rooms: [
-      { name: "Laundry room", x0: 0, x1: 9, wall: "#b9c6cf", floor: "#9aa7b0" },
-      { name: "Gym", x0: 9, x1: 18, wall: "#d9a55b", floor: "#40434a" },
-      { name: "Closet hall", x0: 18, x1: 27, wall: "#7d5a78", floor: "#c9b49a" },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Dog spa", x0: 30, x1: 38, wall: "#d9a9a0", floor: "#b9a596" },
-    ],
-  },
-  {
-    name: "Roof",
-    rooms: [
-      { name: "Pool deck", x0: 0, x1: 27, wall: "#5f6f52", floor: "#d6c4a6", open: true },
-      { name: "Elevator", x0: ELEV_X0, x1: ELEV_X1, wall: "#a99c8a", floor: "#3a3346" },
-      { name: "Sky lounge", x0: 30, x1: 38, wall: "#3e3550", floor: "#8a6a52" },
-    ],
-  },
-];
-const fy = (floor: number) => floor * FLOOR_H;
+// ------------------------------------------------------------------ the building (metres): see cpeLayout.ts
 
 /** the eight errands: who asks (a building character), what's lost, and where it is */
 export const ERRAND_SLOTS: { floor: number; x: number; z: number; item: ItemKind; itemFloor: number; itemX: number; itemZ: number }[] = [
@@ -140,14 +126,16 @@ const QUIET_SLOTS: { floor: number; x: number; z: number; anim: string; base: nu
   { floor: 2, x: 25, z: -1.4, anim: "Idle_Talking_Loop", base: 0 },
 ];
 
+/** eight zombies, one per errand slot: on zombie night each is the dormant resident of that slot */
 const ZOMBIE_SPAWNS: { floor: number; x: number; z: number; base: number }[] = [
-  { floor: 0, x: 35, z: -2.4, base: 2 },
-  { floor: 0, x: 4, z: -3.0, base: 2 },
+  { floor: 0, x: 24, z: -2.4, base: 2 },
   { floor: 1, x: 3.5, z: -2.6, base: 2 },
-  { floor: 1, x: 22.5, z: -2.0, base: 3 },
-  { floor: 1, x: 14.5, z: -3.2, base: 2 },
+  { floor: 1, x: 32, z: -2.0, base: 3 },
+  { floor: 0, x: 35, z: -2.4, base: 2 },
   { floor: 2, x: 17, z: -2.4, base: 2 },
-  { floor: 2, x: 6, z: -3.0, base: 0 },
+  { floor: 1, x: 14.5, z: -3.2, base: 2 },
+  { floor: 2, x: 31, z: -2.6, base: 0 },
+  { floor: 0, x: 4, z: -3.0, base: 2 },
 ];
 
 const CLOSETS: { floor: number; x: number }[] = [
@@ -157,16 +145,6 @@ const CLOSETS: { floor: number; x: number }[] = [
   { floor: 1, x: 26.0 },
   { floor: 2, x: 24.8 },
 ];
-/**
- * Fire-station holes: a round hole in the ceiling with a knotted rope hanging through it, one per floor that has a
- * floor above. Climbing is a struggle (mash to climb, stop and you slip); sliding down is quick.
- */
-export const ROPES: { floor: number; x: number; z: number }[] = [
-  { floor: 0, x: 13.2, z: -1.6 }, // the mailroom, up to the gym
-  { floor: 1, x: 6.6, z: -1.7 }, // the laundry room, up to the pool deck
-];
-const CLIMB_PER_PRESS = 0.42;
-const CLIMB_SLIP = 0.55; // metres a second, while she isn't pulling
 const CLOSET_HW = 1.0;
 const CLOSET_Z = -3.3; // the closet's door plane; inside is z < CLOSET_Z
 
@@ -202,76 +180,26 @@ const DOG_SPOTS: { floor: number; x: number; z: number }[] = [
   { floor: 1, x: 12, z: -1.0 }, // on a treadmill
   { floor: 1, x: 25.8, z: -1.0 },
   { floor: 2, x: 2, z: -1.2 },
-  { floor: 2, x: 10.5, z: -4.1 }, // on a pool float (edge)
+  { floor: 2, x: 10.5, z: -1.5 }, // on a pool float, at the near edge where she can reach it
   { floor: 2, x: 21, z: -4.2 },
   { floor: 2, x: 37, z: -4.0 },
 ];
 const SPA = { floor: 1, x0: 30.4, x1: 38 };
 
 // ------------------------------------------------------------------ helpers
-function skylineTexture(): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 2048;
-  c.height = 512;
-  const g = c.getContext("2d")!;
-  const sky = g.createLinearGradient(0, 0, 0, 512);
-  sky.addColorStop(0, "#2a2350");
-  sky.addColorStop(0.45, "#7a4f86");
-  sky.addColorStop(0.75, "#e88f7a");
-  sky.addColorStop(1, "#ffcf98");
-  g.fillStyle = sky;
-  g.fillRect(0, 0, 2048, 512);
-  let s = 7;
-  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 70; i++) {
-    const w = 40 + r() * 90, h = 120 + r() * 360, x = r() * 2048;
-    g.fillStyle = `rgba(${40 + r() * 20}, ${30 + r() * 15}, ${70 + r() * 25}, 0.96)`;
-    g.fillRect(x, 512 - h, w, h);
-    for (let wy = 512 - h + 10; wy < 500; wy += 14)
-      for (let wx = x + 6; wx < x + w - 6; wx += 11) if (r() < 0.35) {
-        g.fillStyle = r() < 0.8 ? "rgba(255, 214, 150, 0.9)" : "rgba(180, 220, 255, 0.8)";
-        g.fillRect(wx, wy, 5, 7);
-      }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function labelTexture(text: string, bg: string, fg: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 128;
-  const g = c.getContext("2d")!;
-  g.fillStyle = bg;
-  g.fillRect(0, 0, 512, 128);
-  g.fillStyle = fg;
-  let size = 54;
-  g.font = `600 ${size}px Georgia, serif`;
-  while (size > 18 && g.measureText(text).width > 480) {
-    size -= 2;
-    g.font = `600 ${size}px Georgia, serif`;
-  }
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillText(text, 256, 68);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-const mats = new Map<string, THREE.MeshLambertMaterial>();
-function lam(color: string | number, emissive = 0): THREE.MeshLambertMaterial {
+/** a lit, slightly matte surface for the small things the game moves (items, dogs, the closet doors, the ropes) */
+const mats = new Map<string, THREE.MeshStandardMaterial>();
+function lam(color: string | number, emissive = 0): THREE.MeshStandardMaterial {
   const key = `${color}|${emissive}`;
   let m = mats.get(key);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive });
+    m = new THREE.MeshStandardMaterial({ color, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive, roughness: 0.78, metalness: 0 });
     mats.set(key, m);
   }
   return m;
 }
 
-type Box = { floor: number; x0: number; x1: number; z0: number; z1: number };
+type Box = Collider;
 
 export async function createCenturyParkEast(container: HTMLElement, castBase: string, callbacks: CpeCallbacks = {}): Promise<CpeHandle> {
   const disposers: (() => void)[] = [];
@@ -283,7 +211,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.3;
+  renderer.toneMappingExposure = 1.12;
   renderer.domElement.setAttribute("data-testid", "century-park-east-canvas");
   renderer.domElement.style.touchAction = "none";
   container.appendChild(renderer.domElement);
@@ -297,6 +225,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       return false;
     }
   })();
+  // three tiers: software GL (CI) draws flat and small; a phone gets shadows; a desktop GPU gets a sharper shadow map.
+  // Contact darkening in the corners is painted into the set (see cpeSet.ts) instead of a screen-space pass: an
+  // occlusion pass cost more than the whole rest of the frame on an M1.
+  // `?cpeTier=phone|flat` forces a lower tier so a capture script can price each effect on the same machine.
+  const forcedTier = new URLSearchParams(window.location.search).get("cpeTier");
+  const highQuality = !softwareGl && !coarse && forcedTier !== "phone" && forcedTier !== "flat";
+  const shadows = !softwareGl && forcedTier !== "flat";
+  renderer.shadowMap.enabled = shadows;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   disposers.push(() => {
     renderer.setAnimationLoop(null);
     renderer.dispose();
@@ -305,7 +242,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#1d1830");
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 400);
+  scene.fog = new THREE.Fog(0x2a2350, 40, 170);
+  // a soft studio environment so painted surfaces and brass pick up a little reflected light
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  pmrem.dispose();
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.28;
+  disposers.push(() => envRT.dispose());
+  const camera = new THREE.PerspectiveCamera(27, 1, 0.5, 400);
 
   // ---------------------------------------------------------------- loading
   const loader = new GLTFLoader();
@@ -329,14 +274,31 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const clips = animsG.animations;
 
   // ---------------------------------------------------------------- lights
-  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x4a3a58, 1.9);
+  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x4a3a58, 0.85);
   scene.add(hemi);
+  // the key light comes in over the cut like a lamp held up to a dollhouse; it follows her floor so the shadow map
+  // only ever covers one storey and stays sharp
   const key = new THREE.DirectionalLight(0xfff0dc, 1.6);
-  key.position.set(-8, 30, 30);
+  key.castShadow = shadows;
+  key.shadow.mapSize.set(highQuality ? 2048 : 1024, highQuality ? 2048 : 1024);
+  const kc = key.shadow.camera as THREE.OrthographicCamera;
+  kc.left = -24;
+  kc.right = 24;
+  kc.top = 9;
+  kc.bottom = -7;
+  kc.near = 2;
+  kc.far = 70;
+  key.shadow.bias = -0.0005;
+  key.shadow.normalBias = 0.03;
+  key.shadow.radius = 2.5;
   scene.add(key);
+  scene.add(key.target);
+  const fill = new THREE.DirectionalLight(0xa9b8ff, 0.35);
+  fill.position.set(30, 14, 26);
+  scene.add(fill);
   const roomLights: THREE.PointLight[] = [];
   for (let i = 0; i < (softwareGl ? 2 : 5); i++) {
-    const l = new THREE.PointLight(0xffc27a, 9, 11, 1.6);
+    const l = new THREE.PointLight(0xffc27a, 7, 11, 1.6);
     scene.add(l);
     roomLights.push(l);
   }
@@ -353,133 +315,32 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   };
   const solid = (floor: number, x0: number, x1: number, z0: number, z1: number) => solids.push({ floor, x0, x1, z0, z1 });
 
-  const skyTex = skylineTexture();
-  const sky = new THREE.Mesh(new THREE.PlaneGeometry(260, 65), new THREE.MeshBasicMaterial({ map: skyTex, fog: false }));
-  sky.position.set(WIDTH / 2, 12, -60);
-  scene.add(sky);
-  // the street and the sidewalk in front of the building
-  box(-30, 70, -1.2, -0.3, 0.3, 14, lam("#3a3346"));
-  box(-120, 160, -40, -1.2, -70, 14, new THREE.MeshBasicMaterial({ color: 0x141022 }));
-  box(-30, 70, -0.3, -0.12, 0.3, 3.2, lam("#8f8a9c"));
-
-  const lamps: { mesh: THREE.Mesh; floor: number; x: number; base: number; phase: number }[] = [];
-  const windows: THREE.Mesh[] = [];
-  const glassMat = new THREE.MeshBasicMaterial({ color: 0x6a5f9a, transparent: true, opacity: 0.25 });
-  const lampMat = new THREE.MeshLambertMaterial({ color: 0xffe2b0, emissive: 0xffc27a, emissiveIntensity: 2.4 });
-  const emergencyMat = new THREE.MeshLambertMaterial({ color: 0xff3b3b, emissive: 0xff2020, emissiveIntensity: 2.2 });
-  const emergency: THREE.Mesh[] = [];
-  const shell = lam("#4b4258");
-  const band = lam("#3a3346");
-
+  // the set: the cut tower, every room dressed, the street and the city (cpeSet.ts); gameplay only keeps the colliders
+  const set = buildSet(world, scene, { softwareGl, shadows });
+  disposers.push(() => set.dispose());
+  const { lamps, windows, emergency } = set;
+  set.waterMat.map?.repeat.set(5, 1.2);
+  // walls, partitions and furniture block movement; the list is pure data (cpeLayout.ts) so a unit test can walk it
+  solids.push(...staticColliders());
   FLOORS.forEach((fl, f) => {
-    const y = fy(f);
-    // slab under the floor, and the facade frame down each side
-    box(-0.6, WIDTH + 0.6, y - 0.42, y, -DEPTH - 0.4, 0.35, band);
-    box(-0.9, 0, y, y + FLOOR_H - 0.42, -DEPTH - 0.4, 0.35, shell);
-    box(WIDTH, WIDTH + 0.9, y, y + FLOOR_H - 0.42, -DEPTH - 0.4, 0.35, shell);
-    solid(f, -5, 0.25, -10, 10);
-    solid(f, WIDTH - 0.25, WIDTH + 5, -10, 10);
-    for (const r of fl.rooms) {
-      box(r.x0, r.x1, y, y + 0.04, -DEPTH, 0.3, lam(r.floor));
-      if (!r.open) {
-        // back wall with a band of windows onto the dusk
-        box(r.x0, r.x1, y, y + WALL_H, -DEPTH - 0.25, -DEPTH, lam(r.wall));
-        const ww = r.x1 - r.x0;
-        const n = Math.max(1, Math.floor(ww / 3.2));
-        for (let i = 0; i < n; i++) {
-          if (r.name === "Elevator") break;
-          const cx = r.x0 + (ww * (i + 0.5)) / n;
-          const view = skyTex.clone();
-          view.repeat.set(0.07, 0.62);
-          view.offset.set(((cx + f * 9) / 60) % 0.93, 0.36);
-          view.needsUpdate = true;
-          const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(2.2, ww / n - 0.6), 1.7), new THREE.MeshBasicMaterial({ map: view, color: 0xffffff }));
-          win.position.set(cx, y + 1.95, -DEPTH + 0.02);
-          world.add(win);
-          windows.push(win);
-        }
-        // ceiling lamp
-        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 0.18, 14), lampMat.clone());
-        lamp.position.set((r.x0 + r.x1) / 2, y + WALL_H - 0.12, -2.4);
-        world.add(lamp);
-        lamps.push({ mesh: lamp, floor: f, x: (r.x0 + r.x1) / 2, base: 2.4, phase: Math.random() * 10 });
-        // the emergency strip that only shows on zombie night
-        const strip = new THREE.Mesh(new THREE.BoxGeometry(r.x1 - r.x0 - 0.4, 0.06, 0.06), emergencyMat);
-        strip.position.set((r.x0 + r.x1) / 2, y + WALL_H - 0.05, -DEPTH + 0.1);
-        world.add(strip);
-        emergency.push(strip);
-      } else {
-        // roof: a glass balustrade at the back and a string of bulbs
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(r.x1 - r.x0, 1.1, 0.06), glassMat);
-        rail.position.set((r.x0 + r.x1) / 2, y + 0.55, -DEPTH);
-        world.add(rail);
-        for (let x = r.x0 + 0.8; x < r.x1; x += 1.4) {
-          const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), lampMat.clone());
-          bulb.position.set(x, y + 3.0 + Math.sin(x * 0.9) * 0.15, -3.8);
-          world.add(bulb);
-          lamps.push({ mesh: bulb, floor: f, x, base: 2.0, phase: Math.random() * 10 });
-        }
-      }
-      // partition at the room's right edge, with a doorway (the elevator has sliding doors instead)
-      if (r.x1 < WIDTH) {
-        const wallMat = lam(r.wall);
-        box(r.x1 - 0.12, r.x1 + 0.12, y, y + WALL_H, -DEPTH, DOOR_Z0, wallMat);
-        box(r.x1 - 0.12, r.x1 + 0.12, y, y + WALL_H, DOOR_Z1, -0.2, wallMat);
-        box(r.x1 - 0.12, r.x1 + 0.12, y + 2.6, y + WALL_H, DOOR_Z0, DOOR_Z1, wallMat);
-        solid(f, r.x1 - 0.15, r.x1 + 0.15, -DEPTH - 1, DOOR_Z0);
-        solid(f, r.x1 - 0.15, r.x1 + 0.15, DOOR_Z1, 2);
-      }
-    }
-    // elevator car: brushed doors and a floor indicator
-    box(ELEV_X0 + 0.3, ELEV_X1 - 0.3, y, y + 2.7, -DEPTH + 0.05, -DEPTH + 0.3, lam("#c9c4cf"));
+    // the elevator's floor indicator: lit, over the doors
     const ind = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: labelTexture(["G", "A", "R"][f], "#1b1626", "#ffcf7a") }));
-    ind.position.set((ELEV_X0 + ELEV_X1) / 2, y + 2.95, -DEPTH + 0.32);
+    ind.position.set((ELEV_X0 + ELEV_X1) / 2, fy(f) + 3.1, -DEPTH + 0.37);
     world.add(ind);
   });
-  // the building's name over the lobby
-  const nameplate = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.8), new THREE.MeshBasicMaterial({ map: labelTexture("CENTURY PARK EAST", "#2b2238", "#ffcf7a") }));
-  nameplate.position.set(21, 3.05, -DEPTH + 0.03);
-  world.add(nameplate);
 
-  // ---------------------------------------------------------------- furniture (scenery with colliders where it matters)
-  const furn = (f: number, x0: number, x1: number, h: number, z0: number, z1: number, color: string, collide = true) => {
-    const m = box(x0, x1, fy(f), fy(f) + h, z0, z1, lam(color));
-    if (collide) solid(f, x0, x1, z0, z1);
-    return m;
-  };
-  // ground floor
-  for (let i = 0; i < 5; i++) furn(0, 0.6 + i * 1.2, 1.5 + i * 1.2, 0.6 + (i % 3) * 0.35, -4.9, -4.1, ["#c69a6b", "#a97e55", "#d8b384"][i % 3], false); // parcel stacks
-  furn(0, 2.4, 7.2, 0.9, -4.9, -4.2, "#7a5a3e");
-  furn(0, 8.4, 14.6, 2.2, -4.9, -4.5, "#a79f8c"); // mailbox wall
-  furn(0, 19.5, 24.5, 1.05, -3.9, -3.0, "#8a5a36"); // the concierge desk
-  box(19.4, 24.6, 1.05, 1.12, -3.95, -2.95, new THREE.MeshLambertMaterial({ color: 0xd9a548, emissive: 0x6a4a10, emissiveIntensity: 0.4 }));
-  furn(0, 30.6, 33.2, 0.75, -4.6, -3.4, "#d98f6b"); // sofa
-  furn(0, 34.4, 37.4, 0.75, -4.6, -3.4, "#d98f6b");
-  furn(0, 32.6, 34.6, 0.45, -2.6, -1.6, "#3e3550"); // coffee table
-  // the barricade in the mailroom (zombie night): boxes piled at the mailroom door
+  // ---------------------------------------------------------------- the barricade and the gameplay props
+  // the barricade in the mailroom (zombie night): parcels piled at the mailroom door, a plank nailed across
   const barricade = new THREE.Group();
-  for (let i = 0; i < 9; i++) box(9 + (i % 3) * 0.9, 9.85 + (i % 3) * 0.9, Math.floor(i / 3) * 0.7, 0.68 + Math.floor(i / 3) * 0.7, -2.6 + (i % 2) * 0.3, -1.6 + (i % 2) * 0.3, lam(["#c69a6b", "#a97e55", "#d8b384"][i % 3]), barricade);
-  world.add(barricade);
-  // amenity floor
-  for (let i = 0; i < 4; i++) {
-    furn(1, 0.6 + i * 1.6, 1.9 + i * 1.6, 1.1, -4.9, -4.0, "#e8edf2"); // washers
-    const drum = new THREE.Mesh(new THREE.CircleGeometry(0.38, 20), new THREE.MeshLambertMaterial({ color: 0x5d7f9a, emissive: 0x29425a, emissiveIntensity: 0.6 }));
-    drum.position.set(1.25 + i * 1.6, fy(1) + 0.6, -3.99);
-    world.add(drum);
+  for (let i = 0; i < 9; i++) {
+    const m = box(9 + (i % 3) * 0.9, 9.85 + (i % 3) * 0.9, Math.floor(i / 3) * 0.7, 0.68 + Math.floor(i / 3) * 0.7, -2.6 + (i % 2) * 0.3, -1.6 + (i % 2) * 0.3, materialFor(`parcel|${i % 3}`), barricade);
+    m.castShadow = shadows;
+    m.receiveShadow = shadows;
   }
-  furn(1, 10.2, 12.4, 0.5, -4.6, -3.6, "#2b2f36"); // treadmills
-  furn(1, 13.2, 15.4, 0.5, -4.6, -3.6, "#2b2f36");
-  furn(1, 16.2, 17.6, 1.4, -4.9, -4.3, "#5a5f6a"); // weight rack
-  for (let x = 31; x < 37.5; x += 2.2) furn(1, x, x + 1.6, 0.35, -4.6, -3.6, "#9ad3e8", false); // grooming tubs
-  // roof: the pool, loungers and a cabana
-  const pool = new THREE.Mesh(new THREE.BoxGeometry(12, 0.08, 2.6), new THREE.MeshLambertMaterial({ color: 0x48c6e8, emissive: 0x1a7fa8, emissiveIntensity: 0.55 }));
-  pool.position.set(12, fy(2) + 0.06, -3.3);
-  world.add(pool);
-  solid(2, 6, 18, -4.6, -2.0);
-  for (let x = 2; x < 6; x += 1.6) furn(2, x, x + 0.8, 0.35, -4.6, -3.0, "#f4efe6", false);
-  furn(2, 30.6, 33.6, 0.75, -4.6, -3.4, "#7cc7a4");
-  furn(2, 34.6, 37.4, 1.0, -4.8, -4.0, "#2b2f36"); // the bar
-
+  const plank = box(8.7, 11.9, 1.3, 1.5, -1.45, -1.35, materialFor("wood|#9a6a44"), barricade);
+  plank.rotation.z = -0.12;
+  plank.castShadow = shadows;
+  world.add(barricade);
   // closets: a cupboard against the back wall with a door that swings, and a broom leaning beside it
   const closets = CLOSETS.map(c => {
     const y = fy(c.floor);
@@ -492,13 +353,15 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     solid(c.floor, c.x + CLOSET_HW - 0.02, c.x + CLOSET_HW + 0.14, -DEPTH - 1, CLOSET_Z);
     const hinge = new THREE.Group();
     hinge.position.set(c.x - CLOSET_HW, y, CLOSET_Z);
-    const door = box(0, CLOSET_HW * 2, 0, 2.55, -0.06, 0, lam("#b07a4a"), hinge);
+    const door = box(0, CLOSET_HW * 2, 0, 2.55, -0.06, 0, materialFor("wood|#b07a4a"), hinge);
     door.position.x = CLOSET_HW;
+    door.castShadow = shadows;
+    door.receiveShadow = shadows;
+    // a panel line and a brass handle so it reads as a door, not a plank
+    box(0.12, CLOSET_HW * 2 - 0.12, 0.3, 2.25, -0.07, -0.06, materialFor("darkwood"), hinge).position.x = CLOSET_HW;
+    box(CLOSET_HW * 2 - 0.3, CLOSET_HW * 2 - 0.18, 1.15, 1.35, -0.1, -0.06, materialFor("brass"), hinge).position.x = CLOSET_HW;
     hinge.rotation.y = -1.9; // open
     g.add(hinge);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshBasicMaterial({ map: labelTexture("STORAGE", "#efe4d2", "#3a3346") }));
-    sign.position.set(c.x, y + 2.95, CLOSET_Z + 0.02);
-    g.add(sign);
     const broom = new THREE.Group();
     box(-0.025, 0.025, 0, 1.5, -0.025, 0.025, lam("#c99a5b"), broom);
     box(-0.16, 0.16, -0.05, 0.22, -0.06, 0.06, lam("#e2c46a"), broom);
@@ -610,6 +473,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   const items = ERRAND_SLOTS.map((s, i) => {
     const g = itemMesh(s.item);
+    g.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+    });
     g.position.set(s.itemX, fy(s.itemFloor), s.itemZ);
     g.visible = false;
     world.add(g);
@@ -622,14 +488,17 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   });
 
   // ---------------------------------------------------------------- people
-  type Person = { root: THREE.Object3D; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; current: string; play(name: string, fade?: number, once?: boolean): void; tint(c: THREE.Color | null): void };
+  type Person = { root: THREE.Object3D; meshes: THREE.Mesh[]; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; current: string; play(name: string, fade?: number, once?: boolean): void; tint(c: THREE.Color | null): void };
   function person(g: GLTF, clone: boolean): Person {
     const root = clone ? SkeletonUtils.clone(g.scene) : g.scene;
     const own: THREE.MeshStandardMaterial[] = [];
+    const meshes: THREE.Mesh[] = [];
     root.traverse(o => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       m.frustumCulled = false;
+      m.castShadow = shadows;
+      meshes.push(m);
       const mat = (m.material as THREE.MeshStandardMaterial).clone();
       mat.roughness = 0.8;
       m.material = mat;
@@ -640,6 +509,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     for (const c of clips) actions.set(c.name, mixer.clipAction(c));
     const p: Person = {
       root,
+      meshes,
       mixer,
       actions,
       current: "",
@@ -662,7 +532,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     world.add(root);
     return p;
   }
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
+  // a soft contact blob under everyone: the only shadow in software GL, a hint of one under real shadows
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: shadows ? 0.13 : 0.28, depthWrite: false });
   const blob = (r = 0.42) => {
     const m = new THREE.Mesh(new THREE.CircleGeometry(r, 20), shadowMat);
     m.rotation.x = -Math.PI / 2;
@@ -690,7 +561,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     p.root.position.set(s.x, fy(s.floor), s.z);
     p.root.rotation.y = 0.2;
     p.play("Idle_Loop");
-    p.tint(new THREE.Color().setHSL((i * 0.13) % 1, 0.18, 0.92));
+    // their own clothes, their own height; a tint over the whole texture used to wash the skin out too
+    p.root.scale.setScalar(0.96 + ((i * 7) % 5) * 0.025);
     const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: labelTexture("!", "#ffcf4a", "#3a2a10"), transparent: true }));
     mark.position.set(s.x, fy(s.floor) + 2.3, s.z);
     world.add(mark);
@@ -702,12 +574,12 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     p.root.position.set(s.x, fy(s.floor), s.z);
     p.root.rotation.y = s.anim === "Jog_Fwd_Loop" ? Math.PI / 2 : (i % 2 ? 0.4 : -0.4);
     p.play(s.anim);
-    p.tint(new THREE.Color().setHSL((0.55 + i * 0.07) % 1, 0.12, 0.88));
+    p.root.scale.setScalar(0.94 + ((i * 5) % 6) * 0.025);
     blob().position.set(s.x, fy(s.floor) + 0.02, s.z);
     return p;
   });
 
-  type ZState = "wander" | "chase" | "dazed" | "lured" | "trapped" | "dance";
+  type ZState = "wander" | "chase" | "dazed" | "lured" | "trapped" | "dance" | "stunned" | "chipped" | "riding" | "wrecking" | "harmless";
   const zombies = ZOMBIE_SPAWNS.map((s, i) => {
     const p = person(bases[s.base], true);
     p.root.position.set(s.x, fy(s.floor), s.z);
@@ -754,8 +626,54 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       upL: p.root.getObjectByName("upperarm_l"),
       upR: p.root.getObjectByName("upperarm_r"),
       spine: p.root.getObjectByName("spine_02"),
+      eyeMat,
+      /** the device a chipped zombie is heading for */
+      device: -1,
     };
   });
+
+  // ---------------------------------------------------------------- the trade room's devices (what the chipped zombies destroy)
+  const pack = activeTrade();
+  const roomY = fy(pack.room.floor);
+  const deviceMeshes = pack.devices.map((d, i) => {
+    const g = new THREE.Group();
+    const body = new THREE.Group();
+    g.add(body);
+    if (pack.device.kind === "washer") {
+      const faces = [materialFor("white"), materialFor("white"), materialFor("solid|#d8dde3"), materialFor("white"), materialFor("washer"), materialFor("white")];
+      const m = new THREE.Mesh(new THREE.BoxGeometry(d.w, d.h, d.d), faces);
+      m.position.y = d.h / 2;
+      body.add(m);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(d.w + 0.02, 0.06, d.d + 0.02), materialFor("solid|#d8dde3"));
+      top.position.y = d.h + 0.03;
+      body.add(top);
+    } else if (pack.device.kind === "toilet") {
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.42, 16), materialFor("white"));
+      bowl.position.set(0, 0.21, 0.15);
+      const tank = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.2), materialFor("white"));
+      tank.position.set(0, 0.6, -0.25);
+      const seat = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.05, 8, 20), materialFor("white"));
+      seat.rotation.x = Math.PI / 2;
+      seat.position.set(0, 0.44, 0.15);
+      body.add(bowl, tank, seat);
+    } else {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.04), materialFor("white"));
+      plate.position.set(0, 1.0, 0);
+      const holes = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.05), materialFor("solid|#2b2f36"));
+      holes.position.set(0, 1.0, 0.01);
+      body.add(plate, holes);
+    }
+    body.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+      (o as THREE.Mesh).receiveShadow = shadows;
+    });
+    g.position.set(d.x, roomY, d.z);
+    world.add(g);
+    return { g, body, i, wrecked: false, shake: 0, claimed: false, name: deviceName(pack, i) };
+  });
+  const wreckedCount = () => deviceMeshes.filter(d => d.wrecked).length;
+  let zombieHaste = 1;
+  let roomWreckedTold = false;
 
   // ---------------------------------------------------------------- dogs
   function makeDog(b: Breed) {
@@ -836,6 +754,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   const dogs = BREEDS.map((b, i) => {
     const d = makeDog(b);
+    d.root.traverse(o => {
+      (o as THREE.Mesh).castShadow = shadows;
+    });
     const spot = DOG_SPOTS[i];
     d.root.position.set(spot.x, fy(spot.floor), spot.z);
     d.root.rotation.y = i % 2 ? 0.6 : -0.6;
@@ -887,8 +808,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   let flatTarget = 0;
   let flip = 1;
   let charges = 3; // she arrives with a few sprays; the wall extinguishers refill
-  // on a rope: which one, and how far up (metres above its floor)
-  let climb: { rope: number; h: number } | null = null;
+  // on a rope: which one, the climb itself (climbMachine.ts), the sway she has, and the mantle over the lip at the top
+  type Mantle = { t: number; from: THREE.Vector3; to: THREE.Vector3 };
+  let climb: { rope: number; s: ClimbState; sway: number; swayV: number; pulls: number; mantle: Mantle | null } | null = null;
+  let landSquash = 0;
+  const sounds = createCpeSounds();
+  disposers.push(() => sounds.dispose());
+  const clipLength = (name: string) => heroG.animations.find(a => a.name === name)?.duration ?? 1;
   let sprintHeld = false;
   let ridingUntil = 0;
   let finaleAt = 0;
@@ -907,19 +833,46 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     for (const s of emergency) s.visible = zombieNight;
     barricade.visible = zombieNight;
     concierge.root.visible = zombieNight;
-    hemi.intensity = zombieNight ? 1.25 : 1.9;
+    hemi.intensity = zombieNight ? 0.55 : 0.85;
     hemi.color.set(zombieNight ? 0xcfe0ff : 0xfff0dc);
+    key.color.set(zombieNight ? 0xd8e4ff : 0xfff0dc);
+    key.intensity = zombieNight ? 1.15 : 1.6;
     scene.background = new THREE.Color(zombieNight ? "#141022" : "#1d1830");
+    (scene.fog as THREE.Fog).color.set(zombieNight ? 0x1a2238 : 0x2a2350);
+    gradeWarm = zombieNight ? 0 : 1;
+    inks = zombieNight ? INK_SETS.zombie : INK_SETS.cozy;
+    printRef?.setInks(inks);
+    if (cctvRef) {
+      if (zombieNight) {
+        cctvRef.follow(floor, pos.x);
+        cctvRef.boot();
+        const a = cctvRef.active;
+        callbacks.onCamera?.({ id: a.id, label: a.label, floor: a.floor, thumbs: cctvRef.thumbs.map(t => ({ id: t.id, label: t.label })) });
+      } else callbacks.onCamera?.(null);
+    }
+    for (const p of set.pools) (p.material as THREE.MeshBasicMaterial).color.set(zombieNight ? 0x8fa8d8 : 0xffffff);
     pMat.size = 0.16;
   }
+  let gradeWarm = 1;
+  let inks = INK_SETS.cozy;
+  let printRef: ReturnType<typeof createPrintPass> | null = null;
+  let cctvRef: Cctv | null = null;
   applyVibe();
 
   // ---------------------------------------------------------------- input
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
     keys.add(e.code);
+    if (climb && !e.repeat) {
+      // on the rope the keys are hands: A/left is the left hand, D/right the right, anything else the next one due
+      if (e.code === "KeyA" || e.code === "ArrowLeft") return climbHand("L");
+      if (e.code === "KeyD" || e.code === "ArrowRight") return climbHand("R");
+      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "KeyE" || e.code === "Space") {
+        e.preventDefault();
+        return climbHand("next");
+      }
+    }
     if (e.code === "KeyE" || e.code === "Enter") interact();
-    if (climb && !e.repeat && (e.code === "KeyW" || e.code === "ArrowUp")) climbPress();
     if (e.code === "KeyF") spray();
     if (e.code === "Space") {
       e.preventDefault();
@@ -987,7 +940,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   // ---------------------------------------------------------------- collisions
   function blocked(f: number, x: number, z: number, r = 0.3): boolean {
     if (z > -0.35 || z < -DEPTH + 0.35) return true;
-    for (const b of solids) if (b.floor === f && x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1) return true;
+    for (const b of solids) if (b.floor === f && hitsCollider(b, x, z, r)) return true;
     for (const c of closets) if (c.floor === f && c.locked && Math.abs(x - c.x) < CLOSET_HW + r && z < CLOSET_Z + r) return true;
     return false;
   }
@@ -1009,15 +962,22 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const near = (f: number, x: number, z: number, d: number) => f === floor && Math.hypot(pos.x - x, pos.z - z) < d;
   function findPrompt(): typeof prompt {
     if (performance.now() < ridingUntil || finaleAt) return null;
-    if (climb) return { id: "climb", label: "Climb! Keep tapping", act: () => climbPress() };
+    if (climb) return { id: "climb", label: "Hand over hand: A, D (or tap)", act: () => climbHand("next") };
     // the ropes come first, so a neighbour standing nearby never hides the way up or down
     for (let i = 0; i < ropes.length; i++) {
       const r = ropes[i];
       if (near(r.floor, r.x, r.z, 1.15)) return { id: "rope_up", label: `Climb the rope to the ${FLOORS[r.floor + 1].name.toLowerCase()}`, act: () => startClimb(i) };
       if (near(r.floor + 1, r.x, r.z, 1.15)) return { id: "rope_down", label: `Slide down to the ${FLOORS[r.floor].name.toLowerCase()}`, act: () => slideDown(i) };
     }
-    // the errand that's open: talk to its giver, pick up its item
-    for (let i = 0; i < ERRAND_SLOTS.length; i++) {
+    // zombie night: a stunned dormant resident within reach is the shotgun's moment
+    if (vibe === "zombie")
+      for (let i = 0; i < ERRAND_SLOTS.length; i++) {
+        const z = zombies[i];
+        if (z && z.state === "stunned" && isHot(i) && z.floor === floor && Math.hypot(pos.x - z.pos.x, pos.z - z.pos.z) < 2.0)
+          return { id: "shotgun", label: "Program the shotgun", act: () => callbacks.onInteract?.({ kind: "shotgun", slot: i }) };
+      }
+    // the errand that's open: talk to its giver, pick up its item (cozy night; on zombie night the residents are the zombies)
+    for (let i = 0; vibe !== "zombie" && i < ERRAND_SLOTS.length; i++) {
       const s = ERRAND_SLOTS[i];
       const ph = errandPhase[i];
       if ((ph === "need" || ph === "carrying" || ph === "waiting") && near(s.floor, s.x, s.z, 1.7))
@@ -1048,7 +1008,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
   function interact() {
     if (paused) return;
-    if (climb) return climbPress();
+    if (climb) return climbHand("next");
     if (prompt) prompt.act();
   }
   function pickUpItem(i: number) {
@@ -1087,21 +1047,35 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     flatTarget = 0;
     callbacks.onInteract?.({ kind: "pump" });
   }
+  const reportClimb = () => {
+    if (!climb) return callbacks.onClimb?.(null);
+    callbacks.onClimb?.({ progress: plannedHeight(climb.s) / FLOOR_H, stamina: climb.s.stamina, resting: isResting(climb.s) });
+  };
   function startClimb(i: number) {
     const r = ropes[i];
-    climb = { rope: i, h: 0.15 };
+    climb = { rope: i, s: newClimb(0.15), sway: 0, swayV: 0, pulls: 0, mantle: null };
     armedAt = Math.min(armedAt, performance.now());
     pos.set(r.x, fy(r.floor) + 0.15, r.z + 0.18);
     vy = 0;
     heading = Math.PI; // facing the rope, back to us
+    // the clip is one metre of hand-over-hand; it is scrubbed by how far she has climbed, never played on its own
     hero.play("ClimbUp_1m", 0.12);
-    callbacks.onClimb?.(climb.h / FLOOR_H);
-  }
-  function climbPress() {
-    if (!climb || paused) return;
-    climb.h += CLIMB_PER_PRESS;
     const act = hero.actions.get("ClimbUp_1m");
-    if (act) act.timeScale = 1.6;
+    if (act) act.paused = true;
+    sounds.creak(0.3);
+    reportClimb();
+  }
+  function climbHand(hand: Hand | "next") {
+    if (!climb || paused || climb.mantle) return;
+    const before = climb.s.pulls;
+    climb.s = climbPress2(climb.s, hand);
+    if (climb.s.pulls > before) {
+      const h = climb.s.pull?.hand ?? "R";
+      climb.swayV += (h === "L" ? 1 : -1) * 1.1;
+      sounds.creak(0.4 + (1 - climb.s.stamina) * 0.6);
+      if (climb.s.stamina < 0.35) sounds.grunt();
+    }
+    reportClimb();
   }
   function slideDown(i: number) {
     const r = ropes[i];
@@ -1121,6 +1095,9 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     callbacks.onFloor?.(next);
     callbacks.onInteract?.({ kind: "elevator", floor: next });
   }
+  /** zombie night: the zombie whose dormant resident is the open slot is the one the shotgun can chip */
+  const isHot = (i: number) => vibe === "zombie" && i < ERRAND_SLOTS.length && (errandPhase[i] === "need" || errandPhase[i] === "carrying" || errandPhase[i] === "waiting");
+  const settled = (z: (typeof zombies)[number]) => z.state === "chipped" || z.state === "riding" || z.state === "wrecking" || z.state === "harmless" || z.state === "trapped";
   function spray() {
     if (paused || finaleAt || climb) return;
     if (charges <= 0) {
@@ -1129,32 +1106,74 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     }
     charges -= 1;
     callbacks.onCharges?.(charges);
-    const col = vibe === "zombie" ? new THREE.Color("#f4f7ff") : new THREE.Color("#d9b8ff");
+    const zombieNight = vibe === "zombie";
+    const col = zombieNight ? new THREE.Color("#bfe8ff") : new THREE.Color("#d9b8ff");
     const from = new THREE.Vector3(pos.x + facing * 0.5, pos.y + 1.1, pos.z);
-    for (let k = 0; k < 70; k++) emit(from, new THREE.Vector3(facing * (4 + Math.random() * 3), 0.6, 0), 1.6, col, 0.9);
+    // the tazer is a short bright arc; the mist is a cloud
+    for (let k = 0; k < (zombieNight ? 40 : 70); k++) emit(from, new THREE.Vector3(facing * (zombieNight ? 9 + Math.random() * 4 : 4 + Math.random() * 3), zombieNight ? 0.2 : 0.6, 0), zombieNight ? 0.5 : 1.6, col, zombieNight ? 0.35 : 0.9);
     hero.play("Interact", 0.1, true);
     setTimeout(() => hero.current === "Interact" && hero.play("Idle_Loop"), 600);
-    for (const z of zombies) {
-      if (z.floor !== floor || z.state === "trapped") continue;
+    zombies.forEach((z, i) => {
+      if (z.floor !== floor || settled(z)) return;
       const dx = z.pos.x - pos.x;
-      if (Math.sign(dx) === facing && Math.abs(dx) < 4.2 && Math.abs(z.pos.z - pos.z) < 1.8) {
+      if (Math.sign(dx) !== facing || Math.abs(dx) > 4.2 || Math.abs(z.pos.z - pos.z) > 1.8) return;
+      if (zombieNight && isHot(i)) {
+        // stunned: thirty seconds on the ground, the shotgun's window
+        z.state = "stunned";
+        z.t = 30;
+        z.sprayed = false;
+        callbacks.onInteract?.({ kind: "tazed", slot: i });
+      } else {
         z.state = "dazed";
         z.t = 2.2;
         z.sprayed = true;
       }
-    }
+    });
+  }
+  function chip(slot: number) {
+    const z = zombies[slot];
+    if (!z || settled(z)) return;
+    const device = deviceMeshes.find(d => !d.wrecked && !d.claimed) ?? deviceMeshes.find(d => !d.wrecked);
+    if (!device) return;
+    device.claimed = true;
+    z.device = device.i;
+    z.state = "chipped";
+    z.t = 0;
+    z.stars.visible = false;
+    z.eyeMat.color.set(0x6fd0ff);
+    callbacks.onInteract?.({ kind: "chipped", slot, device: device.name });
+  }
+  function wake(slot: number) {
+    const z = zombies[slot];
+    if (!z || z.state !== "stunned") return;
+    z.state = "dazed";
+    z.t = 3;
+  }
+  function fuseOut(slot: number) {
+    const z = zombies[slot];
+    if (!z || z.state !== "stunned") return;
+    invuln = 0;
+    bite(z);
+    z.state = "dazed";
+    z.t = 3;
   }
   function jump() {
-    if (climb) return climbPress();
+    if (climb) return climbHand("next");
     if (paused || pos.y > fy(floor) + 0.02) return;
     vy = 4.6;
   }
   function bite(z: (typeof zombies)[number]) {
     if (climb) {
-      // grabbed by the ankle: she lets go of the rope
-      climb = null;
-      callbacks.onClimb?.(null);
+      // grabbed by the ankle: she drops to the last knot and keeps hold; it costs her grip, not a life
+      climb.s = climbGrabbed(climb.s);
+      climb.swayV += 2.2;
+      invuln = 2.5;
+      sounds.slide();
+      reportClimb();
       callbacks.onInteract?.({ kind: "rope_fell" });
+      z.state = "dazed";
+      z.t = 2.5;
+      return;
     }
     bites += 1;
     invuln = 5;
@@ -1180,23 +1199,66 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   }
 
   // ---------------------------------------------------------------- post
-  const composer = new EffectComposer(renderer);
+  const composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: softwareGl ? 0 : 4 });
+  const composer = new EffectComposer(renderer, composerTarget);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.45, 0.96);
+  // bloom only on what's actually a light (lamps, the sign), never on a white sofa in a bright room
+  const bloom = softwareGl ? null : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.5, 1.3);
   if (bloom) composer.addPass(bloom);
+  // the grade: a warm storybook night, or a cool green-tinged one; the runtime eases between them when the vibe flips
+  const grade = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uWarm: { value: 1 }, uVig: { value: 0.3 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uWarm; uniform float uVig; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec3 warm = c.rgb;
+        warm = mix(vec3(l), warm, 1.12);
+        warm = mix(warm, warm * vec3(1.05, 0.98, 0.9), smoothstep(0.4, 1.2, l));
+        warm += vec3(0.02, 0.0, 0.035) * (1.0 - smoothstep(0.0, 0.35, l));
+        vec3 cool = c.rgb;
+        cool = mix(vec3(l), cool, 0.82);
+        cool = mix(cool, cool * vec3(0.9, 1.02, 1.04), smoothstep(0.3, 1.2, l));
+        cool += vec3(0.0, 0.03, 0.025) * (1.0 - smoothstep(0.0, 0.4, l));
+        c.rgb = mix(cool, warm, uWarm);
+        vec2 d = vUv - 0.5;
+        c.rgb *= 1.0 - uVig * dot(d, d) * 1.7;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(grade);
   composer.addPass(new OutputPass());
+  // the brochure: the finished frame is separated into ink plates and screened onto paper (cpePrint.ts)
+  const print = createPrintPass(renderer.getPixelRatio());
+  print.setInks(inks);
+  printRef = print;
+  composer.addPass(print);
+  // zombie night is watched on the concierge's monitors (cpeCctv.ts); software GL keeps the plain dollhouse
+  const cctv: Cctv | null = softwareGl ? null : createCctv(renderer, scene, renderer.getPixelRatio());
+  cctvRef = cctv;
+  disposers.push(() => cctv?.dispose());
+  const reportCamera = () => {
+    if (!cctv || vibe !== "zombie") return callbacks.onCamera?.(null);
+    const a = cctv.active;
+    callbacks.onCamera?.({ id: a.id, label: a.label, floor: a.floor, thumbs: cctv.thumbs.map(t => ({ id: t.id, label: t.label })) });
+  };
+
+  disposers.push(() => composerTarget.dispose());
   function resize() {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     if (softwareGl) {
-      const pr = Math.min(1, Math.sqrt(400_000 / Math.max(1, w * h)));
+      const pr = Math.min(1, Math.sqrt(160_000 / Math.max(1, w * h)));
       renderer.setPixelRatio(pr);
       composer.setPixelRatio(pr);
     }
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
+    cctvRef?.setSize(w, h);
     camera.aspect = w / h;
-    camera.fov = w < h ? 46 : 30;
+    camera.fov = w < h ? 46 : 27;
     camera.updateProjectionMatrix();
   }
   resize();
@@ -1210,36 +1272,78 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
   const camLook = new THREE.Vector3(pos.x, 1.6, -2.5);
   let elapsed = 0;
   let lastBubble = 0;
+  // twenty skinned people cost more than the whole building: only the ones the camera can see are skinned and
+  // drawn, and only the ones on her floor cast a shadow. The party shows everyone.
+  const viewHalf = () => (camera.aspect < 1 ? 9 : 12);
+  const inView = (x: number, f: number) => !!finaleAt || (Math.abs(x - camLook.x) < viewHalf() && Math.abs(f - floor) <= 1);
+  const present = (p: Person, x: number, f: number, step: number) => {
+    const on = inView(x, f);
+    p.root.visible = on;
+    if (!on) return;
+    p.mixer.update(step);
+    const cast = shadows && f === floor;
+    for (const m of p.meshes) m.castShadow = cast;
+  };
+  renderer.info.autoReset = false;
   function frame() {
+    renderer.info.reset();
     const dt = Math.min(0.05, clock.getDelta());
+    // A React overlay pauses play. Rendering a costly software-WebGL scene behind the opaque shotgun desk
+    // starves its real-time buttons and fuse; preserve the last frame instead until play resumes.
+    if (paused) return;
     elapsed += dt;
     const now = performance.now();
     const frozen = paused;
 
-    // ---- her
+    // ---- her, on the rope
     if (climb && !frozen) {
       const r = ropes[climb.rope];
-      climb.h = Math.max(0.15, climb.h - CLIMB_SLIP * dt);
-      const act = hero.actions.get("ClimbUp_1m");
-      if (act) act.timeScale = Math.max(0.15, act.timeScale - dt * 2.5);
-      if (keys.has("KeyS") || keys.has("ArrowDown")) {
-        climb = null; // let go
-        callbacks.onClimb?.(null);
-      } else if (climb.h >= FLOOR_H - 0.35) {
-        // up through the hole and onto the floor above
-        floor = r.floor + 1;
-        pos.set(r.x + 0.9, fy(floor), r.z);
-        climb = null;
-        vy = 0;
-        hero.play("Idle_Loop", 0.2);
-        for (const d of carriedDogs) dogs[d].floor = floor;
-        callbacks.onClimb?.(null);
-        callbacks.onFloor?.(floor);
-        callbacks.onInteract?.({ kind: "rope_top", floor });
+      const top = fy(r.floor + 1);
+      if (climb.mantle) {
+        // over the lip: an arc from the hole to the landing, a land, a squash
+        const m = climb.mantle;
+        m.t = Math.min(1, m.t + dt / 0.55);
+        const k = m.t;
+        const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        pos.lerpVectors(m.from, m.to, ease);
+        pos.y += Math.sin(k * Math.PI) * 0.45;
+        heading = Math.PI / 2;
+        if (m.t >= 1) {
+          floor = r.floor + 1;
+          pos.copy(m.to);
+          climb = null;
+          vy = 0;
+          landSquash = 1;
+          sounds.thud();
+          hero.play("Idle_Loop", 0.25);
+          for (const d of carriedDogs) dogs[d].floor = floor;
+          callbacks.onClimb?.(null);
+          callbacks.onFloor?.(floor);
+          callbacks.onInteract?.({ kind: "rope_top", floor });
+        }
       } else {
-        pos.set(r.x + Math.sin(elapsed * 2.2) * 0.04, fy(r.floor) + climb.h, r.z + 0.18);
-        heading = Math.PI;
-        callbacks.onClimb?.(climb.h / FLOOR_H);
+        climb.s = climbTick(climb.s, dt);
+        if (keys.has("KeyS") || keys.has("ArrowDown")) {
+          climb = null; // let go
+          callbacks.onClimb?.(null);
+        } else if (climb.s.h >= FLOOR_H - 0.45) {
+          const landing = ropeLanding(r);
+          climb.mantle = { t: 0, from: new THREE.Vector3(r.x, fy(r.floor) + climb.s.h, r.z + 0.18), to: new THREE.Vector3(landing.x, top, landing.z) };
+          hero.play("Jump_Land", 0.1, true);
+          sounds.creak(0.8);
+        } else {
+          // the body hangs off the rope and swings with each pull; the clip is scrubbed by the metres climbed
+          climb.swayV -= climb.sway * 22 * dt + climb.swayV * 4.5 * dt;
+          climb.sway += climb.swayV * dt;
+          pos.set(r.x + climb.sway * 0.05, fy(r.floor) + climb.s.h, r.z + 0.18);
+          heading = Math.PI;
+          const act = hero.actions.get("ClimbUp_1m");
+          if (act) {
+            const len = clipLength("ClimbUp_1m");
+            act.time = (((climb.s.h - 0.15) % 1) + 1) % 1 * len;
+          }
+          if (Math.floor(elapsed * 4) !== Math.floor((elapsed - dt) * 4)) reportClimb();
+        }
       }
     }
     if (!climb && !frozen && !finaleAt && now >= ridingUntil) {
@@ -1288,8 +1392,12 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     flat += (flatTarget - flat) * Math.min(1, dt * 7);
     flip = Math.min(1, flip + dt * 9);
     paper.position.copy(pos);
-    paper.scale.set(1, 1, THREE.MathUtils.lerp(1, 0.05, flat));
-    paper.rotation.z = flat > 0.5 && ["Walk_Loop", "Sprint_Loop"].includes(hero.current) ? Math.sin(elapsed * 11) * 0.06 : 0;
+    landSquash = Math.max(0, landSquash - dt * 4.5);
+    const squash = Math.sin(Math.min(1, landSquash) * Math.PI) * 0.12;
+    const pullK = climb?.s.pull ? climb.s.pull.t / PULL_DUR : 0;
+    const stretch = climb && !climb.mantle ? Math.sin(pullK * Math.PI) * 0.05 : 0;
+    paper.scale.set(1 + squash * 0.6, 1 - squash + stretch, THREE.MathUtils.lerp(1, 0.05, flat));
+    paper.rotation.z = climb && !climb.mantle ? climb.sway * 0.14 : flat > 0.5 && ["Walk_Loop", "Sprint_Loop"].includes(hero.current) ? Math.sin(elapsed * 11) * 0.06 : 0;
     hero.root.position.set(0, 0, 0);
     hero.root.rotation.y = heading;
     hero.root.scale.set(flat > 0.5 ? Math.abs(flip) : 1, 1, 1);
@@ -1298,13 +1406,20 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     heroShadow.scale.setScalar(THREE.MathUtils.lerp(1, 0.6, flat));
     hero.mixer.update(frozen ? 0 : dt);
 
+    // ---- which picture: the printed dollhouse, or the monitors on zombie night (the party is always the dollhouse)
+    const onMonitors = vibe === "zombie" && !finaleAt && !!cctv;
+    const liveCamera = onMonitors && cctv ? cctv.active.cam : camera;
+
     // ---- errand markers and items
     needy.forEach((n, i) => {
       const ph = errandPhase[i];
       n.mark.visible = ph === "need" || ph === "carrying" || ph === "waiting";
-      n.mark.position.y = fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08;
-      n.mark.lookAt(camera.position);
-      n.p.mixer.update(dt);
+      if (vibe === "zombie" && zombies[i]) {
+        n.mark.position.set(zombies[i].pos.x, zombies[i].pos.y + 2.3 + Math.sin(elapsed * 3 + i) * 0.08, zombies[i].pos.z);
+        n.mark.visible = n.mark.visible && !settled(zombies[i]);
+      } else n.mark.position.set(ERRAND_SLOTS[i].x, fy(ERRAND_SLOTS[i].floor) + 2.3 + Math.sin(elapsed * 3 + i) * 0.08, ERRAND_SLOTS[i].z);
+      n.mark.lookAt(liveCamera.position);
+      present(n.p, ERRAND_SLOTS[i].x, ERRAND_SLOTS[i].floor, dt);
       if (finaleAt) n.p.play("Dance_Loop");
       else n.p.play(ph === "done" ? "Yes" : ph === "need" || ph === "carrying" ? "Idle_Talking_Loop" : "Idle_Loop", 0.3, ph === "done");
       const it = items[i];
@@ -1315,11 +1430,14 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         (it.glow.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(elapsed * 4) * 0.3;
       }
     });
-    for (const q of quiet) {
-      q.mixer.update(dt);
+    quiet.forEach((q, i) => {
+      present(q, QUIET_SLOTS[i].x, QUIET_SLOTS[i].floor, dt);
       if (finaleAt) q.play("Dance_Loop");
+    });
+    if (concierge.root.visible || vibe === "zombie" || finaleAt) {
+      concierge.mixer.update(dt);
+      for (const m of concierge.meshes) m.castShadow = shadows && floor === 0;
     }
-    concierge.mixer.update(dt);
 
     // ---- zombies (or sleepwalkers)
     for (const z of zombies) {
@@ -1331,13 +1449,86 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         z.state = "dance";
         z.p.play("Dance_Loop");
       } else if (!frozen) {
-        if (z.state === "wander") {
+        if (z.state === "stunned") {
+          // on the ground, twitching; when the thirty seconds are up it gets up angry
+          if (z.t <= 0) {
+            z.state = "chase";
+            z.t = 0;
+          }
+        } else if (z.state === "chipped" || z.state === "riding") {
+          const device = deviceMeshes[z.device];
+          const roomFloor = pack.room.floor;
+          if (!device || device.wrecked) {
+            const next = deviceMeshes.find(d => !d.wrecked && !d.claimed);
+            if (next) {
+              next.claimed = true;
+              z.device = next.i;
+            } else z.state = "harmless";
+          } else if (z.state === "riding") {
+            z.t -= dt * (zombieHaste - 1);
+            if (z.t <= 0) {
+              z.floor = roomFloor;
+              z.pos.set((ELEV_X0 + ELEV_X1) / 2, fy(roomFloor), -2.4);
+              z.state = "chipped";
+            }
+          } else if (z.floor !== roomFloor) {
+            // to the elevator on its own floor, then ride
+            const ex = (ELEV_X0 + ELEV_X1) / 2;
+            const ddx = ex - z.pos.x;
+            if (Math.abs(ddx) < 0.4) {
+              z.state = "riding";
+              z.t = 1.4;
+            } else {
+              const nz = THREE.MathUtils.lerp(z.pos.z, -2.4, Math.min(1, dt * 2));
+              moveTo(z.pos, z.floor, z.pos.x + Math.sign(ddx) * 2.2 * zombieHaste * dt, nz, 0.25);
+            }
+          } else {
+            // on the room's floor: to the front of the device
+            const tx = device.g.position.x, tz = device.g.position.z + 1.05;
+            const ddx = tx - z.pos.x, ddz = tz - z.pos.z;
+            if (Math.hypot(ddx, ddz) < 0.35) {
+              z.state = "wrecking";
+              z.t = 3.2;
+            } else {
+              const len = Math.hypot(ddx, ddz) || 1;
+              moveTo(z.pos, z.floor, z.pos.x + (ddx / len) * 2.2 * zombieHaste * dt, z.pos.z + (ddz / len) * 2.2 * zombieHaste * dt, 0.25);
+            }
+          }
+        } else if (z.state === "wrecking") {
+          const device = deviceMeshes[z.device];
+          if (device) {
+            device.shake = 1;
+            if (Math.random() < 0.5) emit(new THREE.Vector3(device.g.position.x + (Math.random() - 0.5) * 0.8, device.g.position.y + 0.6 + Math.random() * 0.6, device.g.position.z + 0.5), new THREE.Vector3((Math.random() - 0.5) * 2, 1.5 + Math.random(), 0.6), 0.8, new THREE.Color("#f4f7ff"), 1.1);
+            if (z.t <= 0 && !device.wrecked) {
+              device.wrecked = true;
+              device.body.rotation.z = (device.i % 2 ? 1 : -1) * 0.22;
+              device.body.position.y = -0.1;
+              device.body.traverse(o => {
+                const m = o as THREE.Mesh;
+                if (m.isMesh) m.material = Array.isArray(m.material) ? m.material.map(() => materialFor("solid|#6a6670|0.9")) : materialFor("solid|#6a6670|0.9");
+              });
+              for (let k = 0; k < 40; k++) emit(new THREE.Vector3(device.g.position.x, device.g.position.y + 0.8, device.g.position.z + 0.4), new THREE.Vector3((Math.random() - 0.5) * 4, 2 + Math.random() * 3, 1), 1.2, new THREE.Color("#ffe08a"), 1.4);
+              z.state = "harmless";
+              callbacks.onInteract?.({ kind: "device_wrecked", device: device.name, wrecked: wreckedCount(), total: deviceMeshes.length });
+              if (wreckedCount() === deviceMeshes.length && !roomWreckedTold) {
+                roomWreckedTold = true;
+                callbacks.onInteract?.({ kind: "room_wrecked" });
+              }
+            }
+          } else z.state = "harmless";
+        } else if (z.state === "harmless") {
+          // chipped and spent: it wanders and never chases again
+          const nx = z.pos.x + z.dir * 0.5 * dt;
+          if (blocked(z.floor, nx, z.pos.z, 0.3) || nx < 1 || nx > WIDTH - 1) z.dir *= -1;
+          else z.pos.x = nx;
+        } else if (z.state === "wander") {
           const nx = z.pos.x + z.dir * 0.7 * dt;
           if (blocked(z.floor, nx, z.pos.z, 0.3) || (z.floor === SPA.floor && nx > SPA.x0 - 0.5) || nx < 1 || nx > WIDTH - 1) z.dir *= -1;
           else z.pos.x = nx;
           z.pos.z += Math.sin(elapsed * 0.7 + z.phase) * 0.25 * dt;
           z.pos.z = THREE.MathUtils.clamp(z.pos.z, -DEPTH + 0.6, -0.6);
           if (sameFloor && dist < 6 && now >= ridingUntil && now >= calmUntil && now >= armedAt && !(floor === SPA.floor && pos.x > SPA.x0)) z.state = "chase";
+          if (vibe === "zombie" && !isHot(zombies.indexOf(z)) && zombies.indexOf(z) < ERRAND_SLOTS.length && errandPhase[zombies.indexOf(z)] === "done") z.state = "harmless";
         } else if (z.state === "chase") {
           if (!sameFloor || dist > 9 || (floor === SPA.floor && pos.x > SPA.x0)) z.state = "wander";
           else if (dist > 0.05) {
@@ -1378,16 +1569,21 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         }
       }
       // pose: a slow shuffle with arms out (or a sleepwalker's drift)
-      const moving = z.state === "wander" || z.state === "chase" || z.state === "lured";
-      z.p.play(z.state === "dance" ? "Dance_Loop" : z.state === "dazed" ? "Idle_No_Loop" : moving ? "Walk_Loop" : "Idle_Loop", 0.3);
+      const moving = z.state === "wander" || z.state === "chase" || z.state === "lured" || z.state === "chipped" || z.state === "harmless";
+      z.p.play(z.state === "dance" ? "Dance_Loop" : z.state === "dazed" || z.state === "stunned" ? "Idle_No_Loop" : z.state === "wrecking" ? "Interact" : moving ? "Walk_Loop" : "Idle_Loop", 0.3);
       const act = z.p.actions.get("Walk_Loop");
-      if (act) act.timeScale = z.state === "chase" ? 0.85 : 0.5;
+      if (act) act.timeScale = z.state === "chase" ? 0.85 : z.state === "chipped" ? 1.3 : 0.5;
       z.p.root.position.copy(z.pos);
-      const face = z.state === "wander" ? (z.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan2(dx, dz);
+      // stunned: flat out on its back, twitching
+      z.p.root.rotation.x = z.state === "stunned" ? -Math.PI / 2 + Math.sin(elapsed * 30) * 0.03 : 0;
+      z.p.root.position.y = z.state === "stunned" ? z.pos.y + 0.12 : z.pos.y;
+      const devX = z.device >= 0 ? deviceMeshes[z.device]?.g.position.x ?? z.pos.x : z.pos.x;
+      const face = z.state === "wander" || z.state === "harmless" ? (z.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : z.state === "chipped" ? (devX >= z.pos.x ? Math.PI / 2 : -Math.PI / 2) : z.state === "wrecking" ? Math.PI : Math.atan2(dx, dz);
       if (z.state !== "trapped" && z.state !== "dance") z.p.root.rotation.y += (face - z.p.root.rotation.y) * Math.min(1, dt * 4);
-      z.p.root.visible = z.state !== "trapped" || (z.floor === floor && Math.sin(elapsed * 3 + z.phase) > 0.6);
-      z.p.mixer.update(frozen ? 0 : dt);
-      if (z.state !== "dance") {
+      const shown = z.state !== "trapped" || (z.floor === floor && Math.sin(elapsed * 3 + z.phase) > 0.6);
+      present(z.p, z.pos.x, z.floor, frozen ? 0 : dt);
+      z.p.root.visible = z.p.root.visible && shown;
+      if (z.p.root.visible && z.state !== "dance" && z.state !== "harmless" && z.state !== "chipped" && z.state !== "wrecking") {
         if (z.upL) z.upL.rotation.x -= 1.15;
         if (z.upR) z.upR.rotation.x -= 1.15;
         if (z.spine) z.spine.rotation.x += 0.22;
@@ -1399,7 +1595,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
         z.face.visible = z.p.root.visible;
         for (const c of z.face.children) c.visible = (c.name === "eye") === (vibe === "zombie");
       }
-      z.stars.visible = z.state === "dazed";
+      z.stars.visible = z.state === "dazed" || z.state === "stunned";
+      if (z.state === "stunned") z.stars.visible = Math.sin(elapsed * 40) > -0.2;
       z.stars.position.set(z.pos.x, z.pos.y + 2.05, z.pos.z);
       z.stars.rotation.y += dt * 5;
       z.shadow.position.set(z.pos.x, z.pos.y + 0.02, z.pos.z);
@@ -1475,6 +1672,13 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       callbacks.onBubble?.(null);
     }
 
+    // ---- the devices: shaking while chewed, smoking once wrecked
+    for (const d of deviceMeshes) {
+      d.shake = Math.max(0, d.shake - dt * 2);
+      d.g.rotation.z = d.shake > 0 ? Math.sin(elapsed * 40) * 0.05 * d.shake : 0;
+      if (d.wrecked && Math.random() < 0.12) emit(new THREE.Vector3(d.g.position.x + (Math.random() - 0.5) * 0.4, d.g.position.y + 0.9, d.g.position.z), new THREE.Vector3(0, 0.6 + Math.random() * 0.4, 0.1), 0.25, new THREE.Color("#8a8a90"), 1.6);
+    }
+
     // ---- closets swing
     for (const c of closets) {
       if (c.locked) continue;
@@ -1508,7 +1712,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
 
     // ---- lamps: steady and warm, or flickering on zombie night; at the party, they pulse to the beat
     for (const l of lamps) {
-      const m = l.mesh.material as THREE.MeshLambertMaterial;
+      const m = l.mesh.material as THREE.MeshStandardMaterial;
       let k = l.base;
       if (finaleAt) k = l.base * (0.6 + 0.8 * Math.max(0, Math.sin(elapsed * 8.4 + l.x * 0.4)));
       else if (vibe === "zombie") k = l.base * (Math.sin(elapsed * 23 + l.phase * 7) > 0.93 || Math.sin(elapsed * 1.3 + l.phase) > 0.97 ? 0.15 : 0.85);
@@ -1525,25 +1729,52 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       l.color.set(vibe === "zombie" && !finaleAt ? 0xc8d8ff : 0xffc27a);
     });
 
+    // ---- the key light follows her floor; the water moves; the city slides; the grade eases toward the vibe
+    key.position.set(pos.x - 9, fy(floor) + 11, 16);
+    key.target.position.set(pos.x, fy(floor) + 1.2, -2.6);
+    set.waterMat.map?.offset.set(elapsed * 0.014, elapsed * 0.009);
+    set.parallax(camPos.x);
+    grade.uniforms.uWarm.value += (gradeWarm - grade.uniforms.uWarm.value) * Math.min(1, dt * 2.5);
+
     // ---- prompt
     if (!frozen) setPrompt(findPrompt());
 
     // ---- camera: a dollhouse shot of her floor; the party pulls back to the whole building
+    // on the rope the camera comes in and looks up with her (gesture focus); the dollhouse shot returns at the top
+    const onRope = !!climb && !finaleAt;
+    const wantFov = finaleAt ? (camera.aspect < 1 ? 46 : 27) : onRope ? (camera.aspect < 1 ? 40 : 23) : camera.aspect < 1 ? 46 : 27;
+    if (Math.abs(camera.fov - wantFov) > 0.05) {
+      camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 3);
+      camera.updateProjectionMatrix();
+    }
     const goal = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.6), 62)
-      : camera.aspect < 1
+      : onRope
+        ? new THREE.Vector3(ropes[climb!.rope].x + 0.4, pos.y + 1.5, camera.aspect < 1 ? 7.8 : 8.4)
+        : camera.aspect < 1
         ? new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 2, WIDTH - 2), Math.max(fy(floor), pos.y - 1.2) + 3.9, 10.5)
-        : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), Math.max(fy(floor), pos.y - 1.2) + 3.9, 13.5);
+        : new THREE.Vector3(THREE.MathUtils.clamp(pos.x, 5, WIDTH - 5), Math.max(fy(floor), pos.y - 1.2) + 3.5, 12.4);
     // on a phone the card covers the top third: aim above her so the floor sits in the open middle
     const look = finaleAt
       ? new THREE.Vector3(WIDTH / 2, fy(1.5), -2.5)
-      : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.45), -2.6);
+      : onRope
+        ? new THREE.Vector3(ropes[climb!.rope].x, pos.y + 0.9, -2.0)
+        : new THREE.Vector3(goal.x, Math.max(fy(floor), pos.y - 1.2) + (camera.aspect < 1 ? 2.3 : 1.35), -2.6);
     camPos.lerp(goal, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camLook.lerp(look, Math.min(1, dt * (finaleAt ? 0.8 : 4)));
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
-    composer.render();
+    if (softwareGl) {
+      // SwiftShader has no GPU: avoid four full-screen post passes so simulation and input stay responsive.
+      renderer.render(scene, camera);
+    } else if (onMonitors && cctv) {
+      if (cctv.follow(floor, pos.x)) reportCamera();
+      cctv.render(elapsed, dt);
+    } else {
+      print.tick(elapsed);
+      composer.render();
+    }
   }
   renderer.setAnimationLoop(frame);
 
@@ -1564,7 +1795,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     ready: true,
     ropes: ROPES,
     state: () => ({
-      climbing: climb ? climb.h / FLOOR_H : null,
+      climbing: climb ? plannedHeight(climb.s) / FLOOR_H : null,
+      stamina: climb ? climb.s.stamina : null,
       floor,
       x: pos.x,
       z: pos.z,
@@ -1576,6 +1808,10 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       saved: savedDogs,
       trapped: closets.filter(c => c.locked).length,
       zombies: zombies.map(z => ({ floor: z.floor, x: z.pos.x, z: z.pos.z, state: z.state })),
+      devices: deviceMeshes.map(d => ({ name: d.name, wrecked: d.wrecked })),
+      wrecked: wreckedCount(),
+      /** zombie night is on the monitors only with a real GPU */
+      monitors: vibe === "zombie" && !!cctv && !finaleAt,
       vibe,
     }),
     teleport(f: number, x: number, z: number) {
@@ -1610,6 +1846,25 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     },
     closets: CLOSETS,
     dogs: DOG_SPOTS,
+    /** zombie night, for a test: stand her by that slot's zombie and taze it */
+    taze(slot: number) {
+      const z = zombies[slot];
+      if (!z) return;
+      floor = z.floor;
+      pos.set(z.pos.x - 1.2, fy(z.floor), z.pos.z);
+      facing = 1;
+      charges = Math.max(charges, 1);
+      spray();
+    },
+    chip,
+    wake,
+    fuseOut,
+    /** for a test on a slow renderer: chipped zombies walk and ride four times faster; the wreck itself is unchanged */
+    hurry() {
+      zombieHaste = 4;
+    },
+    /** what one frame costs: draw calls and triangles, plus which quality tier this device landed in */
+    perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs?.length ?? 0, softwareGl, highQuality, shadows }),
   };
   (window as unknown as { __centuryParkEast?: typeof hook }).__centuryParkEast = hook;
   disposers.push(() => {
@@ -1649,12 +1904,19 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     interact,
     spray,
     jump,
+    climbHand(hand) {
+      climbHand(hand);
+    },
+    chip,
+    wake,
+    fuseOut,
     setSprint(on) {
       sprintHeld = on;
     },
     respawn() {
       climb = null;
       callbacks.onClimb?.(null);
+      landSquash = 0;
       bites = 0;
       flatTarget = 0;
       flat = 0;
