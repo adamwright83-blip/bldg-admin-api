@@ -62,10 +62,17 @@ export const ROPES: { floor: number; x: number; z: number }[] = [
   { floor: 1, x: 6.6, z: -1.7 }, // the laundry room, up to the pool deck
 ];
 export const ROPE_LANDING_DX = 0.9;
+/** The roof's larger pool needs a little more front-deck clearance after mantling. */
+export const ROOF_ROPE_LANDING_DZ = 0.45;
 export const ROPE_HOLE_RADIUS = 0.62;
 
 /** the plunge pool with its coping: it starts east of the laundry rope's hole so the landing and the hole stay clear */
 export const ROOF_POOL: Collider = { floor: 2, x0: 8.6, x1: 18.25, z0: -4.85, z1: -1.75 };
+
+/** Shared by the runtime and tests: the upper rope must clear the pool while remaining close enough to slide back. */
+export function ropeLanding(rope: (typeof ROPES)[number]): { x: number; z: number } {
+  return { x: rope.x + ROPE_LANDING_DX, z: rope.floor === 1 ? rope.z + ROOF_ROPE_LANDING_DZ : rope.z };
+}
 
 /** furniture that blocks movement; the set draws each piece on exactly this footprint */
 export const FURNITURE_COLLIDERS: Collider[] = [
