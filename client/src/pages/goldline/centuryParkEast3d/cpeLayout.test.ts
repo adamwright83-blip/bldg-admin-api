@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, PLAYER_RADIUS, ROOF_POOL, ROPES, ROPE_HOLE_RADIUS, ROPE_LANDING_DX, WIDTH, hitsCollider, staticColliders } from "./cpeLayout";
+import { DEPTH, ELEV_X0, ELEV_X1, FLOORS, PLAYER_RADIUS, ROOF_POOL, ROPES, ROPE_HOLE_RADIUS, ROPE_LANDING_DX, WIDTH, hitsCollider, ropeLanding, staticColliders } from "./cpeLayout";
 
 /**
  * The ropes must land her somewhere she can walk away from. PR #710 enlarged the pool's collider and the laundry rope
@@ -45,7 +45,7 @@ function reachable(floor: number, from: { x: number; z: number }, to: { x: numbe
 describe("Century Park East ropes", () => {
   for (const rope of ROPES) {
     const above = rope.floor + 1;
-    const landing = { x: rope.x + ROPE_LANDING_DX, z: rope.z };
+    const landing = ropeLanding(rope);
     const name = `${FLOORS[rope.floor].name} → ${FLOORS[above].name}`;
 
     it(`${name}: she lands clear of everything and can take a first step in every direction`, () => {
@@ -81,5 +81,6 @@ describe("Century Park East ropes", () => {
     expect(rope.floor).toBe(1);
     expect(ROOF_POOL.x0).toBeGreaterThan(rope.x + ROPE_HOLE_RADIUS);
     expect(ROOF_POOL.x0).toBeGreaterThan(rope.x + ROPE_LANDING_DX + PLAYER_RADIUS);
+    expect(ropeLanding(rope).z).toBeGreaterThan(ROOF_POOL.z1 + PLAYER_RADIUS + 0.1);
   });
 });
