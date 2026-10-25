@@ -30,7 +30,7 @@ another piece of real work through the game.
 | `gojoystick.com/joystick-start` returns **404** | `vercel.json` has no rewrite for it |
 | `app.gojoystick.com` does not resolve | curl status 000 |
 | The funnel is reachable only at `admin.bldg.chat/joystick-start` | 200 there |
-| Stripe returns every buyer to `admin.bldg.chat` | `server/saas/saasBilling.ts` `appUrl()` default; no `DAYFORGE_BILLING_APP_URL` in production |
+| Stripe returns every buyer to `admin.bldg.chat` | `server/saas/saasBilling.ts` `appUrl()` default; the billing return-URL override is not set in production |
 | The draft's resume token lives in the starting origin's browser storage | `JoystickAcquisitionPage.tsx` `readCredentials` |
 
 So in production a stranger on gojoystick.com cannot reach signup at all. If the funnel were linked from the
