@@ -62,6 +62,9 @@ test.describe("Lantern City → Century Park East", () => {
     await expect(root).toHaveAttribute("data-vibe", "zombie", { timeout: 30_000 });
     await expect.poll(isReady, { timeout: 180_000, intervals: [1000] }).toBe(true);
     await call(page, "calm");
+    // zombie night has its own way to the desk (the shotgun test below); the errands are cozy night's, so switch back
+    await page.getByTestId("century-park-east-vibe").click();
+    await expect(root).toHaveAttribute("data-vibe", "cozy");
 
     // the open errand: ask, find, hand over, and the real resident's Letter Desk opens
     const open = page.getByTestId("century-park-east-open-slot");
@@ -229,7 +232,10 @@ test.describe("Lantern City → Century Park East", () => {
     await call(page, "calm");
     if ((await root.getAttribute("data-vibe")) !== "zombie") await page.getByTestId("century-park-east-vibe").click();
     await expect(root).toHaveAttribute("data-vibe", "zombie");
-    await expect(page.getByTestId("century-park-east-monitors")).toBeVisible({ timeout: 10_000 });
+    // the monitor wall needs a real GPU; software WebGL (this runner) keeps the plain dollhouse and says so
+    const monitors = await page.evaluate(() => !!(window as unknown as { __centuryParkEast: { state(): { monitors: boolean } } }).__centuryParkEast.state().monitors);
+    if (monitors) await expect(page.getByTestId("century-park-east-monitors")).toBeVisible({ timeout: 10_000 });
+    else await expect(page.getByTestId("century-park-east-monitors")).toHaveCount(0);
 
     const open = page.getByTestId("century-park-east-open-slot");
     await expect(open).toHaveAttribute("data-phase", "need", { timeout: 30_000 });

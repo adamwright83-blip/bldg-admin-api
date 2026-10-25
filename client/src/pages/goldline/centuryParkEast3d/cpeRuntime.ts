@@ -1801,6 +1801,8 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
       zombies: zombies.map(z => ({ floor: z.floor, x: z.pos.x, z: z.pos.z, state: z.state })),
       devices: deviceMeshes.map(d => ({ name: d.name, wrecked: d.wrecked })),
       wrecked: wreckedCount(),
+      /** zombie night is on the monitors only with a real GPU */
+      monitors: vibe === "zombie" && !!cctv && !finaleAt,
       vibe,
     }),
     teleport(f: number, x: number, z: number) {
