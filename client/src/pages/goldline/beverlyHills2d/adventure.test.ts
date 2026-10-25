@@ -90,6 +90,23 @@ describe("The Other Rodeo playable arc", () => {
         .chapter
     ).toBe("courtyard");
   });
+  it("retrieves a rightward ball throw from the blocked courtyard edge without reloading", () => {
+    const s = freshAdventure();
+    s.x = 480;
+    interact(s);
+    s.x = 1450;
+    s.facing = 1;
+    throwToy(s);
+    advance(s, 10);
+    expect(s.passage).toBe(false);
+    expect(prompt(s)?.action).toBe("ball");
+    interact(s);
+    expect(s.item).toBe("ball");
+    s.facing = -1;
+    throwToy(s);
+    advance(s, 4);
+    expect(s.passage).toBe(true);
+  });
   it("never crosses the garage gap before the platform is raised", () => {
     const s = freshAdventure();
     s.chapter = "distortion";

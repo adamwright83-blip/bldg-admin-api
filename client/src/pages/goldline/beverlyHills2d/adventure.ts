@@ -247,10 +247,13 @@ export function interact(s: Adventure): boolean {
 }
 export function throwToy(s: Adventure): boolean {
   if (s.item !== "ball" && s.item !== "stick") return false;
-  s.toy = Math.max(
-    150,
-    Math.min(CHAPTERS[s.chapter].width - 150, s.x + s.facing * 400)
-  );
+  // Before the passage opens, a rightward throw must stay on reachable ground.
+  // The player can retrieve an unsuccessful lure and throw away from the stairs.
+  const farthest =
+    s.chapter === "courtyard" && !s.passage
+      ? 1450
+      : CHAPTERS[s.chapter].width - 150;
+  s.toy = Math.max(150, Math.min(farthest, s.x + s.facing * 400));
   s.item = null;
   s.chase = 8;
   return true;
