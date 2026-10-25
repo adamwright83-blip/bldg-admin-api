@@ -1250,7 +1250,7 @@ export async function createCenturyParkEast(container: HTMLElement, castBase: st
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     if (softwareGl) {
-      const pr = Math.min(1, Math.sqrt(400_000 / Math.max(1, w * h)));
+      const pr = Math.min(1, Math.sqrt(160_000 / Math.max(1, w * h)));
       renderer.setPixelRatio(pr);
       composer.setPixelRatio(pr);
     }
