@@ -8,6 +8,12 @@ import {
   ONBOARDING_QUESTIONS,
   type GoldlineOnboardingQuestionKey,
 } from "@shared/goldlineOnboarding";
+import {
+  JOYSTICK_EXPERIENCE_LABELS,
+  experienceFromEntrySearch,
+  parseJoystickExperience,
+  type JoystickExperience,
+} from "@shared/joystickSelectedExperience";
 import type {
   JoystickDraftAnswerMap,
   JoystickDraftPreview,
@@ -17,6 +23,26 @@ import "./joystick-acquisition.css";
 
 type Credentials = { sessionId: string; resumeToken: string };
 const SESSION_KEY = "joystick_acquisition_credentials";
+const EXPERIENCE_KEY = "joystick_selected_experience";
+
+/**
+ * The world chosen on the homepage arrives as ?world= (or the SPA landing's
+ * ?mode=). It is kept for the visit so the Stripe return, which carries only
+ * ?session= and ?checkout=, still knows it.
+ */
+function readSelectedExperience(): JoystickExperience | null {
+  if (typeof window === "undefined") return null;
+  const fromUrl = experienceFromEntrySearch(window.location.search);
+  try {
+    if (fromUrl) {
+      localStorage.setItem(EXPERIENCE_KEY, fromUrl);
+      return fromUrl;
+    }
+    return parseJoystickExperience(localStorage.getItem(EXPERIENCE_KEY));
+  } catch {
+    return fromUrl;
+  }
+}
 
 function readCredentials(): Credentials | null {
   try {
@@ -49,6 +75,7 @@ export default function JoystickAcquisitionPage() {
   const [ownerEmail, setOwnerEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [selectedExperience] = useState<JoystickExperience | null>(() => readSelectedExperience());
   const started = useRef(false);
   const previewViewed = useRef(false);
   const checkoutReturnedTracked = useRef(false);
@@ -74,7 +101,10 @@ export default function JoystickAcquisitionPage() {
   useEffect(() => {
     if (credentials || started.current) return;
     started.current = true;
-    captureProductEvent("onboarding_draft_started", { source: "joystick_landing" });
+    captureProductEvent("onboarding_draft_started", {
+      source: "joystick_landing",
+      selected_experience: selectedExperience,
+    });
     start.mutate(
       { requestId: requestId() },
       {
@@ -94,7 +124,7 @@ export default function JoystickAcquisitionPage() {
         onError: cause => setError(cause.message),
       }
     );
-  }, [credentials, start]);
+  }, [credentials, start, selectedExperience]);
 
   useEffect(() => {
     const data = resume.data;
@@ -195,6 +225,7 @@ export default function JoystickAcquisitionPage() {
         contactName,
         ownerEmail,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        selectedExperience,
       });
       captureProductEvent("onboarding_identity_completed", { funnel_step: "prepay" });
       await resume.refetch();
@@ -284,7 +315,11 @@ export default function JoystickAcquisitionPage() {
       <section className="ja-card">
         <header className="ja-header">
           <span>JOYSTICK</span>
-          <small>YOUR BUSINESS. PLAYABLE.</small>
+          <small>
+            {selectedExperience
+              ? `${JOYSTICK_EXPERIENCE_LABELS[selectedExperience].toUpperCase()} · YOUR BUSINESS, PLAYABLE.`
+              : "YOUR BUSINESS. PLAYABLE."}
+          </small>
         </header>
 
         {error ? <p className="ja-error" role="alert">{error}</p> : null}
