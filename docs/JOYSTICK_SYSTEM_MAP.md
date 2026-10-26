@@ -64,7 +64,7 @@ Later Kingdoms have no locked place-name. Do not invent one.
 - `world.overworld` — Driver fantasy connective world. Exists before `level.colosseum`. Trailblazer can travel it while Colosseum is the only unlocked destination.
 - `admin.lantern_city` — Admin real-business territory visualization. Not the Overworld.
 - `hidden_game.*` — A complete, authored game (its own story, chapters, finale) that appears inside `admin.lantern_city` when a territory gets its first verified sale. Its chapters are rewards for real work. Not a `minigame.*`, not a `kingdom.*`, not an `encounter.*`.
-- `hidden_game.lost_property` — The first Hidden Game: a slapstick cozy puzzle game (four mice, a man-child prankster). The camera changes every chapter (2D side view → 3D → top-down …); the art style never does. A dark twist arrives only in the last minute. The story bible lives outside this repository (Claude Doc "Lost Property: Story Bible").
+- `hidden_game.lost_property` — The first Hidden Game, built as **Small Comforts** (`preview/small-comforts/`; what is built: `preview/small-comforts/STORY.md`): a slapstick cozy puzzle game (three mice — the Conductor, Biscuit and Pip — and a man-child prankster). The camera changes every chapter (2D side view → 3D → top-down …); the art style never does. A dark twist arrives only in the last minute. The story bible lives outside this repository (Claude Doc "Lost Property: Story Bible").
 - `admin.tower_wars` — Specific Admin visualization/mode. Legacy-feeling gameplay may remain visual-only. Not the Overworld.
 - `ship.wayward` — Trailblazer's in-world ship/home. Nothing else.
 - `kingdom.brass_republic` — Kingdom One.
