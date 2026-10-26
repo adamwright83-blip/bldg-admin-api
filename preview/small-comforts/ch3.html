@@ -869,7 +869,14 @@ function feedTick(dt){if(!BR.on)return;const prev=BR.ph;BR.ph=(BR.ph+dt/BR.P)%1;
   MAN.bob=Math.sin(ph*Math.PI*2)*3;
   // the out-breath ruffles the mice
   for(const M of[A,B,PIP])if(M.vis&&SCENE==="in"){M.droop=lerp(M.droop,BR.gust*.5,.3);if(BR.gust>.6)M.lean=lerp(M.lean,-.18*BR.gust,.2)}}
-function drawFeedFX(t){drawZapFX();if(SCENE!=="in"||!BR.on||!MAN.vis)return;const [mx,my]=P2S(...mouthP()),k=K();
+/* crumbs in his moustache (the alternate miss): they ride every breath, then drop out */
+let MUST=null;const MUSTC={crust:"#b9783a",meatball:"#6e3420",chicken:"#e6c48a"};
+function drawMust(t){if(!MUST||SCENE!=="in"||!MAN.vis)return;const age=clock-MUST.t0;if(age>9){MUST=null;return}
+  const a=H2S(200,342),b=H2S(220,342),sc=Math.hypot(b[0]-a[0],b[1]-a[1])/20,fall=Math.max(0,age-8),gust=BR.gust||0;
+  fx.save();fx.globalAlpha=clamp(1-fall,0,1);fx.fillStyle=MUSTC[MUST.k]||MUSTC.crust;fx.strokeStyle="rgba(40,24,12,.6)";fx.lineWidth=1;
+  for(const c of MUST.c){const [x,y]=H2S(200+c.x,342+c.y),yy=y+Math.sin(t*3+c.p)*1.2*sc+gust*Math.sin(t*20+c.p)*3*sc+fall*fall*160*sc;fx.beginPath();fx.ellipse(x,yy,c.r*sc,c.r*.8*sc,c.p,0,7);fx.fill();fx.stroke()}
+  fx.restore()}
+function drawFeedFX(t){drawZapFX();drawMust(t);if(SCENE!=="in"||!BR.on||!MAN.vis)return;const [mx,my]=P2S(...mouthP()),k=K();
   fx.save();fx.lineCap="round";
   if(BR.ph<.56&&BR.chew<=0){const q=smooth(0,.5,BR.ph);fx.strokeStyle=`rgba(230,240,255,${.22*q})`;fx.lineWidth=2;
     for(let i=0;i<7;i++){const a=-Math.PI*.15+i*.32+Math.sin(t*2+i)*.05,ph=((t*1.4+i*.37)%1),R0=(150-ph*120)*k;fx.beginPath();fx.arc(mx,my,R0,a,a+.35);fx.stroke()}}
@@ -923,7 +930,12 @@ async function landScrap(k){const ph=BR.ph,inn=ph>.03&&ph<.56&&BR.chew<=0;
       if(k===SCRAPS[0])CAPT=null;FD.i++;await wait(.3);await nextScrap();state="feed";return}
     await chickenDown();return}
   // the out-breath blows it straight back
-  FD.misses++;WRONG.add("blown:"+k);const f=FD.fly;sfx.boing();
+  FD.misses++;WRONG.add("blown:"+k);const f=FD.fly;sfx.boing();FD.mc=FD.mc||{};FD.mc[k]=(FD.mc[k]||0)+1;
+  if(FD.mc[k]%2===0){// the alternate, Antigravity's: the same scrap missed twice bursts on his lips, and the crumbs go all through his moustache
+    const m=mouthP(),fx0=f.x,fy0=f.y;await tween(.14,q=>{f.x=lerp(fx0,m[0],q);f.y=lerp(fy0,m[1]-24,q)},ease.in);FD.fly=null;sfx.crunch();sfx.snort();
+    MUST={k,t0:clock,c:Array.from({length:24},()=>({x:(Math.random()-.5)*130,y:(Math.random()-.5)*24,r:4.5+Math.random()*5,p:Math.random()*6}))};
+    say(A,"…",1.4);await wait(.3);say(PIP,"?",1.2);await wait(1.2)}
+  else{
   const tgt=k==="crust"?PIP:k==="meatball"?A:B,s=sOf(tgt.y)*(tgt===A?1:tgt===B?.95:.82),end=[tgt.x,tgt.y-s*1.18],x0=f.x,y0=f.y;
   await tween(.5,q=>{f.x=lerp(x0,end[0],q);f.y=lerp(y0,end[1],q)-Math.sin(q*Math.PI)*90;f.r-=.35},ease.lin);sfx.thud(.07);
   if(k==="crust"){// it lands on Pip like a hat. He keeps it.
@@ -931,7 +943,7 @@ async function landScrap(k){const ph=BR.ph,inn=ph>.03&&ph<.56&&BR.chew<=0;
   else if(k==="meatball"){// bonk: off the Conductor's cap, back to Biscuit
     tgt.sq=.25;say(A,"✶",1);sfx.boink();const x1=f.x,y1=f.y,bb=[B.x+4,B.y-sOf(B.y)*.95*1.12];await tween(.4,q=>{f.x=lerp(x1,bb[0],q);f.y=lerp(y1,bb[1],q)-Math.sin(q*Math.PI)*60},ease.lin);FD.fly=null;await pose({sq:0},.2,ease.back,A)}
   else{// a chicken leg to the face: Biscuit goes over backwards
-    await tween(.3,q=>{B.rz=-q*1.4;B.lean=-.4*q},ease.out);sfx.thud(.12);B.shut=1;FD.fly=null;await wait(.7);B.shut=0;await pose({rz:0,lean:0},.35,ease.back,B)}
+    await tween(.3,q=>{B.rz=-q*1.4;B.lean=-.4*q},ease.out);sfx.thud(.12);B.shut=1;FD.fly=null;await wait(.7);B.shut=0;await pose({rz:0,lean:0},.35,ease.back,B)}}
   if(FD.misses===2)caption("Wait for his mouth to open wide — then tap",6);
   FD.held=k;await pose({aLz:-2.6,aRz:2.6,yaw:.35,hp:-.3},.25,ease.back,B);state="feed"}
 async function chickenDown(){state="busy";BR.on=0;CAPT=null;MAN.reach=0;MAN.lf=-1;
@@ -1111,6 +1123,13 @@ let SONG=null,PROG=0,LUMP={p:0,v:0,k:0},SBASE=null;
    mouse with a tiny microphone. The mouse wants no part of karaoke, and dives off the sill onto his stomach. */
 const SHARD={B:{dx:52,dy:10,rot:-.25,fly:null},A:{dx:50,dy:8,rot:.2,fly:null},PIP:{dx:44,dy:8,rot:-.1,fly:null}};
 function shardPos(k){const sp=OUT.SILL[k],s=SHARD[k];return[sp[0]+s.dx,sp[1]+s.dy]}
+/* the glass has been stuck in his window frame for forty years. Every jump, the one with the microphone says so (lines from Antigravity). */
+const LYRICS={B:["NO MORE PUTTY!","FA-LA-FREE!","40 YEARS IN A SASH!"],A:["GOODBYE, SILL!","OO-WAH-BREEZE!","FRESH AIR!"],PIP:["OUTTA THE FRAME!","FREE AT LAST!","WHEEE!"]};
+const LYRN={B:0,A:0,PIP:0};let GLYR=null;
+function shardSay(k,text,d=1.1){for(const o in SHARD){const L=SHARD[o].lyr;if(o!==k&&L)L.d=Math.min(L.d,clock-L.t0+.12)}SHARD[k].lyr={text,t0:clock,d}}
+function nextLyric(k){return LYRICS[k][LYRN[k]++%LYRICS[k].length]}
+function drawLyric(text,sx,sy,size,age,d){const rise=Math.min(1,age/.25),fade=clamp((d-age)/.3,0,1);fx.save();fx.globalAlpha=fade;fx.font=`${Math.round(size*(.7+.3*ease.back(rise)))}px "Patrick Hand",Georgia,serif`;
+  fx.textAlign="center";fx.textBaseline="bottom";fx.lineJoin="round";fx.lineWidth=Math.max(3,size*.18);fx.strokeStyle="#2b1d1a";const hw=fx.measureText(text).width/2+10,x=clamp(sx,hw,W-hw),y=sy-age*18;fx.strokeText(text,x,y);fx.fillStyle="#fff1d6";fx.fillText(text,x,y);fx.restore()}
 function shardSing(k,t){if(!SONG)return 0;let o=0;for(const cyc of SONG.cycles)for(const s of cyc.slots){if(s.k!==k)continue;const d=t-s.cue;if(d>-.04&&d<(k==="B"?BEAT*.85:BEAT*.42))o=Math.max(o,1-Math.max(0,d)/(k==="B"?BEAT*.85:BEAT*.42)*.5)}return o}
 function drawMic(ctx,x,y,r,rot){ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.fillStyle="#2a2a30";ctx.fillRect(-r*.18,0,r*.36,r*1.6);ctx.fillStyle="#9aa0aa";ctx.beginPath();ctx.arc(0,-r*.1,r*.55,0,7);ctx.fill();
   ctx.strokeStyle="rgba(40,40,50,.6)";ctx.lineWidth=1;for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(-r*.5,-r*.1+i*r*.18);ctx.lineTo(r*.5,-r*.1+i*r*.18);ctx.stroke()}ctx.restore()}
@@ -1118,7 +1137,8 @@ function drawShards(t){if(SCENE!=="out"||!SONG&&!SHARDS_ON)return;const k=K(),st
   for(const key of["B","A","PIP"]){const S_=SHARD[key];let [px,py]=shardPos(key),rot=S_.rot,mic=0;
     if(S_.fly){const q=clamp((clock-S_.fly.t0)/S_.fly.d,0,1),M=mOf(key),up=Math.sin(q*Math.PI);py-=up*90;px+=up*12;rot+=up*.5;mic=up;if(q>=1)S_.fly=null}
     if(S_.goto){px=S_.goto[0];py=S_.goto[1];mic=1}
-    const [sx,sy]=P2S(px,py),sing=S_.goto?.6+.4*Math.abs(Math.sin(clock*6)):shardSing(key,st),h=92*k;
+    const lyrOn=S_.lyr&&clock-S_.lyr.t0<S_.lyr.d||GLYR&&clock-GLYR.t0<GLYR.d*.7;
+    const [sx,sy]=P2S(px,py),sing=S_.goto||lyrOn?.6+.4*Math.abs(Math.sin(clock*(lyrOn?14:6))):shardSing(key,st),h=92*k;
     fx.save();fx.translate(sx,sy);fx.rotate(rot+sing*Math.sin(clock*18)*.06);
     fx.beginPath();fx.moveTo(-h*.32,0);fx.lineTo(h*.08,-h);fx.lineTo(h*.38,-h*.08);fx.closePath();const g=fx.createLinearGradient(-h*.3,-h,h*.3,0);g.addColorStop(0,"rgba(225,240,255,.75)");g.addColorStop(1,"rgba(150,190,230,.35)");
     fx.fillStyle=g;fx.fill();fx.strokeStyle="rgba(255,255,255,.95)";fx.lineWidth=1.6;fx.stroke();fx.strokeStyle="rgba(255,255,255,.7)";fx.beginPath();fx.moveTo(-h*.1,-h*.2);fx.lineTo(h*.03,-h*.75);fx.stroke();
@@ -1126,7 +1146,10 @@ function drawShards(t){if(SCENE!=="out"||!SONG&&!SHARDS_ON)return;const k=K(),st
     fx.fillStyle="#1d2733";fx.beginPath();fx.arc(-h*.02,-h*.45,h*.04,0,7);fx.arc(h*.14,-h*.42,h*.04,0,7);fx.fill();
     fx.beginPath();fx.ellipse(h*.07,-h*.27,h*(.05+sing*.04),h*(.02+sing*.1),0,0,7);fx.fill();
     if(sing>.2){fx.fillStyle=`rgba(255,240,200,${sing})`;fx.font=`${Math.round(h*.4)}px Georgia`;fx.fillText(key==="B"?"♪":"♫",h*.3,-h*.9-sing*h*.2)}
-    if(mic)drawMic(fx,h*.42,-h*.55,h*.22*Math.max(.4,mic),.6);fx.restore()}}
+    if(mic)drawMic(fx,h*.42,-h*.55,h*.22*Math.max(.4,mic),.6);fx.restore();
+    if(S_.lyr){const age=clock-S_.lyr.t0;if(age>S_.lyr.d)S_.lyr=null;else drawLyric(S_.lyr.text,sx+h*.1,sy-h*1.3,Math.max(22,h*.4),age,S_.lyr.d)}}
+  // all three at once
+  if(GLYR){const age=clock-GLYR.t0;if(age>GLYR.d)GLYR=null;else{let cx=0,cy=0;for(const key of["B","A","PIP"]){const p=P2S(...shardPos(key));cx+=p[0]/3;cy+=p[1]/3}drawLyric(GLYR.text,cx,cy-92*k*1.7,Math.max(34,92*k*.66),age,GLYR.d)}}}
 let SHARDS_ON=0;
 /* song time = the moment the player is hearing: the audio clock minus output latency. Falls back to the game clock (tests, no audio). */
 function songT(){if(SBASE&&AC&&AC.state==="running"&&!window.__ts&&TS===1){const lat=Math.min(.2,AC.outputLatency||AC.baseLatency||0);return SBASE.c+(AC.currentTime-SBASE.a)-lat}return clock}
@@ -1170,7 +1193,7 @@ function heimTap(){if(state!=="slide"||!SONG)return;const t=songT();
   const cyc=SONG.cycles.find(c=>t>=c.c0-.05&&t<c.c0+BAR+.05&&c.slots.some(s=>s.state==="wait"));if(!cyc)return;
   const s=cyc.slots.find(s=>s.state==="wait");if(!s||t<s.cue-WIN_EARLY)return;const M=mOf(s.k);if(M.busy){s.state="skip";return}
   const err=window.__auto?0:t-s.cue,a=Math.abs(err);s.grade=a<=PERFECT?"perfect":a<=GOOD?"good":"miss";s.state="launched";CAPT=null;
-  RINGS.push({M,t0:clock,g:s.grade,early:err<0});SHARD[s.k].fly={t0:clock,d:.5};sfx.tink(1.6);leap(M,s.k,s.grade,cyc.thrust)}
+  RINGS.push({M,t0:clock,g:s.grade,early:err<0});SHARD[s.k].fly={t0:clock,d:.5};sfx.tink(1.6);if(s.grade!=="miss"){shardSay(s.k,nextLyric(s.k));jumpSound(s.k)}leap(M,s.k,s.grade,cyc.thrust)}
 /* the leap: up off the sill, flips, and down onto his stomach exactly as her hands go in */
 async function leap(M,k,grade,thrust){try{await leap_(M,k,grade,thrust)}catch(e){console.warn(e)}finally{if(M.busy&&!M.vis)M.vis=1;M.busy=0;M.hop=0;M.rz=0}}
 async function leap_(M,k,grade,thrust){M.busy=1;const C_=CASTH[k],g=gen,sp=OUT.SILL[k],hit=grade!=="miss";
@@ -1233,6 +1256,9 @@ async function outside(){setScene("out");zoomK=0;DARK=1;GLASS.length=0;HC.drape=
   [[A,"A"],[B,"B"],[PIP,"PIP"]].forEach(([M,k])=>Object.assign(M,{vis:1,x:OUT.SILL[k][0],y:OUT.SILL[k][1],hop:0,rz:0,yaw:.45,hp:-.55,lean:0,sq:0,sit:0,droop:0,shut:0,aLz:-.32,aRz:M===PIP?.12:.32,busy:0,gagged:0}));
   if(!CHOKE){CHOKE=1;chokeLoop()}
   await tween(1.3,q=>DARK=lerp(1,.18,q),ease.io);
+  // his window's glass, out on the sill, out of the frame for the first time in forty years. A man is choking. The glass is thrilled.
+  await wait(.3);SHARDS_ON=1;["B","A","PIP"].forEach((k,i)=>{SHARD[k].fly={t0:clock+i*.09,d:.5};tone(2600*(1.2+i*.15),.18,{gain:.05,type:"triangle",at:i*.09})});
+  await wait(.35);GLYR={text:"WE'RE FREE!",t0:clock,d:1.7};freeSound();await wait(1.5);
   await wait(.4);say(A,"!",1);
   // across the path: a porch light clicks on. A door. Running feet in the wet. She's shouting before she's even there.
   await wait(.6);sfx.fclick();await tween(.3,q=>PORCH=q);await wait(.3);sfx.door(.6);await wait(.2);
@@ -1283,7 +1309,7 @@ async function win(){state="busy";SONG=null;CAPT=null;CHIX=null;RINGS.length=0;
   await manExpr(P_("man","thanks"),.6);await wait(.8);SAYAT=()=>{const p=H2S(200,120);return[p[0],p[1]-20]};showSay("…thank you.");MAN.talk=1;sfx.mumble(3);await wait(1);MAN.talk=0;await wait(2);hideSay();
   // the Conductor's glass hops over and holds the microphone out to Pip. Pip sings. One note. The glass sings back.
   {const pp=[PIP.x+40,PIP.y-30];SHARD.A.goto=pp;sfx.tink(1.5);await wait(.6);await pose({aRz:2.6,hp:-.3},.25,ease.out,PIP);PIP.blush=1;
-   sing(880,0,.7,{gain:.08,shimmer:.4});await wait(.75);[523.3,659.3,784].forEach((f,i)=>sing(f,i*.05,1.1,{gain:.04,v:"o"}));say(PIP,"♥",1.6);await wait(1.3);SHARD.A.goto=null;await pose({aRz:.12,hp:0},.3,ease.io,PIP)}
+   sing(880,0,.7,{gain:.08,shimmer:.4});await wait(.75);if(CHOIR==="b")shardChord(523.3,0,{d:1.1,gain:.04});else[523.3,659.3,784].forEach((f,i)=>sing(f,i*.05,1.1,{gain:.04,v:"o"}));shardSay("A","HAL-LE-LU-GLASS!",1.6);say(PIP,"♥",1.6);await wait(1.3);SHARD.A.goto=null;await pose({aRz:.12,hp:0},.3,ease.io,PIP)}
   POCKETW=1;sfx.squeak(.9);await wait(1.4);
   await tween(1.4,q=>DARK=lerp(.18,.8,q));endChapter()}
 let POCKET=0,POCKETW=0;
@@ -1329,12 +1355,18 @@ function drawOutFX(t,dt){const k=K();
 const RAIN=Array.from({length:150},()=>({x:Math.random(),y:Math.random(),v:1.1+Math.random()*.9,l:14+Math.random()*26,w:.7+Math.random()*.9,a:.18+Math.random()*.25}));const DROPS=[];
 
 /* the glass choir: a sung "la"/"ooh" through vowel formants with a little shimmer on top */
-const VOW={a:[[800,7,1],[1150,9,.55],[2800,12,.22]],o:[[330,6,1],[800,9,.35],[2400,12,.08]]};
-function sing(f,at,d,{gain=.06,v="a",l=true,shimmer=.25}={}){if(!AC)return;const t0=AC.currentTime+at;
+const VOW={a:[[800,7,1],[1150,9,.55],[2800,12,.22]],o:[[330,6,1],[800,9,.35],[2400,12,.08]],e:[[300,7,1],[2250,12,.45],[3000,14,.2]]};
+/* two ways the glass can celebrate a jump, for Adam to pick between: ?choir=a is the original (the glass sings only its
+   cue note, and a chord on her push); ?choir=b adds Antigravity's idea, a four-part "aah-EEE!" on every jump. Remembered per device. */
+let CHOIR=(()=>{const q=new URLSearchParams(location.search).get("choir");try{if(q==="a"||q==="b")localStorage.setItem("smallcomforts.choir",q);return localStorage.getItem("smallcomforts.choir")||"a"}catch(e){return q==="b"?"b":"a"}})();
+function shardChord(root,at,{d=.5,gain=.03}={}){[1,1.26,1.5,2].forEach((m,i)=>sing(root*m,at+i*.025,d,{gain,v:"a",to:"e",shimmer:i===3?.3:0}));tone(2637,.18,{type:"triangle",gain:.025,to:3136,at:at+.01})}
+function jumpSound(k,at=0){if(CHOIR==="b")shardChord(CASTH[k].note,at)}
+function freeSound(at=0){if(CHOIR==="b")shardChord(392,at,{d:.95,gain:.04});else["B","A","PIP"].forEach(k=>sing(CASTH[k].note,at,.85,{gain:.05,shimmer:.3}))}
+function sing(f,at,d,{gain=.06,v="a",to=null,l=true,shimmer=.25}={}){if(!AC)return;const t0=AC.currentTime+at;
   const out=AC.createGain();out.gain.setValueAtTime(.0001,t0);out.gain.exponentialRampToValueAtTime(gain,t0+.035);out.gain.setValueAtTime(gain,t0+Math.max(.05,d*.55));out.gain.exponentialRampToValueAtTime(.0001,t0+d+.22);out.connect(master);
   const src=AC.createGain();const os=[];[1,1.007,.996].forEach((m,i)=>{const o=AC.createOscillator();o.type=i===2?"triangle":"sawtooth";o.frequency.value=f*m;const og=AC.createGain();og.gain.value=i===2?.6:.5;o.connect(og).connect(src);os.push(o)});
   const lfo=AC.createOscillator(),lg=AC.createGain();lfo.frequency.value=5.4;lg.gain.setValueAtTime(0,t0);lg.gain.linearRampToValueAtTime(f*.009,t0+.18);lfo.connect(lg);os.forEach(o=>lg.connect(o.frequency));
-  VOW[v].forEach(([F,Q,amp],i)=>{const bp=AC.createBiquadFilter();bp.type="bandpass";bp.Q.value=Q;if(l&&i===0){bp.frequency.setValueAtTime(380,t0);bp.frequency.exponentialRampToValueAtTime(F,t0+.07)}else bp.frequency.value=F;const g=AC.createGain();g.gain.value=amp*1.8;src.connect(bp).connect(g).connect(out)});
+  VOW[v].forEach(([F,Q,amp],i)=>{const bp=AC.createBiquadFilter();bp.type="bandpass";bp.Q.value=Q;if(l&&i===0){bp.frequency.setValueAtTime(380,t0);bp.frequency.exponentialRampToValueAtTime(F,t0+.07)}else bp.frequency.setValueAtTime(F,t0);if(to)bp.frequency.exponentialRampToValueAtTime(VOW[to][i][0],t0+.07+d*.6);const g=AC.createGain();g.gain.value=amp*1.8;src.connect(bp).connect(g).connect(out)});
   if(shimmer){const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f*4;env(g,t0,.004,gain*shimmer,.5);o.connect(g).connect(master);o.start(t0);o.stop(t0+.6)}
   [...os,lfo].forEach(o=>{o.start(t0);o.stop(t0+d+.3)})}
 /* ---------- ticking, input, hints, reset ---------- */
@@ -1348,7 +1380,7 @@ function ch3Key(k){if(state==="feed"&&(k===" "||k==="Enter")){feedTap();return 1
 function ch3Hint(){if(state==="feed"&&!CAPT)caption("Tap while his mouth is opening — he's breathing in",5);
   if(state==="slide"&&!CAPT)caption("Tap the singing glass when its ring closes",5)}
 function resetLeft(){setScene("in");BR.on=0;BR.happy=0;BR.chew=0;BR.gust=0;FD=null;SONG=null;PROG=0;Object.assign(LUMP,{p:0,v:0,k:0,show:0});RINGS.length=0;PARTS.length=0;CRACK=null;SHOES=null;SAYAT=null;CAPT=null;CHOKE=0;FLASH=0;GLASS.length=0;SPL.length=0;SPLAT=null;CHIX=null;POCKET=0;POCKETW=0;PORCH=0;CAPFLY=null;
-  Object.assign(WOM,{vis:0,cap:0,tgt:null,talk:0,p:null});ZAPE=null;CRUMB=null;MAN.buzz=0;SHARDS_ON=0;for(const k in SHARD){SHARD[k].fly=null;SHARD[k].goto=null}LEGS.k=1;MAN.noclip=0;MAN.img=null;MAN.sq3=0;DAZE=0;SBASE=null;MAN.s=.72;MAN.rot=0;RA.cap.visible=true;for(const M of[A,B,PIP]){M.st=null;M.daisy=0;M.stick=null;M.ride=null;M.busy=0;M.gagged=0}}
+  Object.assign(WOM,{vis:0,cap:0,tgt:null,talk:0,p:null});ZAPE=null;CRUMB=null;MAN.buzz=0;SHARDS_ON=0;GLYR=null;MUST=null;for(const k in SHARD){SHARD[k].fly=null;SHARD[k].goto=null;SHARD[k].lyr=null;LYRN[k]=0}LEGS.k=1;MAN.noclip=0;MAN.img=null;MAN.sq3=0;DAZE=0;SBASE=null;MAN.s=.72;MAN.rot=0;RA.cap.visible=true;for(const M of[A,B,PIP]){M.st=null;M.daisy=0;M.stick=null;M.ride=null;M.busy=0;M.gagged=0}}
 async function intro(){state="busy";await feedIntro()}
 
 /* ---------- the man: placement each frame (pose is drawn on the 12 fps clock) ---------- */

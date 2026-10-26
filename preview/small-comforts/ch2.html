@@ -331,7 +331,7 @@ function drawImg(ctx,img,px,py,w,rot=0,syS=1,anchor=.5,alpha=1,d){const [sx,sy]=
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy);ctx.rotate(rot);ctx.scale(1,syS);ctx.drawImage(img,-ww/2,-hh*anchor,ww,hh);ctx.restore()}
 function shadow(px,py,w,a){const [sx,sy]=P2S(px,py);const k=K(),rx=Math.max(1,w*k*.5),ry=rx*.22;const g=pc.createRadialGradient(sx,sy,0,sx,sy,rx);g.addColorStop(0,`rgba(16,8,3,${a})`);g.addColorStop(1,"rgba(16,8,3,0)");
   pc.save();pc.translate(sx,sy);pc.scale(1,ry/rx);pc.translate(-sx,-sy);pc.fillStyle=g;pc.beginPath();pc.arc(sx,sy,rx,0,7);pc.fill();pc.restore()}
-function laceEnd(t){if(A.hang)return[A.hang.hx,A.hang.hy];const th=LACE.th+Math.sin(t*.9)*.05;return[PIV[0]+Math.sin(th)*LACE_L,PIV[1]+Math.cos(th)*LACE_L]}
+function laceEnd(t){const hg=A.hang||B.hang;if(hg)return[hg.hx,hg.hy];const th=LACE.th+Math.sin(t*.9)*.05;return[PIV[0]+Math.sin(th)*LACE_L,PIV[1]+Math.cos(th)*LACE_L]}
 function drawLace(t){const [ex,ey]=laceEnd(t);const a=P2S(PIV[0],PIV[1]),b=P2S(ex,ey),k=K();const mx=(a[0]+b[0])/2+(b[1]-a[1])*.06,my=(a[1]+b[1])/2;
   pc.save();pc.lineCap="round";const path=()=>{pc.beginPath();pc.moveTo(a[0],a[1]);pc.quadraticCurveTo(mx,my,b[0],b[1])};
   path();pc.strokeStyle="#3a2314";pc.lineWidth=13*k;pc.stroke();path();pc.strokeStyle="#7a4f30";pc.lineWidth=9.5*k;pc.stroke();
@@ -841,7 +841,7 @@ function cutTick(dt){
   HC.gt=(HC.gt||0)+(TR.on?dt:0);if(HC.gt>9){HC.gt=0;sfx.growl();HC.gr=.8;say(B,"!",.9);MAN.bob=3}
   if(HC.gr>0){HC.gr-=dt;B.shake=1;TR.x+=(Math.random()-.5)*6;TR.y+=(Math.random()-.5)*4;if(HC.gr<=0){B.shake=0;MAN.bob=0;say(PIP,"…",1.2)}}
   if(HC.cutFrac>=.3&&!HC.doneShown){HC.doneShown=1;$("done").hidden=false}
-  if(HC.stir>=1&&TR.on){swat();return}
+  if(HC.stir>=1&&TR.on){(SWATN++%2?playDead:swat)();return}
   if(PTR.fast>2){bucked();return}
   if(HC.finishReq||HC.cutFrac>=.86||HC.cutT>80){HC.finishReq=0;finishCut()}}
 function finishCut(){$("done").hidden=true;if(state!=="cutting"){HC.finishReq=1;return}sneeze()}
@@ -870,6 +870,18 @@ async function swat(){state="busy";PTR.down=0;TR.on=0;buzz(0);WRONG.add("swat");
   await tween(1.6,q=>{MAN.rot=-4+Math.sin(q*Math.PI*5)*7*(1-q);B.shake=1;PIP.shake=1},ease.lin);sfx.mumble(3);B.shake=0;PIP.shake=0;HC.flare=0;MAN.lf=-1;PIP.lean=-1.1;PIP.shut=1;
   await swing;A.ctr=null;A.rz=0;Object.assign(A,{aLz:-.32,aRz:.32});MAN.rot=-4;
   say(A,"✶",1.4);sfx.thud(.07);await wait(.8);Object.assign(PIP,{lean:0,shut:0});HC.gust=0;HC.stir=.4;state="cutting"}
+/* wrong, the alternate (Antigravity's): the second time you ignore the lookout, all three go limp like toys until he settles */
+let SWATN=0;
+async function playDead(){state="busy";PTR.down=0;TR.on=0;buzz(0);WRONG.add("dead");sfx.snort();HC.gust=1;HC.flare=1;HC.press=0;MAN.lf=-1;
+  // everybody on his face is suddenly a stuffed toy
+  await Promise.all([[A,1],[B,-1],[PIP,1]].map(([M,s])=>pose({lean:-1.25,rz:s*.35,shut:1,aLz:-1.7,aRz:1.7,sq:.12,shake:0},.12,ease.out,M)));sfx.thud(.05);
+  // he snorts, smacks his lips, mumbles. One foot in the air twitches. Nobody breathes.
+  await wait(.7);sfx.mumble(3);MAN.bob=3;await wait(.6);HC.flare=0;
+  await tween(.5,q=>PIP.aRz=1.7+Math.sin(q*Math.PI*6)*.35,ease.lin);await wait(.4);
+  sfx.growl();B.shake=1;await wait(.55);B.shake=0;MAN.bob=0;await wait(.5);
+  // he settles. One by one, they come back to life.
+  HC.gust=0;sfx.manSnore();for(const [M,rz] of[[PIP,.12],[A,.32],[B,.32]]){await pose({lean:0,rz:0,shut:0,aLz:-.32,aRz:rz,sq:0},.25,ease.back,M);sfx.msq(1.2)}
+  say(PIP,"…",1);HC.stir=.35;state="cutting"}
 /* wrong (during the rig): pull the beard and it swings you */
 let PREV="";
 async function wrongTarzan(){PREV=state;state="busy";setGlint(null);WRONG.add("tarzan");
@@ -884,6 +896,29 @@ async function wrongTarzan(){PREV=state;state="busy";setGlint(null);WRONG.add("t
   await tween(.45,q=>{A.y=lerp(560,812,q*q);A.rz=-1.5},ease.lin);sfx.thud(.14);HC.gust=0;say(A,"✶",1.6);A.shut=1;await wait(1.1);A.shut=0;
   await pose({rz:0,...REST},.45,ease.back);for(const r of[.25,-.25,.12,0])await pose({hr:r},.1);await walkTo(700,820,200);await face(.3);
   state=PREV;setGlint(PREV==="needRide"?()=>trMid():()=>[PIP.x,PIP.y-40])}
+
+/* wrong (during the rig), Antigravity's: Biscuit grabs the shoelace instead. He is the heavy one. */
+async function wrongYoyo(){PREV=state;state="busy";setGlint(null);WRONG.add("yoyo");const home=[B.x,B.y];
+  const [ex,ey]=laceEnd(clock),s=sOf(B.y)*.95,piv=1.18,fy=ey+piv*s;
+  await walkTo(ex-24,Math.max(fy+40,820),150,B);await pose({yaw:0,hp:-.6},.2,ease.io,B);say(B,"!",.8);
+  await pose({sq:.3,aLz:-2.8,aRz:2.8},.2,ease.out,B);sfx.squeak(.8);
+  {const x0=B.x,y0=B.y;await tween(.34,q=>{B.x=lerp(x0,ex,q);B.y=lerp(y0,fy,q);B.hop=Math.sin(q*Math.PI)*24},ease.out);B.hop=0}
+  B.piv=piv;B.hang={hx:ex,hy:ey};B.hp=-.2;
+  // the lace stretches all the way down to the floor, then flings him up at the hook. And down. And up. Like a tea bag.
+  const floor=826-piv*s;let hy=ey;
+  for(let i=0;i<3;i++){const lo=floor-i*20,hi=lerp(PIV[1]+30,ey-60,i/2);
+    await tween(.34,q=>{B.hang.hy=lerp(hy,lo,q*q);B.sq=-.1*q},ease.lin);sfx.boing();B.sq=.3;
+    await tween(.46,q=>{B.hang.hy=lerp(lo,hi,1-(1-q)*(1-q));B.sq=.3*(1-q);B.rz=Math.sin(q*Math.PI)*.3*(i%2?-1:1)},ease.lin);hy=hi}
+  B.rz=0;
+  await tween(.4,q=>B.hang.hy=lerp(hy,ey,q),ease.io);
+  // he lets go at the top. Down he comes, onto the cushion, which has something to say about it.
+  const c0=[B.hang.hx,B.hang.hy+(piv-.5)*s],c1=[CU.x,CU.y-4-.5*s];B.hang=null;B.piv=.5;B.ctr=c0.slice();sfx.squeak(.9);
+  await tween(.6,q=>{B.ctr[0]=lerp(c0[0],c1[0],q);B.ctr[1]=lerp(c0[1],c1[1],q)-Math.sin(q*Math.PI)*90;B.rz=-q*Math.PI*2},ease.lin);
+  B.ctr=null;B.rz=0;B.x=CU.x;B.y=CU.y-4;sfx.pfft();CU.fl=1;tween(.5,q=>CU.sq=lerp(1,.5,q),ease.out).then(()=>tween(.6,q=>{CU.sq=lerp(.5,1,q);CU.fl=1-q},ease.lin));
+  B.sq=.35;await pose({sq:0,aLz:-.32,aRz:.32,hp:0},.3,ease.back,B);say(B,"…",1.4);await wait(.6);
+  // the Conductor points at the trimmer. Again.
+  await pose({aRz:2.3,hy:.6},.3);say(A,"!",1);await wait(.6);await pose({aRz:.32,hy:0},.3);await walkTo(home[0],home[1],150,B);
+  state=PREV;setGlint(()=>trMid())}
 
 /* ---------- the sneeze, and the reveal ---------- */
 async function sneeze(){state="busy";PTR.down=0;TR.on=0;buzz(0);
@@ -1178,7 +1213,7 @@ function showSay(t){sayEl.textContent=t;sayEl.style.opacity="1"}
 function hideSay(){sayEl.style.opacity="0"}
 $("card").onclick=()=>{$("card").hidden=true};
 $("done").onclick=e=>{e.stopPropagation();finishCut()};
-function reset(){buzz(0);gen++;tweens.length=0;A=A0();B=B0();PIP=C0();resetProps();resetHair();zoomK=0;DARK=0;MAN.vis=0;MAN.reach=0;MAN.talk=0;MAN.sleep=0;MSNORE=0;WRONG.clear();
+function reset(){buzz(0);gen++;SWATN=0;tweens.length=0;A=A0();B=B0();PIP=C0();resetProps();resetHair();zoomK=0;DARK=0;MAN.vis=0;MAN.reach=0;MAN.talk=0;MAN.sleep=0;MSNORE=0;WRONG.clear();
   Object.assign(TR,{vis:0,on:0,ride:0,dust:0});CORD=null;Object.assign(DRAWING,{x:1236,y:214,vis:1,fall:null,rot:-.07,fold:0,tapeLeft:null});if(typeof resetPhone==="function")resetPhone();
   LID=0;SNORE=0;hideSay();setGlint(null);$("end").hidden=true;$("card").hidden=true;$("done").hidden=true}
 $("again").onclick=e=>{e.stopPropagation();reset();intro()};
@@ -1198,7 +1233,7 @@ glC.addEventListener("pointerdown",e=>{if(state==="start")return;if(AC&&AC.state
   if(!state.startsWith("need"))return;idleT=0;
   const onM=(M,mul)=>{const s=sOf(M.y)*mul;return M.vis&&near(x,y,[M.x,M.y-M.hop-s*.5],s*.55)};
   const onBeard=()=>{if(!MAN.vis||HC.drape<400)return false;const [lx,ly]=S2H(x,y);return Math.abs(lx-200)<120&&ly>400&&ly<760};
-  if(state==="needRide"){if(near(x,y,trMid(),95)||onM(B,.95))return void doRide();if(onBeard())return void wrongTarzan()}
+  if(state==="needRide"){if(near(x,y,trMid(),95)||onM(B,.95))return void doRide();{const [ex,ey]=laceEnd(clock);if(near(x,y,[ex,ey],80)||near(x,y,[(PIV[0]+ex)/2,(PIV[1]+ey)/2],60))return void wrongYoyo()}if(onBeard())return void wrongTarzan()}
   if(state==="needClimb"){if(onM(PIP,.82)||onM(A,1))return void doClimb();if(onBeard())return void wrongTarzan()}
   if(typeof phoneTap==="function"&&phoneTap(x,y,onM))return;
   if(!A.onHead){const [px]=S2P(x,y);pose({hy:clamp((px-A.x)/260,-.8,.8),hp:-.15},.25).then(()=>wait(.8)).then(()=>{if(state.startsWith("need"))pose({hy:0,hp:0},.4)})}});
@@ -1238,7 +1273,7 @@ function loop_(now){const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/
 }
 if(!window.ManFace){fail("Part of the scene didn't load. Refresh to try again.");throw 0}faces();kidFaces();resetHair();
 requestAnimationFrame(loop);
-window.__dbg={get clock(){return clock},get ntw(){return tweens.length},P2S,H2S,H2P,S2H,get MAN(){return MAN},WRONG,HC,TR,HOIST,PTR,get A(){return A},get B(){return B},get C(){return PIP},get state(){return state},set state(v){state=v},intro,begin,finishCut,doRide,doClimb,startCut,get PB(){return typeof PB!=='undefined'?PB:null},get PH(){return typeof PH!=='undefined'?PH:null},doComfort:()=>doComfort(),bucked:()=>bucked(),startPinball:()=>startPinball(),phonePart:()=>phonePart(),faceTime:()=>faceTime(),sneezeNow:()=>{state='busy';sneeze()},doBlanket:()=>doBlanket(),sneeze:()=>sneeze()};
+window.__dbg={get clock(){return clock},get ntw(){return tweens.length},P2S,H2S,H2P,S2H,get MAN(){return MAN},WRONG,HC,TR,HOIST,PTR,get A(){return A},get B(){return B},get C(){return PIP},get state(){return state},set state(v){state=v},intro,begin,finishCut,doRide,doClimb,startCut,get PB(){return typeof PB!=='undefined'?PB:null},get PH(){return typeof PH!=='undefined'?PH:null},doComfort:()=>doComfort(),bucked:()=>bucked(),startPinball:()=>startPinball(),phonePart:()=>phonePart(),faceTime:()=>faceTime(),sneezeNow:()=>{state='busy';sneeze()},wrongYoyo:()=>wrongYoyo(),playDead:()=>playDead(),swat:()=>swat(),doBlanket:()=>doBlanket(),sneeze:()=>sneeze()};
 </script>
 </body>
 </html>

@@ -343,7 +343,7 @@ function drawProps(t){pc.setTransform(DPR,0,0,DPR,0,0);pc.clearRect(0,0,W,H);
   // cushion
   shadow(CU.x,CU.y+4,CU.w*1.05,.5);{const fl=CU.fl*Math.sin(t*38)*.06,[cx,cy]=P2S(CU.x,CU.y-CU.w*.24*CU.sq),kk=K(),ww=CU.w*(1+(1-CU.sq)*.12+fl)*kk,hh=ww*G.cushion.height/G.cushion.width;pc.save();pc.translate(cx,cy);pc.scale(1,.62*CU.sq);pc.rotate(-2.2+fl*2);pc.shadowColor='rgba(30,10,5,.9)';pc.shadowBlur=3;pc.drawImage(G.cushion,-ww/2,-hh*.45,ww,hh);pc.shadowBlur=0;pc.restore();const [hx,hy]=P2S(CU.x-CU.w*.18,CU.y-CU.w*.27*CU.sq),k=K();pc.save();pc.globalCompositeOperation="screen";const hg=pc.createRadialGradient(hx,hy,0,hx,hy,CU.w*.3*k);hg.addColorStop(0,"rgba(255,200,150,.35)");hg.addColorStop(1,"rgba(255,200,150,0)");pc.fillStyle=hg;pc.beginPath();pc.arc(hx,hy,CU.w*.3*k,0,7);pc.fill();pc.restore()}
   // bottle cap (on the floor, or on the spool table)
-  if(!CAP.carried&&CAP.vis!==0){shadow(CAP.x,CAP.y+2,CAP.w*.95,.45);drawCap(pc,CAP.x,CAP.y,CAP.w,t,CAP.rot||0)}
+  if(!CAP.carried&&!CAP.helmet&&CAP.vis!==0){shadow(CAP.x,CAP.y+2,CAP.w*.95,.45);drawCap(pc,CAP.x,CAP.y-(CAP.lift||0),CAP.w,t,CAP.rot||0)}
   SH.forEach(s=>{if(s.landed&&s.y>700)shadow(s.x,s.y+2,70,.4);drawImg(pc,s.top?G.shellTop:G.shellBot,s.x,s.y-27*(s.sq??1),96,s.rot,s.sq??1,.5)});
   if(Y&&!Y.inCap)drawYolk(pc,Y.x,Y.y,Y.r);
   drawLace(t);
@@ -376,6 +376,7 @@ const runs=Array.from({length:9},()=>({x:Math.random(),y:Math.random(),v:.01+Mat
 const steam=[],sparks=[];let drip={y:0,next:1.5,spl:0};let glint=null;
 function drawFX(t,dt){fx.setTransform(DPR,0,0,DPR,0,0);fx.clearRect(0,0,W,H);const k=K();
   if(CAP.carried&&PIP.vis){const s=sOf(PIP.y)*.82;drawCap(fx,PIP.x+8,PIP.y-PIP.hop-s*.3,CAP.w*.8,t)}
+  if(CAP.helmet&&PIP.vis){const s=sOf(PIP.y)*.82;drawCap(fx,PIP.x+2,PIP.y-PIP.hop-s*1.0,CAP.w*.9,t,Math.PI+(CAP.wob||0))}
   drawOcc();drawSockHide(t);
   if(DARK>0){const g=fx.createLinearGradient(0,0,0,H);g.addColorStop(0,`rgba(4,5,9,${DARK*1.3})`);g.addColorStop(1,`rgba(4,5,9,${DARK*.6})`);fx.fillStyle=g;fx.fillRect(0,0,W,H)}
   drawBubbles();
@@ -917,6 +918,30 @@ async function wrongPip(){state="busy";setGlint(null);WRONG.add("pip");const hom
   await walkTo(PIP.x-60,PIP.y+6,190);await pose({yaw:1.1,lean:.3,aLx:-1.2,aRx:-1.2},.2);await wait(.2);
   sfx.boing();await pose({rz:-.25,hop:18},.18,ease.out,PIP);await pose({rz:0,hop:0},.3,ease.back,PIP);await pose({lean:0,aLx:0,aRx:0},.2);say(A,"♥",1);
   await walkTo(home[0],home[1],95,PIP);await pose({yaw:0,hp:0,hy:0},.2,ease.io,PIP);setGlint(()=>laceEnd(clock));state="needLace"}
+/* wrong (Antigravity's): Pip tries to lift the bottle cap. It flips over onto his head like a tiny helmet. */
+async function wrongCap(){state="busy";setGlint(null);WRONG.add("cap");const home=[PIP.x,PIP.y],c0=[CAP.x,CAP.y];
+  // he hurries over, crutch clacking: that's a step if ever he saw one
+  await walkTo(CAP.x-48,CAP.y+2,220,PIP);await pose({yaw:1.1,lean:.45,aLx:-1.2,aRx:-1.2},.25,ease.io,PIP);sfx.squeak(1.3);
+  // he gets it up on its edge. It is heavier than it looks.
+  for(let i=0;i<2;i++){const top=.4+i*.35;await tween(.24,q=>CAP.rot=-Math.sin(q*Math.PI/2)*top,ease.out);sfx.msq(1.2+i*.12);await tween(.18,q=>CAP.rot=-top*(1-q*.5),ease.in)}
+  // up it goes... over... and down onto his head. Clonk.
+  {const r0=CAP.rot,s=sOf(PIP.y)*.82,x0=CAP.x;await tween(.32,q=>{CAP.rot=lerp(r0,-Math.PI,q);CAP.x=lerp(x0,PIP.x+2,q);CAP.lift=Math.sin(q*Math.PI)*s*1.6+q*s*.3},ease.io)}
+  CAP.helmet=1;CAP.lift=0;CAP.rot=0;sfx.tink(.75);sfx.thud(.06);Object.assign(PIP,{lean:0,aLx:0,aRx:0,shut:1,sq:.25});await pose({sq:0},.25,ease.back,PIP);await wait(.5);
+  // he can't see. He sets off anyway, in the general direction of nothing.
+  for(const [dx,dy] of[[-34,10],[28,-14],[-22,6]]){const x0=PIP.x,y0=PIP.y;await tween(.7,q=>{PIP.x=x0+dx*q;PIP.y=y0+dy*q;PIP.yaw=dx<0?-1.1:1.1;PIP.walk=1;PIP.ph=(PIP.ph||0)+.18;CAP.wob=Math.sin(q*Math.PI*6)*.12},ease.io);PIP.walk=0;sfx.msq(1.25);await wait(.15)}
+  {const x0=PIP.x,tx=CU.x+CU.w*.5+12;await tween(.45,q=>{PIP.x=lerp(x0,tx,q);PIP.walk=1;PIP.ph+=.2;CAP.wob=Math.sin(q*Math.PI*5)*.12},ease.in);PIP.walk=0}
+  // into the cushion. It says something rude. He sits down hard.
+  sfx.pfftSmall();CU.fl=.5;tween(.3,q=>CU.sq=lerp(1,.86,q),ease.out).then(()=>tween(.4,q=>{CU.sq=lerp(.86,1,q);CU.fl=.5*(1-q)},ease.out));
+  await tween(.3,q=>{PIP.rz=q*.9;CAP.wob=q*.3},ease.out);sfx.thud(.06);say(A,"!",1);await wait(.4);
+  // the Conductor comes over and takes the lid off him
+  await walkTo(PIP.x+70,PIP.y+4,230);await pose({yaw:-1.1,lean:.3,aLz:-2.6,aRz:2.6},.2);sfx.squeak(1.15);
+  {const s=sOf(PIP.y)*.82;CAP.helmet=0;CAP.wob=0;CAP.x=PIP.x+2;CAP.y=PIP.y;CAP.rot=Math.PI;CAP.lift=s*1.3;const x0=CAP.x;
+   await tween(.45,q=>{CAP.rot=lerp(Math.PI,2*Math.PI,q);CAP.x=lerp(x0,x0+46,q);CAP.lift=s*1.3*(1-q)+Math.sin(q*Math.PI)*40},ease.io);CAP.rot=0;CAP.lift=0}sfx.tink(1.1);
+  await pose({lean:0,aLz:-.32,aRz:.32},.2);PIP.shut=0;say(PIP,"✶",1.4);await tween(.6,q=>PIP.rz=.9*(1-q)+Math.sin(q*Math.PI*4)*.2*(1-q),ease.lin);PIP.rz=0;await wait(.3);
+  // he puts it back where it was. Pip goes home.
+  {const x0=CAP.x,y0=CAP.y;await Promise.all([walkTo(c0[0]+66,c0[1]+4,180),tween(1.1,q=>{CAP.x=lerp(x0,c0[0],q);CAP.y=lerp(y0,c0[1],q)},ease.io)])}
+  await Promise.all([walkTo(home[0],home[1],220,PIP),face(.3)]);await pose({yaw:0,hp:0,hy:0},.2,ease.io,PIP);
+  setGlint(()=>laceEnd(clock));state="needLace"}
 function hint(){const g=glint&&glint.at();if(!g)return;const M=state==="needCushion"?A:A,right=g[0]>M.x;
   pose(right?{aRz:2.2,hy:.5}:{aLz:-2.2,hy:-.5},.35,ease.io,M).then(()=>wait(.9)).then(()=>{if(state.startsWith("need"))pose({aLz:-.32,aRz:.32,hy:0},.35,ease.io,M)});
   sfx.squeak(1.2);if(state==="needLace"&&!PIP.bub)say(PIP,"dream",2.6);if(state==="needZip"){ZIP.jig=1;sfx.msq(.8);setTimeout(()=>ZIP.jig=0,500)}}
@@ -946,6 +971,7 @@ glC.addEventListener("pointerdown",e=>{if(state==="start")return;if(AC&&AC.state
   const onM=(M,mul)=>{const s=sOf(M.y)*mul;return M.vis&&near(x,y,[M.x,M.y-M.hop-s*.5],s*.55)};
   if(state==="needLace"){const [ex,ey]=laceEnd(clock);if(near(x,y,[ex,ey-60],95)||near(x,y,[(PIV[0]+ex)/2,(PIV[1]+ey)/2],80)||onM(A,1))return void doLace();
     if(onM(PIP,.82)||near(x,y,[L.BED[0],L.BED[1]-20],120))return void wrongPip();
+    if(near(x,y,[CAP.x,CAP.y-24],70))return void wrongCap();
     if(near(x,y,[CU.x,CU.y-20],150))return void wrongCushion();
     if(near(x,y,[E.x,E.y-50],110)||near(x,y,[1606,600],130))return void wrongTin()}
   if(state==="needShells"&&(SH.some(s=>near(x,y,[s.x,s.y-20],80))||onM(A,1)))return void doShells();
@@ -973,7 +999,7 @@ function loop_(now){const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/
 }
 if(!window.ManFace){fail("Part of the scene didn't load. Refresh to try again.");throw 0}faces();resetHair();
 requestAnimationFrame(loop);
-window.__dbg={get clock(){return clock},P2S,S2P,get MAN(){return MAN},drawHair,hc,WRONG,ZIP,OCC,get SH(){return SH},get E(){return E},get A(){return A},get B(){return B},get C(){return PIP},get state(){return state},set state(v){state=v},doZip,doLace,doShells,doCushion,intro,begin,wrongTin,wrongCushion,wrongPip,hideAndReturn:()=>{state='busy';hideAndReturn()}};
+window.__dbg={get clock(){return clock},P2S,S2P,get MAN(){return MAN},drawHair,hc,WRONG,ZIP,OCC,get SH(){return SH},get E(){return E},get A(){return A},get B(){return B},get C(){return PIP},get state(){return state},set state(v){state=v},doZip,doLace,doShells,doCushion,intro,begin,wrongTin,wrongCushion,wrongPip,wrongCap,get CAP(){return CAP},hideAndReturn:()=>{state='busy';hideAndReturn()}};
 </script>
 </body>
 </html>
