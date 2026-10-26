@@ -4,6 +4,8 @@
 [`reference/`](reference/): Chapter One's "Lunch. Tomorrow." and the Chapter Three Heimlich
 with the singing glass.
 
+**What happens in each chapter, who the mice are, and the mistakes agents keep making: [STORY.md](STORY.md).** Read it before you describe or change anything.
+
 If you are asked to work on Small Comforts, the three mice, the suitcase game, the cozy
 true-crime mice game, or "Lost Property", start here. Improve these files. Do not rebuild the
 game, and do not start from anything under [Not this](#not-this).
@@ -83,6 +85,7 @@ their art.
 - **Antigravity's `feat/small-comforts-chapters-1-4`** (closed PR #724). It was rebuilt from a
   written description with its own art. Its graphics are rejected. Its chapter logic and
   synthesized audio may still be mined for mechanics and jokes, ported into these files.
+- **The early story bible's cast and chapter table** (a Baker and a Reader mouse, a "From the ceiling" chapter). Those predate the build. [STORY.md](STORY.md) is what was actually built.
 - **`server/mitch/smallComfortsProduction.ts`** still describes the Lost Property Hotel
   proprietor proof, not these chapters.
 
