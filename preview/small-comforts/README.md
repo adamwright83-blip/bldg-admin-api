@@ -1,0 +1,72 @@
+# Small Comforts — the canonical build
+
+**This folder is the real game.** Adam confirmed it on 2026-10-26 from the captures in
+[`reference/`](reference/): Chapter One's "Lunch. Tomorrow." and the Chapter Three Heimlich
+with the singing glass.
+
+If you are asked to work on Small Comforts, the three mice, the suitcase game, the cozy
+true-crime mice game, or "Lost Property", start here. Improve these files. Do not rebuild the
+game, and do not start from anything under [Not this](#not-this).
+
+Source: the Claude artifact "Small Comforts", version `1791868620-6d07`, published 2026-10-13
+(`https://claude.ai/artifact/TQfw4Qw7PZT61UUPV64Gae`). The files here are byte-identical to that
+version. The artifact link needs Adam's claude.ai login. This folder does not.
+
+## Run it
+
+```bash
+python3 -m http.server 5301 --directory preview/small-comforts
+```
+
+Open <http://localhost:5301/>. Use a plain static server: Vite rewrites the three.js import map
+and changes what loads. Sound on, landscape.
+
+## What is in it
+
+| File | What it is |
+|---|---|
+| `index.html` | Chapter menu. Progress is in `localStorage` keys `smallcomforts.*`. |
+| `ch1.html` | **Chapter One — Breakfast in Bed.** His lunch is on top of the tin. Pip's bed is up on the shelf. Nobody can reach either. |
+| `ch2.html` | **Chapter Two — This Is a Sign.** He's asleep, his beard is in the way, somebody has a trimmer. |
+| `ch3.html` | **Chapter Three — Leftovers.** Inside: the mice feed him the week's scraps on the in-breath. The chicken goes down wrong, he backs through his own window and lands outside. Outside: the neighbour, one arm in a cast, does the Heimlich; the mice jump on her beat; a shard of his window beside each mouse sings that mouse's note. |
+| `man.js` | The man's and the neighbour's faces: an SVG rig with named expression beats. |
+| `plate.jpg`, `plate1.jpg` | The painted suitcase interior. |
+| `out.jpg`, `down.jpg` | The painted yard under his window, side-on and looking down. |
+| `body_*.png` | His cut-paper body for the yard. |
+| `*.webp` | Props: egg, shoelace, whoopee cushion, cap. |
+
+**There is no separate Chapter Four file.** The choking, the window, the one-armed Heimlich and
+the singing glass are the second half of `ch3.html`. When Adam says "Chapter Four", he means
+that sequence.
+
+Each chapter is one self-contained page: a canvas painted plate, felt mice in three.js (loaded
+from a CDN through the page's import map), and synthesized sound. In `ch3.html`,
+`window.__dbg.outside()` jumps straight to the yard for captures and testing.
+
+## Not this
+
+Each of these has sent an agent the wrong way. Do not use them as the base, and never take
+their art.
+
+- **The app's `client/src/components/admin/control-room/SmallComforts/`.** It renders only the
+  painted Tin Can House plate on Lantern City's Hollywood island. Its `game/` and `logic/`
+  folders are an older 3D proprietor prototype that nothing imports. None of it is these chapters.
+- **Older Claude artifacts.** "Small Comforts" of 2026-10-04 and 2026-10-11 (an earlier
+  single-page build); the standalone "Breakfast in Bed" and "This Is a Sign" (2026-10-11) and
+  "Leftovers" (2026-10-12, a Heimlich without the singing glass); "Small Comforts Chapter One"
+  (2026-10-05); and the "Lost Property: …" look tests, cast and story bible (2026-10-04/05).
+  This bundle supersedes all of them.
+- **Branches** `feat/small-comforts-*`, `fix/small-comforts-*`, `small-comforts-in-lantern-city`,
+  `evidence/small-comforts-proprietor-spike`, `art/small-comforts-blender-vs01` and
+  `feat/home-truth-small-comforts*`: the 3D proprietor line and the plate entry.
+- **Antigravity's `feat/small-comforts-chapters-1-4`** (closed PR #724). It was rebuilt from a
+  written description with its own art. Its graphics are rejected. Its chapter logic and
+  synthesized audio may still be mined for mechanics and jokes, ported into these files.
+- **`server/mitch/smallComfortsProduction.ts`** still describes the Lost Property Hotel
+  proprietor proof, not these chapters.
+
+## Not done yet
+
+These chapters are not wired into the app. When that happens, this folder is the source, and
+connecting it to the Hollywood Tin Can House entry is its own change. The unlock gate in PR #556
+is separate business logic; check its chapter rules against these chapters before wiring.
