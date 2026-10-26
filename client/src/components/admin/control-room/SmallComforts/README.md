@@ -2,7 +2,7 @@
 
 **The real game is not in this folder.** The canonical Small Comforts build, the three chapters
 Adam approved, lives in [`preview/small-comforts/`](../../../../../../preview/small-comforts/README.md).
-Read that README before changing anything here.
+Read that README and [`STORY.md`](../../../../../../preview/small-comforts/STORY.md) (what happens in each chapter) before changing anything here.
 
 What this folder is today:
 

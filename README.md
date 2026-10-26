@@ -16,7 +16,7 @@ who owns each business fact, and the one legal path from real evidence to a game
   server. It does not run `drizzle/*.sql`; a numbered migration is not live until an idempotent
   copy is added there.
 - **Games have one canonical build each.** Small Comforts (the three mice in the suitcase) is
-  [`preview/small-comforts/`](preview/small-comforts/README.md). Read a game's README before
+  [`preview/small-comforts/`](preview/small-comforts/README.md), and [`STORY.md`](preview/small-comforts/STORY.md) says what happens in each chapter. Read a game's README before
   touching it; older branches, artifacts and prototypes of the same game exist and are wrong.
 
 ## Layout
