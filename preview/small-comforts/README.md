@@ -9,8 +9,10 @@ true-crime mice game, or "Lost Property", start here. Improve these files. Do no
 game, and do not start from anything under [Not this](#not-this).
 
 Source: the Claude artifact "Small Comforts", version `1791868620-6d07`, published 2026-10-13
-(`https://claude.ai/artifact/TQfw4Qw7PZT61UUPV64Gae`). The files here are byte-identical to that
-version. The artifact link needs Adam's claude.ai login. This folder does not.
+(`https://claude.ai/artifact/TQfw4Qw7PZT61UUPV64Gae`). This folder started as a byte-identical
+copy of that version. **From 2026-10-26 on, this folder is the source of truth.** Change it here
+first, then republish the artifact from it. The artifact link needs Adam's claude.ai login. This
+folder does not.
 
 ## Run it
 
@@ -42,6 +44,25 @@ that sequence.
 Each chapter is one self-contained page: a canvas painted plate, felt mice in three.js (loaded
 from a CDN through the page's import map), and synthesized sound. In `ch3.html`,
 `window.__dbg.outside()` jumps straight to the yard for captures and testing.
+
+## Ideas ported from Antigravity (2026-10-26), on trial
+
+Adam is playing these to decide what stays. The art is untouched: every gag uses the existing
+props, mice and cutouts.
+
+| Where | What | How to see it |
+|---|---|---|
+| `ch3.html`, outside | The window shards pop up and shout **"WE'RE FREE!"** while he chokes | Plays on its own when the yard scene opens |
+| `ch3.html`, Heimlich | On every good jump, the shard with the microphone sings a line ("NO MORE PUTTY!", "GOODBYE, SILL!", "OUTTA THE FRAME!"…) | Hit a jump on its note |
+| `ch3.html`, ending | The Conductor's glass sings back to Pip: **"HAL-LE-LU-GLASS!"** | Finish the chapter |
+| `ch3.html`, sound | **Choir A/B.** `?choir=a` is the original: the glass sings only its cue note, plus a chord on her push. `?choir=b` adds a four-part "aah→EEE" chord on every jump. Remembered per device. | Open `ch3.html?choir=b`, or `?choir=a` to switch back |
+| `ch3.html`, feeding | **Alternate miss.** The first out-breath miss with a scrap plays the original (hat on Pip, bonk off the cap, chicken leg to the face). The second miss with the *same* scrap bursts it on his lips, and the crumbs sit in his moustache. | Feed him on the out-breath, twice, with the same scrap |
+| `ch2.html`, the rig | **New:** Biscuit grabs the shoelace instead of the trimmer. The lace yo-yos him up at the hook, and he drops onto his cushion. | Tap the hanging shoelace while the trimmer is glowing |
+| `ch2.html`, haircut | **Alternate wrong move.** The first time you buzz while he stirs, you get the original swat and Tarzan swing. The second time, all three mice go limp like toys until he settles. | Keep buzzing after Pip's warning, twice |
+| `ch1.html`, the shoelace step | **New:** Pip tries to lift the bottle cap. It flips onto his head like a helmet, and he staggers blind into the whoopee cushion. | Tap the bottle cap on the rug before the Conductor swings |
+
+Each chapter's `window.__dbg` can trigger these directly (`wrongCap`, `wrongYoyo`, `playDead`,
+`swat`, `outside`, `win`).
 
 ## Not this
 
