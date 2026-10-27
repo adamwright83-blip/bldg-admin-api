@@ -82,7 +82,7 @@
 .lc-job__error{color:#9c272c!important;font-weight:700}
 .lc-job__fallback{padding:8px 0;border:0;background:none;color:var(--ink);font-size:12px;font-weight:900;display:flex;align-items:center;gap:4px}
 .lc-job__check{width:70px;height:70px;display:grid;place-items:center;border-radius:50%;background:#76d5a5;color:#0b3a26;flex-shrink:0}
-.lc-hold{--hold-ring:#b8bdc8;position:relative;width:103px;height:103px;flex-shrink:0;display:grid;place-items:center;border:0;border-radius:50%;padding:7px;cursor:pointer;touch-action:none!important;user-select:none;-webkit-user-select:none;background:conic-gradient(var(--gold) 0%, var(--hold-ring) 0%);box-shadow:0 1px 4px #0002}
+.lc-hold{--hold-ring:#b8bdc8;position:relative;width:103px;height:103px;flex-shrink:0;display:grid;place-items:center;border:0;border-radius:50%;padding:7px;cursor:pointer;touch-action:none!important;user-select:none;-webkit-user-select:none;background:conic-gradient(var(--gold) 0 var(--fill), var(--hold-ring) var(--fill) 100%);box-shadow:0 1px 4px #0002}
 .lc-hold__inner{background:var(--ink);color:var(--paper);width:100%;height:100%;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;letter-spacing:.04em}
 .lc-hold--holding{animation:lc-hold-fill 1.1s linear forwards}
 .lc-hold--saving{background:conic-gradient(var(--gold) 100%,var(--gold) 100%);opacity:.75}
@@ -92,7 +92,7 @@
 .lc-next{width:100%;margin:14px 0 0}
 .lc-hint{color:var(--muted);font-size:13px;line-height:1.5}
 @property --fill{syntax:"<percentage>";initial-value:0%;inherits:false}
-@keyframes lc-hold-fill{from{background:conic-gradient(var(--gold) 0%,var(--hold-ring) 0%)}to{background:conic-gradient(var(--gold) 100%,var(--hold-ring) 100%)}}
+@keyframes lc-hold-fill{from{--fill:0%}to{--fill:100%}}
 @keyframes lc-reaction-flash{0%{opacity:0}28%{opacity:.8}100%{opacity:0}}
 @keyframes lc-signal{0%{opacity:0;transform:scale(.7)}32%{opacity:1;transform:scale(1.08)}55%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
 @keyframes lc-fox-wave{0%{transform:translateY(100%) rotate(-5deg)}35%{transform:translateY(0) rotate(3deg)}75%{transform:translateY(0) rotate(-4deg)}100%{transform:translateY(100%) rotate(0deg)}}
