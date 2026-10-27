@@ -5,12 +5,13 @@
  * Usage list (`importCleanCloudReferralUsage`, the entry point GumballPals and Jawbreaker will call). Native POS
  * businesses use JOYSTICK's own codes and referrals, and the referrer's credit is earned from the paid-order ledger.
  *
- * JOYSTICK has no store-credit wallet yet, so on the native tier an earned credit is owed and the operator marks it
- * applied. Never mark one applied on the operator's behalf.
+ * Native tier credit lives in customer_credit_entries: the new customer's credit is granted when the referral is
+ * recorded, the referrer's when the new customer's first paid order is admitted, and chargeCard spends it
+ * (planCreditRedemption). Grants and spends are idempotent per referral and per order.
  */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
-import { referralCodes, referralPrograms, referrals } from "../../../drizzle/schema";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { customerCreditEntries, orders, referralCodes, referralPrograms, referrals } from "../../../drizzle/schema";
 import {
   CLEANCLOUD_SETUP_STEPS,
   DEFAULT_CREDIT_CENTS,
@@ -20,7 +21,9 @@ import {
   makeReferralCode,
   normalizeReferralCode,
   parseCleanCloudReferralUsage,
+  referralPhoneKey,
   referralSyncFreshness,
+  referralUsageCellsFromResponse,
   type ReferralMode,
   type ReferralProgram,
   type ReferralRecord,
@@ -177,6 +180,10 @@ export async function recordReferral(input: {
     referredEmail: input.referredEmail?.trim() || null,
     usedAt: input.usedAt ?? new Date(),
   });
+  const phoneKey = referralPhoneKey(input.referredPhone);
+  if (phoneKey && program.newCustomerCreditCents > 0) {
+    await grantCredit({ tenantId: tid, phone: phoneKey, cents: program.newCustomerCreditCents, reason: "referral_new_customer", referralId: id });
+  }
   return { id };
 }
 
@@ -293,4 +300,161 @@ export async function getReferralActivity(tenantId: string, now: Date = new Date
     cleancloudSetupSteps: program.source === "cleancloud" ? CLEANCLOUD_SETUP_STEPS : [],
     ledgerNote,
   };
+}
+
+// ── Native tier: store credit ─────────────────────────────────────────
+
+async function grantCredit(input: {
+  tenantId: string;
+  phone: string;
+  cents: number;
+  reason: "referral_new_customer" | "referral_referrer";
+  referralId: string;
+}) {
+  await (await db())
+    .insert(customerCreditEntries)
+    .values({ id: randomUUID(), tenantId: input.tenantId, customerPhone: input.phone, amountCents: input.cents, reason: input.reason, referralId: input.referralId })
+    .onDuplicateKeyUpdate({ set: { amountCents: sql`amount_cents` } }); // already granted: keep the first grant
+}
+
+export async function getAvailableCreditCents(tenantId: string, phone: string | null | undefined): Promise<number> {
+  const key = referralPhoneKey(phone);
+  if (!key) return 0;
+  const [row] = await (await db())
+    .select({ total: sql<number>`COALESCE(SUM(${customerCreditEntries.amountCents}), 0)` })
+    .from(customerCreditEntries)
+    .where(and(eq(customerCreditEntries.tenantId, requireTenant(tenantId)), eq(customerCreditEntries.customerPhone, key)));
+  return Math.max(0, Number(row?.total ?? 0));
+}
+
+/** Called by chargeCard after Stripe captured and the payment was admitted. One spend per order. */
+export async function redeemCredit(input: { tenantId: string; phone: string | null | undefined; orderId: number; cents: number }) {
+  const key = referralPhoneKey(input.phone);
+  if (!key || input.cents <= 0) return;
+  await (await db())
+    .insert(customerCreditEntries)
+    .values({ id: randomUUID(), tenantId: requireTenant(input.tenantId), customerPhone: key, amountCents: -input.cents, reason: "redeemed", orderId: input.orderId })
+    .onDuplicateKeyUpdate({ set: { amountCents: sql`amount_cents` } });
+}
+
+/**
+ * Called by chargeCard after a paid order is admitted. If this customer came in on a referral that hasn't paid the
+ * referrer yet, their first order with money in it earns the referrer's credit.
+ */
+export async function creditReferrerOnFirstPaidOrder(input: { tenantId: string; phone: string | null | undefined; amountCents: number }) {
+  const tid = requireTenant(input.tenantId);
+  const key = referralPhoneKey(input.phone);
+  if (!key || input.amountCents <= 0) return { credited: false as const };
+  const program = await getReferralProgram(tid);
+  if (program.source !== "joystick" || program.mode === "off") return { credited: false as const };
+  const d = await db();
+  const open = await d
+    .select()
+    .from(referrals)
+    .where(and(eq(referrals.tenantId, tid), eq(referrals.source, "joystick"), isNull(referrals.referrerCreditAppliedAt)));
+  const referral = open.find(r => referralPhoneKey(r.referredPhone) === key);
+  if (!referral?.code) return { credited: false as const };
+  const [owner] = await d
+    .select()
+    .from(referralCodes)
+    .where(and(eq(referralCodes.tenantId, tid), eq(referralCodes.code, referral.code)))
+    .limit(1);
+  const referrerKey = referralPhoneKey(owner?.customerPhone);
+  if (referrerKey && program.referrerCreditCents > 0) {
+    await grantCredit({ tenantId: tid, phone: referrerKey, cents: program.referrerCreditCents, reason: "referral_referrer", referralId: referral.id });
+  }
+  await d
+    .update(referrals)
+    .set({ referrerCreditAppliedAt: new Date(), referrerCreditAppliedBy: referrerKey ? "auto:first-paid-order" : "auto:first-paid-order:no-referrer-phone" })
+    .where(and(eq(referrals.tenantId, tid), eq(referrals.id, referral.id)));
+  return { credited: Boolean(referrerKey) };
+}
+
+/**
+ * The Laundry Butler pickup form: a new customer typed a code. Never blocks the order: returns why it didn't apply.
+ * Codes are for new customers only, one referral per phone.
+ */
+export async function recordReferralAtSignup(input: {
+  tenantId: string;
+  orderId: number;
+  code: string | null | undefined;
+  name: string;
+  phone: string;
+  email?: string | null;
+}): Promise<{ applied: boolean; creditCents: number; reason?: string }> {
+  const tid = requireTenant(input.tenantId);
+  const code = normalizeReferralCode(input.code ?? "");
+  if (!code) return { applied: false, creditCents: 0 };
+  const program = await getReferralProgram(tid);
+  if (program.source !== "joystick" || program.mode === "off") return { applied: false, creditCents: 0, reason: "Referral codes aren't on for this business" };
+  const key = referralPhoneKey(input.phone);
+  if (!key) return { applied: false, creditCents: 0, reason: "A referral needs a valid phone number" };
+  const d = await db();
+  const earlier = await d
+    .select({ id: orders.id, phone: orders.phone })
+    .from(orders)
+    .where(and(eq(orders.tenantId, tid), ne(orders.id, input.orderId)))
+    .orderBy(desc(orders.id))
+    .limit(5000);
+  if (earlier.some(o => referralPhoneKey(o.phone) === key)) return { applied: false, creditCents: 0, reason: "Referral codes are for new customers" };
+  const existing = await d.select({ phone: referrals.referredPhone }).from(referrals).where(and(eq(referrals.tenantId, tid), eq(referrals.source, "joystick")));
+  if (existing.some(r => referralPhoneKey(r.phone) === key)) return { applied: false, creditCents: 0, reason: "This phone number already used a referral code" };
+  try {
+    await recordReferral({ tenantId: tid, code, referredName: input.name, referredPhone: input.phone, referredEmail: input.email ?? null });
+  } catch (error) {
+    return { applied: false, creditCents: 0, reason: error instanceof Error ? error.message : "The code didn't apply" };
+  }
+  return { applied: true, creditCents: program.newCustomerCreditCents };
+}
+
+/** The customer's own code, for the order confirmation ("give this to a neighbour"). Null when referrals are off. */
+export async function referralCodeForNewOrder(input: { tenantId: string; name: string; phone: string; email?: string | null }) {
+  const program = await getReferralProgram(input.tenantId);
+  if (program.source !== "joystick" || program.mode === "off") return null;
+  const { code } = await ensureReferralCode({ tenantId: input.tenantId, customerName: input.name, customerPhone: input.phone, customerEmail: input.email ?? null });
+  return { code, newCustomerCreditCents: program.newCustomerCreditCents, referrerCreditCents: program.referrerCreditCents };
+}
+
+// ── CleanCloud tier: where the Referral Code Usage window lives ─────────
+
+/** GumballPals saw the window load from this address. Only CleanCloud addresses are kept. */
+export async function saveCleanCloudReferralUsageUrl(tenantId: string, url: string | null | undefined) {
+  if (!url) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "cleancloudapp.com") return;
+  const tid = requireTenant(tenantId);
+  const program = await getReferralProgram(tid);
+  await (await db())
+    .insert(referralPrograms)
+    .values({
+      tenantId: tid,
+      source: program.source,
+      mode: program.mode,
+      referrerCreditCents: program.referrerCreditCents,
+      newCustomerCreditCents: program.newCustomerCreditCents,
+      cleancloudReferralUsageUrl: parsed.href,
+    })
+    .onDuplicateKeyUpdate({ set: { cleancloudReferralUsageUrl: parsed.href } });
+}
+
+export async function getCleanCloudReferralUsageUrl(tenantId: string): Promise<string | null> {
+  const [row] = await (await db())
+    .select({ url: referralPrograms.cleancloudReferralUsageUrl, source: referralPrograms.source })
+    .from(referralPrograms)
+    .where(eq(referralPrograms.tenantId, requireTenant(tenantId)))
+    .limit(1);
+  return row?.source === "cleancloud" ? (row.url ?? null) : null;
+}
+
+/** Jawbreaker: import a fetched copy of the window. */
+export async function importCleanCloudReferralUsageResponse(tenantId: string, body: string) {
+  const cells = referralUsageCellsFromResponse(body);
+  if (!cells.length) return { upserted: 0, rejected: [] as string[], recognised: false };
+  const result = await importCleanCloudReferralUsage({ tenantId, rows: cells });
+  return { ...result, recognised: true };
 }

@@ -5732,5 +5732,29 @@ await runRequired(
   "Referrals"
 );
 
+// JOYSTICK referrals, part 2: native store credit, and where Jawbreaker reads CleanCloud's referral activity.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS customer_credit_entries (
+    id varchar(64) NOT NULL,
+    tenant_id varchar(64) NOT NULL,
+    customer_phone varchar(16) NOT NULL,
+    amount_cents int NOT NULL,
+    reason enum('referral_new_customer','referral_referrer','redeemed','adjustment') NOT NULL,
+    referral_id varchar(64) NULL,
+    order_id int NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_credit_referral_grant (tenant_id, reason, referral_id),
+    UNIQUE KEY uq_credit_order_redemption (tenant_id, reason, order_id),
+    KEY idx_credit_tenant_phone (tenant_id, customer_phone)
+  )`,
+  "Customer credit entries"
+);
+await ensureRequiredColumn(
+  "referral_programs",
+  "cleancloud_referral_usage_url",
+  "ALTER TABLE referral_programs ADD COLUMN cleancloud_referral_usage_url varchar(512) NULL"
+);
+
 console.log("\nMigration complete.");
 await conn.end();
