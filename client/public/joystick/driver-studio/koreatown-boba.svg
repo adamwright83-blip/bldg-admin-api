@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="590" viewBox="0 0 1000 590" role="img" aria-label="Cozy illustrated Koreatown boba shop">
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#8dcce2"/><stop offset="1" stop-color="#e8c6b2"/></linearGradient>
+ <linearGradient id="wall" x2="0" y2="1"><stop stop-color="#f0c99a"/><stop offset="1" stop-color="#d59a73"/></linearGradient>
+ <linearGradient id="glass" x2=".1" y2="1"><stop stop-color="#baedee"/><stop offset=".6" stop-color="#8dbea8"/><stop offset="1" stop-color="#557b82"/></linearGradient>
+ <linearGradient id="roof" x2="0" y2="1"><stop stop-color="#ad5e63"/><stop offset="1" stop-color="#743e59"/></linearGradient>
+ <filter id="shadow"><feGaussianBlur stdDeviation="7"/></filter>
+</defs>
+<rect width="1000" height="590" fill="url(#sky)"/>
+<path d="M0 342 Q125 246 256 312 Q399 221 542 287 Q745 200 1000 305 L1000 590 0 590Z" fill="#7ea8a1"/>
+<path d="M0 396 Q230 349 427 393 Q675 329 1000 395 L1000 590H0Z" fill="#d9af91"/>
+<!-- soft pink blossoms -->
+<path d="M45 0 Q102 82 190 141 Q245 180 269 257" stroke="#7e5a56" stroke-width="19" fill="none"/>
+<g fill="#f1abc0">
+ <circle cx="60" cy="80" r="51"/><circle cx="155" cy="102" r="68"/><circle cx="241" cy="160" r="49"/><circle cx="89" cy="186" r="55"/><circle cx="17" cy="209" r="48"/>
+</g>
+<g fill="#fff0e4" opacity=".8"><circle cx="110" cy="80" r="10"/><circle cx="179" cy="151" r="9"/><circle cx="32" cy="183" r="8"/></g>
+<!-- side buildings -->
+<path d="M0 218h168v285H0Z" fill="#e2b6aa"/><path d="M0 245h172" stroke="#a56d6e" stroke-width="12"/>
+<g fill="#748f9e"><rect x="29" y="276" width="48" height="76" rx="5"/><rect x="95" y="276" width="50" height="76" rx="5"/></g>
+<path d="M793 190H1000V528H793Z" fill="#e5aa92"/>
+<path d="M819 227h151v72H819Z" fill="#8cb9c5" stroke="#fff1d3" stroke-width="8"/>
+<rect x="836" y="334" width="118" height="129" rx="7" fill="#7c9693"/>
+<!-- shop -->
+<path d="M206 155 H788 V502 H206Z" fill="url(#wall)" stroke="#8a6065" stroke-width="9"/>
+<path d="M193 158 H797 L785 211 H209Z" fill="#fff5d9" stroke="#b8875c" stroke-width="7"/>
+<path d="M207 208 H786 V246 H207Z" fill="#854e53"/>
+<path d="M215 246 H781 V286 Q750 304 718 287 Q685 303 651 287 Q617 307 583 287 Q550 305 518 287 Q486 305 451 287 Q417 305 386 287 Q351 303 319 288 Q283 304 250 287 Q228 303 215 286Z" fill="#f5a9a3" stroke="#915c66" stroke-width="7"/>
+<g stroke="#fff1db" stroke-width="8"><path d="M260 247v43M347 246v43M434 246v43M521 246v43M608 246v43M695 246v43"/></g>
+<rect x="257" y="312" width="470" height="183" rx="9" fill="url(#glass)" stroke="#714d50" stroke-width="14"/>
+<path d="M500 314V497" stroke="#714d50" stroke-width="12"/>
+<path d="M270 432H717" stroke="#f5e8b8" stroke-width="7" opacity=".6"/>
+<rect x="421" y="390" width="150" height="105" rx="12" fill="#ac694f"/>
+<g fill="#fbe8b6"><circle cx="466" cy="422" r="13"/><circle cx="519" cy="422" r="13"/></g>
+<!-- boba logo signage -->
+<rect x="302" y="163" width="400" height="70" rx="26" fill="#f9e5b7" stroke="#845760" stroke-width="9"/>
+<text x="502" y="207" font-family="Arial, sans-serif" font-weight="900" font-size="44" fill="#67454c" text-anchor="middle" letter-spacing="6">BOBA</text>
+<!-- warm pendant bulbs -->
+<path d="M302 310V344M690 309V342" stroke="#5c4c55" stroke-width="5"/>
+<circle cx="302" cy="351" r="16" fill="#fce5a2" stroke="#e6ae57" stroke-width="5"/>
+<circle cx="690" cy="351" r="16" fill="#fce5a2" stroke="#e6ae57" stroke-width="5"/>
+<!-- little boba mascot -->
+<g transform="translate(580 350)">
+ <path d="M5 9H89L80 119H17Z" fill="#f2cda0" stroke="#754d4a" stroke-width="8"/>
+ <path d="M4 10Q46 -3 90 10" fill="#fef3d8" stroke="#754d4a" stroke-width="9"/>
+ <path d="M42 6L52 -48" stroke="#f0f5d8" stroke-width="13"/>
+ <g fill="#805550"><circle cx="31" cy="60" r="7"/><circle cx="63" cy="60" r="7"/><circle cx="35" cy="91" r="9"/><circle cx="61" cy="91" r="9"/></g>
+ <path d="M44 64q4 7 8 0" fill="none" stroke="#754d4a" stroke-width="4" stroke-linecap="round"/>
+</g>
+<!-- planters and flowers -->
+<g transform="translate(115 387)"><path d="M20 30Q2 -33 38 -89M45 33Q56 -70 92 -83M51 34Q13 -52 -12 -53" stroke="#527b53" stroke-width="9" fill="none" stroke-linecap="round"/><path d="M0 28h109l-15 112H15Z" fill="#a55e4b" stroke="#6e4a47" stroke-width="8"/></g>
+<g transform="translate(762 395)"><path d="M25 19Q3 -51 57 -94M50 30Q92 -63 110 -56" stroke="#537e64" stroke-width="13" fill="none"/><path d="M0 21h117l-18 115H17Z" fill="#bd7657" stroke="#78594d" stroke-width="9"/></g>
+<path d="M0 512Q300 500 545 509Q790 521 1000 499V590H0Z" fill="#ddb998"/>
+<path d="M0 535H1000" stroke="#ba8c72" stroke-width="7"/>
+<g fill="#9a6b5b" opacity=".6"><ellipse cx="375" cy="556" rx="78" ry="10"/><ellipse cx="627" cy="560" rx="116" ry="9"/></g>
+</svg>
