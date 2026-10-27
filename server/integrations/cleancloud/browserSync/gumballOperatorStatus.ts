@@ -82,8 +82,11 @@ function attemptStageLine(
   const value = String(outcome ?? "").toLowerCase();
   const text = String(message ?? "").toLowerCase();
   if (!value) return "export never captured";
-  if (value === "direct_auth_failed" || text.includes("not connected")) {
+  if (text.includes("gmail is not connected")) {
     return "sync failed because Jawbreaker Gmail is not connected. That is not a zero";
+  }
+  if (value === "direct_auth_failed") {
+    return "sync failed because CleanCloud sign-in failed. That is not a zero";
   }
   if (value === "extension_export") return "export never captured";
   if (value === "extension_failed") return "sync failed";

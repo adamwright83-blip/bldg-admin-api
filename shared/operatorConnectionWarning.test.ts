@@ -60,6 +60,25 @@ describe("operator connection warnings", () => {
     expect(text).not.toMatch(ZERO);
   });
 
+  it("does not blame Gmail for a CleanCloud sign-in failure", () => {
+    for (const message of [
+      "CleanCloud login rejected: Incorrect password.",
+      "CleanCloud requires authenticator-app 2FA; Jawbreaker supports email verification codes only.",
+    ]) {
+      const text = operatorConnectionWarning({
+        tenantId: "laundry_farm",
+        gmailStatusKnown: true,
+        gmailConfigured: true,
+        gmailConnected: true,
+        lastAttemptOutcome: "direct_auth_failed",
+        lastAttemptMessage: message,
+      });
+      expect(text).toMatch(/last CleanCloud sync for Laundry Farm failed/i);
+      expect(text).not.toMatch(/Gmail/);
+      expect(text).not.toMatch(ZERO);
+    }
+  });
+
   it("does not turn a missing mailbox into zero revenue while status is still loading", () => {
     expect(
       operatorConnectionWarning({

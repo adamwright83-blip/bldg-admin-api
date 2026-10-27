@@ -25,6 +25,17 @@ describe("failed syncs stay failures", () => {
     expect(line).not.toContain("direct_auth_failed");
   });
 
+  it("calls a rejected CleanCloud sign-in a sign-in failure, not a missing mailbox", () => {
+    const line = formatGumballOperatorStatus({
+      lastAttemptAt: "2026-10-20T02:09:28.000Z",
+      lastAttemptOutcome: "direct_auth_failed",
+      lastAttemptMessage: "CleanCloud login rejected: Incorrect password.",
+    });
+    expect(line).toContain("sync failed because CleanCloud sign-in failed");
+    expect(line).not.toContain("Gmail");
+    expect(line).toContain("not a zero");
+  });
+
   it("still names an export that never arrived", () => {
     expect(
       formatGumballOperatorStatus({

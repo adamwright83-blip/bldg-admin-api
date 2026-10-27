@@ -82,12 +82,13 @@ export function operatorConnectionWarning(
   const detail = safeAttemptDetail(input.lastAttemptMessage);
   const gmailMissing =
     input.gmailStatusKnown && input.gmailConfigured && !input.gmailConnected;
+  // Only a recorded missing-mailbox message names Gmail; a rejected password,
+  // authenticator 2FA, or a verification timeout is a sign-in failure.
   const gmailFailure =
     failed &&
-    (String(input.lastAttemptOutcome ?? "")
-      .trim()
-      .toLowerCase() === "direct_auth_failed" ||
-      (detail ?? "").toLowerCase().includes("not connected"));
+    String(input.lastAttemptMessage ?? "")
+      .toLowerCase()
+      .includes("gmail is not connected");
   if (!gmailMissing && !failed) return null;
   if (gmailMissing || gmailFailure) {
     const stayed = failed
