@@ -205,3 +205,5 @@
 .lc-briefing .gdp-load-error{padding:12px 14px;display:grid;gap:6px}
 .lc-nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:14px 0 4px}
 .lc-nav button{min-height:52px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:900;letter-spacing:.04em;text-align:left;cursor:pointer}
+/* Lantern City paintings and placeholders: a soft lantern glow after a saved job. */
+.lc-lantern-glow{inset:0;background:radial-gradient(circle at 50% 55%,#fff1b6cc 0,#ffd97a55 30%,transparent 65%);mix-blend-mode:screen;opacity:0;animation:lc-fx-fade 1.8s ease-out both}

@@ -10,10 +10,11 @@ import {
   HOLD_TO_CONFIRM_MS,
   isVisitDone,
   jobTruth,
-  SCENES,
+  artFor,
   visitPeriod,
   visitTitle,
   type DriverSceneId,
+  type SceneArt,
   type RouteVisit,
 } from "./driverStudioModel";
 import { ClaireTether, type ClaireCallState } from "./ClaireTether";
@@ -119,8 +120,8 @@ function HoldRing({ label, disabled, onCommit }: {
  * The scene's authored art, with a stage sized exactly like `object-fit: cover`
  * so local reactions sit on the art's own features at any crop.
  */
-function SceneImage({ scene, reaction, night, variant = "hero" }: { scene: DriverSceneId; reaction: number; night: boolean; variant?: "hero" | "thumb" }) {
-  const entry = SCENES[scene];
+function SceneImage({ scene, art, reaction, night, variant = "hero" }: { scene: DriverSceneId; art: SceneArt; reaction: number; night: boolean; variant?: "hero" | "thumb" }) {
+  const entry = art;
   const [fx, fy] = entry.focus.split(" ").map(v => (v === "center" ? 50 : parseFloat(v)) / 100);
   const stageStyle = {
     "--ar": entry.size[0] / entry.size[1],
@@ -158,7 +159,8 @@ function SceneImage({ scene, reaction, night, variant = "hero" }: { scene: Drive
               <span className="lc-fx lc-opus-fill lc-opus-fill--sixth" />
             </div>
           )}
-          {scene === "beverly-hills" && <span className="lc-fx lc-rodeo-calf" aria-hidden="true" />}
+          {scene === "beverly-hills" && !entry.territory && <span className="lc-fx lc-rodeo-calf" aria-hidden="true" />}
+          {(entry.territory || entry.placeholder) && <span className="lc-fx lc-lantern-glow" aria-hidden="true" />}
           {scene === "koreatown" && (
             <div aria-hidden="true">
               <span className="lc-fx lc-kt-bulb lc-kt-bulb--left" />
@@ -183,6 +185,7 @@ function SceneImage({ scene, reaction, night, variant = "hero" }: { scene: Drive
         <img key={`t${reaction}`} className="lc-fx lc-rodeo-reaction" src="/joystick/driver-studio/rodeo-terrier-delighted.png" alt="" aria-hidden="true" />
       )}
       {entry.concept && <span className="lc-scene__concept">CONCEPT ART · NOT LIVE GAMEPLAY</span>}
+      {entry.territory && <span className="lc-scene__concept">{entry.label.toUpperCase()}</span>}
     </div>
   );
 }
@@ -275,6 +278,7 @@ function VisitDetail({ visit, savedIds, arrived, onArrive, onBack, onSave, onRet
   // Turn-by-turn directions when any job carries them; every job here shares the address.
   const mapsUrl = visit.jobs.find(j => j.navigationUrl?.includes("/maps/dir/"))?.navigationUrl ?? visit.jobs.find(j => j.navigationUrl)?.navigationUrl ?? null;
   const night = visitPeriod(visit) === "evening";
+  const art = artFor(visit);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   useEffect(() => { headingRef.current?.focus(); }, [visit.id]);
   useEffect(() => {
@@ -298,9 +302,9 @@ function VisitDetail({ visit, savedIds, arrived, onArrive, onBack, onSave, onRet
         <button type="button" onClick={onBack} className="lc-ghost"><ArrowLeft size={18} /> ROUTE</button>
         <span className={`lc-state ${allSaved ? "lc-state--done" : arrived ? "lc-state--here" : ""}`} data-testid="driver-studio-visit-state">{allSaved ? "DONE" : arrived ? "ARRIVED" : "EN ROUTE"}</span>
       </div>
-      <SceneImage scene={visit.scene} reaction={reaction} night={night} />
+      <SceneImage scene={visit.scene} art={art} reaction={reaction} night={night && !art.placeholder} />
       <div className="lc-visit__body">
-        <div className="lc-visit__meta">{SCENES[visit.scene].label} · {visit.timeLabel}</div>
+        <div className="lc-visit__meta">{art.label} · {visit.timeLabel}</div>
         <h2 ref={headingRef} tabIndex={-1}>{visitTitle(visit)}</h2>
         {visit.scene !== "plain" && visit.jobs.length === 1 && <p className="lc-visit__place">{visit.location}</p>}
         <p>{visit.address ?? "Address not provided"}</p>
@@ -318,7 +322,7 @@ function VisitDetail({ visit, savedIds, arrived, onArrive, onBack, onSave, onRet
         )}
         {!arrived && !allSaved && <p className="lc-hint">Tap I'VE ARRIVED when you are parked at the address. Jobs unlock there.</p>}
         <p className="lc-scene__message" role="status" aria-live="polite">
-          {reaction > 0 && savedJob ? `${formatJobKind(savedJob.kind)} SAVED · ${SCENES[visit.scene].effect}` : ""}
+          {reaction > 0 && savedJob ? `${formatJobKind(savedJob.kind)} SAVED · ${art.effect}` : ""}
         </p>
         {allSaved && <button type="button" className="lc-primary lc-next" onClick={onNext} data-testid="driver-studio-next">{hasNext ? <>NEXT STOP <ArrowRight size={20}/></> : <>BACK TO ROUTE <ArrowRight size={20}/></>}</button>}
       </div>
@@ -465,7 +469,7 @@ export default function DriverStudioDay({ businessDate, stops, isLoading, loadEr
                       <strong>{visitTitle(v)}</strong>
                       <small>{v.jobs.map(s => formatJobKind(s.kind)).join(" · ")} · {v.jobs.length} {v.jobs.length === 1 ? "job" : "jobs"}{done ? " · done" : next ? " · next" : ""}</small>
                     </span>
-                    <span className="lc-list-row__art" aria-hidden="true"><SceneImage scene={v.scene} reaction={0} night={false} variant="thumb" /></span>
+                    <span className="lc-list-row__art" aria-hidden="true"><SceneImage scene={v.scene} art={artFor(v)} reaction={0} night={false} variant="thumb" /></span>
                     <ChevronRight size={18} aria-hidden="true" />
                   </button>
                 </li>

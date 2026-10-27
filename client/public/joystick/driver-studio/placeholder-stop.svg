@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="590" viewBox="0 0 1000 590" role="img" aria-label="Placeholder art, to be replaced">
+<!-- Deliberately obvious stand-in for stops with no game or Lantern City painting. Replace with authored art. -->
+<defs>
+ <pattern id="stripes" width="56" height="56" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+  <rect width="56" height="56" fill="#f3e6c4"/>
+  <rect width="28" height="56" fill="#ead6a4"/>
+ </pattern>
+</defs>
+<rect width="1000" height="590" fill="url(#stripes)"/>
+<rect x="18" y="18" width="964" height="554" fill="none" stroke="#b27911" stroke-width="10" stroke-dasharray="34 22"/>
+<g fill="#7d5220" font-family="Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">
+ <text x="500" y="270" font-size="74" letter-spacing="8">PLACEHOLDER ART</text>
+ <text x="500" y="350" font-size="34" letter-spacing="5">REPLACE WITH THIS STOP'S WORLD</text>
+</g>
+</svg>

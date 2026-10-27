@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DayPlanStop } from "../goldlineDayPlanModel";
 import {
-  canHoldToComplete, chooseDriverScene, findVisit, groupRouteVisits, hasSavedJob, jobTruth, minutesOfStop, SCENES, timeOfStop, visitPeriod, visitTitle,
+  artFor, territoryOf, canHoldToComplete, chooseDriverScene, findVisit, groupRouteVisits, hasSavedJob, jobTruth, minutesOfStop, SCENES, timeOfStop, visitPeriod, visitTitle,
 } from "./driverStudioModel";
 
 const stop = (id: string, overrides: Partial<DayPlanStop> = {}): DayPlanStop => ({
@@ -164,5 +164,22 @@ describe("Driver Studio stability while saving", () => {
       stop("early", { sortKey: "09:00", address: "1 Early St" }),
     ]);
     expect(visits.map(v => v.id)).toEqual(["early", "late", "task"]);
+  });
+});
+
+describe("Driver Studio art for every stop", () => {
+  it("uses game art first, then the Lantern City painting, then an obvious placeholder", () => {
+    expect(artFor({ scene: "opus", address: "3545 Wilshire Blvd" }).image).toBe(SCENES.opus.image);
+    const losFeliz = artFor({ scene: "plain", address: "Location unresolved — Los Feliz Towers" });
+    expect(losFeliz).toMatchObject({ territory: true, label: "Lantern City · Los Feliz", image: "/assets/goldline/lantern-city/v6/territories/los-feliz/healthy.png" });
+    expect(artFor({ scene: "hollywood", address: "20 Example Ave, Hollywood" })).toMatchObject({ territory: true, title: "Hollywood" });
+    expect(artFor({ scene: "plain", address: "1 Example Rd, West Hollywood" }).image).toContain("/west-hollywood/");
+    expect(artFor({ scene: "plain", address: "123 Main Street" })).toMatchObject({ placeholder: true, image: "/joystick/driver-studio/placeholder-stop.svg" });
+    expect(artFor({ scene: "plain", address: null }).placeholder).toBe(true);
+  });
+  it("matches territory names on word boundaries", () => {
+    expect(territoryOf("4455 Los Feliz Blvd")?.slug).toBe("los-feliz");
+    expect(territoryOf("Mid City, Los Angeles")?.slug).toBe("mid-city");
+    expect(territoryOf("Downtowner Cafe")).toBeNull();
   });
 });

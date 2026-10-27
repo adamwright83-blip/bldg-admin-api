@@ -57,6 +57,10 @@ export type SceneArt = {
   effect: string;
   /** Concept art is never presented as shipped gameplay. */
   concept?: boolean;
+  /** Lantern City's painting of the neighbourhood, used where no game exists. */
+  territory?: boolean;
+  /** Obvious stand-in art to be replaced. */
+  placeholder?: boolean;
 };
 
 /** Only existing, checked-in game imagery. No generated facsimiles of shipped games. */
@@ -112,6 +116,56 @@ export const SCENES: Record<DriverSceneId, SceneArt> = {
   },
   plain: { label: "Business stop", title: null, image: null, size: [1, 1], focus: "center", effect: "Job recorded" },
 };
+
+/** Neighbourhoods with a committed Lantern City painting (v6 territories, healthy state). */
+const LANTERN_TERRITORIES: Array<[slug: string, name: string]> = [
+  ["arts-district", "Arts District"], ["beverly-hills", "Beverly Hills"], ["century-city", "Century City"],
+  ["downtown", "Downtown"], ["east-hollywood", "East Hollywood"], ["echo-park", "Echo Park"],
+  ["hollywood-hills-west", "Hollywood Hills West"], ["hollywood", "Hollywood"], ["koreatown", "Koreatown"],
+  ["los-feliz", "Los Feliz"], ["mid-city", "Mid-City"], ["silver-lake", "Silver Lake"],
+  ["west-hollywood", "West Hollywood"], ["westlake", "Westlake"],
+];
+
+/** The Lantern City territory named in the stop's address, longest name first. */
+export function territoryOf(address: string | null | undefined): { slug: string; name: string } | null {
+  const place = (address ?? "").toLowerCase().replace(/[-\s]+/g, " ");
+  const hit = [...LANTERN_TERRITORIES]
+    .sort((a, b) => b[1].length - a[1].length)
+    .find(([, name]) => new RegExp(`\\b${name.toLowerCase().replace(/-/g, " ")}\\b`).test(place));
+  return hit ? { slug: hit[0], name: hit[1] } : null;
+}
+
+export const PLACEHOLDER_ART: SceneArt = {
+  label: "Placeholder art · replace",
+  title: null,
+  image: "/joystick/driver-studio/placeholder-stop.svg",
+  size: [1000, 590],
+  focus: "50% 50%",
+  effect: "Job recorded",
+  placeholder: true,
+};
+
+/**
+ * Every visit gets a picture: its game's art, else Lantern City's painting of
+ * the neighbourhood, else an obvious placeholder.
+ */
+export function artFor(visit: Pick<RouteVisit, "scene" | "address">): SceneArt {
+  const game = SCENES[visit.scene];
+  if (game.image) return game;
+  const territory = territoryOf(visit.address);
+  if (territory) {
+    return {
+      label: `Lantern City · ${territory.name}`,
+      title: game.title,
+      image: `/assets/goldline/lantern-city/v6/territories/${territory.slug}/healthy.png`,
+      size: [1536, 994],
+      focus: "50% 45%",
+      effect: "Lantern City brightens",
+      territory: true,
+    };
+  }
+  return { ...PLACEHOLDER_ART, title: game.title };
+}
 
 export function visitTitle(visit: Pick<RouteVisit, "scene" | "location">) {
   return SCENES[visit.scene].title ?? visit.location;
