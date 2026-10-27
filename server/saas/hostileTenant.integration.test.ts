@@ -131,6 +131,7 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
         ]
       );
       for (const entitlement of [
+        "dayforge_core",
         "boreslay",
         "dayforge_field",
         "commercial_pipeline",
