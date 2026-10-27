@@ -20,6 +20,7 @@ import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { strategyRouter } from "./strategy/strategyRouter";
+import { referralRouter } from "./domains/referral/referralRouter";
 import {
   attributeOrderFromCampaign,
   reverseCommercialOrderAttribution,
@@ -424,6 +425,7 @@ export const appRouter = router({
   daphne: daphneRouter,
   system: systemRouter,
   strategy: strategyRouter,
+  referrals: referralRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

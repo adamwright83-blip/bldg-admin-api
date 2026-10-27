@@ -5677,5 +5677,60 @@ await assertRequiredColumns("personal_outreach_replies", [
   ]);
 }
 
+// JOYSTICK referrals (shared/referralProgram.ts). Idempotent CREATE IF NOT EXISTS.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referral_programs (
+    tenant_id varchar(64) NOT NULL,
+    source enum('cleancloud','joystick') NOT NULL,
+    mode enum('off','one_time_credit') NOT NULL DEFAULT 'off',
+    referrer_credit_cents int NOT NULL DEFAULT 1000,
+    new_customer_credit_cents int NOT NULL DEFAULT 1000,
+    cleancloud_setup_confirmed_at timestamp NULL,
+    cleancloud_last_synced_at timestamp NULL,
+    updated_by varchar(128) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id)
+  )`,
+  "Referral programs"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referral_codes (
+    tenant_id varchar(64) NOT NULL,
+    code varchar(32) NOT NULL,
+    customer_name varchar(191) NOT NULL,
+    customer_phone varchar(32) NULL,
+    customer_email varchar(191) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id, code),
+    KEY idx_referral_codes_tenant_phone (tenant_id, customer_phone)
+  )`,
+  "Referral codes"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referrals (
+    id varchar(64) NOT NULL,
+    tenant_id varchar(64) NOT NULL,
+    source enum('cleancloud','joystick') NOT NULL,
+    external_key varchar(191) NULL,
+    code varchar(32) NULL,
+    referrer_name varchar(191) NOT NULL,
+    referred_name varchar(191) NOT NULL,
+    referred_phone varchar(32) NULL,
+    referred_email varchar(191) NULL,
+    used_at timestamp NOT NULL,
+    external_orders int NULL,
+    external_spending_cents int NULL,
+    referrer_credit_applied_at timestamp NULL,
+    referrer_credit_applied_by varchar(128) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_referrals_tenant_external (tenant_id, external_key),
+    KEY idx_referrals_tenant_used (tenant_id, used_at)
+  )`,
+  "Referrals"
+);
+
 console.log("\nMigration complete.");
 await conn.end();
