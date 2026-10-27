@@ -94,12 +94,12 @@ export function speakLaundryFarmCompanyView(
   if (aspect === "breakdown") {
     const farm = view.businessRevenue.find(item => item.tenantId === LAUNDRY_FARM_TENANT_ID);
     const butler = view.businessRevenue.find(item => item.tenantId === LAUNDRY_BUTLER_TENANT_ID);
-    if (farm) speech.say(`Laundry Farm: ${speech.money(farm.figures.netRevenueCents, true)} in admitted revenue ${view.period.label}.`);
+    if (farm) speech.say(`Laundry Farm recorded sales ${view.period.label}: ${speech.money(farm.figures.recordedSalesCents, true)}.`);
     else speech.say("Laundry Farm's book is unavailable for this breakdown.");
-    if (butler) speech.say(`Laundry Butler: ${speech.money(butler.figures.netRevenueCents, true)} in admitted revenue ${view.period.label}.`);
+    if (butler) speech.say(`Laundry Butler recorded sales ${view.period.label}: ${speech.money(butler.figures.recordedSalesCents, true)}.`);
     else speech.say("Laundry Butler's book is unavailable for this breakdown.");
     if (view.mayStateCompanyTotal && farm && butler) {
-      speech.say(`Together: ${speech.money(view.totals.netRevenueCents, true)} in admitted revenue, after recorded refunds.`);
+      speech.say(`Together, recorded sales ${view.period.label} are ${speech.money(view.totals.recordedSalesCents, true)}.`);
     }
     overlapSentences(view, speech);
     return;

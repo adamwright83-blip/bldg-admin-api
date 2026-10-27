@@ -326,9 +326,9 @@ describe("Claire company questions", () => {
     expect(combined.turn.handled && combined.turn.speak).toContain("Recorded sales this month so far are $657.00 across 7 orders.");
     const direct = await ask("Break down this month's revenue between Laundry Farm and Laundry Butler", all);
     expect(direct.turn.reader).toBe("company_view");
-    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Farm: $260.00 in admitted revenue");
-    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Butler: $392.00 in admitted revenue");
-    expect(direct.turn.handled && direct.turn.speak).toContain("Together: $652.00");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Farm recorded sales this month so far: $265.00.");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Butler recorded sales this month so far: $392.00.");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Together, recorded sales this month so far are $657.00.");
     expect(matchLaundryFarmCompanyQuestion("Break that down by business", question)).toEqual({
       aspect: "breakdown", period: { kind: "this_month" },
     });
