@@ -297,3 +297,65 @@
   .brochure { position: static; transform: rotate(-1.5deg); max-width: 260px; }
   .wall { grid-template-columns: 1fr; }
 }
+.goalShow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.goalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.goalLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.goalInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 0 10px;
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font: 700 22px/1 "Barlow Condensed", sans-serif;
+  color: var(--amber);
+}
+.goalInputWrap input {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  outline: none;
+}
+.goalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.goalSave {
+  appearance: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--amber);
+  color: #2b1a0c;
+  font: 700 14px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.goalSave:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

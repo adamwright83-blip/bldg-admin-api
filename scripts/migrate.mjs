@@ -5756,5 +5756,12 @@ await ensureRequiredColumn(
   "ALTER TABLE referral_programs ADD COLUMN cleancloud_referral_usage_url varchar(512) NULL"
 );
 
+// 0148: tower front desk goals, set by the operator from the elevator. Idempotent CREATE IF NOT EXISTS.
+{
+  const statements = await readSqlStatements("../drizzle/0148_tower_desk_goals.sql");
+  for (const statement of statements) await runRequired(statement, "Tower desk goals");
+  await assertRequiredColumns("tower_desk_goals", ["id", "tenant_id", "building_id", "monthly_goal_cents", "updated_by", "updated_at"]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

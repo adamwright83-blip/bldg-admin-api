@@ -19,8 +19,8 @@ export const TOWER_DESK_BUILDINGS = ["century_park_east", "opus_la"] as const;
 export type TowerDeskBuildingId = (typeof TOWER_DESK_BUILDINGS)[number];
 
 /**
- * Adam's monthly revenue goal for the building, in cents. Null until he names it: the elevator's
- * penthouse then reads "Goal needed", never a number we picked for him.
+ * The fallback monthly goal, in cents, used only until the operator saves one from the elevator
+ * (tower_desk_goals). Null reads "Goal needed", never a number we picked for them. CPE's $800 is Adam's.
  */
 export const TOWER_DESK_MONTHLY_GOAL_CENTS: Record<TowerDeskBuildingId, number | null> = {
   century_park_east: 80_000, // Adam, 2026-10-27: $800/month
@@ -45,6 +45,10 @@ const CONTRACT_LANE: Record<TowerDeskBuildingId, TowerDesk["contract"]> = {
   century_park_east: null,
   opus_la: { status: "not_wired", label: "Gym towel contract" },
 };
+
+/** what the elevator's goal field accepts: $1 to $1,000,000 a month */
+export const GOAL_MIN_CENTS = 100;
+export const GOAL_MAX_CENTS = 100_000_000;
 
 export const QUIET_DAYS = 45;
 export const RUN_RATE_DAYS = 30;
@@ -103,6 +107,8 @@ export type TowerDesk = {
     perHomeMonthlyCents: number | null;
   };
   goalMonthlyCents: number | null;
+  /** "saved": the operator set it in the UI; "default": the fallback above; "none": nobody has */
+  goalSource: "saved" | "default" | "none";
   /** a building contract paid apart from residents (OPUS's gym towels); null where there is none */
   contract: null | { status: "not_wired"; label: string };
   dim: {
@@ -133,6 +139,8 @@ export function buildTowerDesk(input: {
   residents: DeskResidentInput[];
   ledger: DeskLedgerInput;
   referrals: DeskReferralInput;
+  /** the operator's saved goal; undefined when none is saved (or it couldn't be read) */
+  savedGoalCents?: number;
 }): TowerDesk {
   const { now } = input;
   const residents = input.residents
@@ -217,7 +225,8 @@ export function buildTowerDesk(input: {
     residents: residents.map(r => ({ key: r.key, name: r.name, unit: r.unit, orderDays: r.orderedAt.map(ymd) })),
     firstOrderDay: firsts.length ? ymd(new Date(Math.min(...firsts))) : null,
     revenue,
-    goalMonthlyCents: TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId],
+    goalMonthlyCents: input.savedGoalCents ?? TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId],
+    goalSource: input.savedGoalCents !== undefined ? "saved" : TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId] !== null ? "default" : "none",
     contract: CONTRACT_LANE[input.buildingId],
     dim: { quietResidents: quiet.length, estMonthlyCents },
     log: log.slice(0, LOG_LIMIT),
