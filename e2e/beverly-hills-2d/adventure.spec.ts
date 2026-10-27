@@ -75,13 +75,17 @@ test("journal submission stays pending, does not add orders or grow a ranch plot
   });
   await page.addInitScript(() =>
     localStorage.setItem(
-      "joystick.other-rodeo.fiction.v2",
+      "joystick.other-rodeo.fiction.v3",
       JSON.stringify({
-        version: 2,
+        version: 3,
         chapter: "home",
-        flags: { stairs: true, gate: true, water: true, tether: true, rescued: true },
-        calf: { met: true },
+        water: { F: 0 },
+        hose: true,
+        sluice: true,
+        flags: { rescued: true, yielded: false, ended: true },
+        calf: { trust: 3 },
         player: { x: 640, d: 0.6 },
+        boxer: { x: 530, d: 0.56, state: "follow" },
       })
     )
   );
