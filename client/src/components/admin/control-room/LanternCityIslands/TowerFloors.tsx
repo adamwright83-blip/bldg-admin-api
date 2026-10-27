@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeographicCustomer } from "../customerGeography";
 import { createTowerRooms, type LobbyRect, type RoomHover } from "./towerRooms";
-import { buildTowerModel, darkFloors, TOWER_BUILDINGS, unitOf, type Resident } from "./towerStack";
+import { applyDeskConfig, buildTowerModel, darkFloors, TOWER_BUILDINGS, unitOf, type Resident } from "./towerStack";
 import TowerDesk from "./TowerDesk";
 import OpusClubhouse from "./OpusClubhouse";
-import { TOWER_DESK_BUILDINGS, type TowerDeskBuildingId } from "@shared/towerDesk";
+import { DEFAULT_QUIET_DAYS, TOWER_DESK_BUILDINGS, type TowerDeskBuildingId } from "@shared/towerDesk";
+import { trpc } from "@/lib/trpc";
 import { openCenturyParkEastGame } from "@/pages/goldline/centuryParkEast3d/centuryParkEastEntry";
 import styles from "./tower-floors.module.css";
 
@@ -17,7 +18,6 @@ import styles from "./tower-floors.module.css";
  * a lit window opens that resident's card with a one-tap text from your own phone. Century Park East's lobby is also
  * the door into its game: something is banging on the glass.
  */
-const QUIET_DAYS = 45;
 const GAME_BUILDINGS = new Set(["century_park_east"]);
 const DESK_BUILDINGS = new Set<string>(TOWER_DESK_BUILDINGS);
 
@@ -53,7 +53,14 @@ export default function TowerFloors({
   const [lobbies, setLobbies] = useState<LobbyRect[]>([]);
   const [quietOnly, setQuietOnly] = useState(false);
   const list = useRef<HTMLElement>(null);
-  const spec = TOWER_BUILDINGS.find(b => b.id === buildingId);
+  const baseSpec = TOWER_BUILDINGS.find(b => b.id === buildingId);
+  // what the operator told us about this building (floors, doors per floor, numbering, quiet days) lies over the drawing's starting guesses
+  const deskQ = trpc.system.towerDesk.read.useQuery(
+    { buildingId: buildingId as TowerDeskBuildingId },
+    { enabled: DESK_BUILDINGS.has(buildingId), staleTime: 60_000, retry: 1 },
+  );
+  const spec = useMemo(() => (baseSpec ? applyDeskConfig(baseSpec, deskQ.data?.config) : undefined), [baseSpec, deskQ.data?.config]);
+  const quietDays = deskQ.data?.config.quietDays ?? DEFAULT_QUIET_DAYS;
   const residents = useMemo<Row[]>(
     () =>
       customers
@@ -67,13 +74,13 @@ export default function TowerFloors({
             unit: unitOf(c.unit, address),
             phone: c.phone,
             days,
-            quiet: days !== null && days >= QUIET_DAYS,
+            quiet: days !== null && days >= quietDays,
             spendCents: typeof c.totalSpendCents === "number" ? c.totalSpendCents : null,
             orders: typeof c.totalOrders === "number" ? c.totalOrders : null,
           };
         })
         .filter(r => r.address),
-    [customers],
+    [customers, quietDays],
   );
   const model = useMemo(() => (spec ? buildTowerModel(spec, residents) : null), [spec, residents]);
   const view = useRef<ReturnType<typeof createTowerRooms> | null>(null);
@@ -120,14 +127,14 @@ export default function TowerFloors({
         <div>
           <h2>{spec.name}</h2>
           <p className={styles.stat} data-testid="tower-sales">
-            {spendKnown.length ? `${money(lifetime)} lifetime from ${spendKnown.length} resident${spendKnown.length === 1 ? "" : "s"}` : `${rows.length} resident${rows.length === 1 ? "" : "s"}`} · {active30} ordered in the last 30 days · {quiet} quiet {QUIET_DAYS}+ days (dim windows)
+            {spendKnown.length ? `${money(lifetime)} lifetime from ${spendKnown.length} resident${spendKnown.length === 1 ? "" : "s"}` : `${rows.length} resident${rows.length === 1 ? "" : "s"}`} · {active30} ordered in the last 30 days · {quiet} quiet {quietDays}+ days (dim windows)
           </p>
           <p className={styles.stat}>
             {lit} of {units} homes lit · {dark} of {floors} floors with no customer
           </p>
           <p className={styles.note}>
             Floors come from each customer's unit number
-            {spec.numberingConfirmed ? "." : " (1507 read as floor 15; not yet confirmed for this building)."} Where a lit
+            {spec.numberingConfirmed ? "." : hasDesk ? " (1507 read as floor 15; confirm that in Building settings below)." : " (1507 read as floor 15; not yet confirmed for this building)."} Where a lit
             room sits along its floor is illustrative. Rooms are scenery. Tap a lit window for that resident.
           </p>
         </div>
@@ -172,7 +179,7 @@ export default function TowerFloors({
         ) : null}
         </div>
         <aside ref={list} className={styles.list} aria-label="Customers in this building">
-          <h3>{quietOnly ? `${listed.length} quiet 45+ days` : `${here.length} customer${here.length === 1 ? "" : "s"} here`}</h3>
+          <h3>{quietOnly ? `${listed.length} quiet ${quietDays}+ days` : `${here.length} customer${here.length === 1 ? "" : "s"} here`}</h3>
           {quietOnly ? <button type="button" className={styles.showAll} onClick={() => setQuietOnly(false)}>Show all {rows.length}</button> : null}
           <ul>
             {listed.map(r => (

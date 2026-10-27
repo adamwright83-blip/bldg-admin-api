@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { GOAL_MAX_CENTS, GOAL_MIN_CENTS, residentsAsOf, type TowerDesk as Desk, type TowerDeskBuildingId } from "@shared/towerDesk";
 import { buildTowerModel, darkFloors, type BuildingModel, type BuildingSpec, type Resident } from "./towerStack";
+import DeskSettings, { openDeskSettings } from "./DeskSettings";
+import { money } from "./deskMoney";
 import styles from "./tower-desk.module.css";
 
 /**
@@ -9,7 +11,7 @@ import styles from "./tower-desk.module.css";
  * brochure and bezels are drawing; every figure on a screen is read live, and a monitor with nothing
  * real behind it says "Not wired yet" instead of showing a number.
  */
-export const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString()}`;
+export { money };
 const DAY_MS = 86_400_000;
 const shortDay = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).toUpperCase();
@@ -83,7 +85,7 @@ export function ThenNow({ desk, spec, rows }: { desk: Desk; spec: BuildingSpec; 
   }, [playing, span]);
 
   const day = first ? addDays(first, at) : today;
-  const frame = useMemo(() => residentsAsOf(desk.residents, day), [desk.residents, day]);
+  const frame = useMemo(() => residentsAsOf(desk.residents, day, desk.config.quietDays), [desk.residents, day, desk.config.quietDays]);
   const model = useMemo(() => {
     const keys = new Set(frame.map(f => f.key));
     return buildTowerModel(spec, rows.filter(r => keys.has(r.key)));
@@ -109,7 +111,8 @@ export function ThenNow({ desk, spec, rows }: { desk: Desk; spec: BuildingSpec; 
 }
 
 export function Elevator({ desk }: { desk: Desk }) {
-  const run = desk.revenue.last30Cents, goal = desk.goalMonthlyCents;
+  const utils = trpc.useUtils();
+  const run = desk.revenue.totalLast30Cents, goal = desk.goalMonthlyCents, contract = desk.contract;
   const level = run !== null && goal ? Math.min(1, run / goal) : 0;
   return (
     <div className={styles.elevator}>
@@ -118,19 +121,33 @@ export function Elevator({ desk }: { desk: Desk }) {
         <div className={styles.car} style={{ bottom: `calc(${level * 100}% * 0.86 + 2%)` }}>$</div>
       </div>
       <div className={styles.elevatorRead}>
-        <small>{desk.contract ? "Residents paid, last 30 days" : "Paid, last 30 days"}</small>
-        {run !== null ? <b className={styles.bigMoney} data-testid="desk-run-rate">{money(run)}</b> : <b className={styles.notWiredBox}>Not wired yet</b>}
+        <small>Paid, last 30 days</small>
+        {run !== null ? (
+          <b className={styles.bigMoney} data-testid="desk-run-rate">{money(run)}</b>
+        ) : (
+          <div className={styles.goalShow}>
+            <span>Couldn't read your sales just now.</span>
+            <button type="button" className={styles.deskButton} onClick={() => void utils.system.towerDesk.read.invalidate({ buildingId: desk.buildingId })}>Try again</button>
+          </div>
+        )}
         {desk.revenue.status === "partial" ? <em>May be low: a sales source didn't load.</em> : null}
+        {run !== null && contract ? <em>{money(desk.revenue.last30Cents ?? 0)} residents · {money(contract.paid30Cents)} {contract.name}</em> : null}
         <small>Goal (penthouse)</small>
         <GoalEditor desk={desk} />
         {run !== null && goal ? <em>{Math.round(level * 100)}% of the way up</em> : null}
-        {desk.contract ? (
-          <>
-            <small>{desk.contract.label}</small>
-            <b className={styles.notWiredBox}>Not wired yet</b>
-            <em>Paid apart from residents; no ledger records it yet.</em>
-          </>
-        ) : null}
+        <small>{contract ? contract.name : "Building contract"}</small>
+        {contract ? (
+          <div className={styles.goalShow}>
+            <b className={styles.bigMoney}>{money(contract.paid30Cents)}</b>
+            <span>of {money(contract.monthlyCents)}/mo · logged by you</span>
+            <button type="button" className={styles.deskButton} onClick={openDeskSettings}>Log a payment</button>
+          </div>
+        ) : (
+          <div className={styles.goalShow}>
+            <span>None yet.</span>
+            <button type="button" className={styles.deskButton} onClick={openDeskSettings} data-testid="desk-add-contract">Add a contract</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -229,10 +246,10 @@ export function GoalFloors({ desk, model, quietKeys }: { desk: Desk | undefined;
 export function DimReadout({ desk, onShowQuiet }: Readout & { onShowQuiet: () => void }) {
   return (
     <div className={styles.dimRead}>
-      <p><b>{desk.dim.quietResidents}</b> resident{desk.dim.quietResidents === 1 ? "" : "s"} quiet 45+ days</p>
+      <p><b>{desk.dim.quietResidents}</b> resident{desk.dim.quietResidents === 1 ? "" : "s"} quiet {desk.config.quietDays}+ days</p>
       {desk.dim.estMonthlyCents !== null
         ? <p><b className={styles.bigMoney}>{money(desk.dim.estMonthlyCents)}/mo</b><br /><small>what they used to spend a month (estimate)</small></p>
-        : <p className={styles.notWiredBox}>Not wired yet</p>}
+        : <p className={styles.notWired}>Couldn't read their sales just now, so there's no dollar figure.</p>}
       {desk.dim.quietResidents ? <button type="button" className={styles.deskButton} onClick={onShowQuiet}>View quiet residents →</button> : null}
     </div>
   );
@@ -255,9 +272,16 @@ export function LogReadout({ desk }: Readout) {
 
 export function ReferralReadout({ desk }: Readout) {
   const r = desk.referrals;
-  if (r.status === "unavailable") return <p className={styles.notWiredBox}>Not wired yet</p>;
+  if (r.status === "unavailable") {
+    return <p className={styles.notWired}>Couldn't read referrals just now. <a className={styles.deskLink} href="/growth/referrals">Open Referrals →</a></p>;
+  }
   if (r.freshness?.state === "never") {
-    return <p className={styles.notWired}><b className={styles.notWiredBox}>Not wired yet</b><br />CleanCloud's referral list hasn't been copied in.</p>;
+    return (
+      <p className={styles.notWired}>
+        No referral list has been copied in from CleanCloud yet, so nothing can show here.{" "}
+        <a className={styles.deskLink} href="/growth/referrals" data-testid="desk-setup-referrals">Set up referrals →</a>
+      </p>
+    );
   }
   return (
     <div className={styles.refRead}>
@@ -279,7 +303,9 @@ export function ReferralReadout({ desk }: Readout) {
 
 export function useTowerDesk(buildingId: TowerDeskBuildingId) {
   const q = trpc.system.towerDesk.read.useQuery({ buildingId }, { staleTime: 60_000, retry: 1 });
-  const pending = <p className={styles.notWired}>{q.isError ? "Not wired yet: the desk couldn't be read." : "Reading…"}</p>;
+  const pending = q.isError
+    ? <p className={styles.notWired}>The desk couldn't be read. <button type="button" className={styles.deskButton} onClick={() => void q.refetch()}>Try again</button></p>
+    : <p className={styles.notWired}>Reading…</p>;
   return { desk: q.data, pending };
 }
 
@@ -332,6 +358,7 @@ export default function TowerDesk({
           {desk ? <ReferralReadout desk={desk} /> : pending}
         </Monitor>
       </div>
+      {desk ? <DeskSettings desk={desk} spec={spec} /> : null}
     </div>
   );
 }

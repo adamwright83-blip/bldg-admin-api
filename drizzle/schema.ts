@@ -10917,3 +10917,37 @@ export const towerDeskGoals = mysqlTable(
     tenantBuilding: uniqueIndex("uq_tower_desk_goals_tenant_building").on(table.tenantId, table.buildingId),
   })
 );
+
+/** Everything about a tower the operator tells us from the desk's settings (floors, doors per floor, numbering, quiet days, building contract), one JSON row per tenant and building. */
+export const towerDeskConfig = mysqlTable(
+  "tower_desk_config",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    buildingId: varchar("building_id", { length: 32 }).notNull(),
+    configJson: text("config_json").notNull(),
+    updatedBy: varchar("updated_by", { length: 128 }),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantBuilding: uniqueIndex("uq_tower_desk_config_tenant_building").on(table.tenantId, table.buildingId),
+  })
+);
+
+/** Payments the operator logged against a building contract, since no sales ledger records them. */
+export const towerDeskContractPayments = mysqlTable(
+  "tower_desk_contract_payments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    buildingId: varchar("building_id", { length: 32 }).notNull(),
+    amountCents: int("amount_cents").notNull(),
+    paidOn: varchar("paid_on", { length: 10 }).notNull(),
+    note: varchar("note", { length: 200 }).notNull().default(""),
+    createdBy: varchar("created_by", { length: 128 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({
+    tenantBuildingPaid: index("idx_tower_desk_payments_scope").on(table.tenantId, table.buildingId, table.paidOn),
+  })
+);

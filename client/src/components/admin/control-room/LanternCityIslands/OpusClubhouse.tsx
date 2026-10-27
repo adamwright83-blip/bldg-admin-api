@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import type { TowerDeskBuildingId } from "@shared/towerDesk";
 import { darkFloors, type BuildingModel, type BuildingSpec, type Resident } from "./towerStack";
-import { DimReadout, Elevator, GoalFloors, LogReadout, money, ReferralReadout, ThenNow, useTowerDesk } from "./TowerDesk";
+import DeskSettings, { openDeskSettings } from "./DeskSettings";
+import { money } from "./deskMoney";
+import { DimReadout, Elevator, GoalFloors, LogReadout, ReferralReadout, ThenNow, useTowerDesk } from "./TowerDesk";
 import styles from "./opus-clubhouse.module.css";
 
 /**
@@ -45,7 +47,8 @@ export default function OpusClubhouse({
   const lit = model.towers.reduce((n, t) => n + t.lit, 0);
   const floors = model.towers.reduce((n, t) => n + t.spec.floors, 0);
   const litFloors = floors - model.towers.reduce((n, t) => n + darkFloors(t).length, 0);
-  const run = desk?.revenue.last30Cents ?? null;
+  const run = desk?.revenue.totalLast30Cents ?? null;
+  const assumed = model.towers.filter(t => t.spec.unitsAssumed);
   const goal = desk?.goalMonthlyCents ?? null;
 
   const chip = (prop: Prop, text: string, cls: string) => (
@@ -87,27 +90,39 @@ export default function OpusClubhouse({
     <div className={styles.clubhouse} data-testid="opus-clubhouse">
       <p className={styles.sign}>
         The clubhouse · <b>{lit} of {units}</b> homes lit · tap anything in the room
+        {assumed.length ? <> · * {assumed.map(t => t.spec.short).join(" and ")}: doors per floor is a starting guess. <button type="button" className={styles.signLink} onClick={openDeskSettings}>Set it in Building settings</button></> : null}
       </p>
       <div className={styles.roomScroll}>
         <div className={styles.room}>
           <img src="/goldline/opus-clubhouse/room.webp" alt="The OPUS clubhouse: an album, a model of both towers, a brass elevator, a plant shelf, a mailroom and a bulletin board" />
-          {/* the elevator's two lanes carry their own live plaques over the painted ones */}
-          <span className={`${styles.lanePlaque} ${styles.laneContract}`}>Not wired yet</span>
-          <span className={`${styles.lanePlaque} ${styles.laneResidents}`} data-testid="opus-residents-lane">
-            {run !== null ? money(run) : "Not wired yet"}
-          </span>
+          {/* the painted plaques carry facts that change (floors, homes, what a lane is worth), so live ones sit over them */}
+          <div className={styles.modelPlate} aria-hidden>
+            {model.towers.map(t => (
+              <span key={t.spec.id}>
+                <b>{t.spec.short.toUpperCase()}</b>
+                {t.spec.floors} FL · {t.spec.floors * t.spec.unitsPerFloor} HOMES{t.spec.unitsAssumed ? "*" : ""}
+              </span>
+            ))}
+          </div>
+          <button type="button" className={`${styles.lanePlaque} ${styles.laneContract}`} onClick={openDeskSettings} aria-label={desk?.contract ? `${desk.contract.name}: log a payment` : "Add a building contract"} data-testid="opus-contract-lane">
+            {desk?.contract ? money(desk.contract.paid30Cents) : "Add"}
+          </button>
+          <button type="button" className={`${styles.lanePlaque} ${styles.laneResidents}`} onClick={() => setOpen("elevator")} aria-label="Resident orders, last 30 days" data-testid="opus-residents-lane">
+            {desk?.revenue.last30Cents != null ? money(desk.revenue.last30Cents) : "…"}
+          </button>
           {chip("album", desk?.firstOrderDay ? `Since ${new Date(`${desk.firstOrderDay}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })}` : "The album", styles.atAlbum)}
           {chip("model", `${litFloors} of ${floors} floors lit`, styles.atModel)}
-          {chip("elevator", run !== null && goal ? `${Math.round(Math.min(1, run / goal) * 100)}% of ${money(goal)}` : goal ? `Goal ${money(goal)}/mo` : "Goal needed", styles.atElevator)}
+          {chip("elevator", run !== null && goal ? `${Math.round(Math.min(1, run / goal) * 100)}% of ${money(goal)}` : goal ? `Goal ${money(goal)}/mo` : "Set your goal", styles.atElevator)}
           {chip("garden", desk ? `${desk.dim.quietResidents} quiet${desk.dim.estMonthlyCents ? ` · ${money(desk.dim.estMonthlyCents)}/mo` : ""}` : "Quiet residents", styles.atGarden)}
           {chip("mail", desk ? `${desk.log.length ? `Latest: ${desk.log[0]!.unit ? `Unit ${desk.log[0]!.unit}` : desk.log[0]!.name}` : "No mail yet"}` : "The mailroom", styles.atMail)}
-          {chip("board", desk?.referrals.status === "ok" && desk.referrals.freshness?.state !== "never" ? `${desk.referrals.involving} referrals` : "Not wired yet", styles.atBoard)}
+          {chip("board", desk?.referrals.status === "ok" && desk.referrals.freshness?.state !== "never" ? `${desk.referrals.involving} referrals` : "Set up referrals", styles.atBoard)}
         </div>
       </div>
       <section className={styles.panel} aria-live="polite" data-testid={`opus-panel-${open}`}>
         <h4>{TITLES[open]}</h4>
         <div className={styles.panelBody}>{body}</div>
       </section>
+      {desk ? <DeskSettings desk={desk} spec={spec} /> : null}
     </div>
   );
 }

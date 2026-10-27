@@ -359,3 +359,138 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.deskLink {
+  color: var(--amber);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.settings {
+  grid-column: 1 / -1;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(255, 207, 107, 0.35);
+  color: var(--phosphor);
+  font: 500 14px/1.35 "Barlow Condensed", Barlow, sans-serif;
+}
+.settings summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  font: 700 15px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.settingsBody {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 12px;
+}
+.settingsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.settingsCol h5 {
+  margin: 4px 0 0;
+  font: 700 13px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.settingsNote { margin: 0; opacity: 0.85; }
+.settingsErr { margin: 10px 0 0; color: #ff9d8a; font-weight: 700; }
+.settings label,
+.towerFields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 700 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.settings input:not([type="checkbox"]) {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 207, 107, 0.6);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font: 600 17px/1 Barlow, sans-serif;
+  min-width: 0;
+}
+.towerFields {
+  display: flex;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 207, 107, 0.3);
+  border-radius: 8px;
+}
+.towerFields legend { padding: 0 6px; font: 700 13px/1 "Barlow Condensed", sans-serif; letter-spacing: 0.08em; }
+.towerFields input { width: 110px; }
+.towerFields em { flex-basis: 100%; color: #ffd9a8; font-size: 12px; }
+.checkRow {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px !important;
+  text-transform: none !important;
+  font: 600 15px/1.3 Barlow, sans-serif !important;
+  letter-spacing: 0 !important;
+}
+.checkRow input { width: 22px; height: 22px; accent-color: var(--amber); }
+.inlineField {
+  flex-direction: row !important;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px !important;
+  text-transform: none !important;
+  font: 600 15px/1.3 Barlow, sans-serif !important;
+  letter-spacing: 0 !important;
+}
+.inlineField input { width: 84px; }
+.payForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.payForm .goalSave { grid-column: 1 / -1; }
+.payList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.payList li {
+  display: grid;
+  grid-template-columns: 90px 70px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border-bottom: 1px solid rgba(255, 244, 220, 0.12);
+  font: 500 14px/1.2 Barlow, sans-serif;
+}
+.payList b { color: var(--amber); }
+.payList button {
+  width: 40px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--phosphor);
+  font-size: 15px;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .settingsBody { grid-template-columns: 1fr; }
+}

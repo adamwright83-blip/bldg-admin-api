@@ -17,11 +17,13 @@
  * Anything that doesn't read cleanly stays in the tower's `unplaced` list, never guessed into a window.
  */
 import type { CanonicalGeographyId } from "@shared/canonicalGeography";
-import { TOWER_ADDRESS_PATTERNS } from "@shared/towerDesk";
+import { TOWER_ADDRESS_PATTERNS, type DeskConfig } from "@shared/towerDesk";
 
 export type TowerSpec = {
   id: string;
   label: string;
+  /** the name on a plaque: "Wilshire", "2160" */
+  short: string;
   address: RegExp;
   floors: number;
   unitsPerFloor: number;
@@ -41,8 +43,8 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
     name: "OPUS LA",
     numberingConfirmed: false,
     towers: [
-      { id: "south", label: "South tower · 3545 Wilshire", address: TOWER_ADDRESS_PATTERNS.opus_la.south, floors: 22, unitsPerFloor: 18 },
-      { id: "north", label: "North tower · 3650 W 6th", address: TOWER_ADDRESS_PATTERNS.opus_la.north, floors: 14, unitsPerFloor: 18, unitsAssumed: true },
+      { id: "south", short: "Wilshire", label: "South tower · 3545 Wilshire", address: TOWER_ADDRESS_PATTERNS.opus_la.south, floors: 22, unitsPerFloor: 18 },
+      { id: "north", short: "6th Street", label: "North tower · 3650 W 6th", address: TOWER_ADDRESS_PATTERNS.opus_la.north, floors: 14, unitsPerFloor: 18, unitsAssumed: true },
     ],
   },
   {
@@ -50,11 +52,27 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
     name: "Century Park East",
     numberingConfirmed: false,
     towers: [
-      { id: "2160", label: "2160 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2160"], floors: 21, unitsPerFloor: 12 },
-      { id: "2170", label: "2170 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2170"], floors: 21, unitsPerFloor: 12 },
+      { id: "2160", short: "2160", label: "2160 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2160"], floors: 21, unitsPerFloor: 12 },
+      { id: "2170", short: "2170", label: "2170 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2170"], floors: 21, unitsPerFloor: 12 },
     ],
   },
 ];
+
+/**
+ * The drawing's starting guesses, with the operator's saved building facts laid over them: a tower whose floors and
+ * doors per floor they entered is no longer "assumed", and confirming the numbering clears that note too.
+ */
+export function applyDeskConfig(spec: BuildingSpec, config: Pick<DeskConfig, "towers" | "numberingConfirmed"> | null | undefined): BuildingSpec {
+  if (!config) return spec;
+  return {
+    ...spec,
+    numberingConfirmed: spec.numberingConfirmed || config.numberingConfirmed,
+    towers: spec.towers.map(t => {
+      const saved = config.towers[t.id];
+      return saved ? { ...t, floors: saved.floors, unitsPerFloor: saved.unitsPerFloor, unitsAssumed: false } : t;
+    }),
+  };
+}
 
 export type Resident = { key: string; name: string; address: string; unit: string | null; /** quiet 45+ days: the room is lit, but dimly */ quiet?: boolean };
 /** where a unit string lands: floor 1..floors, slot 1..unitsPerFloor (null when the floor is known but the door isn't) */
