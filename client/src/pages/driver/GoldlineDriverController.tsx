@@ -1684,6 +1684,7 @@ function LiveGoldlineDriverController({
           pickups.isLoading || deliveries.isLoading || externalOrders.isLoading
         }
         onOpenImport={() => setAddExternalWorkOpen(true)}
+        onOpenNewOrder={() => setNewOrderOpen(true)}
         onOpenWeek={() => setWeekOpen(true)}
         onEnterOperations={() => {
           setDayBriefingOpen(false);
