@@ -15,7 +15,7 @@
  */
 import type { ReferralActivityRow, ReferralSyncFreshness } from "./referralProgram";
 
-export const TOWER_DESK_BUILDINGS = ["century_park_east"] as const;
+export const TOWER_DESK_BUILDINGS = ["century_park_east", "opus_la"] as const;
 export type TowerDeskBuildingId = (typeof TOWER_DESK_BUILDINGS)[number];
 
 /**
@@ -24,6 +24,26 @@ export type TowerDeskBuildingId = (typeof TOWER_DESK_BUILDINGS)[number];
  */
 export const TOWER_DESK_MONTHLY_GOAL_CENTS: Record<TowerDeskBuildingId, number | null> = {
   century_park_east: 80_000, // Adam, 2026-10-27: $800/month
+  opus_la: null,
+};
+
+/** each tower's street address; the client's tower drawing and the server's resident match read the same patterns */
+export const TOWER_ADDRESS_PATTERNS: Record<TowerDeskBuildingId, Record<string, RegExp>> = {
+  opus_la: { south: /\b3545\s+wilshire\b/i, north: /\b3650\s+(?:w\.?|west)?\s*6th\b/i },
+  century_park_east: { "2160": /\b2160\s+century\s+(?:park|pk)\b/i, "2170": /\b2170\s+century\s+(?:park|pk)\b/i },
+};
+
+export function isTowerAddress(buildingId: TowerDeskBuildingId, address: string | null | undefined): boolean {
+  return Object.values(TOWER_ADDRESS_PATTERNS[buildingId]).some(re => re.test(address ?? ""));
+}
+
+/**
+ * OPUS also has the gym-towel building contract. No ledger records it yet (the paid-order ledger holds residents'
+ * laundry orders), so its lane says so instead of folding into, or hiding behind, resident revenue.
+ */
+const CONTRACT_LANE: Record<TowerDeskBuildingId, TowerDesk["contract"]> = {
+  century_park_east: null,
+  opus_la: { status: "not_wired", label: "Gym towel contract" },
 };
 
 export const QUIET_DAYS = 45;
@@ -83,6 +103,8 @@ export type TowerDesk = {
     perHomeMonthlyCents: number | null;
   };
   goalMonthlyCents: number | null;
+  /** a building contract paid apart from residents (OPUS's gym towels); null where there is none */
+  contract: null | { status: "not_wired"; label: string };
   dim: {
     quietResidents: number;
     /** the quiet residents' own average month while they were ordering; null when money can't be read */
@@ -196,6 +218,7 @@ export function buildTowerDesk(input: {
     firstOrderDay: firsts.length ? ymd(new Date(Math.min(...firsts))) : null,
     revenue,
     goalMonthlyCents: TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId],
+    contract: CONTRACT_LANE[input.buildingId],
     dim: { quietResidents: quiet.length, estMonthlyCents },
     log: log.slice(0, LOG_LIMIT),
     referrals,

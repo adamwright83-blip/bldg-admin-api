@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTowerDesk, residentsAsOf, type DeskResidentInput } from "./towerDesk";
+import { buildTowerDesk, isTowerAddress, residentsAsOf, type DeskResidentInput } from "./towerDesk";
 
 const now = new Date("2026-10-27T12:00:00Z");
 const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
@@ -65,5 +65,22 @@ describe("residentsAsOf", () => {
     expect(residentsAsOf(list, "2025-12-31")).toEqual([]);
     expect(residentsAsOf(list, "2026-02-20")).toEqual([{ key: "a", quiet: true }]);
     expect(residentsAsOf(list, "2026-03-10")).toEqual([{ key: "a", quiet: false }]);
+  });
+});
+
+describe("OPUS LA", () => {
+  it("reads both OPUS towers by street address, and nothing else", () => {
+    expect(isTowerAddress("opus_la", "3545 Wilshire Blvd Apt 1607")).toBe(true);
+    expect(isTowerAddress("opus_la", "3650 W 6th St #902")).toBe(true);
+    expect(isTowerAddress("opus_la", "2160 Century Park East")).toBe(false);
+    expect(isTowerAddress("century_park_east", "2170 Century Pk E")).toBe(true);
+  });
+
+  it("keeps the gym-towel contract in its own lane, not wired, apart from residents", () => {
+    const desk = buildTowerDesk({ buildingId: "opus_la", now, residents, ledger: { status: "ok", startUtc: daysAgo(365), events: [{ occurredAt: daysAgo(3), cents: 5000, identityKeys: ["phone:1"] }] }, referrals: { status: "unavailable" } });
+    expect(desk.contract).toEqual({ status: "not_wired", label: "Gym towel contract" });
+    expect(desk.revenue.last30Cents).toBe(5000);
+    expect(desk.goalMonthlyCents).toBeNull();
+    expect(buildTowerDesk({ buildingId: "century_park_east", now, residents, ledger: { status: "unavailable" }, referrals: { status: "unavailable" } }).contract).toBeNull();
   });
 });
