@@ -76,10 +76,10 @@
 .atBoard { left: 92%; top: 79%; }
 .modelPlate {
   position: absolute;
-  left: 19.3%;
-  top: 60.2%;
-  width: 13.5%;
-  height: 8.9%;
+  left: 25.1%;
+  top: 60.3%;
+  width: 17.9%;
+  height: 8.7%;
   display: flex;
   background: #171019;
   border-radius: 3px;
