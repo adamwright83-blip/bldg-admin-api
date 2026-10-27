@@ -9,7 +9,7 @@ test("Tin Can House opens the real Small Comforts game and exit preserves tenant
   const game = page.locator('[data-small-comforts="game"]');
   await expect(game).toBeVisible();
   await expect(board).toHaveAttribute("data-paused", "true");
-  await expect(game.locator("iframe")).toHaveAttribute("src", "/small-comforts/");
+  await expect(game.locator("iframe")).toHaveAttribute("src", "/small-comforts/index.html");
   await game.getByRole("button", { name: /Lantern City/ }).click();
   await expect(game).toHaveCount(0);
   await expect(board).toHaveAttribute("data-paused", "false");

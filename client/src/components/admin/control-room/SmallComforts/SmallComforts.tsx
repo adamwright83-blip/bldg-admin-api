@@ -1,7 +1,7 @@
 import "./smallComfortsFrame.css";
 
 /** Served by the server from preview/small-comforts/, the canonical build (see server/_core/smallComfortsStatic.ts). */
-export const SMALL_COMFORTS_SRC = "/small-comforts/";
+export const SMALL_COMFORTS_SRC = "/small-comforts/index.html";
 
 /**
  * The Tin Can House on Hollywood opens the real game: the three chapters in
