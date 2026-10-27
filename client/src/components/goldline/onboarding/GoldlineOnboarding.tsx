@@ -1,4 +1,6 @@
 import { CustomerImport } from "./CustomerImport";
+import { HeldListImport } from "./HeldListImport";
+import { readHeldCustomerList } from "@/lib/joystickHeldCustomerList";
 import { DemoAccess, DemoExit, useDemoCapability } from "./DemoAccess";
 import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
@@ -51,6 +53,8 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
  const reload = () => window.location.reload();
  const demo = useDemoCapability();
  const utils = trpc.useUtils();
+ // A list shared before checkout (docs/goldline/FIRST_TEN_MINUTES.md slice B).
+ const [heldList, setHeldList] = useState(() => readHeldCustomerList());
  const start = trpc.system.goldlineOnboarding.start.useMutation({onSuccess:()=>{captureProductEvent("onboarding_started",{entry});utils.system.goldlineOnboarding.state.invalidate();}});
  const save = trpc.system.goldlineOnboarding.answer.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const reveal = trpc.system.goldlineOnboarding.reveal.useMutation({onSuccess:()=>{captureProductEvent("onboarding_completed",{sessionId:session?.id,acquisitionSessionId:session?.acquisitionSessionId});utils.system.goldlineOnboarding.state.invalidate();}});
@@ -82,12 +86,10 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
   return <DesignPartnerWorld session={session}/>;
  }
  return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}>
-  {session.acquisitionSessionId ? (
-   <section className="gl-customer-import">
-    <h2>Your first world is ready.</h2>
-    <p>Start with the business truth you gave us. Connections and customer imports can wait until after your first real action.</p>
-    <div className="gl-import-actions"><button disabled={reveal.isPending} onClick={()=>reveal.mutate()}>{reveal.isPending?"ASSEMBLING…":"REVEAL MY WORLD"}</button></div>
-   </section>
+  {/* Paid signups bring the list they shared before checkout; everyone else,
+      paid or not, can import one here before the reveal. */}
+  {heldList ? (
+   <HeldListImport list={heldList} busy={reveal.isPending} onContinue={()=>reveal.mutate()} onDropped={()=>setHeldList(null)} />
   ) : <CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />}
   {reveal.error&&<p role="alert">{reveal.error.message}</p>}
  </OnboardingInterview>;

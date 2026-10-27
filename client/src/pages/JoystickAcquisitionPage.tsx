@@ -8,15 +8,51 @@ import {
   ONBOARDING_QUESTIONS,
   type GoldlineOnboardingQuestionKey,
 } from "@shared/goldlineOnboarding";
+import {
+  JOYSTICK_EXPERIENCE_LABELS,
+  experienceFromEntrySearch,
+  parseJoystickExperience,
+  type JoystickExperience,
+} from "@shared/joystickSelectedExperience";
 import type {
   JoystickDraftAnswerMap,
   JoystickDraftPreview,
 } from "@shared/joystickAcquisition";
 import { apiBase } from "@/lib/apiBase";
 import "./joystick-acquisition.css";
+import {
+  HELD_LIST_MAX_BYTES,
+  heldListPlaceLine,
+  holdCustomerList,
+  readCustomerListDecision,
+  readHeldCustomerList,
+  skipCustomerList,
+  type CustomerListDecision,
+  type HeldCustomerList,
+} from "@/lib/joystickHeldCustomerList";
 
 type Credentials = { sessionId: string; resumeToken: string };
 const SESSION_KEY = "joystick_acquisition_credentials";
+const EXPERIENCE_KEY = "joystick_selected_experience";
+
+/**
+ * The world chosen on the homepage arrives as ?world= (or the SPA landing's
+ * ?mode=). It is kept for the visit so the Stripe return, which carries only
+ * ?session= and ?checkout=, still knows it.
+ */
+function readSelectedExperience(): JoystickExperience | null {
+  if (typeof window === "undefined") return null;
+  const fromUrl = experienceFromEntrySearch(window.location.search);
+  try {
+    if (fromUrl) {
+      localStorage.setItem(EXPERIENCE_KEY, fromUrl);
+      return fromUrl;
+    }
+    return parseJoystickExperience(localStorage.getItem(EXPERIENCE_KEY));
+  } catch {
+    return fromUrl;
+  }
+}
 
 function readCredentials(): Credentials | null {
   try {
@@ -49,6 +85,11 @@ export default function JoystickAcquisitionPage() {
   const [ownerEmail, setOwnerEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [selectedExperience] = useState<JoystickExperience | null>(() => readSelectedExperience());
+  const [heldList, setHeldList] = useState<HeldCustomerList | null>(() => readHeldCustomerList());
+  const [listDecision, setListDecision] = useState<CustomerListDecision | null>(() => readCustomerListDecision());
+  const [pendingList, setPendingList] = useState<HeldCustomerList | null>(null);
+  const prefilledArea = useRef(false);
   const started = useRef(false);
   const previewViewed = useRef(false);
   const checkoutReturnedTracked = useRef(false);
@@ -70,11 +111,15 @@ export default function JoystickAcquisitionPage() {
   const plans = trpc.system.saas.plans.useQuery();
   const checkout = trpc.system.saas.checkout.useMutation();
   const activate = trpc.system.saas.activateOwner.useMutation();
+  const readList = trpc.system.goldlineOnboarding.previewDraftCustomerList.useMutation();
 
   useEffect(() => {
     if (credentials || started.current) return;
     started.current = true;
-    captureProductEvent("onboarding_draft_started", { source: "joystick_landing" });
+    captureProductEvent("onboarding_draft_started", {
+      source: "joystick_landing",
+      selected_experience: selectedExperience,
+    });
     start.mutate(
       { requestId: requestId() },
       {
@@ -94,7 +139,7 @@ export default function JoystickAcquisitionPage() {
         onError: cause => setError(cause.message),
       }
     );
-  }, [credentials, start]);
+  }, [credentials, start, selectedExperience]);
 
   useEffect(() => {
     const data = resume.data;
@@ -143,7 +188,60 @@ export default function JoystickAcquisitionPage() {
     generatePreview.isPending ||
     saveIdentity.isPending ||
     checkout.isPending ||
-    activate.isPending;
+    activate.isPending ||
+    readList.isPending;
+
+  // The list's own localities answer "where do you work" as a suggestion the
+  // operator confirms or edits; it is saved as their answer only when they continue.
+  useEffect(() => {
+    if (nextQuestion !== "service_area" || !heldList || prefilledArea.current) return;
+    const place = heldList.summary.localities[0]?.label;
+    if (!place) return;
+    prefilledArea.current = true;
+    setAnswer(value => value || place);
+  }, [nextQuestion, heldList]);
+
+  async function chooseList(file: File | undefined) {
+    if (!file || !credentials) return;
+    setError(null);
+    if (file.size > HELD_LIST_MAX_BYTES) {
+      setError("Choose a CSV smaller than 500 KB (about 100 customers).");
+      return;
+    }
+    try {
+      const payload = await file.text();
+      const summary = await readList.mutateAsync({ ...credentials, payload });
+      setPendingList({ fileName: file.name, payload, summary, heldAt: new Date().toISOString() });
+      captureProductEvent("onboarding_mirror_shown", {
+        funnel_step: "prepay",
+        customers: summary.rows,
+        usable: summary.usable,
+        needs_review: summary.needsReview,
+        localities: summary.localities.length,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not read that list.");
+    }
+  }
+
+  function confirmList() {
+    if (!pendingList) return;
+    if (!holdCustomerList(pendingList)) {
+      setError("This browser would not keep your list. You can add it again after your workspace opens.");
+    }
+    setHeldList(pendingList);
+    setListDecision("held");
+    setPendingList(null);
+    captureProductEvent("onboarding_source_connected", { kind: "csv", funnel_step: "prepay" });
+  }
+
+  function continueWithoutList() {
+    skipCustomerList();
+    setHeldList(null);
+    setPendingList(null);
+    setListDecision("skipped");
+    captureProductEvent("onboarding_source_connected", { kind: "none", funnel_step: "prepay" });
+  }
 
   async function submitAnswer(event: FormEvent) {
     event.preventDefault();
@@ -195,6 +293,7 @@ export default function JoystickAcquisitionPage() {
         contactName,
         ownerEmail,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        selectedExperience,
       });
       captureProductEvent("onboarding_identity_completed", { funnel_step: "prepay" });
       await resume.refetch();
@@ -284,7 +383,11 @@ export default function JoystickAcquisitionPage() {
       <section className="ja-card">
         <header className="ja-header">
           <span>JOYSTICK</span>
-          <small>YOUR BUSINESS. PLAYABLE.</small>
+          <small>
+            {selectedExperience
+              ? `${JOYSTICK_EXPERIENCE_LABELS[selectedExperience].toUpperCase()} · YOUR BUSINESS, PLAYABLE.`
+              : "YOUR BUSINESS. PLAYABLE."}
+          </small>
         </header>
 
         {error ? <p className="ja-error" role="alert">{error}</p> : null}
@@ -323,12 +426,67 @@ export default function JoystickAcquisitionPage() {
               SIGN IN
             </a>
           </div>
+        ) : data.status === "draft" && !preview && !listDecision && pendingList ? (
+          <div className="ja-mirror" data-testid="customer-list-mirror">
+            <p className="ja-kicker">YOUR BUSINESS, FROM YOUR LIST</p>
+            <h1>
+              {pendingList.summary.usable
+                ? `${pendingList.summary.usable} ${pendingList.summary.usable === 1 ? "customer" : "customers"}.`
+                : "No one we could place yet."}
+            </h1>
+            {heldListPlaceLine(pendingList.summary) ? (
+              <p>Mostly in {heldListPlaceLine(pendingList.summary)}.</p>
+            ) : (
+              <p>Your list has no city or ZIP column, so we can't tell where you work from it yet.</p>
+            )}
+            {pendingList.summary.sampleNames.length ? (
+              <ul className="ja-names" aria-label="Customers from your list">
+                {pendingList.summary.sampleNames.map(name => <li key={name}>{name}</li>)}
+              </ul>
+            ) : null}
+            <p className="ja-truth">
+              From {pendingList.fileName} · {pendingList.summary.rows} rows
+              {pendingList.summary.duplicates ? ` · ${pendingList.summary.duplicates} duplicate${pendingList.summary.duplicates === 1 ? "" : "s"}` : ""}
+              {pendingList.summary.needsReview ? ` · ${pendingList.summary.needsReview} need a closer look` : ""}.
+              {" "}Read in this browser. Nothing is saved until your workspace opens.
+            </p>
+            <div className="ja-actions">
+              <button className="ja-primary" disabled={busy} onClick={confirmList}>THAT'S MY BUSINESS</button>
+              <label className="ja-secondary">
+                Choose a different file
+                <input type="file" accept=".csv,text/csv" className="sr-only" disabled={busy} onChange={event => void chooseList(event.target.files?.[0])} />
+              </label>
+              <button className="ja-secondary" disabled={busy} onClick={continueWithoutList}>Continue without a list</button>
+            </div>
+          </div>
+        ) : data.status === "draft" && !preview && !listDecision ? (
+          <div className="ja-mirror" data-testid="bring-your-business">
+            <p className="ja-kicker">STEP ONE</p>
+            <h1>Bring your business.</h1>
+            <p>
+              Drop in your customer list and JOYSTICK reads it back to you. An export from CleanCloud, Square, Jobber,
+              QuickBooks or a spreadsheet works: a name and an address for each customer, up to 100.
+            </p>
+            <div className="ja-actions">
+              <label className="ja-primary ja-file">
+                {readList.isPending ? "READING YOUR LIST…" : "CHOOSE A CUSTOMER LIST (CSV)"}
+                <input type="file" accept=".csv,text/csv" className="sr-only" disabled={busy} onChange={event => void chooseList(event.target.files?.[0])} />
+              </label>
+              <button className="ja-secondary" disabled={busy} onClick={continueWithoutList}>I don't have a list handy</button>
+            </div>
+            <p className="ja-truth">Your list stays in this browser until you start your workspace. No customers are invented.</p>
+          </div>
         ) : nextQuestion ? (
           <form className="ja-form" onSubmit={submitAnswer}>
             <p className="ja-kicker">
               {JOYSTICK_PREPAY_QUESTION_KEYS.indexOf(nextQuestion) + 1} OF 3
             </p>
             <h1>{questionText(nextQuestion)}</h1>
+            {nextQuestion === "service_area" && heldList && heldListPlaceLine(heldList.summary) ? (
+              <p className="ja-truth" data-testid="service-area-from-list">
+                Your list points to {heldListPlaceLine(heldList.summary)}. Change it if that's not where you work.
+              </p>
+            ) : null}
             <textarea
               autoFocus
               maxLength={2000}
@@ -366,11 +524,21 @@ export default function JoystickAcquisitionPage() {
               <p className="ja-kicker">CLAIRE'S OPENING READ</p>
               <h1>{preview.area.canonicalAddress || preview.area.declared}</h1>
               <p data-testid="draft-preview-briefing">{preview.briefing.text}</p>
+              {heldList ? (
+                <div className="ja-dayline" data-testid="held-list-receipt">
+                  <span>YOUR CUSTOMERS</span>
+                  <strong>
+                    {heldList.summary.usable} from {heldList.fileName}
+                    {heldListPlaceLine(heldList.summary) ? `, mostly ${heldListPlaceLine(heldList.summary)}` : ""}.
+                  </strong>
+                  <small>They come into your world when your workspace opens. Until then they stay in this browser.</small>
+                </div>
+              ) : null}
               <div className="ja-dayline">
                 <span>{preview.recommendedAction.title}</span>
                 <strong>{preview.recommendedAction.text}</strong>
               </div>
-              <small data-testid="draft-preview-label">Draft preview · based only on your answers{preview.area.provenance === "geocoded_declaration" ? " and the place you declared" : ""}.</small>
+              <small data-testid="draft-preview-label">Draft preview · based only on your answers{preview.area.provenance === "geocoded_declaration" ? " and the place you declared" : ""}{heldList ? ", plus your list" : ""}.</small>
             </div>
             <form className="ja-form ja-identity" onSubmit={submitIdentity}>
               <p className="ja-kicker">SAVE THIS WORLD</p>
@@ -402,7 +570,17 @@ export default function JoystickAcquisitionPage() {
                 <span>{preview.recommendedAction.title}</span>
                 <strong>{preview.recommendedAction.text}</strong>
               </div>
-              <small data-testid="draft-preview-label">Draft preview · based only on your answers.</small>
+              {heldList ? (
+                <div className="ja-dayline" data-testid="held-list-receipt">
+                  <span>YOUR CUSTOMERS</span>
+                  <strong>
+                    {heldList.summary.usable} from {heldList.fileName}
+                    {heldListPlaceLine(heldList.summary) ? `, mostly ${heldListPlaceLine(heldList.summary)}` : ""}.
+                  </strong>
+                  <small>They come into your world when your workspace opens. Until then they stay in this browser.</small>
+                </div>
+              ) : null}
+              <small data-testid="draft-preview-label">Draft preview · based only on your answers{heldList ? " and your list" : ""}.</small>
             </div>
             <div className="ja-checkout">
               <p className="ja-kicker">START PLAYING</p>

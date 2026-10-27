@@ -38,6 +38,8 @@ export type DirectSyncResult = {
   range: { from: string; to: string };
   salesReceipt?: CleanCloudIngestionResult | null;
   revenueReceipt?: CleanCloudIngestionResult | null;
+  /** Referral Code Usage, read after the exports. Never fails the sync. */
+  referrals?: { status: "imported" | "no_address_yet" | "unrecognised" | "failed"; upserted?: number; error?: string };
 };
 
 /**
@@ -426,6 +428,8 @@ export async function runCleanCloudDirectSync(
       });
     }
 
+    const referrals = await syncCleanCloudReferralUsage({ tenantId, session });
+
     return {
       success: true,
       tenantId,
@@ -434,6 +438,7 @@ export async function runCleanCloudDirectSync(
       range,
       salesReceipt,
       revenueReceipt,
+      referrals,
     };
   } catch (error) {
     await recordSyncAttempt({
@@ -444,5 +449,33 @@ export async function runCleanCloudDirectSync(
       to: range.to,
     });
     throw error;
+  }
+}
+
+/**
+ * Fetches CleanCloud's Referral Code Usage window with this run's session. Its address is the one GumballPals saw the
+ * window load from; until GumballPals has synced once there is nothing to fetch. Never throws: referrals must not
+ * fail the sales sync, and the page's freshness label shows when the copy is old.
+ */
+export async function syncCleanCloudReferralUsage(input: {
+  tenantId: string;
+  session: CleanCloudSession;
+  fetchImpl?: typeof fetch;
+}): Promise<NonNullable<DirectSyncResult["referrals"]>> {
+  try {
+    const { getCleanCloudReferralUsageUrl, importCleanCloudReferralUsageResponse } = await import(
+      "../../../domains/referral/referralService"
+    );
+    const url = await getCleanCloudReferralUsageUrl(input.tenantId);
+    if (!url) return { status: "no_address_yet" };
+    const response = await (input.fetchImpl ?? fetch)(url, {
+      headers: { ...BROWSER_HEADERS, Cookie: input.session.cookieHeader, "X-Requested-With": "XMLHttpRequest" },
+      redirect: "manual",
+    });
+    if (!response.ok) return { status: "failed", error: `CleanCloud answered ${response.status}` };
+    const result = await importCleanCloudReferralUsageResponse(input.tenantId, await response.text());
+    return result.recognised ? { status: "imported", upserted: result.upserted } : { status: "unrecognised" };
+  } catch (error) {
+    return { status: "failed", error: sanitizeCleanCloudMessage(error instanceof Error ? error.message : String(error)) };
   }
 }

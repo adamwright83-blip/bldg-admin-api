@@ -398,6 +398,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/growth/driver-intelligence/ledger-room",
   "/growth/buildings",
   "/growth/offers",
+  "/growth/referrals",
   "/home/today",
   "/home/exceptions",
   "/home/signals",
@@ -674,6 +675,7 @@ function AdminHostRouter() {
       <Route path="/growth/driver-intelligence/:rest*" component={AdminHostApp} />
       <Route path="/growth/buildings" component={AdminHostApp} />
       <Route path="/growth/offers" component={AdminHostApp} />
+      <Route path="/growth/referrals" component={AdminHostApp} />
       <Route path="/home/:rest*" component={AdminHostApp} />
       <Route path="/money" component={AdminHostApp} />
       <Route path="/settings" component={AdminHostApp} />

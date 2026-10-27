@@ -60,6 +60,7 @@ interface FormData {
   lastName: string;
   phone: string;
   email: string;
+  referralCode: string;
 }
 
 interface SchedulePickupModalProps {
@@ -607,6 +608,12 @@ function StepReview({
             type="email"
             placeholder="Optional"
           />
+          <InputField
+            label="Referral code"
+            value={formData.referralCode}
+            onChange={v => setFormData({ ...formData, referralCode: v.toUpperCase() })}
+            placeholder="Optional, from a neighbour"
+          />
         </div>
       </div>
 
@@ -951,7 +958,16 @@ function BookingExperience({
     lastName: "",
     phone: "",
     email: "",
+    // A shared link (?ref=MARIA-7K2) fills the code in.
+    referralCode: (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ref") : null)?.toUpperCase() ?? "",
   });
+  const [referralOutcome, setReferralOutcome] = useState<{
+    applied: boolean;
+    creditCents: number;
+    reason?: string;
+    myCode?: string;
+    newCustomerCreditCents?: number;
+  } | null>(null);
 
   const createOrderMutation = trpc.orders.create.useMutation();
   const currentStage = useMemo(() => getCurrentStage(step), [step]);
@@ -975,8 +991,18 @@ function BookingExperience({
         lastName: formData.lastName,
         phone: formData.phone,
         email: formData.email || undefined,
+        referralCode: formData.referralCode.trim() || undefined,
       });
       setOrderId(result.orderId);
+      if (result.referral || result.myReferral) {
+        setReferralOutcome({
+          applied: Boolean(result.referral?.applied),
+          creditCents: result.referral?.creditCents ?? 0,
+          reason: result.referral?.reason,
+          myCode: result.myReferral?.code,
+          newCustomerCreditCents: result.myReferral?.newCustomerCreditCents,
+        });
+      }
       setStep(5);
     } catch (err) {
       console.error("Failed to create order:", err);
@@ -1070,6 +1096,22 @@ function BookingExperience({
             loading={createOrderMutation.isPending}
             error={submitError}
           />
+        ) : null}
+
+        {step === 5 && orderId && referralOutcome ? (
+          <div className="mx-3 mt-3 rounded-xl border border-[#efdde6] bg-white px-3 py-2 text-[13px] text-[#5d3b4a] sm:mx-5" role="status">
+            {referralOutcome.applied ? (
+              <p>Referral code applied: ${(referralOutcome.creditCents / 100).toFixed(2)} credit comes off your first charge.</p>
+            ) : formData.referralCode.trim() && referralOutcome.reason ? (
+              <p>Your referral code didn't apply: {referralOutcome.reason}. Your pickup is still booked.</p>
+            ) : null}
+            {referralOutcome.myCode ? (
+              <p>
+                Your own code to share: <strong>{referralOutcome.myCode}</strong>. A neighbour who uses it gets $
+                {((referralOutcome.newCustomerCreditCents ?? 0) / 100).toFixed(2)} off, and you get credit after their first order.
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {step === 5 && orderId ? (

@@ -228,7 +228,12 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
       const result = await chargeCard.mutateAsync({ orderId: order.id, amountCents: cents });
       if (result.success) {
         await invalidateLive();
-        toast.success(`Charged ${money(order.total)} for #LB-${order.id}.`);
+        const credit = "creditAppliedCents" in result ? result.creditAppliedCents ?? 0 : 0;
+        toast.success(
+          credit > 0
+            ? `Charged $${(result.chargedCents / 100).toFixed(2)} for #LB-${order.id} after $${(credit / 100).toFixed(2)} referral credit.`
+            : `Charged ${money(order.total)} for #LB-${order.id}.`
+        );
       } else {
         toast.error(result.error || "Charge failed. Open Intake to resolve.");
       }

@@ -92,3 +92,4 @@ body[data-companion="luma"]{--companion:#0a7f8c}
 .cast-names [aria-pressed="true"]{color:var(--companion);border-color:var(--companion);transition:color .6s ease,border-color .6s ease,background-color .6s ease}
 @media(max-width:760px){.cast-names [aria-pressed="true"]{background:var(--companion);border-color:var(--companion);color:var(--paper)}}
 @media(prefers-reduced-motion:reduce){.little-rule,.cast-names [aria-pressed="true"]{transition:none}}
+.closing .bring-link{display:inline-block;margin:30px auto 0;background:none;border-top:0;border-left:0;border-right:0}

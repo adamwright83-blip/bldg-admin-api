@@ -47,6 +47,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/joystick-start",
+      "destination": "/index.html"
+    },
+    {
       "source": "/onboarding",
       "destination": "/index.html"
     },

@@ -61,6 +61,7 @@ const ArchivedLevel4OffensiveHost = lazy(() =>
 );
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
+const ReferralsPage = lazy(() => import("./ReferralsPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
 const ClaireScheduledOutreach = lazy(() => import("./admin/ClaireScheduledOutreach"));
@@ -215,6 +216,7 @@ export default function AdminHostApp() {
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
   const isGrowthBuildings = path === "/growth/buildings";
   const isGrowthOffers = path === "/growth/offers";
+  const isGrowthReferrals = path === "/growth/referrals";
   const isCommercialPipeline = path === "/commercial-pipeline";
   const isChurnRadar = path === "/churn-radar";
   const isSalesIntel = path === "/sales-intel";
@@ -243,6 +245,7 @@ export default function AdminHostApp() {
     isDriverIntelligence ||
     isGrowthBuildings ||
     isGrowthOffers ||
+    isGrowthReferrals ||
     isCommercialPipeline ||
     isChurnRadar ||
     isSalesIntel ||
@@ -554,6 +557,10 @@ export default function AdminHostApp() {
           <GrowthBuildingsPage />
         ) : isGrowthOffers ? (
           <GrowthOffersPage />
+        ) : isGrowthReferrals ? (
+          <Suspense fallback={<div className="cr-route-loading">Loading Referrals…</div>}>
+            <ReferralsPage />
+          </Suspense>
         ) : isCommercialPipeline ? (
           <Suspense
             fallback={

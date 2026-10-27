@@ -1,13 +1,18 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { importedCustomers, revealWorld, mutateFirstMission } from "./firstMission";
-import { previewCustomerCsv } from "./customerImport";
+import { previewCustomerCsv, summarizeCustomerCsv } from "./customerImport";
+import { requireOnboardingSession } from "../saas/saasStore";
 import { runTenantImport } from "../saas/tenantImportService";
 import { z } from "zod";
-import { router, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
+import { router, publicProcedure, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
 import { answerSession, attachFirstAction, authorOperatorTask, orderedGoldlineOnboardingAnswers, prepareClaireOpening } from "../../shared/goldlineOnboarding";
 import { hasExistingWorld, readSession, saveSession, startSession } from "./store";
 import { interpretAnswers } from "./interpreter";
 export const goldlineOnboardingRouter = router({
+ // Pre-account mirror for the signup draft. Requires the draft's own resume
+ // credentials, returns a summary only, and stores nothing: the list stays in the
+ // visitor's browser until the paid workspace exists and importCustomers runs.
+ previewDraftCustomerList: publicProcedure.input(z.object({sessionId:z.string().uuid(),resumeToken:z.string().min(32).max(128),payload:z.string().min(1).max(500000)})).mutation(async ({input})=>{const draft=await requireOnboardingSession(input);if(draft.onboardingMode!=="joystick_generic"||draft.status!=="draft")throw new Error("This signup is no longer accepting a customer list.");return summarizeCustomerCsv(input.payload);}),
  previewImport: procedure.input(z.object({payload:z.string().max(500000)})).mutation(({input})=>previewCustomerCsv(input.payload)),
  importCustomers: procedure.input(z.object({payload:z.string().max(500000),fileName:z.string().min(1).max(200)})).mutation(async ({ctx,input})=>{const session=await startSession(ctx.tenantId);if(session.status!=="READY")throw new Error("Complete the five answers before import.");const result=await runTenantImport({tenantId:ctx.tenantId,providerKey:"goldline_customer_csv",sourceFileName:input.fileName,payload:input.payload});await saveSession({...session,optionalUploadReference:result.runId,version:session.version+1},session.version);return result;}),
  customers: memberProcedure.query(({ctx})=>importedCustomers(ctx.tenantId)),

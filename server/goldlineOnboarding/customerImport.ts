@@ -44,3 +44,41 @@ export class CustomerCsvProvider {
  }
 }
 registerTenantImportProvider(new CustomerCsvProvider());
+
+export type CustomerListSummary = {
+ rows:number;
+ usable:number;
+ duplicates:number;
+ needsReview:number;
+ localities:Array<{label:string;count:number}>;
+ sampleNames:string[];
+};
+const titleCase=(s:string)=>s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase());
+/**
+ * A pre-account read of an operator's customer list for the first-ten-minutes
+ * mirror (docs/goldline/FIRST_TEN_MINUTES.md slice B). Pure: no storage, no
+ * geocoding, no network. Localities come only from the list's own city/state or
+ * postal columns, never from inference. The list itself stays in the browser
+ * until the workspace exists, then goes through the normal tenant import.
+ */
+export function summarizeCustomerCsv(payload:string):CustomerListSummary{
+ const raw=parseCsv(payload);
+ const rows=previewCustomerCsv(payload);
+ const counts=new Map<string,number>();
+ rows.forEach((row,i)=>{
+  if(row.duplicate||!row.name)return;
+  const entries=Object.entries(raw[i]??{});const get=(...keys:string[])=>entries.find(([k])=>keys.includes(norm(k)))?.[1]?.trim()??"";
+  const city=get("city"),state=get("state","province"),postal=get("zip","zipcode","postalcode","postal");
+  const label=city?[titleCase(city),state.length===2?state.toUpperCase():titleCase(state)].filter(Boolean).join(", "):postal;
+  if(label)counts.set(label,(counts.get(label)??0)+1);
+ });
+ const unique=rows.filter(r=>!r.duplicate);
+ return {
+  rows:rows.length,
+  usable:unique.filter(r=>r.name&&!r.unresolved).length,
+  duplicates:rows.length-unique.length,
+  needsReview:unique.filter(r=>!r.name||r.unresolved).length,
+  localities:[...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,3).map(([label,count])=>({label,count})),
+  sampleNames:unique.filter(r=>r.name).slice(0,8).map(r=>r.name),
+ };
+}
