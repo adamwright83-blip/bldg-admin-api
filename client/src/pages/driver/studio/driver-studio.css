@@ -16,7 +16,8 @@
 .lc-driver__eyebrow,.lc-driver__header p,.lc-section-label,.lc-visit__meta,.lc-job__labels,.lc-hint{letter-spacing:.09em;font-weight:800;font-size:12px}
 .lc-driver__eyebrow{color:#6e5a47;text-transform:uppercase}
 .lc-driver--dark .lc-driver__eyebrow{color:#e7cfa9}
-.lc-driver__header-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px}
+.lc-driver__header-row{display:flex;align-items:center;gap:8px;margin-top:7px}
+.lc-driver__header-row h1{flex:1;min-width:0}
 .lc-driver h1{font-family:"Barlow Condensed",Anton,"Arial Narrow",Impact,sans-serif;font-weight:900;letter-spacing:-.025em;text-transform:uppercase;font-size:clamp(30px,7.5vw,49px);line-height:1.02;margin:0}
 .lc-night-toggle{border:1px solid var(--line);background:var(--surface);border-radius:50%;color:var(--ink);width:48px;height:48px;display:grid;place-items:center;cursor:pointer;flex-shrink:0}
 .lc-driver__header p{color:var(--muted);margin:12px 0 0}
@@ -202,3 +203,5 @@
 .lc-briefing .gdp-dayline-disclosure summary{font-weight:900;letter-spacing:.08em;font-size:12px}
 .lc-briefing .gdp-dayline-disclosure [data-testid="current-day-line"]{font-size:14px}
 .lc-briefing .gdp-load-error{padding:12px 14px;display:grid;gap:6px}
+.lc-nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:14px 0 4px}
+.lc-nav button{min-height:52px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:900;letter-spacing:.04em;text-align:left;cursor:pointer}

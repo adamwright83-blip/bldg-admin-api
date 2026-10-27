@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ChevronRight, MapPinned, Plus, RotateCcw, Check, Package, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, MapPinned, Menu, Plus, RotateCcw, Check, Package, Moon, Sun, X } from "lucide-react";
 import type { PickupCounts } from "@shared/cleancloudPickup";
 import type { DayPlanStop } from "../goldlineDayPlanModel";
 import {
@@ -34,6 +34,8 @@ type StudioProps = {
   onSwitchToLegacy?: () => void;
   /** Claire's and Daphne's existing Day Line cards (follow-up question, carried work, Day Line details). */
   briefing?: ReactNode;
+  /** The Day Line's existing destinations (journal, week, build mission, overworld…), same handlers as the previous Day Line's menu. */
+  navigation?: Array<{ label: string; onSelect: () => void }>;
 };
 
 /** An intent-confirmation control. Releasing early does not write to the server. */
@@ -346,12 +348,19 @@ function readMemory(businessDate: string): Remembered {
   return { visitId: null, jobIds: [], arrived: [] };
 }
 
-export default function DriverStudioDay({ businessDate, stops, isLoading, loadError, onResolveStop, onRetryPickup, onOriginalStop, onOpenNewOrder, onEnterWorld, onOpenClaireComposer, onCallClaire, onSwitchToLegacy, briefing }: StudioProps) {
+export default function DriverStudioDay({ businessDate, stops, isLoading, loadError, onResolveStop, onRetryPickup, onOriginalStop, onOpenNewOrder, onEnterWorld, onOpenClaireComposer, onCallClaire, onSwitchToLegacy, briefing, navigation = [] }: StudioProps) {
   const visits = useMemo(() => groupRouteVisits(stops), [stops]);
   // Where the driver was, so coming back from Google Maps lands on the same stop. Never submits anything.
   const [memory, setMemory] = useState<Remembered>(() => readMemory(businessDate));
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
   const [claireCall, setClaireCall] = useState<ClaireCallState>("idle");
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const firstDate = useRef(businessDate);
   useEffect(() => {
     if (firstDate.current === businessDate) return;
@@ -425,7 +434,14 @@ export default function DriverStudioDay({ businessDate, stops, isLoading, loadEr
         <>
           <header className="lc-driver__header">
             <div className="lc-driver__eyebrow">JOYSTICK · {dateText}</div>
-            <div className="lc-driver__header-row"><h1>TODAY'S ROUTE</h1><button className="lc-night-toggle" onClick={toggleNight} type="button" aria-label={nightMode ? "Use light mode" : "Use dark mode"} aria-pressed={nightMode}>{nightMode ? <Sun size={19}/> : <Moon size={19}/>}</button></div>
+            <div className="lc-driver__header-row"><h1>TODAY'S ROUTE</h1>{navigation.length > 0 && <button className="lc-night-toggle" type="button" onClick={() => setNavOpen(v => !v)} aria-label="Open Navigation Menu" aria-expanded={navOpen} aria-controls="lc-driver-navigation">{navOpen ? <X size={19}/> : <Menu size={19}/>}</button>}<button className="lc-night-toggle" onClick={toggleNight} type="button" aria-label={nightMode ? "Use light mode" : "Use dark mode"} aria-pressed={nightMode}>{nightMode ? <Sun size={19}/> : <Moon size={19}/>}</button></div>
+            {navOpen && (
+              <nav id="lc-driver-navigation" className="lc-nav" aria-label="Day Line">
+                {navigation.map(item => (
+                  <button key={item.label} type="button" onClick={() => { setNavOpen(false); item.onSelect(); }}>{item.label}</button>
+                ))}
+              </nav>
+            )}
             <p>{completedCount} OF {visits.length} VISITS COMPLETE</p>
             <button type="button" className="lc-out-of-town" onClick={() => onEnterWorld()}>ROAD OUT OF TOWN <ArrowRight size={14}/></button>
           </header>

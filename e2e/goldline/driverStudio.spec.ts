@@ -81,6 +81,12 @@ test("Studio is the default Day Line: route → arrived → cancelled hold → t
   await followUp.getByRole("button", { name: "Tell Claire" }).click();
   await expect(page.getByTestId("claire-mission-followup-reply")).toContainText("Start with the first step only");
 
+  // The previous Day Line's destinations stay reachable from Studio's menu.
+  await page.getByRole("button", { name: "Open Navigation Menu", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Day Line" })).toContainText("EXPLORE OVERWORLD");
+  await page.getByRole("button", { name: "JOURNAL", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-journal-opened", "true");
+
   // New Order goes to the existing order sheet.
   await page.getByTestId("driver-studio-new-order").click();
   await expect(page.locator("body")).toHaveAttribute("data-new-order-opened", "true");

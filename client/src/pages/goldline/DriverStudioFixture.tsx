@@ -112,6 +112,7 @@ export default function DriverStudioFixture() {
         question: "What happened with that growth mission?",
       }}
       onAnswerMissionFollowUp={async () => "Start with the first step only."}
+      onOpenJournal={() => { document.body.dataset.journalOpened = "true"; }}
       onEnterOperations={() => {}}
       onEnterWorld={() => {}}
       onEnterColosseum={() => {}}

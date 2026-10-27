@@ -960,6 +960,17 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           });
         })}
         onSwitchToLegacy={() => switchDaylineSurface("legacy")}
+        navigation={[
+          { label: "JOURNAL", onSelect: props.onOpenJournal ?? props.onEnterOperations },
+          ...(props.onOpenWeek ? [{ label: "WEEK", onSelect: props.onOpenWeek }] : []),
+          { label: "BUILD MISSION", onSelect: () => setBuildMissionOpen(true) },
+          { label: "IMPORT OR ADD STOPS", onSelect: props.onOpenImport },
+          { label: "FIELD OPERATIONS", onSelect: props.onEnterOperations },
+          { label: "EXPLORE OVERWORLD", onSelect: () => props.onEnterWorld() },
+          ...(props.onEnterChapter ? [{ label: "ENTER KINGDOM", onSelect: () => props.onEnterChapter?.() }] : []),
+          ...(props.onOpenFirstMission ? [{ label: "THE FIRST SPARK", onSelect: () => props.onOpenFirstMission?.() }] : []),
+          { label: "PLAY", onSelect: () => setPlaying(true) },
+        ]}
         briefing={
           <>
             <MissionFollowUpCard
@@ -996,6 +1007,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           onPlay={() => { setActiveStop(null); setPlaying(true); }}
         />
       )}
+      <BuildMissionSheet
+        open={buildMissionOpen}
+        onOpenChange={setBuildMissionOpen}
+      />
       {playing && <LanternRun onClose={() => setPlaying(false)} />}
     </>
   );
