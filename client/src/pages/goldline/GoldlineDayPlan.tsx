@@ -50,6 +50,7 @@ import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
+import DriverStudioDay from "../driver/studio/DriverStudioDay";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
@@ -121,6 +122,8 @@ export type GoldlineDayPlanProps = {
   onOpenFirstMission?: () => void;
   firstMissionEvidence?: { text: string; reportedAt: string } | null;
   onOpenImport: () => void;
+  /** Reuse the driver's existing QuickNewOrderSheet; never create a parallel order mutation. */
+  onOpenNewOrder?: () => void;
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
   onEnterColosseum: () => void;
@@ -796,6 +799,7 @@ function DaphneMissionAdjustments({
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   // GOLDLINE world is the default Day Line. The operator can switch to
   // the previous layout with ?dayline=classic while visual QA continues.
+  const studioView = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dayline") === "studio";
   const artPreview =
     typeof window === "undefined" ||
     new URLSearchParams(window.location.search).get("dayline") !== "classic";
@@ -896,6 +900,37 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     if (!nextStop) return props.onOpenImport();
     selectStop(nextStop);
   };
+
+  if (studioView) return (
+    <>
+      <DriverStudioDay
+        businessDate={props.businessDate}
+        stops={plan.stops}
+        isLoading={props.isLoading}
+        loadError={props.loadError}
+        onResolveStop={props.onResolveStop}
+        onOriginalStop={stop => setActiveStop(stop)}
+        onOpenNewOrder={props.onOpenNewOrder ?? props.onOpenImport}
+        onEnterWorld={props.onEnterWorld}
+      />
+      {activeStop && (
+        <DriverStopChapter
+          stop={plan.stops.find(stop => stop.id === activeStop.id) ?? activeStop}
+          onClose={() => setActiveStop(null)}
+          onResolve={props.onResolveStop}
+          onRetryPickup={props.onRetryPickup}
+          onArchive={props.onArchiveStop}
+          onCallClaireForMission={async missionId => {
+            await callClaireForMission.mutateAsync({ missionId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+          }}
+          onEnter={() => { props.onEnterWorld(activeStop.id); setActiveStop(null); }}
+          onJournal={() => { setActiveStop(null); (props.onOpenJournal ?? props.onEnterOperations)(); }}
+          onPlay={() => { setActiveStop(null); setPlaying(true); }}
+        />
+      )}
+      {playing && <LanternRun onClose={() => setPlaying(false)} />}
+    </>
+  );
 
   return (
     <main
