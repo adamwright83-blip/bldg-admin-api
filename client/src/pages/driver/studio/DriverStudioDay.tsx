@@ -227,7 +227,7 @@ export default function DriverStudioDay({ businessDate, stops, isLoading, loadEr
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
   useEffect(() => { setSavedIds(new Set()); setSelectedVisit(null); }, [businessDate]);
-  const [nightMode, setNightMode] = useState(false);
+  const [nightMode, setNightMode] = useState(() => { const hour = new Date().getHours(); return hour >= 19 || hour < 6; });
   const visit = visits.find(v => v.id === selectedVisit);
   const completedCount = visits.filter(v => v.jobs.every(s => hasSavedJob(s, savedIds))).length;
   const save = async (s: DayPlanStop, counts?: PickupCounts): Promise<boolean> => {
