@@ -104,6 +104,14 @@ export default function DriverStudioFixture() {
       onOpenImport={() => {}}
       onOpenNewOrder={() => { document.body.dataset.newOrderOpened = "true"; }}
       onCallClaire={async () => { document.body.dataset.claireCalled = "true"; }}
+      missionFollowUp={{
+        commitmentId: "studio-commitment-1",
+        businessDate: "2026-08-24",
+        title: "Synthetic growth mission",
+        missionType: "continue_existing",
+        question: "What happened with that growth mission?",
+      }}
+      onAnswerMissionFollowUp={async () => "Start with the first step only."}
       onEnterOperations={() => {}}
       onEnterWorld={() => {}}
       onEnterColosseum={() => {}}

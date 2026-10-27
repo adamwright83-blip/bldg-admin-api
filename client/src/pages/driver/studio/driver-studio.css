@@ -191,3 +191,14 @@
 .lc-claire__menu button:disabled{opacity:.6}
 .lc-claire__menu small{color:var(--muted);font-size:12px;line-height:1.4;padding-right:22px}
 .lc-claire__menu-close{position:absolute;right:6px;bottom:6px;width:36px;height:36px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+
+/* Claire's and Daphne's existing Day Line cards, restyled for the light route. */
+.lc-briefing{display:grid;gap:10px;margin:0 0 6px}
+.lc-briefing:empty{display:none}
+.lc-briefing .gdp-mission-followup,.lc-briefing .gdp-mission-adjustments,.lc-briefing .gdp-dayline-disclosure,.lc-briefing .gdp-load-error{margin:0;max-width:none;background:var(--surface);color:var(--ink);border:1.5px solid var(--gold);border-radius:16px;font-size:15px;line-height:1.45;font-family:inherit}
+.lc-briefing .gdp-mission-followup input{min-height:48px;font-size:16px;background:var(--paper);border:1px solid #8f95a3;color:var(--ink)}
+.lc-briefing .gdp-mission-followup button,.lc-briefing .gdp-mission-adjustments button{min-height:48px;padding:10px 14px;border:1.5px solid #49371d;font-weight:900}
+.lc-briefing .gdp-dayline-disclosure{border-color:var(--line)}
+.lc-briefing .gdp-dayline-disclosure summary{font-weight:900;letter-spacing:.08em;font-size:12px}
+.lc-briefing .gdp-dayline-disclosure [data-testid="current-day-line"]{font-size:14px}
+.lc-briefing .gdp-load-error{padding:12px 14px;display:grid;gap:6px}

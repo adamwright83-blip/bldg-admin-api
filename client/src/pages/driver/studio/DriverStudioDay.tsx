@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, ChevronRight, MapPinned, Plus, RotateCcw, Check, Package, Moon, Sun } from "lucide-react";
 import type { PickupCounts } from "@shared/cleancloudPickup";
 import type { DayPlanStop } from "../goldlineDayPlanModel";
@@ -32,6 +32,8 @@ type StudioProps = {
   onOpenClaireComposer: () => void;
   onCallClaire: () => Promise<void>;
   onSwitchToLegacy?: () => void;
+  /** Claire's and Daphne's existing Day Line cards (follow-up question, carried work, Day Line details). */
+  briefing?: ReactNode;
 };
 
 /** An intent-confirmation control. Releasing early does not write to the server. */
@@ -344,7 +346,7 @@ function readMemory(businessDate: string): Remembered {
   return { visitId: null, jobIds: [], arrived: [] };
 }
 
-export default function DriverStudioDay({ businessDate, stops, isLoading, loadError, onResolveStop, onRetryPickup, onOriginalStop, onOpenNewOrder, onEnterWorld, onOpenClaireComposer, onCallClaire, onSwitchToLegacy }: StudioProps) {
+export default function DriverStudioDay({ businessDate, stops, isLoading, loadError, onResolveStop, onRetryPickup, onOriginalStop, onOpenNewOrder, onEnterWorld, onOpenClaireComposer, onCallClaire, onSwitchToLegacy, briefing }: StudioProps) {
   const visits = useMemo(() => groupRouteVisits(stops), [stops]);
   // Where the driver was, so coming back from Google Maps lands on the same stop. Never submits anything.
   const [memory, setMemory] = useState<Remembered>(() => readMemory(businessDate));
@@ -427,6 +429,7 @@ export default function DriverStudioDay({ businessDate, stops, isLoading, loadEr
             <p>{completedCount} OF {visits.length} VISITS COMPLETE</p>
             <button type="button" className="lc-out-of-town" onClick={() => onEnterWorld()}>ROAD OUT OF TOWN <ArrowRight size={14}/></button>
           </header>
+          {briefing && <section className="lc-briefing" aria-label="From Claire">{briefing}</section>}
           {loadError && <div role="alert" className="lc-error">{loadError}</div>}
           {isLoading && <p className="lc-hint" role="status">Loading today's stops…</p>}
           {!isLoading && visits.length === 0 && <p className="lc-empty">No scheduled visits. Add an order to get started.</p>}

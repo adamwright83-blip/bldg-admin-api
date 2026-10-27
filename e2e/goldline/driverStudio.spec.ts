@@ -74,6 +74,13 @@ test("Studio is the default Day Line: route → arrived → cancelled hold → t
   await expect(page.locator(".lc-section-label")).toHaveText(["DAYTIME", "EVENING"]);
   await expect(page.getByText("0 OF 3 VISITS COMPLETE")).toBeVisible();
 
+  // Claire's existing follow-up question still reaches the driver on the new default.
+  const followUp = page.getByTestId("claire-mission-followup");
+  await expect(followUp).toBeVisible();
+  await followUp.getByTestId("claire-mission-followup-answer").fill("Ran out of time.");
+  await followUp.getByRole("button", { name: "Tell Claire" }).click();
+  await expect(page.getByTestId("claire-mission-followup-reply")).toContainText("Start with the first step only");
+
   // New Order goes to the existing order sheet.
   await page.getByTestId("driver-studio-new-order").click();
   await expect(page.locator("body")).toHaveAttribute("data-new-order-opened", "true");

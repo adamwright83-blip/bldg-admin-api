@@ -103,6 +103,29 @@ function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
   );
 }
 
+function FirstMissionEvidenceCard({
+  evidence,
+}: {
+  evidence?: { text: string; reportedAt: string } | null;
+}) {
+  if (!evidence) return null;
+  return (
+    <section
+      className="gdp-load-error"
+      data-testid="day-line-first-mission-evidence"
+      aria-label="Completed field evidence"
+    >
+      <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
+      <p>{evidence.text}</p>
+      <small>
+        Operator-attested observation ·{" "}
+        {new Date(evidence.reportedAt).toLocaleString()}.
+        No sale or revenue verified.
+      </small>
+    </section>
+  );
+}
+
 export type GoldlineDayPlanProps = {
   businessDate: string;
   pickups?: Order[];
@@ -937,6 +960,26 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           });
         })}
         onSwitchToLegacy={() => switchDaylineSurface("legacy")}
+        briefing={
+          <>
+            <MissionFollowUpCard
+              followUp={props.missionFollowUp ?? null}
+              onAnswer={props.onAnswerMissionFollowUp}
+            />
+            <DaphneMissionAdjustments commitments={props.commitments} />
+            <CarriedForwardCard
+              work={props.carriedForward ?? null}
+              onComplete={props.onCompleteCommitment}
+            />
+            {props.currentDayLine ? (
+              <details className="gdp-dayline-disclosure">
+                <summary>DAY LINE DETAILS</summary>
+                <CurrentDayLineBlock line={props.currentDayLine} />
+              </details>
+            ) : null}
+            <FirstMissionEvidenceCard evidence={props.firstMissionEvidence} />
+          </>
+        }
       />
       {activeStop && (
         <DriverStopChapter
@@ -1250,21 +1293,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <CurrentDayLineBlock line={props.currentDayLine} />
         </details>
       )}
-      {props.firstMissionEvidence && (
-        <section
-          className="gdp-load-error"
-          data-testid="day-line-first-mission-evidence"
-          aria-label="Completed field evidence"
-        >
-          <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
-          <p>{props.firstMissionEvidence.text}</p>
-          <small>
-            Operator-attested observation ·{" "}
-            {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}.
-            No sale or revenue verified.
-          </small>
-        </section>
-      )}
+      <FirstMissionEvidenceCard evidence={props.firstMissionEvidence} />
       {artPreview && (
         <details
           className="gdp-v2-operations"
