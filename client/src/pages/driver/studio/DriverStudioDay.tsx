@@ -101,8 +101,14 @@ function SceneImage({ scene, effect, night }: { scene: DriverSceneId; effect: bo
       )}
       {scene === "silver-lake" && <img className="lc-scene__fox" src="/assets/lantern-villager-outreach/villagers/animations/fox-wave.png" alt="" />}
       {scene === "century-park-east" && <div className="lc-scene__cpe-signal" aria-hidden="true"><span>RECORDED</span><b>✓</b></div>}
-      {scene === "opus" && <div className="lc-scene__opus-light" aria-hidden="true"><span>✦</span></div>}
-      {scene === "beverly-hills" && <span className="lc-scene__herd" aria-hidden="true">✦ ✦</span>}
+      {scene === "opus" && <>
+        <div className="lc-scene__opus-light" aria-hidden="true"><span>✦</span></div>
+        <div className="lc-scene__opus-basket" aria-hidden="true"><span className="lc-scene__opus-rope" /><span className="lc-scene__opus-carrier">▤</span></div>
+      </>}
+      {scene === "beverly-hills" && <div className="lc-scene__rodeo" aria-hidden="true">
+        <span className="lc-scene__dog" /><span className="lc-scene__calf" />
+      </div>}
+      {scene === "koreatown" && <span className="lc-scene__boba" aria-hidden="true">✦</span>}
       <div className="lc-scene__flare" aria-hidden="true" />
     </div>
   );
@@ -220,6 +226,7 @@ export default function DriverStudioDay({ businessDate, stops, isLoading, loadEr
   const visits = useMemo(() => groupRouteVisits(stops), [stops]);
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => { setSavedIds(new Set()); setSelectedVisit(null); }, [businessDate]);
   const [nightMode, setNightMode] = useState(false);
   const visit = visits.find(v => v.id === selectedVisit);
   const completedCount = visits.filter(v => v.jobs.every(s => hasSavedJob(s, savedIds))).length;
