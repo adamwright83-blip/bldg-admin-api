@@ -231,3 +231,91 @@ export function parseCleanCloudReferralUsage(input: string | readonly (readonly 
 export function cleanCloudReferralKey(row: Pick<CleanCloudReferralUsageRow, "from" | "to" | "dateUsed">): string {
   return `cc:${row.from.trim().toLowerCase()}|${row.to.trim().toLowerCase()}|${row.dateUsed.toISOString().slice(0, 10)}`;
 }
+
+// ── Native tier: store credit at checkout ─────────────────────────────
+export const STRIPE_MIN_CHARGE_CENTS = 50;
+
+export type CreditRedemptionPlan = {
+  /** Credit taken off this order. */
+  creditUsedCents: number;
+  /** What the customer's card is charged. */
+  chargeCents: number;
+  /** The platform's fee on this charge. */
+  applicationFeeCents: number;
+  /** The cleaner's payout: unchanged by credit. */
+  vendorPayoutCents: number;
+};
+
+/**
+ * Referral credit is a platform marketing cost, so it comes out of the platform's fee, never the cleaner's payout:
+ * charge = price − credit, fee = original fee − credit, payout unchanged. Credit beyond the fee (or below Stripe's
+ * $0.50 minimum charge) stays in the wallet for the next order.
+ */
+export function planCreditRedemption(input: {
+  amountCents: number;
+  platformFeeCents: number;
+  availableCreditCents: number;
+}): CreditRedemptionPlan {
+  const amount = Math.max(0, Math.round(input.amountCents));
+  const fee = Math.min(amount, Math.max(0, Math.round(input.platformFeeCents)));
+  const available = Math.max(0, Math.round(input.availableCreditCents));
+  const creditUsedCents = Math.max(0, Math.min(available, fee, amount - STRIPE_MIN_CHARGE_CENTS));
+  const chargeCents = amount - creditUsedCents;
+  const applicationFeeCents = fee - creditUsedCents;
+  return { creditUsedCents, chargeCents, applicationFeeCents, vendorPayoutCents: chargeCents - applicationFeeCents };
+}
+
+/** Phone numbers compared as their last ten digits (US). */
+export function referralPhoneKey(value: string | null | undefined): string | null {
+  const d = String(value ?? "").replace(/\D/g, "");
+  const ten = d.length === 11 && d.startsWith("1") ? d.slice(1) : d;
+  return ten.length === 10 ? ten : null;
+}
+
+// ── CleanCloud tier: the Referral Code Usage window as Jawbreaker fetches it ──
+function htmlText(fragment: string): string {
+  return fragment
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#36;|&dollar;/gi, "$")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The window's content arrives either as an HTML table or as JSON. Returns cell rows for
+ * `parseCleanCloudReferralUsage`; anything unrecognised returns no rows rather than a guess.
+ */
+export function referralUsageCellsFromResponse(body: string): string[][] {
+  const text = String(body ?? "").trim();
+  if (!text) return [];
+  if (text.startsWith("[") || text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      const list: unknown[] = Array.isArray(parsed) ? parsed : Array.isArray((parsed as any)?.data) ? (parsed as any).data : [];
+      return list
+        .map(item => {
+          if (Array.isArray(item)) return item.map(v => String(v ?? ""));
+          const o = item as Record<string, unknown>;
+          const pick = (...keys: string[]) => String(keys.map(k => o?.[k]).find(v => v != null) ?? "");
+          return [
+            pick("from", "From", "referrer", "referrerName"),
+            pick("to", "To", "referred", "customerName"),
+            pick("dateUsed", "Date Used", "date", "date_used"),
+            pick("newCustomerOrders", "New Customer Orders", "orders"),
+            pick("newCustomerSpending", "New Customer Spending", "spending"),
+          ];
+        })
+        .filter(cells => cells.some(Boolean));
+    } catch {
+      return [];
+    }
+  }
+  const rows: string[][] = [];
+  for (const tr of text.match(/<tr[\s\S]*?<\/tr>/gi) ?? []) {
+    const cells = (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) ?? []).map(htmlText);
+    if (cells.length) rows.push(cells);
+  }
+  return rows;
+}

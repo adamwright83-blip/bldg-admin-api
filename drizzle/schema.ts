@@ -10827,6 +10827,8 @@ export const referralPrograms = mysqlTable("referral_programs", {
   newCustomerCreditCents: int("new_customer_credit_cents").notNull().default(1000),
   cleancloudSetupConfirmedAt: timestamp("cleancloud_setup_confirmed_at"),
   cleancloudLastSyncedAt: timestamp("cleancloud_last_synced_at"),
+  /** Where CleanCloud serves its Referral Code Usage window; GumballPals records it, Jawbreaker fetches it. */
+  cleancloudReferralUsageUrl: varchar("cleancloud_referral_usage_url", { length: 512 }),
   updatedBy: varchar("updated_by", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
@@ -10878,3 +10880,24 @@ export const referrals = mysqlTable(
   })
 );
 export type ReferralRow = typeof referrals.$inferSelect;
+
+/** Native tier store credit. Positive rows grant, negative rows spend. Balance = sum per phone. */
+export const customerCreditEntries = mysqlTable(
+  "customer_credit_entries",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    customerPhone: varchar("customer_phone", { length: 16 }).notNull(),
+    amountCents: int("amount_cents").notNull(),
+    reason: mysqlEnum("reason", ["referral_new_customer", "referral_referrer", "redeemed", "adjustment"]).notNull(),
+    referralId: varchar("referral_id", { length: 64 }),
+    orderId: int("order_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({
+    referralGrant: uniqueIndex("uq_credit_referral_grant").on(table.tenantId, table.reason, table.referralId),
+    orderRedemption: uniqueIndex("uq_credit_order_redemption").on(table.tenantId, table.reason, table.orderId),
+    tenantPhoneIdx: index("idx_credit_tenant_phone").on(table.tenantId, table.customerPhone),
+  })
+);
+export type CustomerCreditEntryRow = typeof customerCreditEntries.$inferSelect;

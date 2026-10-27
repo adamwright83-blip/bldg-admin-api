@@ -144,3 +144,54 @@ describe("referralSyncFreshness", () => {
   it("fresh within a day and a half", () => expect(referralSyncFreshness(new Date("2026-10-27T12:00:00Z"), now).state).toBe("fresh"));
   it("stale after that", () => expect(referralSyncFreshness(new Date("2026-10-26T12:00:00Z"), now)).toMatchObject({ state: "stale", hoursAgo: 48 }));
 });
+
+import { planCreditRedemption, referralPhoneKey, referralUsageCellsFromResponse } from "./referralProgram";
+
+describe("planCreditRedemption", () => {
+  it("takes credit out of the platform fee and leaves the cleaner's payout alone", () => {
+    const plan = planCreditRedemption({ amountCents: 4000, platformFeeCents: 1200, availableCreditCents: 1000 });
+    expect(plan).toEqual({ creditUsedCents: 1000, chargeCents: 3000, applicationFeeCents: 200, vendorPayoutCents: 2800 });
+  });
+
+  it("never uses more credit than the fee; the rest carries over", () => {
+    const plan = planCreditRedemption({ amountCents: 4000, platformFeeCents: 600, availableCreditCents: 1000 });
+    expect(plan).toMatchObject({ creditUsedCents: 600, chargeCents: 3400, applicationFeeCents: 0, vendorPayoutCents: 3400 });
+  });
+
+  it("keeps Stripe's $0.50 minimum charge", () => {
+    const plan = planCreditRedemption({ amountCents: 300, platformFeeCents: 300, availableCreditCents: 1000 });
+    expect(plan.chargeCents).toBe(50);
+    expect(plan.creditUsedCents).toBe(250);
+  });
+
+  it("changes nothing without credit", () => {
+    const plan = planCreditRedemption({ amountCents: 4000, platformFeeCents: 1200, availableCreditCents: 0 });
+    expect(plan).toEqual({ creditUsedCents: 0, chargeCents: 4000, applicationFeeCents: 1200, vendorPayoutCents: 2800 });
+  });
+});
+
+describe("referralPhoneKey", () => {
+  it("compares US numbers by ten digits", () => {
+    expect(referralPhoneKey("+1 (310) 555-0101")).toBe("3105550101");
+    expect(referralPhoneKey("310-555")).toBeNull();
+  });
+});
+
+describe("referralUsageCellsFromResponse", () => {
+  it("reads an HTML table", () => {
+    const html = "<table><tr><th>From</th><th>To</th><th>Date Used</th><th>New Customer Orders</th><th>New Customer Spending</th></tr><tr><td>Adam Wright</td><td>Test</td><td>10/26/26</td><td>0</td><td>&#36;0.00</td></tr></table>";
+    const { rows } = parseCleanCloudReferralUsage(referralUsageCellsFromResponse(html));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ from: "Adam Wright", to: "Test", newCustomerSpendingCents: 0 });
+  });
+
+  it("reads JSON objects", () => {
+    const json = JSON.stringify([{ from: "Ana", to: "Bo", dateUsed: "1/5/27", newCustomerOrders: 2, newCustomerSpending: "$70.00" }]);
+    const { rows } = parseCleanCloudReferralUsage(referralUsageCellsFromResponse(json));
+    expect(rows[0]).toMatchObject({ newCustomerOrders: 2, newCustomerSpendingCents: 7000 });
+  });
+
+  it("returns nothing for something it doesn't recognise", () => {
+    expect(referralUsageCellsFromResponse("<p>Please sign in</p>")).toEqual([]);
+  });
+});
