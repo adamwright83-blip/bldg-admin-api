@@ -12,6 +12,7 @@ import { TenantProvider, useTenant } from "./hooks/useTenant";
 import { useAuth } from "./_core/hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { trpc } from "@/lib/trpc";
+import { signedInWithLegacyDriverPassword } from "@/lib/legacyDriverSession";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
@@ -216,14 +217,6 @@ function CommercialProposalPrintRoute() {
  * leaves a signed-out visitor staring at a broken page instead of a login
  * prompt.
  */
-function signedInWithLegacyDriverPassword(user: {
-  openId?: string | null;
-  role?: string | null;
-} | null): boolean {
-  if (!user?.openId || user.role !== "driver") return false;
-  return !user.openId.startsWith("dayforge:");
-}
-
 function DriverMembershipGate({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {

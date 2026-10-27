@@ -11,19 +11,27 @@ type Props = {
    * Driver defaults to membership. Admin keeps the shared password form.
    */
   mode?: "membership" | "legacy-shared-password";
+  /** inline: no full-page frame, for a sign-in inside another surface (the Claire sheet). */
+  layout?: "page" | "inline";
   onSuccess: () => void;
 };
 
-export function LoginForm({ role = "admin", mode, onSuccess }: Props) {
+export function LoginForm({ role = "admin", mode, layout = "page", onSuccess }: Props) {
   const resolvedMode =
     mode ?? (role === "driver" ? "membership" : "legacy-shared-password");
   if (resolvedMode === "membership") {
-    return <MembershipLoginForm onSuccess={onSuccess} />;
+    return <MembershipLoginForm layout={layout} onSuccess={onSuccess} />;
   }
   return <LegacySharedPasswordForm role={role} onSuccess={onSuccess} />;
 }
 
-function MembershipLoginForm({ onSuccess }: { onSuccess: () => void }) {
+function MembershipLoginForm({
+  layout,
+  onSuccess,
+}: {
+  layout: "page" | "inline";
+  onSuccess: () => void;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -55,15 +63,18 @@ function MembershipLoginForm({ onSuccess }: { onSuccess: () => void }) {
     }
   };
 
+  const inline = layout === "inline";
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <p className="text-xs font-semibold tracking-widest uppercase text-black/40 mb-2">
-            JOYSTICK
-          </p>
-          <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
-        </div>
+    <div className={inline ? "w-full" : "min-h-screen bg-white flex items-center justify-center px-6"}>
+      <div className={inline ? "w-full" : "w-full max-w-sm"}>
+        {inline ? null : (
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold tracking-widest uppercase text-black/40 mb-2">
+              JOYSTICK
+            </p>
+            <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input

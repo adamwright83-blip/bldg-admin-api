@@ -2,6 +2,8 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { TRPCClientError } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { LoginForm } from "@/components/LoginForm";
+import { signedInWithLegacyDriverPassword } from "@/lib/legacyDriverSession";
 import {
   claireComposerErrorCopy,
   claireComposerStorageKey,
@@ -62,6 +64,8 @@ export function ClaireComposer({
   );
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** The server refused this session for Claire (FORBIDDEN): it needs a JOYSTICK sign-in. */
+  const [refused, setRefused] = useState(false);
   const logRef = useRef<HTMLOListElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** Advances on "New conversation" so a late reply can't land in the new one. */
@@ -109,12 +113,9 @@ export function ClaireComposer({
     } catch (err) {
       if (epoch.current !== mine) return;
       setConversation(c => (c.conversationId === conversationId ? markUnanswered(c, sentAt) : c));
-      setError(
-        claireComposerErrorCopy({
-          code: err instanceof TRPCClientError ? (err.data?.code as string | undefined) : undefined,
-          message: err instanceof Error ? err.message : null,
-        })
-      );
+      const code = err instanceof TRPCClientError ? (err.data?.code as string | undefined) : undefined;
+      if (code === "FORBIDDEN") setRefused(true);
+      setError(claireComposerErrorCopy({ code, message: err instanceof Error ? err.message : null }));
       // Keep what they typed so they can decide whether to resend it.
       setDraft(current => current || text);
     } finally {
@@ -139,6 +140,22 @@ export function ClaireComposer({
   }
 
   const empty = conversation.lines.length === 0;
+
+  // The shared driver password opens the Day Line but never reaches Claire. Offer the
+  // JOYSTICK sign-in here rather than a composer whose every message would be refused.
+  const sharedPassword = signedInWithLegacyDriverPassword(user);
+  if (sharedPassword || refused) {
+    return (
+      <section className={`cc-root cc-${variant}`} aria-label="Sign in to message Claire" data-testid="claire-composer-signin">
+        <p className="cc-empty">
+          {sharedPassword
+            ? "This device is signed in with the shared driver password, which can't reach Claire. Sign in with your JOYSTICK account to text her."
+            : "This account isn't a member of this business, so Claire can't answer it. Sign in with the JOYSTICK account that runs it."}
+        </p>
+        <LoginForm role="driver" mode="membership" layout="inline" onSuccess={() => window.location.reload()} />
+      </section>
+    );
+  }
 
   return (
     <section className={`cc-root cc-${variant}`} aria-label="Message Claire" data-testid="claire-composer">
