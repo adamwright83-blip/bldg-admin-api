@@ -17,6 +17,12 @@ import type { IMitchProductionStore } from "./mitchStore";
  * smoke flag is off.
  */
 const localSmokeLocks = new Map<string, Promise<void>>();
+
+/** mysql2 returns [rows, fields] for a raw statement. */
+function lockRows(result: unknown): Array<Record<string, unknown>> {
+  return ((result as [Array<Record<string, unknown>>])[0] ?? []);
+}
+
 export async function withExecutorSmokeSeedLock<T>(
   input: { tenantId: string; gameId: string; enabled: boolean },
   seed: () => Promise<T>
@@ -34,13 +40,13 @@ export async function withExecutorSmokeSeedLock<T>(
     const db = await getDb();
     if (!db) return await seed(); // In-memory unit test. Durable worker fails closed in its store.
     return await db.transaction(async tx => {
-      const [acquisition] = await tx.select({ acquired: sql<number>`GET_LOCK(${lockName}, 15)` }).execute();
+      const [acquisition] = lockRows(await tx.execute(sql`SELECT GET_LOCK(${lockName}, 15) AS acquired`));
       if (Number(acquisition?.acquired) !== 1)
         throw new Error("Mitch executor smoke seed lock unavailable; no order was created");
       try {
         return await seed();
       } finally {
-        const [release] = await tx.select({ released: sql<number>`RELEASE_LOCK(${lockName})` }).execute();
+        const [release] = lockRows(await tx.execute(sql`SELECT RELEASE_LOCK(${lockName}) AS released`));
         if (Number(release?.released) !== 1)
           throw new Error("Mitch executor smoke seed lock release failed");
       }
