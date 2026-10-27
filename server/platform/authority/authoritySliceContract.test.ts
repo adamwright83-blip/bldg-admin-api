@@ -18,7 +18,7 @@ describe("three-fact authority slice", () => {
     ).toBeLessThan(route.indexOf("stripe.paymentIntents.create({"));
     expect(route).toContain("tenantId: paymentTenantId");
     expect(route).toContain(
-      "idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}`"
+      "idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}${creditPlan?.creditUsedCents ? `:credit:${creditPlan.creditUsedCents}` : \"\"}`"
     );
     expect(admission).toContain('claimType: "payment_verified"');
     const nativeAdmission = admission.slice(
