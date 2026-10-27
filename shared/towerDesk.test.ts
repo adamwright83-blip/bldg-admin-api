@@ -15,7 +15,7 @@ describe("buildTowerDesk", () => {
     expect(desk.revenue.perHomeMonthlyCents).toBeNull();
     expect(desk.dim.estMonthlyCents).toBeNull();
     expect(desk.dim.quietResidents).toBe(1);
-    expect(desk.goalMonthlyCents).toBeNull();
+    expect(desk.goalMonthlyCents).toBe(80_000);
   });
 
   it("counts only this building's residents' paid orders in the last 30 days", () => {

@@ -23,7 +23,7 @@ export type TowerDeskBuildingId = (typeof TOWER_DESK_BUILDINGS)[number];
  * penthouse then reads "Goal needed", never a number we picked for him.
  */
 export const TOWER_DESK_MONTHLY_GOAL_CENTS: Record<TowerDeskBuildingId, number | null> = {
-  century_park_east: null,
+  century_park_east: 80_000, // Adam, 2026-10-27: $800/month
 };
 
 export const QUIET_DAYS = 45;
