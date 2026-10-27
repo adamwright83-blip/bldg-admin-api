@@ -87,7 +87,7 @@ export function groupRouteVisits(stops: DayPlanStop[]): RouteVisit[] {
   const visits: RouteVisit[] = [];
   for (const job of stops) {
     // Processing and intake movements are not customer visit cards.
-    if (job.kind === "processing" || job.status === "cancelled") continue;
+    if (job.kind === "processing" || job.status === "cancelled" || (job.source === "derived_operation" && /\\b(jetro|lugos|lugo.s lavanderia)\\b/i.test(job.title))) continue;
     const key = squash(job.address);
     const t = timeOfStop(job.timeLabel);
     const previous = visits[visits.length - 1];
