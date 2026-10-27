@@ -17,6 +17,7 @@
  * Anything that doesn't read cleanly stays in the tower's `unplaced` list, never guessed into a window.
  */
 import type { CanonicalGeographyId } from "@shared/canonicalGeography";
+import { TOWER_ADDRESS_PATTERNS } from "@shared/towerDesk";
 
 export type TowerSpec = {
   id: string;
@@ -40,8 +41,8 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
     name: "OPUS LA",
     numberingConfirmed: false,
     towers: [
-      { id: "south", label: "South tower · 3545 Wilshire", address: /\b3545\s+wilshire\b/i, floors: 22, unitsPerFloor: 18 },
-      { id: "north", label: "North tower · 3650 W 6th", address: /\b3650\s+(?:w\.?|west)?\s*6th\b/i, floors: 14, unitsPerFloor: 18, unitsAssumed: true },
+      { id: "south", label: "South tower · 3545 Wilshire", address: TOWER_ADDRESS_PATTERNS.opus_la.south, floors: 22, unitsPerFloor: 18 },
+      { id: "north", label: "North tower · 3650 W 6th", address: TOWER_ADDRESS_PATTERNS.opus_la.north, floors: 14, unitsPerFloor: 18, unitsAssumed: true },
     ],
   },
   {
@@ -49,8 +50,8 @@ export const TOWER_BUILDINGS: BuildingSpec[] = [
     name: "Century Park East",
     numberingConfirmed: false,
     towers: [
-      { id: "2160", label: "2160 Century Park East", address: /\b2160\s+century\s+(?:park|pk)\b/i, floors: 21, unitsPerFloor: 12 },
-      { id: "2170", label: "2170 Century Park East", address: /\b2170\s+century\s+(?:park|pk)\b/i, floors: 21, unitsPerFloor: 12 },
+      { id: "2160", label: "2160 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2160"], floors: 21, unitsPerFloor: 12 },
+      { id: "2170", label: "2170 Century Park East", address: TOWER_ADDRESS_PATTERNS.century_park_east["2170"], floors: 21, unitsPerFloor: 12 },
     ],
   },
 ];

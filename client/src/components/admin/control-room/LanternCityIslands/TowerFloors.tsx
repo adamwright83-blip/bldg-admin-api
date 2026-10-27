@@ -3,6 +3,7 @@ import type { GeographicCustomer } from "../customerGeography";
 import { createTowerRooms, type LobbyRect, type RoomHover } from "./towerRooms";
 import { buildTowerModel, darkFloors, TOWER_BUILDINGS, unitOf, type Resident } from "./towerStack";
 import TowerDesk from "./TowerDesk";
+import OpusClubhouse from "./OpusClubhouse";
 import { TOWER_DESK_BUILDINGS, type TowerDeskBuildingId } from "@shared/towerDesk";
 import { openCenturyParkEastGame } from "@/pages/goldline/centuryParkEast3d/centuryParkEastEntry";
 import styles from "./tower-floors.module.css";
@@ -109,6 +110,8 @@ export default function TowerFloors({
   })();
   const hasGame = GAME_BUILDINGS.has(spec.id);
   const hasDesk = DESK_BUILDINGS.has(spec.id);
+  // each building its own room: Century Park East's security desk, OPUS LA's animal clubhouse
+  const Desk = spec.id === "opus_la" ? OpusClubhouse : TowerDesk;
   const listed = quietOnly ? rows.filter(r => r.quiet) : rows;
 
   return (
@@ -159,7 +162,7 @@ export default function TowerFloors({
             : null}
         </div>
         {hasDesk ? (
-          <TowerDesk
+          <Desk
             buildingId={spec.id as TowerDeskBuildingId}
             spec={spec}
             model={model}

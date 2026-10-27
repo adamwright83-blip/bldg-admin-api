@@ -1,6 +1,6 @@
-import { isCenturyParkEastTower, streetIdentity } from "../../shared/lanternTerritoryAttribution";
 import {
   buildTowerDesk,
+  isTowerAddress,
   LEDGER_LOOKBACK_DAYS,
   unitOf,
   type DeskLedgerInput,
@@ -29,7 +29,7 @@ export async function readTowerDesk(input: { tenantId: string; buildingId: Tower
   for (const [key, records] of groups) {
     const live = records.filter(r => !r.cancelled);
     const latest = [...live].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).at(-1);
-    if (!latest || !isCenturyParkEastTower(streetIdentity(latest.address))) continue;
+    if (!latest || !isTowerAddress(input.buildingId, latest.address)) continue;
     const identityKeys = new Set<string>();
     for (const r of live) {
       for (const k of identityKeysFor({ phone: r.phone, email: r.email, bldgUserId: r.bldgUserId, cleancloudCustomerId: r.cleancloudCustomerId })) identityKeys.add(k);
