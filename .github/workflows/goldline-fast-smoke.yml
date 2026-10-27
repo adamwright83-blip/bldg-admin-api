@@ -346,48 +346,20 @@ jobs:
           server/rookContact/rookContactAuthorityRepair.test.ts
           client/src/pages/goldline/wayward/waywardTruth.test.ts
 
-
-  claire-conversation-contracts:
-    name: claire-conversation-contracts
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      CI: "true"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.4.1
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - name: Prove Claire semantic routing and structured referents
+        env:
+          # These ran in their own DB-less job; keep them off the proof database.
+          DATABASE_URL: ""
         run: >-
           pnpm vitest run
           server/claire/weeklyMission/conversationalIntelligenceRepair.test.ts
           server/claire/turn/decisionRecord.test.ts
           server/claire/turn/decisionRecordLive.test.ts
           server/claire/voice/conversationRelayAuthoritative.test.ts
-
-  linked-debrief-contracts:
-    name: linked-debrief-contracts
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      CI: "true"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.4.1
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - name: Prove mission-linked tower debrief
+        env:
+          # These ran in their own DB-less job; keep them off the proof database.
+          DATABASE_URL: ""
         run: >-
           pnpm vitest run
           shared/missionLinkedDebrief.test.ts
@@ -396,72 +368,44 @@ jobs:
           server/commercialMissions/parkingLotDebriefContract.test.ts
           client/src/components/driver/SalesMomentum.test.ts
 
+
+  browser-scope:
+    name: browser-scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github
+            scripts/ci
+      - id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node --test scripts/ci/goldlineSmokeScope.test.mjs
+          node scripts/ci/goldlineSmokeScope.mjs >> "$GITHUB_OUTPUT"
+
   fast-browser:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     # World runs five browser specs after DB/bootstrap/build; allow its full proof to finish.
     timeout-minutes: ${{ matrix.timeout }}
+    needs: browser-scope
+    if: needs.browser-scope.outputs.matrix != '[]'
     strategy:
       fail-fast: false
+      # Entries live in .github/goldline-fast-smoke-matrix.json; browser-scope picks which apply.
+      # Silver Lake runs each viewport in its own job: serial software-GL runs can exhaust 40 minutes.
+      # Century Park East gets its own budget so neither tower's proof is cut short by the other's.
       matrix:
-        include:
-          - name: fast-smoke-world
-            timeout: 25
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/worldSmoke.spec.ts
-              e2e/goldline-smoke/lanternCityMount.spec.ts
-              e2e/goldline-smoke/operatorRepresentative.spec.ts
-              e2e/goldline-smoke/cozyVillagerOutreach.spec.ts
-              e2e/goldline-smoke/silverLakeBirdDiscovery.spec.ts
-          # Each viewport runs the same Silver Lake coverage in its own job.
-          # Serial software-GL runs can exhaust 40 minutes after passing 26 tests.
-          - name: fast-smoke-silver-lake-desktop
-            timeout: 40
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop
-              e2e/goldline-smoke/silverLakeIslandEntry.spec.ts
-              e2e/goldline-smoke/playableVillagers.spec.ts
-              e2e/goldline-smoke/integratedDayLine.spec.ts
-              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop
-              e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
-          - name: fast-smoke-silver-lake-mobile
-            timeout: 40
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=mobile
-              e2e/goldline-smoke/silverLakeIslandEntry.spec.ts
-              e2e/goldline-smoke/playableVillagers.spec.ts
-              e2e/goldline-smoke/integratedDayLine.spec.ts
-              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=mobile
-              e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
-          - name: fast-smoke-beverly-hills
-            timeout: 20
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/beverlyHills.spec.ts
-          # Century Park East runs three long specs (errands, the rope, zombie night) on software GL in two projects;
-          # it gets its own job and budget so neither tower's proof is cut short by the other's.
-          - name: fast-smoke-century-park-east
-            timeout: 35
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/centuryParkEast.spec.ts
-          - name: fast-smoke-channel-382
-            timeout: 15
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/channel382.spec.ts
-          - name: fast-smoke-territories
-            timeout: 5
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/territoriesSmoke.spec.ts
-          - name: fast-smoke-campaign
-            timeout: 5
-            command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
-              e2e/goldline-smoke/campaignSmoke.spec.ts
-              e2e/goldline-smoke/campaignMutation.spec.ts
+        include: ${{ fromJSON(needs.browser-scope.outputs.matrix) }}
     services:
       mysql:
         image: mysql:8.0

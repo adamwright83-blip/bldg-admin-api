@@ -2,6 +2,29 @@ name: Beverly Hills 2D adventure
 
 on:
   pull_request:
+    # A client-only game served by Vite: its own code, what it imports, and the build toolchain.
+    paths:
+      - "client/src/pages/goldline/beverlyHills2d/**"
+      - "e2e/beverly-hills-2d/**"
+      - "playwright.beverly-hills.config.ts"
+      - "shared/beverlyHills*"
+      - "server/experience/lanternCity/beverlyHills*"
+      # It mounts inside the admin shell at /growth/lantern-city?level=beverly-hills.
+      - "client/src/pages/AdminHostApp.tsx"
+      - "client/src/components/admin/**"
+      - "client/src/lib/**"
+      - "client/src/_core/**"
+      - "client/src/hooks/**"
+      - "client/src/contexts/**"
+      - "client/src/App.tsx"
+      - "client/src/main.tsx"
+      - "client/src/index.css"
+      - "client/index.html"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/beverly-hills-2d.yml"
   workflow_dispatch:
 
 permissions:

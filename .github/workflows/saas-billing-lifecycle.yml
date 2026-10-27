@@ -2,10 +2,20 @@ name: SaaS billing lifecycle gate
 
 on:
   pull_request:
+    # Docs and captured artifacts never reach this gate; any code change still runs it.
+    paths-ignore:
+      - "docs/**"
+      - "artifacts/**"
+      - "**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   billing-lifecycle:
