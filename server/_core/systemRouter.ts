@@ -39,6 +39,7 @@ import { weeklyMissionRouter } from "../claire/weeklyMission/weeklyMissionRouter
 import { nightShiftRouter } from "../nightShift/nightShiftRouter";
 import { towerWarsRouter } from "../experience/goldline/modes/towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
+import { towerDeskRouter } from "../analytics/towerDeskRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../composition/goldlineWorldRouter";
@@ -111,6 +112,7 @@ export const systemRouter = router({
   nightShift: nightShiftRouter,
   towerWars: towerWarsRouter,
   geographicTruth: geographicTruthRouter,
+  towerDesk: towerDeskRouter,
   canonicalBuilding: canonicalBuildingRouter,
   google: googleRouter,
   goldlineWorld: goldlineWorldRouter,
