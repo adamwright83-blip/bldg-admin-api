@@ -74,7 +74,44 @@
 .atGarden { left: 67%; top: 31%; }
 .atMail { left: 75%; top: 91%; }
 .atBoard { left: 92%; top: 79%; }
+.modelPlate {
+  position: absolute;
+  left: 19.3%;
+  top: 60.2%;
+  width: 13.5%;
+  height: 8.9%;
+  display: flex;
+  background: #171019;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 220, 0.4);
+  color: #fff4dc;
+  pointer-events: none;
+}
+.modelPlate span {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font: 600 clamp(6px, 0.55vw, 10px)/1.15 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.modelPlate span + span { border-left: 1px solid rgba(255, 244, 220, 0.3); }
+.modelPlate b { font-weight: 800; color: #ffcf6b; }
+.signLink {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--amber);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .lanePlaque {
+  appearance: none;
+  cursor: pointer;
   position: absolute;
   top: 36.3%;
   height: 6.4%;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTowerDesk, isTowerAddress, residentsAsOf, type DeskResidentInput } from "./towerDesk";
+import { buildTowerDesk, deskConfigSchema, isTowerAddress, residentsAsOf, type DeskResidentInput } from "./towerDesk";
 
 const now = new Date("2026-10-27T12:00:00Z");
 const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
@@ -15,7 +15,7 @@ describe("buildTowerDesk", () => {
     expect(desk.revenue.perHomeMonthlyCents).toBeNull();
     expect(desk.dim.estMonthlyCents).toBeNull();
     expect(desk.dim.quietResidents).toBe(1);
-    expect(desk.goalMonthlyCents).toBe(80_000);
+    expect(desk.goalMonthlyCents).toBeNull();
   });
 
   it("counts only this building's residents' paid orders in the last 30 days", () => {
@@ -76,12 +76,26 @@ describe("OPUS LA", () => {
     expect(isTowerAddress("century_park_east", "2170 Century Pk E")).toBe(true);
   });
 
-  it("keeps the gym-towel contract in its own lane, not wired, apart from residents", () => {
-    const desk = buildTowerDesk({ buildingId: "opus_la", now, residents, ledger: { status: "ok", startUtc: daysAgo(365), events: [{ occurredAt: daysAgo(3), cents: 5000, identityKeys: ["phone:1"] }] }, referrals: { status: "unavailable" } });
-    expect(desk.contract).toEqual({ status: "not_wired", label: "Gym towel contract" });
-    expect(desk.revenue.last30Cents).toBe(5000);
-    expect(desk.goalMonthlyCents).toBeNull();
-    expect(buildTowerDesk({ buildingId: "century_park_east", now, residents, ledger: { status: "unavailable" }, referrals: { status: "unavailable" } }).contract).toBeNull();
+  it("has no contract until the operator enters one, and counts only the payments they log", () => {
+    const none = buildTowerDesk({ buildingId: "opus_la", now, residents, ledger: { status: "ok", startUtc: daysAgo(365), events: [{ occurredAt: daysAgo(3), cents: 5000, identityKeys: ["phone:1"] }] }, referrals: { status: "unavailable" } });
+    expect(none.contract).toBeNull();
+    expect(none.revenue).toMatchObject({ last30Cents: 5000, totalLast30Cents: 5000 });
+
+    const day = (n: number) => daysAgo(n).toISOString().slice(0, 10);
+    const withContract = buildTowerDesk({
+      buildingId: "opus_la", now, residents,
+      ledger: { status: "ok", startUtc: daysAgo(365), events: [{ occurredAt: daysAgo(3), cents: 5000, identityKeys: ["phone:1"] }] },
+      referrals: { status: "unavailable" },
+      config: { contract: { name: "Gym towels", monthlyCents: 60_000 } },
+      contractPayments: [
+        { id: 1, amountCents: 60_000, paidOn: day(8), note: "" },
+        { id: 2, amountCents: 60_000, paidOn: day(40), note: "last month" },
+      ],
+    });
+    expect(withContract.contract).toMatchObject({ name: "Gym towels", monthlyCents: 60_000, paid30Cents: 60_000 });
+    expect(withContract.contract?.payments.map(p => p.id)).toEqual([1, 2]);
+    expect(withContract.revenue.totalLast30Cents).toBe(65_000);
+    expect(withContract.revenue.last30Cents).toBe(5000);
   });
 });
 
@@ -91,8 +105,30 @@ describe("the operator's own goal", () => {
     expect(buildTowerDesk({ ...base, buildingId: "opus_la", savedGoalCents: 120_000 })).toMatchObject({ goalMonthlyCents: 120_000, goalSource: "saved" });
     expect(buildTowerDesk({ ...base, buildingId: "century_park_east", savedGoalCents: 50_000 })).toMatchObject({ goalMonthlyCents: 50_000, goalSource: "saved" });
   });
-  it("falls back to the default, or to none", () => {
-    expect(buildTowerDesk({ ...base, buildingId: "century_park_east" })).toMatchObject({ goalMonthlyCents: 80_000, goalSource: "default" });
+  it("has no goal until the operator sets one, for any building", () => {
+    expect(buildTowerDesk({ ...base, buildingId: "century_park_east" })).toMatchObject({ goalMonthlyCents: null, goalSource: "none" });
     expect(buildTowerDesk({ ...base, buildingId: "opus_la" })).toMatchObject({ goalMonthlyCents: null, goalSource: "none" });
+  });
+});
+
+describe("the operator's building facts", () => {
+  const base = { now, ledger: { status: "unavailable" as const }, referrals: { status: "unavailable" as const } };
+  it("reads the quiet threshold from the saved config", () => {
+    // Bo's last order was 100 days ago, Ada's 5: a 120-day threshold makes nobody quiet, 7 makes Bo quiet only
+    expect(buildTowerDesk({ ...base, residents, buildingId: "opus_la", config: { quietDays: 120 } }).dim.quietResidents).toBe(0);
+    const tight = buildTowerDesk({ ...base, residents, buildingId: "opus_la", config: { quietDays: 7 } });
+    expect(tight.dim.quietResidents).toBe(1);
+    expect(tight.config.quietDays).toBe(7);
+  });
+  it("fills defaults for a missing or partial config, and refuses nonsense", () => {
+    expect(deskConfigSchema.parse({})).toEqual({ towers: {}, numberingConfirmed: false, quietDays: 45, contract: null });
+    expect(deskConfigSchema.safeParse({ quietDays: 3 }).success).toBe(false);
+    expect(deskConfigSchema.safeParse({ towers: { south: { floors: 0, unitsPerFloor: 10 } } }).success).toBe(false);
+    expect(deskConfigSchema.safeParse({ contract: { name: "", monthlyCents: 100 } }).success).toBe(false);
+  });
+  it("scrubs the history with the same quiet threshold", () => {
+    const list = [{ key: "a", name: "A", unit: null, orderDays: ["2026-01-01"] }];
+    expect(residentsAsOf(list, "2026-01-20", 14)).toEqual([{ key: "a", quiet: true }]);
+    expect(residentsAsOf(list, "2026-01-20", 45)).toEqual([{ key: "a", quiet: false }]);
   });
 });

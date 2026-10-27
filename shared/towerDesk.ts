@@ -13,19 +13,11 @@
  * Money comes only from the canonical paid-order ledger, matched to residents by identity key. When the
  * ledger can't be read the money monitors say so; they never show $0 for "unknown".
  */
+import { z } from "zod";
 import type { ReferralActivityRow, ReferralSyncFreshness } from "./referralProgram";
 
 export const TOWER_DESK_BUILDINGS = ["century_park_east", "opus_la"] as const;
 export type TowerDeskBuildingId = (typeof TOWER_DESK_BUILDINGS)[number];
-
-/**
- * The fallback monthly goal, in cents, used only until the operator saves one from the elevator
- * (tower_desk_goals). Null reads "Goal needed", never a number we picked for them. CPE's $800 is Adam's.
- */
-export const TOWER_DESK_MONTHLY_GOAL_CENTS: Record<TowerDeskBuildingId, number | null> = {
-  century_park_east: 80_000, // Adam, 2026-10-27: $800/month
-  opus_la: null,
-};
 
 /** each tower's street address; the client's tower drawing and the server's resident match read the same patterns */
 export const TOWER_ADDRESS_PATTERNS: Record<TowerDeskBuildingId, Record<string, RegExp>> = {
@@ -37,20 +29,37 @@ export function isTowerAddress(buildingId: TowerDeskBuildingId, address: string 
   return Object.values(TOWER_ADDRESS_PATTERNS[buildingId]).some(re => re.test(address ?? ""));
 }
 
-/**
- * OPUS also has the gym-towel building contract. No ledger records it yet (the paid-order ledger holds residents'
- * laundry orders), so its lane says so instead of folding into, or hiding behind, resident revenue.
- */
-const CONTRACT_LANE: Record<TowerDeskBuildingId, TowerDesk["contract"]> = {
-  century_park_east: null,
-  opus_la: { status: "not_wired", label: "Gym towel contract" },
-};
-
 /** what the elevator's goal field accepts: $1 to $1,000,000 a month */
 export const GOAL_MIN_CENTS = 100;
 export const GOAL_MAX_CENTS = 100_000_000;
 
-export const QUIET_DAYS = 45;
+/** the quiet threshold until the operator changes it in the desk's settings */
+export const DEFAULT_QUIET_DAYS = 45;
+
+/**
+ * Everything about a building that only its operator knows, saved per tenant and building from the desk's
+ * settings (tower_desk_config). Nothing here has a default that belongs to anyone's business: an empty config
+ * means "use the drawing's starting guesses, and say they're guesses".
+ */
+export const deskConfigSchema = z.object({
+  /** floors and doors per floor, by tower id; overrides the starting guess for that tower */
+  towers: z.record(z.string().max(16), z.object({
+    floors: z.number().int().min(1).max(120),
+    unitsPerFloor: z.number().int().min(1).max(60),
+  })).default({}),
+  /** do unit numbers start with the floor (1507 = floor 15)? */
+  numberingConfirmed: z.boolean().default(false),
+  quietDays: z.number().int().min(7).max(365).default(DEFAULT_QUIET_DAYS),
+  /** a building contract paid apart from residents (a gym's towels, a hotel's linens) */
+  contract: z.object({
+    name: z.string().trim().min(1).max(60),
+    monthlyCents: z.number().int().min(0).max(GOAL_MAX_CENTS),
+  }).nullable().default(null),
+});
+export type DeskConfig = z.infer<typeof deskConfigSchema>;
+
+/** a payment the operator logged against the building contract */
+export type DeskContractPayment = { id: number; amountCents: number; paidOn: string; note: string };
 export const RUN_RATE_DAYS = 30;
 export const LEDGER_LOOKBACK_DAYS = 365;
 const DAY_MS = 86_400_000;
@@ -105,12 +114,16 @@ export type TowerDesk = {
     payingResidents30: number | null;
     /** last30Cents ÷ paying residents: what one more lit home is worth at today's average */
     perHomeMonthlyCents: number | null;
+    /** residents' paid orders plus the contract payments the operator logged, last 30 days; null when residents' money can't be read */
+    totalLast30Cents: number | null;
   };
   goalMonthlyCents: number | null;
-  /** "saved": the operator set it in the UI; "default": the fallback above; "none": nobody has */
-  goalSource: "saved" | "default" | "none";
-  /** a building contract paid apart from residents (OPUS's gym towels); null where there is none */
-  contract: null | { status: "not_wired"; label: string };
+  /** "saved": the operator set it in the UI; "none": nobody has */
+  goalSource: "saved" | "none";
+  /** the building contract the operator entered, with the payments they logged; null when none */
+  contract: null | { name: string; monthlyCents: number; paid30Cents: number; payments: DeskContractPayment[] };
+  /** the operator's saved building facts (defaults filled in) */
+  config: DeskConfig;
   dim: {
     quietResidents: number;
     /** the quiet residents' own average month while they were ordering; null when money can't be read */
@@ -141,15 +154,25 @@ export function buildTowerDesk(input: {
   referrals: DeskReferralInput;
   /** the operator's saved goal; undefined when none is saved (or it couldn't be read) */
   savedGoalCents?: number;
+  /** the operator's saved building facts; undefined or partial reads as defaults */
+  config?: Partial<DeskConfig> | null;
+  contractPayments?: DeskContractPayment[];
 }): TowerDesk {
   const { now } = input;
+  const config = deskConfigSchema.parse(input.config ?? {});
+  const quietDays = config.quietDays;
   const residents = input.residents
     .map(r => ({ ...r, orderedAt: [...r.orderedAt].sort((a, b) => a.getTime() - b.getTime()) }))
     .filter(r => r.orderedAt.length);
   const daysSince = (d: Date) => Math.floor((now.getTime() - d.getTime()) / DAY_MS);
-  const quiet = residents.filter(r => daysSince(r.orderedAt.at(-1)!) >= QUIET_DAYS);
+  const quiet = residents.filter(r => daysSince(r.orderedAt.at(-1)!) >= quietDays);
 
-  let revenue: TowerDesk["revenue"] = { status: "unavailable", last30Cents: null, payingResidents30: null, perHomeMonthlyCents: null };
+  // contract money is whatever the operator logged; only the last 30 days count toward the run rate
+  const payments = [...(input.contractPayments ?? [])].sort((a, b) => b.paidOn.localeCompare(a.paidOn) || b.id - a.id);
+  const day30 = ymd(new Date(now.getTime() - RUN_RATE_DAYS * DAY_MS)), today = ymd(now);
+  const paid30Cents = payments.filter(p => p.paidOn >= day30 && p.paidOn <= today).reduce((n, p) => n + p.amountCents, 0);
+
+  let revenue: TowerDesk["revenue"] = { status: "unavailable", last30Cents: null, payingResidents30: null, perHomeMonthlyCents: null, totalLast30Cents: null };
   let estMonthlyCents: number | null = null;
   if (input.ledger.status !== "unavailable") {
     const ledger = input.ledger;
@@ -173,6 +196,7 @@ export function buildTowerDesk(input: {
       last30Cents: last30,
       payingResidents30: paying30.size,
       perHomeMonthlyCents: paying30.size ? Math.round(last30 / paying30.size) : null,
+      totalLast30Cents: last30 + paid30Cents,
     };
     // each quiet resident's own month: paid in the window ÷ the months they were ordering in it
     estMonthlyCents = Math.round(
@@ -190,7 +214,7 @@ export function buildTowerDesk(input: {
   for (const r of residents) {
     r.orderedAt.forEach((d, i) => log.push({ at: d.toISOString(), kind: i === 0 ? "first_order" : "order", unit: r.unit, name: r.name }));
     const last = r.orderedAt.at(-1)!;
-    const quietAt = new Date(last.getTime() + QUIET_DAYS * DAY_MS);
+    const quietAt = new Date(last.getTime() + quietDays * DAY_MS);
     if (quietAt <= now) log.push({ at: quietAt.toISOString(), kind: "went_quiet", unit: r.unit, name: r.name });
   }
   log.sort((a, b) => b.at.localeCompare(a.at));
@@ -225,9 +249,10 @@ export function buildTowerDesk(input: {
     residents: residents.map(r => ({ key: r.key, name: r.name, unit: r.unit, orderDays: r.orderedAt.map(ymd) })),
     firstOrderDay: firsts.length ? ymd(new Date(Math.min(...firsts))) : null,
     revenue,
-    goalMonthlyCents: input.savedGoalCents ?? TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId],
-    goalSource: input.savedGoalCents !== undefined ? "saved" : TOWER_DESK_MONTHLY_GOAL_CENTS[input.buildingId] !== null ? "default" : "none",
-    contract: CONTRACT_LANE[input.buildingId],
+    goalMonthlyCents: input.savedGoalCents ?? null,
+    goalSource: input.savedGoalCents !== undefined ? "saved" : "none",
+    contract: config.contract ? { ...config.contract, paid30Cents, payments } : null,
+    config,
     dim: { quietResidents: quiet.length, estMonthlyCents },
     log: log.slice(0, LOG_LIMIT),
     referrals,
@@ -235,12 +260,12 @@ export function buildTowerDesk(input: {
 }
 
 /** who has ordered by a given day, and who had gone quiet by then: the scrubber's frame */
-export function residentsAsOf(residents: readonly DeskResident[], day: string): { key: string; quiet: boolean }[] {
+export function residentsAsOf(residents: readonly DeskResident[], day: string, quietDays: number = DEFAULT_QUIET_DAYS): { key: string; quiet: boolean }[] {
   const dayMs = Date.parse(`${day}T00:00:00Z`);
   return residents.flatMap(r => {
     const before = r.orderDays.filter(d => d <= day);
     if (!before.length) return [];
     const last = Date.parse(`${before.at(-1)!}T00:00:00Z`);
-    return [{ key: r.key, quiet: (dayMs - last) / DAY_MS >= QUIET_DAYS }];
+    return [{ key: r.key, quiet: (dayMs - last) / DAY_MS >= quietDays }];
   });
 }

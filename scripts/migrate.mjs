@@ -5763,5 +5763,13 @@ await ensureRequiredColumn(
   await assertRequiredColumns("tower_desk_goals", ["id", "tenant_id", "building_id", "monthly_goal_cents", "updated_by", "updated_at"]);
 }
 
+// 0149: tower desk settings (building facts, building contract) and contract payments the operator logs. Idempotent CREATE IF NOT EXISTS.
+{
+  const statements = await readSqlStatements("../drizzle/0149_tower_desk_config.sql");
+  for (const statement of statements) await runRequired(statement, "Tower desk config and contract payments");
+  await assertRequiredColumns("tower_desk_config", ["id", "tenant_id", "building_id", "config_json", "updated_by", "updated_at"]);
+  await assertRequiredColumns("tower_desk_contract_payments", ["id", "tenant_id", "building_id", "amount_cents", "paid_on", "note", "created_by", "created_at"]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

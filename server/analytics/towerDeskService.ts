@@ -1,16 +1,19 @@
 import {
   buildTowerDesk,
+  deskConfigSchema,
   isTowerAddress,
   LEDGER_LOOKBACK_DAYS,
   unitOf,
+  type DeskConfig,
+  type DeskContractPayment,
   type DeskLedgerInput,
   type DeskReferralInput,
   type DeskResidentInput,
   type TowerDesk,
   type TowerDeskBuildingId,
 } from "../../shared/towerDesk";
-import { and, eq } from "drizzle-orm";
-import { towerDeskGoals } from "../../drizzle/schema";
+import { and, desc, eq } from "drizzle-orm";
+import { towerDeskConfig, towerDeskContractPayments, towerDeskGoals } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { identityKeysFor } from "./customerIdentityResolution";
 import { loadPaidOrderLedger } from "./paidOrderLedger";
@@ -74,7 +77,75 @@ export async function readTowerDesk(input: { tenantId: string; buildingId: Tower
     console.warn("[towerDesk] saved goal unavailable", error);
     return undefined;
   });
-  return buildTowerDesk({ buildingId: input.buildingId, now, residents, ledger, referrals, savedGoalCents });
+  const [config, contractPayments] = await Promise.all([
+    readConfig(input.tenantId, input.buildingId).catch(error => {
+      console.warn("[towerDesk] saved building facts unavailable", error);
+      return undefined;
+    }),
+    readContractPayments(input.tenantId, input.buildingId).catch(error => {
+      console.warn("[towerDesk] contract payments unavailable", error);
+      return [] as DeskContractPayment[];
+    }),
+  ]);
+  return buildTowerDesk({ buildingId: input.buildingId, now, residents, ledger, referrals, savedGoalCents, config, contractPayments });
+}
+
+const scope = (tenantId: string, buildingId: TowerDeskBuildingId) =>
+  and(eq(towerDeskConfig.tenantId, tenantId), eq(towerDeskConfig.buildingId, buildingId));
+
+async function readConfig(tenantId: string, buildingId: TowerDeskBuildingId): Promise<DeskConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select({ json: towerDeskConfig.configJson }).from(towerDeskConfig).where(scope(tenantId, buildingId)).limit(1);
+  if (!row) return undefined;
+  const parsed = deskConfigSchema.safeParse(JSON.parse(row.json));
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Save the operator's building facts (whole config; the form sends everything it shows). */
+export async function saveTowerDeskConfig(input: { tenantId: string; buildingId: TowerDeskBuildingId; config: DeskConfig; actor: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const configJson = JSON.stringify(deskConfigSchema.parse(input.config));
+  await db
+    .insert(towerDeskConfig)
+    .values({ tenantId: input.tenantId, buildingId: input.buildingId, configJson, updatedBy: input.actor })
+    .onDuplicateKeyUpdate({ set: { configJson, updatedBy: input.actor } });
+  return { ok: true as const };
+}
+
+async function readContractPayments(tenantId: string, buildingId: TowerDeskBuildingId): Promise<DeskContractPayment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ id: towerDeskContractPayments.id, amountCents: towerDeskContractPayments.amountCents, paidOn: towerDeskContractPayments.paidOn, note: towerDeskContractPayments.note })
+    .from(towerDeskContractPayments)
+    .where(and(eq(towerDeskContractPayments.tenantId, tenantId), eq(towerDeskContractPayments.buildingId, buildingId)))
+    .orderBy(desc(towerDeskContractPayments.paidOn), desc(towerDeskContractPayments.id))
+    .limit(60);
+  return rows;
+}
+
+/** Log a payment received on the building contract. */
+export async function addTowerDeskContractPayment(input: { tenantId: string; buildingId: TowerDeskBuildingId; amountCents: number; paidOn: string; note: string; actor: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(towerDeskContractPayments).values({
+    tenantId: input.tenantId, buildingId: input.buildingId, amountCents: input.amountCents, paidOn: input.paidOn, note: input.note, createdBy: input.actor,
+  });
+  return { ok: true as const };
+}
+
+/** Remove a logged payment (only the signed-in tenant's own). */
+export async function removeTowerDeskContractPayment(input: { tenantId: string; buildingId: TowerDeskBuildingId; id: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(towerDeskContractPayments).where(and(
+    eq(towerDeskContractPayments.id, input.id),
+    eq(towerDeskContractPayments.tenantId, input.tenantId),
+    eq(towerDeskContractPayments.buildingId, input.buildingId),
+  ));
+  return { ok: true as const };
 }
 
 async function readSavedGoal(tenantId: string, buildingId: TowerDeskBuildingId): Promise<number | undefined> {
