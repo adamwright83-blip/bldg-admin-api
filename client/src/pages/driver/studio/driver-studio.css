@@ -98,3 +98,27 @@
 @keyframes lc-fox-wave{0%{transform:translateY(100%) rotate(-5deg)}35%{transform:translateY(0) rotate(3deg)}75%{transform:translateY(0) rotate(-4deg)}100%{transform:translateY(100%) rotate(0deg)}}
 @media(min-width:800px){.lc-driver{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 @media(prefers-reduced-motion:reduce){.lc-hold--holding,.lc-scene--react .lc-scene__flare,.lc-scene--react .lc-scene__fox,.lc-scene--react .lc-scene__cpe-signal,.lc-scene--react .lc-scene__opus-light,.lc-scene--react .lc-scene__herd{animation:none!important}.lc-hold--holding{background:var(--gold)}.lc-scene--react .lc-scene__cpe-signal{opacity:1;transform:none}}
+
+
+/* Authored Rodeo sprite sheets, not AI-generated substitute characters. */
+.lc-scene__rodeo{position:absolute;left:12%;right:0;bottom:0;height:110px;pointer-events:none}
+.lc-scene__dog,.lc-scene__calf{position:absolute;display:block;opacity:0;image-rendering:auto}
+.lc-scene__dog{width:82px;height:73px;left:4px;bottom:6px;background-image:url("/assets/goldline/beverly-hills-2d/02-terrier-sheet.png");background-size:512px 341px;background-position:-3px -51px}
+.lc-scene__calf{width:104px;height:90px;left:117px;bottom:6px;background-image:url("/assets/goldline/beverly-hills-2d/04-calf-sheet.png");background-size:512px 341px;background-position:-7px -29px}
+.lc-scene--react .lc-scene__dog{animation:lc-dog-reaction 1.8s ease-out both}
+.lc-scene--react .lc-scene__calf{animation:lc-calf-reaction 1.8s ease-out both}
+@keyframes lc-dog-reaction{0%{opacity:0;transform:translateX(-24px)}22%{opacity:1}70%{opacity:1;transform:translateX(19px)}100%{opacity:0;transform:translateX(37px)}}
+@keyframes lc-calf-reaction{0%{opacity:0;transform:translateX(24px)}22%{opacity:1}70%{opacity:1;transform:translateX(-15px)}100%{opacity:0;transform:translateX(-45px)}}
+/* OPUS currently has concept art, not a playable game. This reversible local
+   haul is deliberately independent of the future game's persistent state. */
+.lc-scene__opus-basket{position:absolute;right:15%;top:18%;height:140px;width:60px;opacity:0;transform:translateY(35px)}
+.lc-scene__opus-rope{position:absolute;left:30px;top:-60px;width:2px;height:110px;background:#eee0be;box-shadow:0 0 2px #67432e}
+.lc-scene__opus-carrier{position:absolute;bottom:3px;left:7px;width:48px;height:31px;background:#b8834c;border:4px solid #ead4a8;border-radius:0 0 12px 12px;text-align:center;font-size:20px;font-weight:900;color:#f6e2b1}
+.lc-scene--react .lc-scene__opus-basket{animation:lc-haul 1.8s ease-in-out both}
+@keyframes lc-haul{0%{opacity:0;transform:translateY(35px)}18%{opacity:1}72%{opacity:1;transform:translateY(-37px)}100%{opacity:0;transform:translateY(-45px)}}
+.lc-scene__boba{position:absolute;left:50%;top:18%;font-size:46px;color:#fff6cf;text-shadow:0 0 12px #ffca6c;opacity:0}
+.lc-scene--react .lc-scene__boba{animation:lc-signal 1.7s ease-out both}
+@media(prefers-reduced-motion:reduce){
+  .lc-scene--react .lc-scene__dog,.lc-scene--react .lc-scene__calf,
+  .lc-scene--react .lc-scene__opus-basket,.lc-scene--react .lc-scene__boba{animation:none!important;opacity:1;transform:none}
+}
