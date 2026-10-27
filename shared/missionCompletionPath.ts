@@ -29,7 +29,7 @@ export const SHARED_MISSION_OBJECTIVE = {
 export type SharedMissionObjective = {
   status: typeof SHARED_MISSION_OBJECTIVE.status;
   pipelineStage: typeof SHARED_MISSION_OBJECTIVE.pipelineStage;
-  worldVisualState: WorldMissionState;
+  worldVisualState: typeof SHARED_MISSION_OBJECTIVE.worldVisualState;
   completionPath: MissionCompletionPath;
   awardsXp: boolean;
   awardsStreak: boolean;
@@ -71,7 +71,7 @@ export function objectiveForCompletionPath(
   return {
     status: SHARED_MISSION_OBJECTIVE.status,
     pipelineStage: SHARED_MISSION_OBJECTIVE.pipelineStage,
-    worldVisualState,
+    worldVisualState: SHARED_MISSION_OBJECTIVE.worldVisualState,
     completionPath: path,
     awardsXp: path === "play",
     awardsStreak: path === "play",
