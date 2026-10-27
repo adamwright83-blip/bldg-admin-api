@@ -144,6 +144,14 @@
     });
   });
 
+  // "Bring your own business" enters the signup funnel carrying the world just played.
+  // The funnel keeps its resume token in this browser's storage for its own origin, and
+  // Stripe returns buyers to the billing return URL (server/saas/saasBilling.ts, today
+  // admin.bldg.chat). Entry must be on that same origin or the paid draft is lost. When
+  // the billing return URL moves to gojoystick.com, set this to '' so the funnel stays here.
+  const FUNNEL_ORIGIN = 'https://admin.bldg.chat';
+  function bringBusiness(mode) { window.location.href = FUNNEL_ORIGIN + '/joystick-start?world=' + encodeURIComponent(mode === 'road' ? 'road' : 'cozy'); }
+
   // Illustrative browser-local sample. No messaging, CRM, or calendar APIs.
   const sample = $('sample-dialog'), about = $('about-dialog');
   let sampleWorld = 'cozy', draft = 'Hey Marisol! Hope your fall is going well. If you need a hand with laundry again, I’d love to help. — Adam';
@@ -189,7 +197,8 @@
       content('A little less left unsaid.', '<p>Your note is ready. In the full game, you review and approve the real message before it goes out.</p>');
       const status = document.createElement('p'); status.className = 'feedback'; status.setAttribute('role','status');
       status.textContent = 'Sample delivery time: ' + selectedTime + '. Nothing has been sent or scheduled.'; story.appendChild(status);
-      button('Visit the other world ↗', () => startSample('road'), 'primary');
+      button('Try it with your own customers ↗', () => bringBusiness('cozy'), 'primary');
+      button('Visit the other world', () => startSample('road'), 'secondary');
       button('Back to the village', cozyErrand, 'secondary');
     }, 'primary');
     textarea.addEventListener('input', () => { approve.disabled = !textarea.value.trim(); });
@@ -211,10 +220,12 @@
   }
   function roadEnd(door) {
     content(door === 4 ? '“You weren’t supposed to find me.”' : 'Not here. But you’re getting closer.', door === 4 ? '<p>Clockhead’s hiding place is open. That introduction got you further than another week of waiting.</p><p>This is only a glimpse. The full adventure continues as you make real progress.</p>' : '<p>An empty room. One fewer place for Clockhead to hide—and a real person you can follow up with.</p><p>The next useful step brings the next key.</p>');
-    button('Try Lantern City ↗', () => startSample('cozy'), 'primary');
+    button('Try it with your own business ↗', () => bringBusiness('road'), 'primary');
+    button('Try Lantern City', () => startSample('cozy'), 'secondary');
     button('Replay this sample', roadIntro, 'secondary');
   }
   document.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => startSample(b.dataset.play || world)));
+  document.querySelectorAll('[data-bring]').forEach(b => b.addEventListener('click', () => bringBusiness(world)));
   document.querySelectorAll('[data-open-about]').forEach(b => b.addEventListener('click', () => { about.showModal(); resumeIfNeeded(); }));
   $('about-play').onclick = () => { about.close(); startSample(world); };
   document.querySelectorAll('.close-dialog').forEach(b => b.onclick = () => b.closest('dialog').close());

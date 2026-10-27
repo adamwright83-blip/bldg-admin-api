@@ -20,6 +20,7 @@ import {
   fetchReport,
   goldlineRequest,
   readMetricsOverview,
+  readReferralActivity,
   assertCleanCloudScreenshotTarget,
 } from "./browser.js";
 import { nextDailyRun } from "./schedule.js";
@@ -491,6 +492,21 @@ if (!globalThis.chrome?.runtime?.id) {
     }
   }
 
+  // Referral activity rides along with every sync. It never fails the import: the result is only a status line.
+  async function recordReferralActivity() {
+    let tab = null;
+    try {
+      tab = await openSite(`${CLEANCLOUD}/store`);
+      const reading = await runInTab(tab, readReferralActivity, []);
+      const result = await request("referralUsage", { rows: reading.rows, sourceUrl: reading.sourceUrl });
+      return `Referral activity read (${result?.upserted ?? 0} referrals).`;
+    } catch (error) {
+      return `Referral activity was not read: ${String(error?.message || error)}`;
+    } finally {
+      if (tab) await chrome.tabs.remove(tab).catch(() => {});
+    }
+  }
+
   async function captureCleanCloudPng(tabId) {
     if (!(await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS }))) {
       throw new Error(
@@ -633,7 +649,8 @@ if (!globalThis.chrome?.runtime?.id) {
           : witnessResult.note
             ? `Dashboard witness saved. ${witnessResult.note}`
             : `Dashboard witness saved. Economic reconciliation: ${witnessResult.reconciliation}.`;
-        status(`Import confirmed. ${revenueNote} ${witnessStatus}`);
+        const referralNote = await recordReferralActivity();
+        status(`Import confirmed. ${revenueNote} ${witnessStatus} ${referralNote}`);
         if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
