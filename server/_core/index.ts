@@ -12,6 +12,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { registerSmallComforts } from "./smallComfortsStatic";
 import { sdk } from "./sdk";
 import { upsertUser } from "../db";
 import { readNativePaymentFacts, hasNativePaymentAuthority, readNativePaymentAuthorityReceipts } from "../domains/payment/nativePaymentReadService";
@@ -882,6 +883,8 @@ async function startServer() {
       },
     })
   );
+  // The real Small Comforts game, served before the app shell so its pages are not swallowed by index.html.
+  registerSmallComforts(app);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

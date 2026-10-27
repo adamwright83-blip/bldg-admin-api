@@ -20,17 +20,17 @@ test("Report mode is read-only and Explore still opens the cozy house", async ({
   await page.getByRole("button", { name: "90 days" }).click();
   await expect(page.getByLabel("Lantern City report")).toContainText("the last 90 days");
   await page.screenshot({
-    path: "/cursor/stores/bc-927e536b-3c86-410d-8bb4-9e8e2504e3a6/media/lantern-report-desktop.png",
+    path: "test-results/lantern-report-desktop.png",
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("tab", { name: "Report" })).toBeVisible();
   await page.screenshot({
-    path: "/cursor/stores/bc-927e536b-3c86-410d-8bb4-9e8e2504e3a6/media/lantern-report-mobile.png",
+    path: "test-results/lantern-report-mobile.png",
   });
   await page.getByRole("tab", { name: "Explore" }).click();
   await expect(page.getByRole("button", { name: "Tin Can House · Small Comforts" })).toBeVisible();
   await page.getByRole("button", { name: "Tin Can House · Small Comforts" }).click();
-  await expect(page.locator('[data-small-comforts="plate"]')).toBeVisible();
+  await expect(page.locator('[data-small-comforts="game"]')).toBeVisible();
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

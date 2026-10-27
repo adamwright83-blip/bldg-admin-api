@@ -206,6 +206,8 @@ export function legacyDayforgeSecurityHeaders(
     .map(value => configuredFrameOrigin(value, env.NODE_ENV === "production"))
     .filter((value): value is string => Boolean(value));
   const frameSources = [
+    // Same-origin standalone games, e.g. /small-comforts/ framed from Lantern City.
+    "'self'",
     "https://js.stripe.com",
     "https://hooks.stripe.com",
     "https://checkout.stripe.com",

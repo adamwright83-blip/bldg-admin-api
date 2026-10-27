@@ -1,0 +1,42 @@
+.scf-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #07080b;
+  animation: scf-enter .45s cubic-bezier(.2,.75,.25,1) both;
+}
+
+.scf-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Bottom left: the chapters keep their own controls top left, top right and bottom right. */
+.scf-exit {
+  position: fixed;
+  left: max(14px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 1;
+  min-height: 44px;
+  border: 1px solid rgba(250, 233, 205, .34);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: rgba(20, 17, 15, .56);
+  color: #f8ead0;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  font: 600 13px/1.1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.scf-exit:hover { background: rgba(42, 31, 23, .72); }
+
+@keyframes scf-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
