@@ -4,7 +4,6 @@ import type { PickupCounts } from "@shared/cleancloudPickup";
 import type { DayPlanStop } from "../goldlineDayPlanModel";
 import {
   canHoldToComplete,
-  chooseDriverScene,
   formatJobKind,
   groupRouteVisits,
   hasSavedJob,
@@ -164,7 +163,7 @@ function JobCard({ stop, recorded, onSaved, onFallback }: {
   );
 }
 
-function VisitDetail({ visit, savedIds, onBack, onSave, onOriginalStop, onNext, isDriving }: {
+function VisitDetail({ visit, savedIds, onBack, onSave, onOriginalStop, onNext }: {
   visit: RouteVisit;
   savedIds: ReadonlySet<string>;
   onBack: () => void;
