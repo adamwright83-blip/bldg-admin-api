@@ -185,6 +185,8 @@ export async function completeConversationSession(input: {
   claireConversationId?: string;
   callSid?: string;
   reason: string;
+  /** When the call really ended, if known (the idle sweep passes the last activity). Defaults to now. */
+  endedAt?: string;
 }): Promise<ConversationSession | null> {
   const store = productionConversationStore();
   const session = input.callSid
@@ -197,8 +199,73 @@ export async function completeConversationSession(input: {
   return store.updateSession(session.id, {
     status: "complete",
     completionReason: input.reason,
-    endedAt: new Date().toISOString(),
+    endedAt: input.endedAt ?? new Date().toISOString(),
   });
+}
+
+/** No call goes thirty minutes without a word. Past that, nobody is on the line. */
+export const CLAIRE_SESSION_IDLE_MS = 30 * 60 * 1_000;
+export const IDLE_TIMEOUT_REASON = "idle_timeout";
+
+/**
+ * Close sessions nobody ended.
+ *
+ * An inbound call reaches Claire through the phone number's own webhooks, so Twilio's
+ * `completed` status callback (which is attached only to calls Claire places) never arrives,
+ * and a hangup on the Gather path is just a webhook that stops. 18 sessions of kinds
+ * pre_drive, evening_planning and morning_reconciliation sat `in_progress` with no
+ * `endedAt` from 2026-10-01 to 2026-10-20. A session with no activity for 30 minutes is
+ * complete: `endedAt` is its last turn (or its start), `completionReason` is `idle_timeout`.
+ *
+ * This only closes the session row. It does NOT run transcript logging or analysis: those
+ * belong to a hangup the pipeline actually saw, and re-running them for old calls would
+ * spend model budget and notify the operator about calls from weeks ago.
+ */
+export async function sweepIdleConversationSessions(
+  input: { nowMs?: number; idleMs?: number; limit?: number; store?: ClaireConversationStore } = {}
+): Promise<{ closed: string[] }> {
+  const store = input.store ?? productionConversationStore();
+  const nowMs = input.nowMs ?? Date.now();
+  const idleMs = input.idleMs ?? CLAIRE_SESSION_IDLE_MS;
+  const closed: string[] = [];
+  for (const session of await store.listInProgressSessions(input.limit ?? 200)) {
+    const turns = await store.listTurns(session.id);
+    const last = turns.reduce<string>(
+      (latest, turn) => (turn.occurredAt > latest ? turn.occurredAt : latest),
+      session.startedAt
+    );
+    if (nowMs - new Date(last).getTime() < idleMs) continue;
+    const done = await store.updateSession(session.id, {
+      status: "complete",
+      completionReason: IDLE_TIMEOUT_REASON,
+      endedAt: last,
+    });
+    if (done) closed.push(session.id);
+  }
+  return { closed };
+}
+
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Production schedule: every five minutes, never throws, never holds the process open. */
+export function startClaireSessionIdleSweep(intervalMs = 5 * 60 * 1_000): () => void {
+  if (sweepTimer) return () => undefined;
+  const run = () =>
+    void sweepIdleConversationSessions().then(
+      result => {
+        if (result.closed.length) {
+          console.info("[ClaireLedger] idle sessions closed", { event: "claire_session_idle_sweep", count: result.closed.length });
+        }
+      },
+      error => console.warn("[ClaireLedger] idle sweep failed", error instanceof Error ? error.message : error)
+    );
+  run();
+  sweepTimer = setInterval(run, intervalMs);
+  sweepTimer.unref?.();
+  return () => {
+    if (sweepTimer) clearInterval(sweepTimer);
+    sweepTimer = null;
+  };
 }
 
 export { getClaireConversationStore };

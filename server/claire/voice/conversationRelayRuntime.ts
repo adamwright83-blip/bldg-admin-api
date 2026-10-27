@@ -53,6 +53,8 @@ export class ConversationRelaySocketRuntime {
   private inflightGeneration = 0;
   private readonly stoppedGenerations = new Set<number>();
   private callSid: string | null = null;
+  /** Last final prompt and the reply emitted for it, to recognise a transcript that only grew. */
+  private lastTurn: { utterance: string; spoken: string } | null = null;
 
   constructor(
     private readonly options: {
@@ -183,6 +185,12 @@ export class ConversationRelaySocketRuntime {
     }
     if (result.listenOnly) return;
     const speak = result.speak.trim();
+    // 2026-10-22: Twilio sent one story as three growing final prompts ("…160 dollars", "…160 dollars. So
+    // it's a very nice order", "…And his name is Forrest") and Claire said the same 296-character reply to
+    // each. A prompt that only extends the previous one and gets the identical reply is not spoken again.
+    const previous = this.lastTurn;
+    this.lastTurn = { utterance, spoken: speak };
+    if (speak && previous && previous.spoken === speak && extendsUtterance(previous.utterance, utterance)) return;
     if (speak) {
       this.speech = markSpeechQueued(beginGeneratedSpeech(speak));
       this.emit({
@@ -194,4 +202,13 @@ export class ConversationRelaySocketRuntime {
     }
     if (result.endCall) this.requestIntentionalEnd();
   }
+}
+
+const normalizedWords = (text: string) => text.toLowerCase().replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** True when `next` is `previous` with more speech appended (ASR revised and extended one utterance). */
+export function extendsUtterance(previous: string, next: string): boolean {
+  const before = normalizedWords(previous);
+  const after = normalizedWords(next);
+  return before.length >= 12 && after.length > before.length && after.startsWith(before);
 }

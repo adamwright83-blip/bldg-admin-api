@@ -20,6 +20,15 @@ import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { strategyRouter } from "./strategy/strategyRouter";
+import { referralRouter } from "./domains/referral/referralRouter";
+import {
+  creditReferrerOnFirstPaidOrder,
+  getAvailableCreditCents,
+  recordReferralAtSignup,
+  redeemCredit,
+  referralCodeForNewOrder,
+} from "./domains/referral/referralService";
+import { planCreditRedemption } from "@shared/referralProgram";
 import {
   attributeOrderFromCampaign,
   reverseCommercialOrderAttribution,
@@ -424,6 +433,7 @@ export const appRouter = router({
   daphne: daphneRouter,
   system: systemRouter,
   strategy: strategyRouter,
+  referrals: referralRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -603,6 +613,7 @@ export const appRouter = router({
           phone: z.string().min(1),
           email: z.string().optional(),
           campaignToken: z.string().trim().min(20).max(512).optional(),
+          referralCode: z.string().trim().max(32).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -636,7 +647,20 @@ export const appRouter = router({
           actorId: "public-order",
         });
 
-        return { orderId };
+        // Referrals never block an order: a code that doesn't apply just says why.
+        const customerName = `${input.firstName} ${input.lastName}`.trim();
+        let referral: Awaited<ReturnType<typeof recordReferralAtSignup>> | null = null;
+        let myReferral: Awaited<ReturnType<typeof referralCodeForNewOrder>> = null;
+        try {
+          if (input.referralCode) {
+            referral = await recordReferralAtSignup({ tenantId: ctx.tenantId, orderId, code: input.referralCode, name: customerName, phone: input.phone, email: input.email ?? null });
+          }
+          myReferral = await referralCodeForNewOrder({ tenantId: ctx.tenantId, name: customerName, phone: input.phone, email: input.email ?? null });
+        } catch (err) {
+          console.warn("[Orders] referral step failed; order kept:", err);
+        }
+
+        return { orderId, referral, myReferral };
       }),
 
     createSetupIntent: publicProcedure
@@ -3339,6 +3363,7 @@ export const appRouter = router({
 
           let platformFeeCents: number | null = null;
           let vendorPayoutCents: number | null = null;
+          let creditPlan: ReturnType<typeof planCreditRedemption> | null = null;
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!, paymentTenantId);
           const stripeMetadata = {
             orderId: String(input.orderId),
@@ -3355,23 +3380,34 @@ export const appRouter = router({
             platformFeeCents = Math.round(
               (input.amountCents * feePercent) / 100
             );
-            vendorPayoutCents = input.amountCents - platformFeeCents;
+            // Referral credit comes out of the platform fee; the cleaner's payout doesn't change.
+            let availableCreditCents = 0;
+            try {
+              availableCreditCents = await getAvailableCreditCents(paymentTenantId, order.phone);
+            } catch (err) {
+              console.warn("[ChargeCard] credit balance unavailable; charging without credit:", err);
+            }
+            creditPlan = planCreditRedemption({ amountCents: input.amountCents, platformFeeCents, availableCreditCents });
+            platformFeeCents = creditPlan.applicationFeeCents;
+            vendorPayoutCents = creditPlan.vendorPayoutCents;
             const useOnBehalfOf =
               process.env.STRIPE_CONNECT_ON_BEHALF_OF === "true";
 
             paymentIntent = await stripe.paymentIntents.create({
               customer: customerId,
               payment_method: paymentMethodId,
-              amount: input.amountCents,
+              amount: creditPlan?.chargeCents ?? input.amountCents,
               currency: "usd",
               confirm: true,
               off_session: true,
-              metadata: stripeMetadata,
+              metadata: creditPlan?.creditUsedCents
+                ? { ...stripeMetadata, referralCreditCents: String(creditPlan.creditUsedCents) }
+                : stripeMetadata,
               transfer_data: { destination: vendorAccountId! },
               application_fee_amount: platformFeeCents,
               ...(useOnBehalfOf ? { on_behalf_of: vendorAccountId! } : {}),
             }, {
-              idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}`,
+              idempotencyKey: `authority-payment:${paymentTenantId}:order:${input.orderId}${creditPlan?.creditUsedCents ? `:credit:${creditPlan.creditUsedCents}` : ""}`,
             });
             console.log(
               `[ChargeCard] Destination charge for vendor ${vendorAccountId}`
@@ -3398,7 +3434,7 @@ export const appRouter = router({
               },
               paidAt,
               orderPatch: {
-                total: centsToDollars(input.amountCents),
+                total: centsToDollars(creditPlan?.chargeCents ?? input.amountCents),
                 isFirstPaidOrder: !hasPaidBefore,
                 platformFeeCents,
                 vendorPayoutCents,
@@ -3422,6 +3458,18 @@ export const appRouter = router({
           }
 
           const isOrderCancelled = admissionResult.statusDisposition?.cancelled === true;
+
+          // Only now, with the money captured and admitted: spend the credit, then pay the referrer if this was
+          // a referred customer's first paid order.
+          const creditAppliedCents = creditPlan?.creditUsedCents ?? 0;
+          try {
+            if (creditAppliedCents > 0) {
+              await redeemCredit({ tenantId: paymentTenantId, phone: order.phone, orderId: input.orderId, cents: creditAppliedCents });
+            }
+            await creditReferrerOnFirstPaidOrder({ tenantId: paymentTenantId, phone: order.phone, amountCents: creditPlan?.chargeCents ?? input.amountCents });
+          } catch (err) {
+            console.error(`[ChargeCard] referral credit bookkeeping failed for order ${input.orderId} (payment is fine):`, err);
+          }
           if (isOrderCancelled) {
             console.warn(
               `[ChargeCard] RECONCILIATION REQUIRED: Order ${input.orderId} is cancelled, but Stripe payment ${paymentIntent.id} was captured and admitted. Preserving cancelled lifecycle state.`
@@ -3480,7 +3528,7 @@ export const appRouter = router({
               orderId: input.orderId,
               customerId: customerId,
               totalWeight: order.weightLbs ? parseFloat(order.weightLbs) : 0,
-              finalAmount: input.amountCents,
+              finalAmount: creditPlan?.chargeCents ?? input.amountCents,
               currency: "usd",
               vendorName,
             })
@@ -3502,7 +3550,7 @@ export const appRouter = router({
           try {
             await notifyOwner({
               title: `Payment Received — Order #${order.id}`,
-              content: `${order.firstName} ${order.lastName} charged $${centsToDollars(input.amountCents)} for ${order.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}.`,
+              content: `${order.firstName} ${order.lastName} charged $${centsToDollars(creditPlan?.chargeCents ?? input.amountCents)} for ${order.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}${creditAppliedCents > 0 ? ` after $${centsToDollars(creditAppliedCents)} referral credit` : ""}.`,
             });
           } catch (err) {
             console.warn("[Notification] Failed:", err);
@@ -3512,7 +3560,7 @@ export const appRouter = router({
           try {
             await notifyCardCharged(
               order.phone,
-              centsToDollars(input.amountCents)
+              centsToDollars(creditPlan?.chargeCents ?? input.amountCents)
             );
           } catch (err) {
             console.warn(
@@ -3561,7 +3609,7 @@ export const appRouter = router({
           }
 
           try {
-            await writeOrderToSheet(order, input.amountCents);
+            await writeOrderToSheet(order, creditPlan?.chargeCents ?? input.amountCents);
             console.log("[Sheets] Revenue written successfully");
           } catch (err) {
             console.warn("[Sheets] Failed to write revenue:", err);
@@ -3574,7 +3622,7 @@ export const appRouter = router({
               level: "3",
               taskType: "unpaid_order",
               title: `Collected payment for order #${order.id}`,
-              description: `${order.firstName} ${order.lastName} charged ${centsToDollars(input.amountCents)}.`,
+              description: `${order.firstName} ${order.lastName} charged ${centsToDollars(creditPlan?.chargeCents ?? input.amountCents)}.`,
               source: "system_detected",
               priority: "high",
               revenueAtRiskCents: input.amountCents,
@@ -3589,7 +3637,7 @@ export const appRouter = router({
               tenantId: order.tenantId ?? "default",
               taskId: task.id,
               outcome: "Customer card charged successfully.",
-              revenueRecoveredCents: input.amountCents,
+              revenueRecoveredCents: creditPlan?.chargeCents ?? input.amountCents,
               completedBy: "stripe_charge_path",
             });
           } catch (err) {
@@ -3603,6 +3651,8 @@ export const appRouter = router({
             receiptUrl,
             ...(isOrderCancelled ? { reconciliationRequired: true as const } : {}),
             statusDisposition: admissionResult.statusDisposition,
+            chargedCents: creditPlan?.chargeCents ?? input.amountCents,
+            creditAppliedCents,
           };
         } catch (err: any) {
           console.error(

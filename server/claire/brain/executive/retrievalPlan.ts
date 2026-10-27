@@ -17,12 +17,9 @@
  */
 
 import { defaultBusinessQuery, type BusinessMetric, type BusinessQuery } from "../../../analytics/businessQuery";
-import { parsePeriodPhrase } from "../../../analytics/businessPeriods";
-import { extractCustomerNames } from "../../business/businessLanguage";
 import {
   companyQuestionFromParameters,
   companyViewRequest,
-  LAUNDRY_FARM_COMPANY_TIME_ZONE,
   matchLaundryFarmCompanyQuestion,
 } from "../../../analytics/laundryFarmCompanyView";
 import type { AttentionPlan } from "../contracts/attention";
@@ -57,30 +54,14 @@ export function inferBusinessMetric(text: string): BusinessMetric | null {
   return null;
 }
 
-const COMPARISON_READER = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?|up or down|trend|growth|grew|shrank|change from)\b/i;
-
 export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | null {
-  const text = perceived.assembledText;
-  const names = extractCustomerNames(text);
-  let metric = inferBusinessMetric(text);
-  if (names.length === 1 && (metric === "revenue" || metric === "orders")) metric = "customer_history";
+  const metric = inferBusinessMetric(perceived.assembledText);
   if (!metric) return null;
   const query = defaultBusinessQuery(metric);
   if (perceived.cardinality && perceived.cardinality > 0) query.limit = perceived.cardinality;
   if (perceived.ordering === "first") query.rank = "earliest";
-  if (metric === "customer_history" && names.length === 1) {
-    query.customerName = names[0]!;
-    const period = parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE);
-    if (period) query.period = period;
-  }
   const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
-  if (mentions.length === 1 && !query.customerName) query.customerName = mentions[0].raw;
-  if (
-    COMPARISON_READER.test(text) &&
-    (query.metric === "revenue" || query.metric === "orders" || query.metric === "aov")
-  ) {
-    query.comparison = "previous";
-  }
+  if (mentions.length === 1) query.customerName = mentions[0].raw;
   if (perceived.listRequest) query.listMembers = true;
   return query;
 }
@@ -106,6 +87,11 @@ function requeryUsingPriorParameters(
   if (mentions.length === 1) query.customerName = mentions[0].raw;
   if (perceived.listRequest) query.listMembers = true;
   return query;
+}
+
+/** "What is my goal?" / "Do you remember my goal?" — answered from the macro goal reader. */
+export function asksAboutGoal(text: string): boolean {
+  return /\b(?:what(?:'s|\s+is|\s+was)|remember|know|tell\s+me)\b[\s\S]{0,30}\b(?:my|our|the)\s+(?:main\s+|big\s+)?goal\b/i.test(text);
 }
 
 /** Imperative halt: "Stop." / "Hey, stop." is discourse, not a route object. */
@@ -174,25 +160,36 @@ export function planRetrievalPassA(
 
     // A pure continuation walks memory's resolved result; it must not re-query.
     if (!attention.continueOrderedQuery) {
-      if (wantsOperations(perceived.assembledText)) {
-        requests.push({ compartment: "businessMemory", kind: "operations" });
-      }
       const kinds = new Set(attention.activeTaskSets.map(set => set.kind));
       const scopedAccount =
         kinds.has("account_judgment") || attention.entitiesToResolve.length > 0;
+      // "What do you have for me tomorrow?" reads tomorrow's day, not today's.
+      const lead = perceived.broadBriefingRequest ? perceived.leadRequest : null;
+      const dayOffset = lead?.horizon === "tomorrow" ? 1 : undefined;
+      if (wantsOperations(perceived.assembledText) || lead) {
+        requests.push({ compartment: "businessMemory", kind: "operations", ...(dayOffset ? { dayOffset } : {}) });
+      }
       if (
         !scopedAccount &&
         (wantsOperations(perceived.assembledText) || kinds.has("broad_planning") || perceived.broadBriefingRequest)
       ) {
-        requests.push({ compartment: "businessMemory", kind: "workday_command" });
+        requests.push({ compartment: "businessMemory", kind: "workday_command", ...(dayOffset ? { dayOffset } : {}) });
+      }
+      // An unscoped briefing sees the operator's game: the active Kingdom and the
+      // real buildings in its hunt still unvisited. A scoped question never does.
+      if (!scopedAccount && (kinds.has("broad_planning") || perceived.broadBriefingRequest)) {
+        requests.push({ compartment: "businessMemory", kind: "game_state" });
+      }
+      // The plan opens with the goal and the distance to it; a goal question is answered from it.
+      if ((!scopedAccount && perceived.broadBriefingRequest) || asksAboutGoal(perceived.assembledText)) {
+        requests.push({ compartment: "businessMemory", kind: "goal_progress" });
       }
       // A bounded semantic planner may choose query CRITERIA, never facts or numbers.
       // If it is absent or fails, the deterministic parser remains the fallback.
       // A company question replaces that query: the company reader is the authority.
       const company = matchLaundryFarmCompanyQuestion(
         perceived.assembledText,
-        companyQuestionFromParameters(memory.orderedQuery?.parameters),
-        memory.currentCallContext.tenantId
+        companyQuestionFromParameters(memory.orderedQuery?.parameters)
       );
       const query = company
         ? companyViewRequest(company)
@@ -205,6 +202,11 @@ export function planRetrievalPassA(
 
   if (may("selfMemory")) {
     requests.push({ compartment: "selfMemory", kind: "disclosure_entitlement" });
+  }
+
+  // The standing macro goal is cheap and unscoped; an unscoped briefing plans against it.
+  if (may("goals") && attention.boardEligible) {
+    requests.push({ compartment: "goals", kind: "macro_goal", scoped: false });
   }
 
   return requests;

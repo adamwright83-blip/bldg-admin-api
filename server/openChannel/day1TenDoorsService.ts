@@ -165,6 +165,17 @@ export async function getDay1TenDoorsMissionReadOnly(input: {
   return findExistingDay1Mission(input);
 }
 
+/** Read-only: every driver id holding a Day 1 mission in the tenant (progression backfill reports them). */
+export async function listDay1TenDoorsDriverIds(tenantId: string): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ driverId: openChannelMissions.driverId })
+    .from(openChannelMissions)
+    .where(and(eq(openChannelMissions.tenantId, tenantId), eq(openChannelMissions.businessDate, DAY1_BUSINESS_DATE)));
+  return rows.map(row => row.driverId).sort();
+}
+
 async function loadWritableDay1Mission(input: {
   tenantId: string;
   driverId: string;
@@ -537,6 +548,14 @@ export async function recordDay1TenDoorsOutcome(input: {
   if (!confirmed || committedOutcome !== outcome) {
     throw new Error("Day 1 outcome was not committed");
   }
+
+  // Claire progression (field effort, never Goldline/Kingdom progression): the committed outcome is one
+  // confirmed field visit for the canonical operator. Idempotent per door; never blocks or fails the tap.
+  void import("../claire/progression/evidenceSources")
+    .then(({ creditDay1OutcomeProgression }) =>
+      creditDay1OutcomeProgression({ tenantId: input.tenantId, driverId: input.driverId, payload: confirmed })
+    )
+    .catch(error => console.warn("[Claire progression] Day 1 credit unavailable", error instanceof Error ? error.message : error));
 
   if (day1IsComplete(confirmed) && mission.status !== "completed") {
     const completedAt = new Date();

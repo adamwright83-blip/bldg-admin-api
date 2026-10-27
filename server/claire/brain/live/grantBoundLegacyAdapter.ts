@@ -14,6 +14,59 @@ import type { ParsedBriefing } from "../../briefing/briefingTypes";
 
 type GrantBoundState = Pick<ClaireTurnState, "pendingBriefing">;
 
+/**
+ * The grant could not be turned into executable work, and NOTHING was attempted.
+ * Production call 2026-10-13 (session 62df3040, conversation 28727517): a grant was
+ * minted for "I think I should call Dana after Louise." and for "You haven't been
+ * doing your job, Claire.", the scope resolved to no work, the adapter threw, and the
+ * caller spoke "I couldn't verify that action completed" three times — once in reply
+ * to "Yes.". A refusal before any write is not an execution failure and must never be
+ * spoken as one.
+ */
+export class BrainV2GrantNotExecutableError extends Error {
+  readonly actionClass: ExecutiveActionGrant["actionClass"];
+  constructor(message: string, grant: ExecutiveActionGrant) {
+    super(message);
+    this.name = "BrainV2GrantNotExecutableError";
+    this.actionClass = grant.actionClass;
+  }
+}
+
+/** A write WAS attempted and did not complete. `attempted` says what, in Claire's words. */
+export class BrainV2ExecutionFailedError extends Error {
+  readonly attempted: string;
+  constructor(attempted: string, cause: unknown) {
+    super(cause instanceof Error ? cause.message : "Brain V2 grant execution failed");
+    this.name = "BrainV2ExecutionFailedError";
+    this.attempted = attempted;
+    if (cause instanceof Error) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+function quoteTitles(titles: readonly string[]): string {
+  const clean = titles.map(title => title.trim()).filter(Boolean);
+  if (!clean.length) return "";
+  if (clean.length === 1) return `"${clean[0]}"`;
+  return `${clean.slice(0, -1).map(title => `"${title}"`).join(", ")} and "${clean[clean.length - 1]}"`;
+}
+
+/** What executing this grant would attempt, phrased for the operator. */
+export function describeAttemptedGrant(
+  grant: ExecutiveActionGrant,
+  state?: { pendingBriefing?: { parsed?: { items?: unknown[] } | null } | null } | null
+): string {
+  if (grant.actionClass === "commit_briefing") {
+    const items = state?.pendingBriefing?.parsed?.items ?? [];
+    const titles = items.map(item => (item as { title?: string }).title ?? "").filter(Boolean);
+    const named = quoteTitles(titles);
+    return named ? `saving ${named} to the Day Line` : "saving the pending Day Line items";
+  }
+  const named = quoteTitles(grant.scope.titles ?? []);
+  if (grant.actionClass === "commit_day_line") return named ? `saving ${named} to the Day Line` : "saving that to the Day Line";
+  if (grant.actionClass === "propose_day_line") return named ? `lining up ${named} for the Day Line` : "lining that up for the Day Line";
+  return `running ${grant.actionClass}`;
+}
+
 const TOKEN_STOP = new Set([
   "the",
   "a",
@@ -59,6 +112,36 @@ function titleMatchesScope(itemTitle: string, scopeTitle: string): boolean {
   return shared >= Math.min(2, left.length, right.length);
 }
 
+/**
+ * A move Claire proposed from the standing goal policy (a lead plan) has no
+ * operator sentence to parse: the work is exactly the grant's titles, on the
+ * grant's business date. It becomes a PENDING briefing only; the operator's own
+ * "yes" is what commits it, through the same `commit_briefing` lifecycle.
+ */
+function planSourcedWork(grant: ExecutiveActionGrant, today: string): ParsedBriefing {
+  const titles = grant.scope.titles?.map(title => title.trim()).filter(Boolean) ?? [];
+  if (!titles.length) throw new Error("Brain V2 lead-plan grant is missing bounded work scope");
+  const businessDate = grant.scope.businessDate ?? today;
+  return {
+    items: titles.map(title => ({
+      kind: "new_work" as const,
+      title,
+      quote: title,
+      businessDate,
+      timing: { kind: "none" as const },
+      quantity: null,
+      people: [],
+      place: null,
+      needs: null,
+      existing: null,
+    })),
+    context: [],
+    questions: [],
+    unparsed: [],
+    source: "deterministic",
+  };
+}
+
 function parseGrantWork(input: {
   grant: ExecutiveActionGrant;
   timeZone: string;
@@ -66,7 +149,10 @@ function parseGrantWork(input: {
 }): ParsedBriefing {
   const titles = input.grant.scope.titles?.filter(Boolean) ?? [];
   if (!titles.length) {
-    throw new Error("Brain V2 Day Line grant is missing bounded work scope");
+    throw new BrainV2GrantNotExecutableError("Brain V2 Day Line grant is missing bounded work scope", input.grant);
+  }
+  if (input.grant.authorityBasis === "standing_goal_policy") {
+    return planSourcedWork(input.grant, briefingClock(input.now, input.timeZone).today);
   }
 
   const parsed = parseBriefingDeterministically(
@@ -79,7 +165,10 @@ function parseGrantWork(input: {
       titles.some(title => titleMatchesScope(item.title, title))
   );
   if (!items.length) {
-    throw new Error("Brain V2 Day Line grant scope did not resolve to executable work");
+    throw new BrainV2GrantNotExecutableError(
+      "Brain V2 Day Line grant scope did not resolve to executable work",
+      input.grant
+    );
   }
 
   return { ...parsed, items };
@@ -102,32 +191,42 @@ async function commitParsed(input: {
   dayDirectorActorId: string;
   conversationKey: string;
   today: string;
+  attempted: string;
 }): Promise<ClaireTurnResult> {
   const dates = [...new Set(input.parsed.items.map(item => item.businessDate))];
-  const existing = await loadExistingWork({
-    tenantId: input.tenantId,
-    dayDirectorActorId: input.dayDirectorActorId,
-    dates,
-  });
-  const reconciled = reconcileBriefing(input.parsed, existing, null);
-  const result = await commitBriefing(reconciled, {
-    tenantId: input.tenantId,
-    dayDirectorActorId: input.dayDirectorActorId,
-    operatorUserId: input.operatorUserId,
-    conversationKey: input.conversationKey,
-    vehicleId: input.operatorUserId,
-  });
+  let result: Awaited<ReturnType<typeof commitBriefing>>;
+  try {
+    const existing = await loadExistingWork({
+      tenantId: input.tenantId,
+      dayDirectorActorId: input.dayDirectorActorId,
+      dates,
+    });
+    const reconciled = reconcileBriefing(input.parsed, existing, null);
+    result = await commitBriefing(reconciled, {
+      tenantId: input.tenantId,
+      dayDirectorActorId: input.dayDirectorActorId,
+      operatorUserId: input.operatorUserId,
+      conversationKey: input.conversationKey,
+      vehicleId: input.operatorUserId,
+    });
+  } catch (error) {
+    // The write was attempted. The failure line must say what Claire tried.
+    throw new BrainV2ExecutionFailedError(input.attempted, error);
+  }
   const speak = speakBriefingCommit(result, input.today);
   const wrote = hasAuthoritativeCommit(result);
 
-  if (wrote || result.failed.length === 0) {
+  // Work the title gate refused stays pending: Claire asked one question and still holds it.
+  const clarifying = Boolean(result.needsClarification?.length);
+  const settled = (wrote || result.failed.length === 0) && !(clarifying && !wrote);
+  if (settled && !clarifying) {
     input.state.pendingBriefing = null;
   }
 
   return {
     speak,
-    receiptBackedCommit: wrote || result.failed.length === 0 ? speak : undefined,
-    kind: wrote || result.failed.length === 0 ? "briefing_saved" : "answered",
+    receiptBackedCommit: settled ? speak : undefined,
+    kind: settled ? "briefing_saved" : "answered",
     actionIds: result.commitmentIds,
     mutationReceipts: result.receipts,
     assembledUtterance: input.parsed.items.map(item => item.quote).join(" "),
@@ -151,7 +250,9 @@ export async function executeGrantBoundLegacyAdapter(input: {
   surface: "voice" | "text";
   now?: Date;
 }): Promise<ClaireTurnResult> {
-  if (isClaireRoleFeedback(input.grant.sourceTurnAssembledText)) throw new Error("Claire role feedback cannot authorize Day Line mutation");
+  if (isClaireRoleFeedback(input.grant.sourceTurnAssembledText)) {
+    throw new BrainV2GrantNotExecutableError("Claire role feedback cannot authorize Day Line mutation", input.grant);
+  }
   const now = input.now ?? new Date();
   const clock = briefingClock(now, input.timeZone);
 
@@ -159,11 +260,17 @@ export async function executeGrantBoundLegacyAdapter(input: {
     if (
       input.grant.scope.identity !== "pending-briefing"
     ) {
-      throw new Error("Brain V2 briefing grant does not match pending briefing authority");
+      throw new BrainV2GrantNotExecutableError(
+        "Brain V2 briefing grant does not match pending briefing authority",
+        input.grant
+      );
     }
     const pending = input.state.pendingBriefing?.parsed;
     if (!pending?.items?.length) {
-      throw new Error("Brain V2 briefing grant has no pending briefing to execute");
+      throw new BrainV2GrantNotExecutableError(
+        "Brain V2 briefing grant has no pending briefing to execute",
+        input.grant
+      );
     }
     return commitParsed({
       parsed: pending,
@@ -173,6 +280,7 @@ export async function executeGrantBoundLegacyAdapter(input: {
       dayDirectorActorId: input.dayDirectorActorId,
       conversationKey: input.conversationKey,
       today: clock.today,
+      attempted: describeAttemptedGrant(input.grant, input.state),
     });
   }
 
@@ -180,9 +288,15 @@ export async function executeGrantBoundLegacyAdapter(input: {
     input.grant.actionClass !== "propose_day_line" &&
     input.grant.actionClass !== "commit_day_line"
   ) {
-    throw new Error(
-      `Brain V2 legacy adapter refuses unsupported action class: ${input.grant.actionClass}`
+    throw new BrainV2GrantNotExecutableError(
+      `Brain V2 legacy adapter refuses unsupported action class: ${input.grant.actionClass}`,
+      input.grant
     );
+  }
+
+  // A plan Claire authored may only be OFFERED. Committing it needs the operator's yes.
+  if (input.grant.authorityBasis === "standing_goal_policy" && input.grant.actionClass !== "propose_day_line") {
+    throw new Error("Brain V2 lead-plan authority may propose, never commit");
   }
 
   const parsed = parseGrantWork({
@@ -218,15 +332,22 @@ export async function executeGrantBoundLegacyAdapter(input: {
     dayDirectorActorId: input.dayDirectorActorId,
     conversationKey: input.conversationKey,
     today: clock.today,
+    attempted: describeAttemptedGrant(input.grant, input.state),
   });
 }
 
+/**
+ * Spoken ONLY after a write was actually attempted and did not complete. It names what
+ * was attempted; a caller that cannot say what was attempted has no business speaking
+ * this line (a grant refused before any write is not a failed action).
+ */
 export function brainV2ExecutionFailureResult(input: {
   assembledUtterance: string;
+  attempted: string;
 }): ClaireTurnResult {
+  const attempted = input.attempted.trim() || "that";
   return {
-    speak:
-      "I couldn't verify that action completed, so I won't retry it through another path.",
+    speak: `I tried ${attempted} and couldn't verify it completed, so I won't retry it through another path.`,
     kind: "answered",
     assembledUtterance: input.assembledUtterance,
     thoughtCompleteness: "complete",

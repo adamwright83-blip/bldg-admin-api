@@ -1,9 +1,7 @@
 import { BUILDINGS, buildingFromSlug, matchBuilding, type BuildingConfig } from "../../shared/buildings";
-import { extractCustomerNames } from "../claire/business/businessLanguage";
 import { listActiveTenantMemberships } from "../saas/tenantAccess";
 import { listTenantUnpaidOrders } from "../domains/orders/unpaidOrderReadService";
 import { parsePeriodPhrase, resolvePeriod, type PeriodSpec } from "./businessPeriods";
-import { resolveCustomerIdentities } from "./customerIdentityResolution";
 import { reconcileLedgerSpan } from "./canonicalRevenue";
 import { findSuspectedCrossSourcePairs, loadPaidOrderLedger, type PaidOrderEvent, type PaidOrderLedger } from "./paidOrderLedger";
 
@@ -28,9 +26,7 @@ export const NON_CUSTOMER_PROOF_IDS = [
 ] as const;
 
 export type CompanyPaymentRail = "stripe" | "cleancloud_clearant" | "other";
-export type CompanyQuestionAspect = "revenue" | "orders" | "health" | "buildings" | "customers";
-export type CompanyBusinessScope = "laundry_farm" | "default" | "both" | "clarify";
-export type CompanyBuildingFocus = "opus_la" | "century_park_east" | "shared";
+export type CompanyQuestionAspect = "revenue" | "orders" | "health" | "buildings" | "breakdown";
 
 export type CompanyMoneyFigures = {
   recordedSalesCents: number;
@@ -60,24 +56,6 @@ export type CompanyBuildingSlice = {
   rails: CompanyRailSlice[];
 };
 
-export type CompanyBusinessBuilding = {
-  bucket: string;
-  label: string;
-  figures: CompanyMoneyFigures;
-  /** Distinct customers in this business at this building. Unmatched orders are not counted. */
-  customerCount: number;
-};
-
-export type CompanyBusinessSlice = {
-  tenantId: string;
-  label: string;
-  figures: CompanyMoneyFigures;
-  customerCount: number;
-  /** Distinct customers at OPUS LA and Century Park East. Not summed across buildings. */
-  sharedBuildingCustomerCount: number;
-  buildings: CompanyBusinessBuilding[];
-};
-
 export type LaundryFarmCompanyView = {
   reader: typeof LAUNDRY_FARM_COMPANY_READER;
   timeZone: typeof LAUNDRY_FARM_COMPANY_TIME_ZONE;
@@ -85,13 +63,11 @@ export type LaundryFarmCompanyView = {
   scope: "company" | "single_tenant" | "unauthorized";
   mayStateCompanyTotal: boolean;
   mayStateDeduplicatedTotal: boolean;
-  /** The requested ledgers loaded completely. A business left unread on purpose is not a gap. */
-  bookComplete: boolean;
   tenantsRead: string[];
   tenantsUnread: string[];
-  /** One slice per business ledger. Never a merged customer list. */
-  businesses: CompanyBusinessSlice[];
   totals: CompanyMoneyFigures;
+  /** The same admitted sales, partitioned by authorized business book. Never inferred from payment rail. */
+  businessRevenue: Array<{ tenantId: string; figures: CompanyMoneyFigures }>;
   buildings: CompanyBuildingSlice[];
   overlap: {
     status: "none" | "unresolved";
@@ -142,16 +118,7 @@ export type CompanySaleDecision = {
 export type LaundryFarmCompanyQuestion = {
   aspect: CompanyQuestionAspect;
   period: PeriodSpec;
-  /** Which business ledger to read. `both` is an intentional cross-business request. */
-  scope: CompanyBusinessScope;
-  building: CompanyBuildingFocus | null;
 };
-
-export function businessDisplayName(tenantId: string): string {
-  if (tenantId === LAUNDRY_FARM_TENANT_ID) return "Laundry Farm";
-  if (tenantId === LAUNDRY_BUTLER_TENANT_ID) return "Laundry Butler";
-  return tenantId;
-}
 
 const RAIL_LABEL: Record<CompanyPaymentRail, string> = {
   stripe: "Stripe",
@@ -216,8 +183,6 @@ export type LaundryFarmCompanyViewRequest = {
   companyView: true;
   aspect: CompanyQuestionAspect;
   period: PeriodSpec;
-  scope: CompanyBusinessScope;
-  building: CompanyBuildingFocus | null;
   /** Names the family. The company reader, not this metric, is the authority. */
   metric: "revenue" | "orders";
 };
@@ -226,28 +191,25 @@ export type CompanyViewEvidencePayload = {
   companyView: true;
   aspect: CompanyQuestionAspect;
   questionPeriod: PeriodSpec;
-  scope: CompanyBusinessScope;
-  building: CompanyBuildingFocus | null;
   view: LaundryFarmCompanyView;
 };
 
 const PROFIT_QUESTION = /\b(?:profit|margin)\b/;
 const CUSTOMER_QUESTION = /\bcustomers?\b/;
-/** Same outstanding-order forms the tenant reader already sends to open orders. */
-const OPEN_ORDER_QUESTION = /\b(?:open orders?|orders? (?:in progress|outstanding|awaiting payment|still open)|unpaid orders?)\b/;
-const SERVICE_LINE_SPLIT = /\bcore\s+laundry\s+farm\b|\bservice\s+line\b/;
-const EXPLICIT_SERVICE = /\b(?:wash(?:\s*&\s*|\s+and\s+)fold|dry[\s-]?clean(?:ing)?|fluff\s*(?:and|&)\s*fold)\b/;
-const PAYMENT_RAIL = /\b(?:clean\s?cloud|clearant|clearent|stripe)\b/;
-const FARM_BUSINESS = /\blaundry\s+farm\b/;
-const BUTLER_BUSINESS = /\blaundry\s+butler\b/;
-const BOTH_BUSINESSES = /\bboth\s+businesses\b|\b(?:combined|across both|cross-business)\b/;
-const WHY_QUESTION = /\bwhy\b/;
-const AOV_QUESTION = /\b(?:average\s+order(?:\s+value)?|aov)\b/;
-/** Same comparison forms the tenant reader already sends to the comparison reader. */
-const COMPARISON_QUESTION = /\b(?:compar(?:e|ed|ing|ison)|versus|vs\.?|up or down|trend|growth|grew|shrank|change from)\b/;
+const OPEN_ORDER_QUESTION = /\bopen\s+orders?\b/;
+const SERVICE_LINE_SPLIT = /\blaundry\s+butler\b|\bcore\s+laundry\s+farm\b|\bservice\s+line\b/;
+const SINGLE_RAIL_FILTER = /\b(?:through|via|using|on)\s+(?:the\s+)?(?:clean\s?cloud|clearant|stripe|laundry\s+butler)\b/;
+const LAUNDRY_FARM_SERVICE_LINE = /\blaundry\s+farm\b[\s\S]{0,48}\b(?:make|made|generate|generated)\b|\b(?:make|made|generate|generated)\b[\s\S]{0,48}\blaundry\s+farm\b/;
 const BUILDING_NAME = /\bopus(?:\s+la)?\b|\bcentury\s+park(?:\s+east)?\b|\bcpe\b/;
 const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+east)?|cpe)\b|\b(?:century\s+park(?:\s+east)?|cpe)\b[\s\S]{0,80}\bopus(?:\s+la)?\b/;
-const NOT_A_CUSTOMER = new Set(["we", "you", "i", "they", "laundry", "the", "opus", "century", "it", "she", "he", "our"]);
+
+/** A breakdown must be requested; unqualified revenue remains the combined company number. */
+function asksBusinessRevenueBreakdown(text: string, inheritedRevenue = false): boolean {
+  const split = /\b(?:break\s+(?:it\s+|that\s+)?down|breakdown|split|separately|by\s+business|each\s+business|versus|vs\.?|compare)\b/.test(text);
+  const aboutRevenue = /\b(?:revenue|sales|income|money|earnings|made|brought\s+in)\b/.test(text) || inheritedRevenue;
+  const aboutBusiness = /\b(?:laundry\s+(?:farm|butler)|clean\s?cloud|stripe|businesses|business|each)\b/.test(text);
+  return split && aboutRevenue && (aboutBusiness || /\b(?:breakdown|break\s+(?:it\s+|that\s+)?down|split)\b/.test(text));
+}
 
 function normalizeCompanyUtterance(utterance: string): string {
   return utterance
@@ -263,205 +225,89 @@ function normalizeCompanyUtterance(utterance: string): string {
 function companyQuestionBlocked(text: string): boolean {
   return (
     PROFIT_QUESTION.test(text) ||
-    (CUSTOMER_QUESTION.test(text) && !whichBusinessCustomers(text)) ||
+    CUSTOMER_QUESTION.test(text) ||
     OPEN_ORDER_QUESTION.test(text) ||
     SERVICE_LINE_SPLIT.test(text) ||
-    EXPLICIT_SERVICE.test(text) ||
-    PAYMENT_RAIL.test(text) ||
-    WHY_QUESTION.test(text) ||
-    AOV_QUESTION.test(text) ||
-    /\bgross\b/.test(text) ||
-    /\b(?:do you think|should i|should we|focus on|to grow|recommend)\b/.test(text) ||
-    /\b(?:last|latest|recent|most recent|first|biggest|largest)\s+(?:\d+\s+|[a-z]+\s+)?(?:sales?|orders?)\b/.test(text) ||
-    namedCustomerAsk(text)
+    SINGLE_RAIL_FILTER.test(text) ||
+    LAUNDRY_FARM_SERVICE_LINE.test(text)
   );
-}
-
-function namedCustomerAsk(text: string): boolean {
-  const match = /\b(?:did|has|have)\s+([a-z]+)\s+(?:generate[ds]?|spend|spent|make|made|order(?:ed)?)\b/.exec(text);
-  return Boolean(match && !NOT_A_CUSTOMER.has(match[1]!));
 }
 
 function companyPeriod(text: string): PeriodSpec {
   return parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) ?? { kind: "this_month" };
 }
 
-/** An unnamed building slice stays on the tenant reader. A named business may still carry a building. */
-function unnamedBuildingSlice(text: string): boolean {
-  if (!BUILDING_NAME.test(text) || BOTH_BUILDINGS.test(text)) return false;
-  if (FARM_BUSINESS.test(text) || BUTLER_BUSINESS.test(text) || explicitBoth(text)) return false;
-  if (/^how (?:did|does|is|has|was)\s+(?:opus(?: la)?|century park(?: east)?|cpe)\b/.test(text)) return false;
-  return true;
-}
-
-function activeBusiness(activeTenantId: string | undefined): "laundry_farm" | "default" | null {
-  if (activeTenantId === LAUNDRY_FARM_TENANT_ID || activeTenantId === LAUNDRY_BUTLER_TENANT_ID) return activeTenantId;
-  return null;
-}
-
-function explicitBoth(text: string): boolean {
-  if (/\bboth\s+businesses\b/.test(text)) return true;
-  if (/\b(?:across both|cross-business)\b/.test(text)) return true;
-  if (/\bcombined\b/.test(text) && /\b(?:business|businesses|make|made|revenue|sales|total|orders)\b/.test(text)) return true;
-  const farm = FARM_BUSINESS.test(text);
-  const butler = BUTLER_BUSINESS.test(text);
-  return farm && butler && /\b(?:and|compare|versus|vs\.?|both)\b/.test(text);
-}
-
-function whichBusinessCustomers(text: string): boolean {
-  return /\bwhich\s+business\b/.test(text) && /\bcustomers?\b/.test(text);
-}
-
-function unclearCrossBusiness(text: string): boolean {
-  if (explicitBoth(text) || whichBusinessCustomers(text)) return false;
-  if (FARM_BUSINESS.test(text) || BUTLER_BUSINESS.test(text)) return false;
-  return /\bbusinesses\b/.test(text);
-}
-
-function buildingFocus(text: string): CompanyBuildingFocus | null {
-  if (BOTH_BUILDINGS.test(text) || /\bthese\s+buildings\b/.test(text)) return "shared";
-  if (/\bopus(?:\s+la)?\b/.test(text)) return "opus_la";
-  if (/\bcentury\s+park(?:\s+east)?\b|\bcpe\b/.test(text)) return "century_park_east";
-  return null;
-}
-
-function namedBusiness(text: string): CompanyBusinessScope | null {
-  if (unclearCrossBusiness(text)) return "clarify";
-  if (explicitBoth(text) || whichBusinessCustomers(text)) return "both";
-  if (FARM_BUSINESS.test(text)) return "laundry_farm";
-  if (BUTLER_BUSINESS.test(text)) return "default";
-  return null;
-}
-
-function unqualifiedRevenue(text: string): boolean {
-  const asks = /\b(?:what|how)\b/.test(text);
-  if (asks && /\b(?:revenue|sales)\b/.test(text)) return true;
-  if (/\blaundry\s+farm\b/.test(text) && /\b(?:make|made|do|did|generate[ds]?|bring|brought)\b/.test(text)) return true;
+function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null {
+  if (asksBusinessRevenueBreakdown(text)) return { aspect: "breakdown", period: companyPeriod(text) };
+  if (companyQuestionBlocked(text)) return null;
   if (
-    /\bhow much (?:have|did|does|do) (?:we|the company|the business)\b/.test(text) &&
-    /\b(?:made|make|brought\s+in|do|doing|done)\b/.test(text)
+    /^how(?:'s| is| are) (?:laundry farm|the company|the business)\b/.test(text) &&
+    !/\b(?:make|made|generate|generated|revenue|sales)\b/.test(text)
   ) {
-    return true;
+    return { aspect: "health", period: companyPeriod(text) };
   }
-  return /^how much business (?:are we getting|did we (?:do|get)|have we (?:done|gotten))\b/.test(text);
-}
-
-function unqualifiedOrders(text: string): boolean {
-  if (!/\borders?\b/.test(text) || /\b(?:revenue|sales)\b/.test(text)) return false;
-  if (/\b(?:we|our)\b/.test(text) || /\blaundry\s+farm\b/.test(text) || /\b(?:the company|the business)\b/.test(text)) return true;
-  return (
-    /\bhow many\b/.test(text) &&
-    (parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) != null ||
-      /\b(?:were there|came in|are there|have there been)\b/.test(text))
-  );
-}
-
-function questionShape(
-  text: string,
-  scope: CompanyBusinessScope,
-  active: "laundry_farm" | "default" | null
-): LaundryFarmCompanyQuestion | null {
-  const period = companyPeriod(text);
-  const building = buildingFocus(text);
-  if (scope === "clarify") return { aspect: "revenue", period, scope, building };
-  const resolved = scope === "both" || scope === "laundry_farm" || scope === "default" ? scope : active;
-  if (!resolved) return null;
-  if (whichBusinessCustomers(text)) {
-    return { aspect: "customers", period, scope: "both", building: building ?? "shared" };
-  }
-  const health =
-    (/^how(?:'s| is| are) (?:we|things|the business|laundry farm|laundry butler)\b/.test(text) ||
-      /^how are we doing\b/.test(text)) &&
-    !/\b(?:make|made|generate|generated|revenue|sales)\b/.test(text);
-  if (health) return { aspect: "health", period, scope: resolved, building };
-  if (building && !/\b(?:revenue|sales|orders|made|make)\b/.test(text)) {
-    return { aspect: "buildings", period, scope: resolved, building };
-  }
-  if (unqualifiedOrders(text)) return { aspect: "orders", period, scope: resolved, building };
-  if (unqualifiedRevenue(text) || /\b(?:make|made|revenue|sales)\b/.test(text)) {
-    return { aspect: building ? "buildings" : "revenue", period, scope: resolved, building };
+  if (BOTH_BUILDINGS.test(text) && /\b(?:business|revenue|sales|made|orders|getting|compared|versus|vs)\b/.test(text)) {
+    return { aspect: "buildings", period: companyPeriod(text) };
   }
   if (
     /^how (?:did|does|is|has|was)\s+(?:opus(?: la)?|century park(?: east)?|cpe)\b/.test(text) &&
     /\b(?:do|doing|done|perform(?:ed|ing)?)\b/.test(text)
   ) {
-    return { aspect: "buildings", period, scope: resolved, building: building ?? "opus_la" };
+    return { aspect: "buildings", period: companyPeriod(text) };
+  }
+  if (/^how many (?:paid )?orders\b/.test(text) && /\bwe\b/.test(text)) {
+    return { aspect: "orders", period: companyPeriod(text) };
+  }
+  if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^(?:what(?:\x27s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month\x27s|month-to-date|this month)\s+){0,3}(?:revenue|sales)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^how much have we (?:made|brought in)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^how much business are we getting\b/.test(text)) {
+    return { aspect: BUILDING_NAME.test(text) ? "buildings" : "revenue", period: companyPeriod(text) };
   }
   return null;
 }
 
-function directCompanyQuestion(text: string, activeTenantId?: string): LaundryFarmCompanyQuestion | null {
-  if (whichBusinessCustomers(text)) {
-    return questionShape(text, "both", activeBusiness(activeTenantId));
-  }
-  if (companyQuestionBlocked(text)) return null;
-  if (unclearCrossBusiness(text)) return questionShape(text, "clarify", null);
-  const named = namedBusiness(text);
-  const intentionalCross = named === "both" || explicitBoth(text) || whichBusinessCustomers(text);
-  if (COMPARISON_QUESTION.test(text) && !intentionalCross && !BOTH_BUILDINGS.test(text)) return null;
-  if (unnamedBuildingSlice(text)) return null;
-  if (named === "clarify") return questionShape(text, "clarify", null);
-  if (named) return questionShape(text, named, activeBusiness(activeTenantId));
-  if (BOTH_BUILDINGS.test(text) && activeBusiness(activeTenantId)) {
-    return questionShape(text, activeBusiness(activeTenantId)!, activeBusiness(activeTenantId));
-  }
-  return questionShape(text, activeBusiness(activeTenantId) ?? "clarify", activeBusiness(activeTenantId));
-}
-
-function companyFollowUp(
-  text: string,
-  prior: LaundryFarmCompanyQuestion | null,
-  activeTenantId?: string
-): LaundryFarmCompanyQuestion | null {
-  if (!prior || prior.scope === "clarify" || companyQuestionBlocked(text) || directCompanyQuestion(text, activeTenantId)) {
-    return null;
-  }
+function companyFollowUp(text: string, prior: LaundryFarmCompanyQuestion | null): LaundryFarmCompanyQuestion | null {
+  if (!prior || companyQuestionBlocked(text) || directCompanyQuestion(text)) return null;
   const continuation = /^(?:(?:and|also|okay|ok|so|then)\b[\s,.-]*)?(?:what|how)\s+about\b|^(?:and|also)\b/.test(text);
   const period = parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE);
-  const building = buildingFocus(text);
-  const named = namedBusiness(text);
+  const building = BUILDING_NAME.test(text);
   const wordCount = text.split(/\s+/).filter(Boolean).length;
-  const shiftResidue = text
-    .replace(/\b(?:and|also|okay|ok|so|then|what|how|about|just|only|please|the|a|an|in|for|of|on|from|at)\b/g, " ")
-    .replace(/\b(?:laundry\s+farm|laundry\s+butler|both\s+businesses)\b/g, " ")
-    .replace(/\b(?:last|this|next|past|previous|prior)\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years)\b/g, " ")
-    .replace(/\b(?:today|yesterday|august|september|october|november|december|january|february|march|april|may|june|july)\b/g, " ")
-    .replace(/\b(?:opus(?:\s+la)?|century\s+park(?:\s+east)?|cpe|these\s+buildings)\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  const shortShift = wordCount <= 8 && shiftResidue.length === 0 && Boolean(period || building || named);
-  if (!(continuation || shortShift)) return null;
-  if (!period && !building && !named) return null;
-  const scope = named && named !== "clarify" ? named : prior.scope;
+  const shortShift =
+    wordCount <= 6 &&
+    Boolean(period || building) &&
+    !/\b(?:revenue|sales|profit|customers?|orders|made)\b/.test(text);
+  if (!(continuation || shortShift) || (!period && !building)) return null;
   const aspect =
     building && !/\b(?:revenue|sales|orders|made)\b/.test(text)
       ? "buildings"
       : /\borders\b/.test(text) && !/\b(?:revenue|sales|made)\b/.test(text)
         ? "orders"
         : prior.aspect;
-  return { aspect, period: period ?? prior.period, scope, building: building ?? prior.building };
+  return { aspect, period: period ?? prior.period };
 }
 
 /**
- * Laundry Farm and Laundry Butler are separate businesses.
- * A bare "we" question reads the active business only.
- * An explicit business name selects that business.
- * Both businesses are read only for an intentional cross-business request.
- * Unclear cross-business wording asks for clarification.
- * A named customer, unpaid orders, growth, a payment rail, and an unnamed
- * building slice stay on the tenant reader.
+ * Company-level revenue, orders, health, and building questions.
+ * A named customer, a profit question, a service-line split, or a single-rail
+ * filter stays on the existing tenant reader.
  */
 export function matchLaundryFarmCompanyQuestion(
   utterance: string,
-  prior: LaundryFarmCompanyQuestion | null = null,
-  activeTenantId?: string
+  prior: LaundryFarmCompanyQuestion | null = null
 ): LaundryFarmCompanyQuestion | null {
   const text = normalizeCompanyUtterance(utterance);
   if (!text) return null;
-  if (extractCustomerNames(utterance).length > 0) return null;
-  const direct = directCompanyQuestion(text, activeTenantId);
-  if (direct?.scope === "clarify" && !unclearCrossBusiness(text) && !namedBusiness(text)) return null;
-  return direct ?? companyFollowUp(text, prior, activeTenantId);
+  if (prior && asksBusinessRevenueBreakdown(text, prior.aspect === "revenue" || prior.aspect === "breakdown")) {
+    return { aspect: "breakdown", period: parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) ?? prior.period };
+  }
+  return directCompanyQuestion(text) ?? companyFollowUp(text, prior);
 }
 
 export function companyViewRequest(question: LaundryFarmCompanyQuestion): LaundryFarmCompanyViewRequest {
@@ -469,25 +315,14 @@ export function companyViewRequest(question: LaundryFarmCompanyQuestion): Laundr
     companyView: true,
     aspect: question.aspect,
     period: question.period,
-    scope: question.scope,
-    building: question.building,
     metric: question.aspect === "orders" ? "orders" : "revenue",
   };
 }
 
-const BUSINESS_SCOPES = new Set<CompanyBusinessScope>(["laundry_farm", "default", "both", "clarify"]);
-
 export function isLaundryFarmCompanyViewRequest(query: unknown): query is LaundryFarmCompanyViewRequest {
   if (!query || typeof query !== "object") return false;
-  const value = query as { companyView?: unknown; aspect?: unknown; period?: unknown; scope?: unknown };
-  return (
-    value.companyView === true &&
-    typeof value.aspect === "string" &&
-    value.period != null &&
-    typeof value.period === "object" &&
-    typeof value.scope === "string" &&
-    BUSINESS_SCOPES.has(value.scope as CompanyBusinessScope)
-  );
+  const value = query as { companyView?: unknown; aspect?: unknown; period?: unknown };
+  return value.companyView === true && typeof value.aspect === "string" && value.period != null && typeof value.period === "object";
 }
 
 export function companyQuestionFromParameters(parameters: unknown): LaundryFarmCompanyQuestion | null {
@@ -497,23 +332,11 @@ export function companyQuestionFromParameters(parameters: unknown): LaundryFarmC
     parameters.aspect !== "orders" &&
     parameters.aspect !== "health" &&
     parameters.aspect !== "buildings" &&
-    parameters.aspect !== "customers"
+    parameters.aspect !== "breakdown"
   ) {
     return null;
   }
-  const building = parameters.building;
-  return {
-    aspect: parameters.aspect,
-    period: parameters.period,
-    scope: parameters.scope,
-    building: building === "opus_la" || building === "century_park_east" || building === "shared" ? building : null,
-  };
-}
-
-export function requestedTenantIdsFor(question: LaundryFarmCompanyQuestion): string[] {
-  if (question.scope === "both") return [...LAUNDRY_FARM_COMPANY_TENANTS];
-  if (question.scope === "laundry_farm" || question.scope === "default") return [question.scope];
-  return [];
+  return { aspect: parameters.aspect, period: parameters.period };
 }
 
 export function isCompanyViewEvidencePayload(payload: unknown): payload is CompanyViewEvidencePayload {
@@ -614,58 +437,6 @@ function railRank(rail: CompanyPaymentRail): number {
   return 2;
 }
 
-function matchedCustomerCount(sales: readonly CompanySaleInput[]): number {
-  const positive = sales.filter(sale => sale.recordedSalesCents > 0);
-  const { groups } = resolveCustomerIdentities(positive, sale => sale.identity ?? {});
-  return groups.filter(group => group.matched).length;
-}
-
-function businessSlices(
-  sales: readonly CompanySaleInput[],
-  unpaidSupplied: boolean,
-  catalog: readonly BuildingConfig[]
-): CompanyBusinessSlice[] {
-  const tenantIds = [...new Set(sales.map(sale => sale.tenantId))];
-  return tenantIds
-    .map(tenantId => {
-      const mine = sales.filter(sale => sale.tenantId === tenantId);
-      const money = emptyMoney();
-      for (const sale of mine) addSale(money, sale);
-      const byBuilding = new Map<string, { label: string; sales: CompanySaleInput[] }>();
-      for (const sale of mine) {
-        const attribution = attributeCompanyBuilding(sale, catalog);
-        const group = byBuilding.get(attribution.bucket) ?? { label: attribution.label, sales: [] };
-        group.sales.push(sale);
-        byBuilding.set(attribution.bucket, group);
-      }
-      return {
-        tenantId,
-        label: businessDisplayName(tenantId),
-        figures: finishMoney(money, unpaidSupplied),
-        customerCount: matchedCustomerCount(mine),
-        sharedBuildingCustomerCount: matchedCustomerCount(
-          mine.filter(sale => {
-            const bucket = attributeCompanyBuilding(sale, catalog).bucket;
-            return bucket === "opus_la" || bucket === "century_park_east";
-          })
-        ),
-        buildings: [...byBuilding.entries()]
-          .map(([bucket, group]) => {
-            const buildingMoney = emptyMoney();
-            for (const sale of group.sales) addSale(buildingMoney, sale);
-            return {
-              bucket,
-              label: group.label,
-              figures: finishMoney(buildingMoney, false),
-              customerCount: matchedCustomerCount(group.sales),
-            };
-          })
-          .sort((a, b) => bucketRank(a.bucket) - bucketRank(b.bucket)),
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
-}
-
 export function composeLaundryFarmCompanyView(input: {
   period: { start: string; end: string; label: string };
   scope: LaundryFarmCompanyView["scope"];
@@ -677,7 +448,6 @@ export function composeLaundryFarmCompanyView(input: {
   decisions?: readonly CompanySaleDecision[];
   withheld?: { count: number; cents: number };
   catalog?: readonly BuildingConfig[];
-  bookComplete?: boolean;
 }): LaundryFarmCompanyView {
   const catalog = input.catalog ?? BUILDINGS;
   const inPeriod = (date: string) => date >= input.period.start && date <= input.period.end;
@@ -765,6 +535,11 @@ export function composeLaundryFarmCompanyView(input: {
     .filter(building => building.figures.orderCount > 0 || building.figures.refundCents !== 0 || building.figures.unpaidBalanceCents)
     .sort((a, b) => bucketRank(a.bucket) - bucketRank(b.bucket) || a.label.localeCompare(b.label));
 
+  const businessRevenue = input.tenantsRead.map(tenantId => {
+    const money = emptyMoney();
+    for (const sale of counted) if (sale.tenantId === tenantId) addSale(money, sale);
+    return { tenantId, figures: finishMoney(money, false) };
+  });
   const totalsMoney = emptyMoney();
   for (const sale of counted) addSale(totalsMoney, sale);
   for (const row of unpaidRows) addUnpaid(totalsMoney, row.totalCents);
@@ -776,11 +551,10 @@ export function composeLaundryFarmCompanyView(input: {
     scope: input.scope,
     mayStateCompanyTotal: input.mayStateCompanyTotal,
     mayStateDeduplicatedTotal: input.mayStateCompanyTotal && !overlapUnresolved,
-    bookComplete: input.bookComplete ?? input.mayStateCompanyTotal,
     tenantsRead: input.tenantsRead,
     tenantsUnread: input.tenantsUnread,
-    businesses: businessSlices(counted, input.unpaid != null, catalog),
     totals: finishMoney(totalsMoney, input.unpaid != null),
+    businessRevenue,
     buildings,
     overlap: {
       status: overlapUnresolved ? "unresolved" : "none",
@@ -854,10 +628,6 @@ export async function readLaundryFarmCompanyView(input: {
   now?: Date;
   period?: PeriodSpec;
   authorizedTenantIds?: readonly string[];
-  /** When set, only these businesses are read. The other ledger stays out. */
-  requestedTenantIds?: readonly string[];
-  /** A cross-business request fails closed unless every requested business is authorized. */
-  requireAllRequested?: boolean;
   loadAuthorizedTenantIds?: (operatorUserId: string) => Promise<readonly string[]>;
   loadLedger?: (window: CompanyLedgerWindow) => Promise<PaidOrderLedger>;
   loadUnpaid?: (tenantId: string) => Promise<readonly CompanyUnpaidInput[] | null>;
@@ -869,21 +639,7 @@ export async function readLaundryFarmCompanyView(input: {
     input.authorizedTenantIds ??
       (await (input.loadAuthorizedTenantIds ?? membershipTenantIds)(input.operatorUserId))
   );
-  const requested = input.requestedTenantIds?.filter(tenantId =>
-    (LAUNDRY_FARM_COMPANY_TENANTS as readonly string[]).includes(tenantId)
-  );
-  if (input.requireAllRequested && requested?.some(tenantId => !authorized.has(tenantId))) {
-    return composeLaundryFarmCompanyView({
-      period: { start: period.start, end: period.end, label: period.label },
-      scope: "unauthorized",
-      mayStateCompanyTotal: false,
-      tenantsRead: [],
-      tenantsUnread: [...LAUNDRY_FARM_COMPANY_TENANTS],
-      sales: [],
-      unpaid: null,
-    });
-  }
-  const allowed = (requested ?? [...LAUNDRY_FARM_COMPANY_TENANTS]).filter(tenantId => authorized.has(tenantId));
+  const allowed = LAUNDRY_FARM_COMPANY_TENANTS.filter(tenantId => authorized.has(tenantId));
   const periodLabel = period.label;
   if (!allowed.length) {
     return composeLaundryFarmCompanyView({
@@ -901,8 +657,7 @@ export async function readLaundryFarmCompanyView(input: {
   const sales: CompanySaleInput[] = [];
   const decisions: CompanySaleDecision[] = [];
   const tenantsRead: string[] = [];
-  const universe = requested ?? [...LAUNDRY_FARM_COMPANY_TENANTS];
-  const tenantsUnread: string[] = universe.filter(tenantId => !allowed.includes(tenantId));
+  const tenantsUnread: string[] = LAUNDRY_FARM_COMPANY_TENANTS.filter(tenantId => !allowed.includes(tenantId));
   let withheldCount = 0;
   let withheldCents = 0;
   let unpaid: CompanyUnpaidInput[] | null = [];
@@ -956,7 +711,6 @@ export async function readLaundryFarmCompanyView(input: {
     period: { start: period.start, end: period.end, label: periodLabel },
     scope: bothRead ? "company" : tenantsRead.length ? "single_tenant" : "unauthorized",
     mayStateCompanyTotal: bothRead && booksComplete && tenantsUnread.length === 0,
-    bookComplete: booksComplete && tenantsUnread.length === 0 && tenantsRead.length > 0,
     tenantsRead,
     tenantsUnread,
     sales,

@@ -265,6 +265,8 @@ describe("Day Line admission: structural guard", () => {
       "server/claire/knowledge/accountActions.ts",
       "server/claire/operatorMissionCommand.ts",
       "server/claire/proactive/growthChallenge.ts",
+      // The operator's own words on a live showrunner call (2026-10-23: reported pickups).
+      "server/claire/showrunner/reportedWork.ts",
       "server/claire/voiceCommitmentLoop.ts",
       "server/claire/weeklyMission/commit.ts",
       "server/experience/goldline/modes/towerWars/towerWarsRouter.ts",

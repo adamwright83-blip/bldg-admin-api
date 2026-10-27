@@ -294,7 +294,7 @@ describe("operations events dashboard helpers", () => {
     const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(", paidUpdate);
     const receipt = source.indexOf("const receiptToken = await new jose.SignJWT", paidUpdate);
     const sms = source.indexOf("await notifyCardCharged", paidUpdate);
-    const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)", paidUpdate);
+    const sheets = source.indexOf("await writeOrderToSheet(order, creditPlan?.chargeCents ?? input.amountCents)", paidUpdate);
     const opsTask = source.indexOf("const task = await createOpsTask", paidUpdate);
 
     expect(stripeCreate).toBeGreaterThan(-1);
@@ -304,7 +304,7 @@ describe("operations events dashboard helpers", () => {
     expect(sms).toBeGreaterThan(paidUpdate);
     expect(sheets).toBeGreaterThan(paidUpdate);
     expect(opsTask).toBeGreaterThan(paidUpdate);
-    expect(source).toContain("total: centsToDollars(input.amountCents)");
+    expect(source).toContain("total: centsToDollars(creditPlan?.chargeCents ?? input.amountCents)");
     expect(source).toContain('source: "admin_chargeCard"');
     expect(source).toContain("[Receipt] Failed to generate receipt after successful charge:");
   });

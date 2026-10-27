@@ -92,8 +92,8 @@ describe("desktop Claire business questions (V)", () => {
   it("answers from analytics and keeps the thread per desktop conversation", async () => {
     const claire = caller(101);
     const conversationId = "desk-conversation-a";
-    const first = await claire.talk({ utterance: "What was revenue through Stripe in the last 30 days?", conversationId });
-    expect(first.reply).toContain("Stripe-backed revenue in the last 30 days is $160 across 4 orders.");
+    const first = await claire.talk({ utterance: "What was revenue in the last 30 days?", conversationId });
+    expect(first.reply).toContain("Paid revenue in the last 30 days is $190 across 5 orders.");
     const second = await claire.talk({ utterance: "What about the 30 before that?", conversationId });
     expect(second.reply).toContain("$95.00 across 2 orders");
     expect(hoisted.commitment).not.toHaveBeenCalled();
@@ -122,7 +122,7 @@ describe("desktop Claire business questions (V)", () => {
       return { kind: "proposed", speak: "Should I add that to today's plan? Say yes or no." };
     });
     await claire.talk({ utterance: "Add reviewing revenue.", conversationId: "desk-conversation-t" });
-    const answer = await claire.talk({ utterance: "What was revenue through Stripe last month?", conversationId: "desk-conversation-t" });
+    const answer = await claire.talk({ utterance: "What was revenue last month?", conversationId: "desk-conversation-t" });
     expect(answer.reply).toContain("last month");
     expect(answer.reply).toContain('still holding "Review revenue"');
     expect(hoisted.commitment).toHaveBeenCalledTimes(1);
@@ -131,6 +131,6 @@ describe("desktop Claire business questions (V)", () => {
   });
 
   it("non-admin users cannot interrogate the business through Claire (Y)", async () => {
-    await expect(caller(105, "user").talk({ utterance: "What was revenue from OPUS last month?" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller(105, "user").talk({ utterance: "What was revenue last month?" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

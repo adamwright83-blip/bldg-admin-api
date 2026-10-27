@@ -17,6 +17,8 @@ export type ClaireConversationStore = {
   getSession(id: string): Promise<ConversationSession | null>;
   getSessionByCallSid(callSid: string): Promise<ConversationSession | null>;
   getSessionByClaireId(claireConversationId: string): Promise<ConversationSession | null>;
+  /** Sessions still `in_progress`, oldest first. The idle sweep closes the ones nobody ended. */
+  listInProgressSessions(limit?: number): Promise<ConversationSession[]>;
   appendTurn(turn: Omit<ConversationTurn, "id">): Promise<ConversationTurn>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
   nextOrdinal(sessionId: string): Promise<number>;
@@ -73,6 +75,13 @@ export function createMemoryClaireConversationStore(): ClaireConversationStore {
         item => item.claireConversationId === claireConversationId
       );
       return row ? { ...row } : null;
+    },
+    async listInProgressSessions(limit = 200) {
+      return [...sessions.values()]
+        .filter(item => item.status === "in_progress")
+        .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
+        .slice(0, limit)
+        .map(item => ({ ...item }));
     },
     async appendTurn(turn) {
       const existing = turns.find(item => item.idempotencyKey === turn.idempotencyKey);

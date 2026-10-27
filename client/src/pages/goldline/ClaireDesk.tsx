@@ -5,6 +5,7 @@ import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms } from "./claireDesk/OpenComms";
+import { ClaireComposer } from "@/components/claire/ClaireComposer";
 import { DaphnePresentationConsent } from "./claireDesk/DaphnePresentationConsent";
 import { callSheetWithheldCopy } from "./claireDesk/callSheetFreshness";
 import "./claireDesk/claireDesk.css";
@@ -290,6 +291,30 @@ export default function ClaireDesk() {
               )}
             </section>
 
+            <section className="cd-card" aria-label="Heard" data-testid="claire-desk-heard">
+              <p className="cd-kicker">HEARD</p>
+              {m.heard.length ? (
+                <ul className="cd-ready">
+                  {m.heard.map(h => (
+                    <li key={h.id}>
+                      ✓ {h.rule} <small>(you said, {h.heardOn}: “{h.quote}”)</small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="cd-muted">No standing rules saved yet. Tell Claire how you want calls to go and it shows here once it is saved.</p>
+              )}
+              {m.promised.length ? (
+                <ul className="cd-ready">
+                  {m.promised.map(p => (
+                    <li key={p.id}>
+                      {p.status === "consumed" ? "✓ Kept" : "Prepared"} for {p.forDate}: {p.summary.join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+
             <OpenComms onChanged={refresh} />
 
             <section className="cd-card cd-confirm" aria-label="Confirm tomorrow" data-testid="confirm-tomorrow">
@@ -351,6 +376,7 @@ export default function ClaireDesk() {
         <div className="cd-portrait" aria-hidden>C</div>
         <p className="cd-name">CLAIRE <small>Chief of staff</small></p>
         {claireLine ? <p className="cd-says" data-testid="claire-desk-says">“{claireLine}”</p> : null}
+        <ClaireComposer variant="desk" onTurn={refresh} />
         {m?.recentChange ? <p className="cd-small">Latest change: {m.recentChange}</p> : null}
         {m?.rationale ? (
           <details className="cd-why" data-testid="claire-desk-why">

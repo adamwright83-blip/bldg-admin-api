@@ -101,7 +101,7 @@ describe("mutation claims require the matching receipt", () => {
     expect(lintPostGenerationStateVerbs("I saved that for you.", empty).pass).toBe(false);
   });
 
-  it("4 — speakBriefingCommit may say Done. 1 on today's line after an actual successful create", () => {
+  it("4 — speakBriefingCommit may say Done and names what was added after an actual successful create", () => {
     const commit = speakBriefingCommit(
       {
         added: [{ title: "Instagram ad", businessDate: "2026-09-19", kind: "new_work", quote: "", timing: { kind: "none" } } as never],
@@ -112,7 +112,8 @@ describe("mutation claims require the matching receipt", () => {
       },
       "2026-09-19"
     );
-    expect(commit).toContain("Done. 1 on today's line.");
+    expect(commit).toContain("Done. Added Instagram ad for today.");
+    expect(commit).not.toMatch(/\d+ on today's line/);
     expect(lintReceiptBackedCommitSpeech(commit, createdA).pass).toBe(true);
     expect(lintPostGenerationStateVerbs(commit, empty).pass).toBe(false);
   });

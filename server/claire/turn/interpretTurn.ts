@@ -261,7 +261,15 @@ const QUERY_PARAMETER_CHANGE =
 const NEW_ORDER_RESTRICTION =
   /\b(?:just|only|actually)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest|first)\b/i;
 
-function isQueryParameterChange(text: string, entities: string[]): boolean {
+/**
+ * Time phrases are not query restrictions. 2026-10-22: "he just now texted me back last night" matched
+ * "just … last" and re-ran the revenue query three times while Adam described a recovered customer.
+ */
+const NARRATIVE_TIME =
+  /\b(?:just\s+now|(?:last|first|this|next)\s+(?:night|week|weekend|month|year|time|morning|afternoon|evening|summer|winter|spring|fall|monday|tuesday|wednesday|thursday|friday|saturday|sunday|thing))\b/gi;
+
+function isQueryParameterChange(utterance: string, entities: string[]): boolean {
+  const text = utterance.replace(NARRATIVE_TIME, " ");
   if (QUERY_PARAMETER_CHANGE.test(text)) return true;
   // "show just Thomas" / "only Dana" — named-scope restriction of the previous set.
   return (

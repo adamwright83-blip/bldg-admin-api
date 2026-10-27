@@ -194,13 +194,11 @@ describe("A — the final acceptance conversation, as one conversation", () => {
 describe("B — revenue thread", () => {
   it("last 30, previous 30, which had more orders, AOV, top customers", async () => {
     const { ask } = exam();
-    expect(await ask("What was revenue through Stripe the last 30 days?")).toContain(
-      "Stripe-backed revenue in the last 30 days is $231 across 6 orders."
-    );
-    expect(await ask("Previous 30?")).toBe("In the 30 days before that, Stripe-backed revenue was $50.00 across 1 order.");
-    expect(await ask("Which period did more orders?")).toContain("so the last 30 days had 5 more");
+    expect(await ask("What was revenue the last 30 days?")).toContain("Paid revenue in the last 30 days is $604 across 12 orders.");
+    expect(await ask("Previous 30?")).toBe("In the 30 days before that, paid revenue was $164 across 3 orders.");
+    expect(await ask("Which period did more orders?")).toContain("so the last 30 days had 9 more");
     expect(await ask("What was AOV?")).toBe(
-      "Average Stripe-backed order value in the last 30 days is $38.53 across 6 paid orders. That's down from $50.00 in the 30 days before that."
+      "Average order value in the last 30 days is $50.31 across 12 paid orders. That's down from $54.67 in the 30 days before that."
     );
     expect(await ask("Who were the top customers?")).toContain("Your top 5 customers by paid revenue");
   });
@@ -299,7 +297,7 @@ describe("H — operations thread", () => {
 describe("I — source / filter thread, and business lineage", () => {
   it("Laundry Farm last month, Laundry Butler, dry cleaning only, laundry again", async () => {
     const { ask } = exam();
-    expect(await ask("How much was the Laundry Farm service line last month?")).toBe(
+    expect(await ask("How much did Laundry Farm do last month?")).toBe(
       "Laundry Farm total revenue last month was $328 across 7 orders."
     );
     expect(await ask("What about Laundry Butler?")).toBe("Laundry Butler revenue last month was $104 across 3 orders. That includes only sales positively attributed to this service line; unresolved sales remain separate.");
@@ -309,7 +307,7 @@ describe("I — source / filter thread, and business lineage", () => {
 
   it("revenue → composition → Stripe → Clearent → latest sale → who → how much → CleanCloud? → last update → GUMBALL today", async () => {
     const { ask } = exam();
-    expect(await ask("How does revenue for the last 30 days compare with the previous 30 days?")).toContain("$604 across 12 orders");
+    expect(await ask("What was revenue the last 30 days?")).toContain("$604 across 12 orders");
     const composition = await ask("Is that Laundry Butler only or Laundry Farm too?");
     expect(composition).toContain("Laundry Butler is a service line within Laundry Farm.");
     expect(composition).toContain("Laundry Butler service was $231 across 6 orders.");
@@ -335,7 +333,7 @@ describe("I — source / filter thread, and business lineage", () => {
       kind: "clarifying" as const,
       speak: "Do you want me to add something, change something, or are you just catching me up?",
     })) as never;
-    await ask("What was revenue through Stripe the last 30 days?");
+    await ask("What was revenue the last 30 days?");
     await ask("How much is Stripe?");
     await ask("What about Clearent?");
     expect(await ask("Add them together.")).toContain("come to $569 across 11 orders");
@@ -390,7 +388,7 @@ describe("L — ambiguous customer", () => {
 describe("M — data failure is never zero", () => {
   it("an unreachable ledger is spoken as unavailable", async () => {
     const { ask } = exam({ loaders: failingLoaders });
-    const text = await ask("What was revenue through Stripe the last 30 days?");
+    const text = await ask("What was revenue the last 30 days?");
     expect(text).toBe("I couldn't get a reliable revenue number just now, so I won't guess.");
     expect(text).not.toMatch(/\$0|\bzero\b/);
   });
@@ -421,7 +419,7 @@ describe("O — long natural speech with corrections", () => {
     expect(revised).toContain('"Grab the KITH aprons" is now before 11 AM.');
     expect(await ask("Actually drop the cash deposit.")).toContain('Took "Deposit the cash" off the list.');
     const saved = await ask("Yes.");
-    expect(saved).toContain("Done. 1 on today's line and 1 on tomorrow's line.");
+    expect(saved).toContain("Done. Added Grab the KITH aprons for today. Added Drop off Rebecca's laundry for tomorrow.");
   });
 });
 

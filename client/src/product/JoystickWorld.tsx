@@ -45,6 +45,7 @@ export default function JoystickWorld() {
         <Suspense fallback={<div className="cc-empty">Raising Lantern City…</div>}>
           <LanternCityIslands
             showUtilityDock={false}
+            onReviewCustomers={() => navigate("/product/customers")}
             onOpenCustomer={() => navigate("/product/customers")}
             onNavigate={navigate}
           />

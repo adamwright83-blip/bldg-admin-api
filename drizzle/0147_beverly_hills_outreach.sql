@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS beverly_hills_outreach (
+  id varchar(36) NOT NULL,
+  tenant_id varchar(64) NOT NULL,
+  prospect_id varchar(191) NOT NULL,
+  address varchar(512) NOT NULL,
+  operator_id varchar(191) NOT NULL,
+  performed_on varchar(10) NOT NULL,
+  hanger_id varchar(100) NOT NULL,
+  hanger_count int NOT NULL,
+  permission_note text NOT NULL,
+  evidence_url text NOT NULL,
+  notes text NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'submitted',
+  reviewer_id varchar(191) NULL,
+  review_note text NULL,
+  reviewed_at timestamp NULL,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_id, id),
+  INDEX idx_bh_outreach_scope (tenant_id, status)
+);

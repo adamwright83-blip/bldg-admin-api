@@ -399,14 +399,14 @@ jobs:
   fast-browser:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    # World runs three browser specs after DB/bootstrap/build; other budgets stay 5m.
+    # World runs five browser specs after DB/bootstrap/build; allow its full proof to finish.
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: fast-smoke-world
-            timeout: 15
+            timeout: 25
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/worldSmoke.spec.ts
@@ -414,20 +414,37 @@ jobs:
               e2e/goldline-smoke/operatorRepresentative.spec.ts
               e2e/goldline-smoke/cozyVillagerOutreach.spec.ts
               e2e/goldline-smoke/silverLakeBirdDiscovery.spec.ts
-          - name: fast-smoke-silver-lake
+          # Each viewport runs the same Silver Lake coverage in its own job.
+          # Serial software-GL runs can exhaust 40 minutes after passing 26 tests.
+          - name: fast-smoke-silver-lake-desktop
             timeout: 40
             command: >-
-              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop
               e2e/goldline-smoke/silverLakeIslandEntry.spec.ts
               e2e/goldline-smoke/playableVillagers.spec.ts
               e2e/goldline-smoke/integratedDayLine.spec.ts
-              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop
+              e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
+          - name: fast-smoke-silver-lake-mobile
+            timeout: 40
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=mobile
+              e2e/goldline-smoke/silverLakeIslandEntry.spec.ts
+              e2e/goldline-smoke/playableVillagers.spec.ts
+              e2e/goldline-smoke/integratedDayLine.spec.ts
+              && pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=mobile
               e2e/goldline-smoke/homeCityClicks.spec.ts --grep "Silver Lake villager"
           - name: fast-smoke-beverly-hills
-            timeout: 25
+            timeout: 20
             command: >-
               pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/beverlyHills.spec.ts
+          # Century Park East runs three long specs (errands, the rope, zombie night) on software GL in two projects;
+          # it gets its own job and budget so neither tower's proof is cut short by the other's.
+          - name: fast-smoke-century-park-east
+            timeout: 35
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
               e2e/goldline-smoke/centuryParkEast.spec.ts
           - name: fast-smoke-channel-382
             timeout: 15

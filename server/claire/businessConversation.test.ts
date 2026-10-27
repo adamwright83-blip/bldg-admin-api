@@ -72,15 +72,17 @@ function expectGrounded(text: string, facts: string[]) {
 describe("Claire business conversation — revenue thread (A–C)", () => {
   it("answers revenue, the previous period, and which had more orders without restating", async () => {
     const { ask } = claire();
-    const first = await say(ask, "What was revenue through Stripe in the last 30 days?");
-    expect(first).toContain("Stripe-backed revenue in the last 30 days is $160 across 4 orders.");
+    const first = await say(ask, "What was revenue in the last 30 days?");
+    expect(first).toContain("Paid revenue in the last 30 days is $190 across 5 orders.");
     expect(first).toContain("1 Goldline order marked paid without a payment record, worth $70.00");
 
     const second = await say(ask, "What about the 30 before that?");
-    expect(second).toContain("$95.00 across 2 orders");
+    expect(second).toBe("In the 30 days before that, paid revenue was $95.00 across 2 orders.");
 
     const third = await say(ask, "Which period had more orders?");
-    expect(third).toContain("the last 30 days had");
+    expect(third).toBe(
+      "The last 30 days had 5 paid orders and the 30 days before that had 2, so the last 30 days had 3 more."
+    );
   });
 
   it("compares to the previous period when asked directly", async () => {
@@ -92,10 +94,11 @@ describe("Claire business conversation — revenue thread (A–C)", () => {
 
   it("carries a service filter into the existing thread", async () => {
     const { ask } = claire();
-    await say(ask, "What was revenue through Stripe in the last 30 days?");
+    await say(ask, "What was revenue in the last 30 days?");
     const text = await say(ask, "What about just wash and fold?");
-    expect(text).toContain("Stripe-backed wash-and-fold revenue");
+    expect(text).toContain("paid wash-and-fold revenue");
     expect(text).toContain("$100 across 2 orders");
+    expect(text).toContain("1 CleanCloud order worth $30.00 couldn't be classified as laundry or dry cleaning");
   });
 
   it("explains a change from grounded drivers only", async () => {
@@ -201,33 +204,33 @@ describe("financial language (I)", () => {
     expect(text).not.toMatch(/profit (?:is|was) \$/);
   });
 
-  it("treats bare how much did we make as the active business, and still refuses profit", async () => {
+  it("asks revenue or profit for 'how much did we make', then continues", async () => {
     const { ask } = claire();
-    const company = await ask("How much did we make?", "default");
-    expect(company).toMatchObject({ handled: true, reader: "company_view" });
-    if (company.handled) expect(company.speak).not.toContain("Do you mean revenue or profit?");
+    const clarify = await ask("How much did we make?");
+    expect(clarify).toMatchObject({ handled: true, speak: expect.stringContaining("Do you mean revenue or profit?") });
+    expect(await say(ask, "Revenue.")).toContain("$190");
   });
 });
 
 describe("failure honesty (N, O)", () => {
   it("database failure is never spoken as zero", async () => {
     const { ask } = claire({ loaders: failingLoaders });
-    const turn = await ask("What was revenue through Stripe in the last 30 days?");
+    const turn = await ask("What was revenue in the last 30 days?");
     expect(turn).toMatchObject({ handled: true, speak: "I couldn't get a reliable revenue number just now, so I won't guess." });
     if (turn.handled) expect(turn.speak).not.toMatch(/\$0|\bzero\b/);
   });
 
   it("a real empty period is a real zero", async () => {
     const { ask } = claire({ loaders: emptyLoaders });
-    expect(await say(ask, "What was revenue through Stripe in the last 30 days?")).toBe(
-      "Stripe-backed revenue in the last 30 days is $0.00 across 0 orders."
+    expect(await say(ask, "What was revenue in the last 30 days?")).toBe(
+      "Paid revenue in the last 30 days is $0.00 across 0 orders."
     );
   });
 
   it("a partial source load is qualified", async () => {
     const loaders: LedgerLoaders = { laundry_butler: fixtureLoaders().laundry_butler, cleancloud: failingLoaders.cleancloud };
     const { ask } = claire({ loaders });
-    expect(await say(ask, "What was revenue through Stripe in the last 30 days?")).toContain(
+    expect(await say(ask, "What was revenue in the last 30 days?")).toContain(
       "That only includes Goldline's own orders; I couldn't reach CleanCloud just now."
     );
   });
@@ -249,7 +252,7 @@ describe("intent separation (P–T)", () => {
 
   it("does not hijack field or plan talk mid-thread", async () => {
     const { ask } = claire();
-    await say(ask, "What was revenue through Stripe in the last 30 days?");
+    await say(ask, "What was revenue in the last 30 days?");
     expect(await ask("Who am I meeting today?")).toEqual({ handled: false });
     expect(await ask("Okay.")).toEqual({ handled: false });
     expect(await ask("Add a task to call Ava tomorrow.")).toEqual({ handled: false });
@@ -286,7 +289,7 @@ describe("context isolation and expiry (H, X, Z)", () => {
   it("queries run only for the tenant Claire was authenticated for", async () => {
     const seen: string[] = [];
     const { ask } = claire({ seenTenants: seen });
-    await ask("What was revenue through Stripe in the last 30 days?", "tenant-a");
+    await ask("What was revenue in the last 30 days?", "tenant-a");
     expect(new Set(seen)).toEqual(new Set(["tenant-a"]));
   });
 });
@@ -305,7 +308,7 @@ describe("live sales scope and undated precision", () => {
   it("keeps the named month through company and service follow-ups", async () => {
     const { ask, state } = claire();
     await say(ask, "How did August compare with July?");
-    await say(ask, "How much was the Laundry Farm service line in August?");
+    await say(ask, "How much did Laundry Farm make in August?");
     for (const utterance of ["How much of that was Laundry Butler?", "How much was core Laundry Farm?", "How much is unresolved by service line?"]) {
       const text = await say(ask, utterance);
       expect(text).toContain("August");
@@ -333,7 +336,7 @@ describe("live sales scope and undated precision", () => {
       ...loaders,
       cleancloud: async () => [...base, { ...base[0]!, cleancloudOrderId: "undated-refund", totalCents: -1000, paymentDateUtc: null, paidDateUtc: null, sourceReportType: "orders_sales" }],
     } });
-    const text = await say(makeClaire().ask, "How much was the Laundry Farm service line in August?");
+    const text = await say(makeClaire().ask, "How much did Laundry Farm make in August?");
     expect(text).toContain("recorded dated totals");
     expect(text).toContain("$10.00 in adjustments with unknown payment dates");
     expect(text).toContain("cannot assign them to this period");

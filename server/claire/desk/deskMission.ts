@@ -1,4 +1,6 @@
 import { strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
+import { drizzleStandingInstructionStore } from "../../agents/daphne/standingInstructions";
+import { drizzlePreparedItemStore } from "../../agents/persistentOperator/preparedItems";
 import { formatInTimeZone } from "date-fns-tz";
 import type { CanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import { listRecentDaphneObservationsBySource } from "../../agents/daphne/observationStore";
@@ -92,6 +94,16 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
     .map(r => ({ ...(r.payload as { need?: string; forDate?: string }), savedAt: new Date(r.occurredAt).toISOString() }))
     .filter(r => r.need && r.forDate === tomorrow)
     .map(r => ({ need: r.need!, savedAt: r.savedAt }));
+  // What Claire has heard and what she has promised, so the operator can see it was kept in the system.
+  const scope = { tenantId: identity.tenantId, canonicalOperatorId: identity.canonicalOperatorId };
+  const heardRows = await drizzleStandingInstructionStore().listActive(scope).catch(() => []);
+  const promisedRows = await drizzlePreparedItemStore().listRecent(scope, 5).catch(() => []);
+  const heard = heardRows
+    .map(r => ({ id: r.id, kind: r.kind, rule: r.text, quote: r.quote, heardOn: r.createdAt.slice(0, 10), version: r.version }))
+    .reverse();
+  const promised = promisedRows
+    .map(r => ({ id: r.id, kind: r.kind, forDate: r.forBusinessDate, status: r.status, said: r.promiseText, summary: r.payload.targets.map(t => t.name).slice(0, 5) }))
+    .reverse();
   const calls = await readDailyClaireCallStatus(identity).catch(() => null);
   const tomorrowPlan = await loadConfirmedWorkdayPlan({ tenantId: identity.tenantId, actorId: identity.dayDirectorActorId, businessDate: tomorrow }).catch(() => null);
   const diagnosis = proposal?.diagnosis;
@@ -112,6 +124,8 @@ export async function buildDeskMission(input: { identity: CanonicalOperatorIdent
     preparation: { planned: briefing.weekPlan?.preparation ?? [], saved: savedPreparation },
     uncertain: briefing.uncertain,
     adaptations: briefing.adaptations,
+    heard,
+    promised,
     rationale: diagnosis
       ? {
           diagnosis: diagnosis.diagnosis,

@@ -67,3 +67,36 @@ describe("normal tenant Islands atlas", () => {
     expect(html).toContain('data-lantern-state="loading"');
   });
 });
+
+describe("Islands never presents a mapping gap as zero customers", () => {
+  const cust = (n: number, located: boolean) =>
+    Array.from({ length: n }, (_, i) => ({
+      identityKey: `c${i}`, displayName: `C${i}`, phone: null,
+      cadence: { state: "active", daysSinceLastOrder: 1 },
+      location: located ? { latitude: 34.1, longitude: -118.3, x: 1, y: 1, outOfBounds: false, canonicalAddress: "x" } : null,
+    }));
+  const render = (data: unknown, extra: Record<string, unknown> = {}) => {
+    mocks.query.mockReturnValue({ data, isError: false, refetch: vi.fn(), ...extra });
+    return renderToStaticMarkup(createElement(LanternCityIslands, { onOpenCustomer: () => {} }));
+  };
+  it("N customers, 0 located: says mapping gap and shows the customer count", () => {
+    const html = render({ customers: cust(93, false), statusCounts: { pending: 93 } });
+    expect(html).toContain("mapping-unmapped");
+    expect(html).toContain("93 customers are on record");
+    expect(html).toContain("not an empty business");
+  });
+  it("some located: partial notice, no all-clear claim", () => {
+    const html = render({ customers: [...cust(3, true), ...cust(2, false).map((c, i) => ({ ...c, identityKey: `u${i}` }))], statusCounts: {} });
+    expect(html).toContain("mapping-partial");
+    expect(html).toContain("2 of 5 customers have no map location");
+  });
+  it("genuinely zero customers shows no mapping warning", () => {
+    const html = render({ customers: [], statusCounts: {} });
+    expect(html).not.toContain("mapping-");
+  });
+  it("query error is the unavailable state, not zero", () => {
+    const html = render(undefined, { isError: true });
+    expect(html).toContain("atlas-unavailable");
+    expect(html).not.toContain("mapping-");
+  });
+});

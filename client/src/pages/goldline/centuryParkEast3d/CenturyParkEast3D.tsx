@@ -8,6 +8,11 @@ import { hasRealDecision } from "../silverLake3d/reunionQuests";
 import { createCozyMusic } from "../silverLake3d/cozyMusic";
 import { createZombieLoungeMusic } from "./zombieLoungeMusic";
 import { createCenturyParkEast, ERRAND_SLOTS, type CpeHandle, type ErrandPhase, type Interaction, type ItemKind, type PromptId, type Vibe } from "./cpeRuntime";
+import { THUMB_RECTS } from "./cpeCctv";
+import { ShotgunDesk } from "./ShotgunDesk";
+import { activeTrade } from "./cpeTrade";
+import { accuracy, chipOutcome, shellsLeft as countShells, type Chip, type Loadout } from "./shotgunMachine";
+import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { centuryParkEastTowerHref } from "./centuryParkEastEntry";
 import styles from "./century-park-east-3d.module.css";
 
@@ -24,6 +29,8 @@ const CAST_BASE = "/assets/goldline/beverly-hills-3d/cast/";
 const VIBE_KEY = "centuryParkEast.vibe";
 const MUSIC_KEY = "centuryParkEast.music";
 const PROGRESS_KEY = "centuryParkEast.progress.v1";
+const CHIPS_KEY = "centuryParkEast.chips.v1";
+const PACK = activeTrade();
 
 type Line = { who: string; text: string };
 
@@ -89,14 +96,37 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
   const [knockedOut, setKnockedOut] = useState(false);
   const [dogs, setDogs] = useState({ carried: 0, saved: 0, total: 12 });
   const [charges, setCharges] = useState(0);
-  const [climbing, setClimbing] = useState<number | null>(null);
+  const [climbing, setClimbing] = useState<{ progress: number; stamina: number; resting: boolean } | null>(null);
+  const [camera, setCamera] = useState<{ id: string; label: string; floor: number; thumbs: { id: string; label: string }[] } | null>(null);
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    if (!camera) return;
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [camera]);
   const [floorIdx, setFloorIdx] = useState(0);
   const [trapped, setTrapped] = useState(0);
   const [party, setParty] = useState(false);
   const [progress, setProgress] = useState<Progress>(() => readJson<Progress>(PROGRESS_KEY, { found: [], reunited: [], passes: [] }));
+  // zombie night: the shotgun, its fuse, the chips fired so far (predictions, scored against the record), the wreck
+  const [shotgunSlot, setShotgunSlot] = useState<number | null>(null);
+  const tazedAtRef = useRef<Map<number, number>>(new Map());
+  const [chips, setChips] = useState<Chip[]>(() => readJson<Chip[]>(CHIPS_KEY, []));
+  const [wreck, setWreck] = useState<{ wrecked: number; total: number }>({ wrecked: 0, total: PACK.devices.length });
+  const [roomWrecked, setRoomWrecked] = useState(false);
 
   const o = useSilverLakeOutreach(CENTURY_PARK_EAST_TERRITORY);
   const targets = o.targets as CozyProjectedTarget[];
+  const brand = TENANT_CONFIG[o.tenantId as TenantId]?.brandName ?? "Laundry Farm";
+  const shells = countShells(chips);
+  const chipScore = useMemo(() => {
+    const byId = new Map(targets.map(t => [t.customerId, t]));
+    const outcomes = chips.map(c => {
+      const t = byId.get(c.customerId);
+      return chipOutcome(c, { replied: !!t && t.reply.status !== "unavailable", lastOrderDate: t?.lastOrderDate ?? null });
+    });
+    return accuracy(chips, outcomes);
+  }, [chips, targets]);
   const passes = useMemo(() => new Set(progress.passes), [progress.passes]);
 
   // the chain: real residents in roster order, one slot each; only the first undecided one is open
@@ -235,7 +265,20 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
     } else if (i.kind === "rope_fell") {
       setBubble({ who: "", text: z ? "Grabbed by the ankle! You let go of the rope." : "A sleepwalker hugged your ankles. You let go of the rope." });
     } else if (i.kind === "out_of_foam") {
-      setBubble({ who: "", text: z ? "Out of foam. Grab a red extinguisher off the wall: lobby, gym or roof." : "Out of mist. Grab a refill off the wall: lobby, gym or roof." });
+      setBubble({ who: "", text: z ? "Tazer's dry. Grab a cartridge off the wall: lobby, gym or roof." : "Out of mist. Grab a refill off the wall: lobby, gym or roof." });
+    } else if (i.kind === "tazed") {
+      tazedAtRef.current.set(i.slot, Date.now());
+      setBubble({ who: "", text: "Down. Thirty seconds. Get to it and program the shotgun (E)." });
+    } else if (i.kind === "shotgun") {
+      if (!tazedAtRef.current.has(i.slot)) tazedAtRef.current.set(i.slot, Date.now());
+      setShotgunSlot(i.slot);
+    } else if (i.kind === "chipped") {
+      setBubble({ who: "", text: PACK.lines.sent(i.device) });
+    } else if (i.kind === "device_wrecked") {
+      setWreck({ wrecked: i.wrecked, total: i.total });
+      setBubble({ who: "", text: PACK.lines.wrecked(i.device, i.total - i.wrecked) });
+    } else if (i.kind === "room_wrecked") {
+      setRoomWrecked(true);
     }
   }, [talk]);
   const onInteractRef = useRef(onInteract);
@@ -261,7 +304,8 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
       onCharges: n => setCharges(n),
       onFloor: f => setFloorIdx(f),
       onBubble: b => setBubble(b),
-      onClimb: c => setClimbing(c === null ? null : Math.round(c * 20) / 20),
+      onClimb: c => setClimbing(c),
+      onCamera: c => setCamera(c),
     })
       .then(h => {
         if (cancelled) {
@@ -293,8 +337,43 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
   }, [chain, ready]);
   const deskOpen = !!o.selectedTarget;
   useEffect(() => {
-    runtimeRef.current?.setPaused(!!dialogue || deskOpen || knockedOut || choiceSlot !== null);
-  }, [dialogue, deskOpen, knockedOut, choiceSlot]);
+    runtimeRef.current?.setPaused(!!dialogue || deskOpen || knockedOut || choiceSlot !== null || shotgunSlot !== null);
+  }, [dialogue, deskOpen, knockedOut, choiceSlot, shotgunSlot]);
+
+  // the shotgun's outcomes: fire schedules the text and chips the zombie; not now wakes it; the fuse bites
+  const shotgunTarget = shotgunSlot !== null ? chain[shotgunSlot]?.target ?? null : null;
+  const saveChip = (c: Chip) =>
+    setChips(prev => {
+      const next = [...prev, c];
+      writeJson(CHIPS_KEY, next);
+      return next;
+    });
+  const fire = async (text: string, when: Date, loadout: Loadout): Promise<boolean> => {
+    if (shotgunSlot === null || !shotgunTarget) return false;
+    const slot = shotgunSlot;
+    const key = `cpe_chip_${shotgunTarget.customerId}_${Date.now()}`;
+    const ok = await o.handleScheduleSend(shotgunTarget, text, when.toISOString(), key);
+    if (!ok) return false;
+    saveChip({ customerId: shotgunTarget.customerId, hypothesis: loadout.hypothesis, shell: loadout.shell, firedAt: new Date().toISOString(), aimedAt: when.toISOString() });
+    await o.handleDraftCompleted(shotgunTarget.customerId, shotgunTarget.displayName, shotgunTarget.villagerVariant, "scheduled");
+    setShotgunSlot(null);
+    runtimeRef.current?.chip(slot);
+    return true;
+  };
+  const notNow = () => {
+    if (shotgunSlot === null) return;
+    const slot = shotgunSlot;
+    setShotgunSlot(null);
+    runtimeRef.current?.wake(slot);
+    setBubble({ who: "", text: "Gun down. It's getting up." });
+  };
+  const fuseOut = useCallback(() => {
+    setShotgunSlot(slot => {
+      if (slot !== null) runtimeRef.current?.fuseOut(slot);
+      return null;
+    });
+    setBubble({ who: "", text: "Too slow. It got you." });
+  }, []);
   useEffect(() => {
     if (!bubble) return;
     const t = setTimeout(() => setBubble(null), 4200);
@@ -403,7 +482,7 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
           <div className={styles.cardKicker}>Lantern City · {floorName}</div>
           <div className={styles.cardTitle}>Century Park East</div>
           <div className={styles.cardSub}>
-            {chain.length ? `${chain.filter(c => c.phase !== "done").length} of ${chain.length} residents need you` : o.loading ? "Reading the residents…" : "Residents quiet 45+ days"}
+            {chain.length ? (z ? `${chain.filter(c => c.phase !== "done").length} of ${chain.length} residents turned` : `${chain.filter(c => c.phase !== "done").length} of ${chain.length} residents need you`) : o.loading ? "Reading the residents…" : "Residents quiet 45+ days"}
           </div>
           {chain.length ? (
             <ol className={styles.errands} data-testid="century-park-east-errands">
@@ -411,8 +490,8 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
                 <li key={c.target.customerId} data-phase={c.phase} className={styles[`phase_${c.phase}`]}>
                   <span className={styles.tick}>{c.phase === "done" ? "✓" : c.phase === "locked" ? "·" : "!"}</span>
                   <span>
-                    <strong>{CHARACTERS[c.slot]}'s {ITEM[ERRAND_SLOTS[c.slot].item].label}</strong>
-                    {c.phase !== "locked" && c.phase !== "done" ? <em>for {firstName(c.target.displayName)}</em> : null}
+                    <strong>{z ? `${CHARACTERS[c.slot]}'s neighbour, turned` : `${CHARACTERS[c.slot]}'s ${ITEM[ERRAND_SLOTS[c.slot].item].label}`}</strong>
+                    {c.phase !== "locked" && c.phase !== "done" ? <em>{z ? "taze it, then program the shotgun" : `for ${firstName(c.target.displayName)}`}</em> : null}
                   </span>
                 </li>
               ))}
@@ -429,8 +508,10 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
               {bites === 0 ? "♥ ♥" : "♥ ♡"} <small>{bites === 0 ? "3D" : "paper"}</small>
             </span>
             <span data-testid="century-park-east-dogs">🐶 {dogs.saved}/{dogs.total}{dogs.carried ? ` · ${dogs.carried} on you` : ""}</span>
-            <span>{z ? "🧯" : "💜"} {charges}</span>
+            <span>{z ? "⚡" : "💜"} {charges}</span>
             {trapped ? <span>{z ? "🧟" : "😴"} {trapped} in closets</span> : null}
+            {z ? <span data-testid="century-park-east-wreck">{PACK.lines.counter(wreck.wrecked, wreck.total)}</span> : null}
+            {z && chips.length ? <span title="Chips that took: a reply or a new order after the shot">chips {chipScore.took}/{chips.length}{chipScore.open ? ` (${chipScore.open} open)` : ""}</span> : null}
           </div>
         </div>
         <div className={styles.hudRight}>
@@ -449,32 +530,53 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
         </div>
       </header>
 
+      {camera && ready && !party ? (
+        <div className={styles.monitors} aria-hidden data-testid="century-park-east-monitors" data-camera={camera.id}>
+          <div className={styles.camLabel}>
+            <span className={styles.rec}>● REC</span> CAM {camera.id} · {["GROUND FLOOR", "AMENITY FLOOR", "ROOF"][camera.floor]} · {camera.label}
+          </div>
+          <div className={styles.camClock}>{clock.toTimeString().slice(0, 8)} · {clock.toISOString().slice(0, 10)}</div>
+          {camera.thumbs.map((t, i) => (
+            <div key={t.id} className={styles.thumbLabel} style={{ left: `${THUMB_RECTS[i].x * 100}%`, top: `calc(${THUMB_RECTS[i].y * 100}% - 18px)`, width: `${THUMB_RECTS[i].w * 100}%` }}>
+              CAM {t.id} · {t.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {prompt && ready && !dialogue && !deskOpen && choiceSlot === null && !knockedOut ? (
         <button type="button" className={styles.prompt} onClick={() => runtimeRef.current?.interact()} data-testid="century-park-east-prompt" data-prompt={prompt.id}>
           <kbd>E</kbd> {prompt.label}
         </button>
       ) : null}
 
-      <div className={styles.touchButtons}>
-        <button type="button" onClick={() => runtimeRef.current?.spray()}>{z ? "Spray" : "Mist"}</button>
-        <button type="button" onPointerDown={() => runtimeRef.current?.setSprint(true)} onPointerUp={() => runtimeRef.current?.setSprint(false)} onPointerLeave={() => runtimeRef.current?.setSprint(false)}>Run</button>
-        <button type="button" onClick={() => runtimeRef.current?.jump()}>Hop</button>
-      </div>
+      {climbing ? (
+        <div className={`${styles.touchButtons} ${styles.hands}`} data-testid="century-park-east-hands">
+          <button type="button" className={styles.hand} onPointerDown={() => runtimeRef.current?.climbHand("L")} aria-label="Left hand">L</button>
+          <button type="button" className={styles.hand} onPointerDown={() => runtimeRef.current?.climbHand("R")} aria-label="Right hand">R</button>
+        </div>
+      ) : (
+        <div className={styles.touchButtons}>
+          <button type="button" onClick={() => runtimeRef.current?.spray()}>{z ? "Taze" : "Mist"}</button>
+          <button type="button" onPointerDown={() => runtimeRef.current?.setSprint(true)} onPointerUp={() => runtimeRef.current?.setSprint(false)} onPointerLeave={() => runtimeRef.current?.setSprint(false)}>Run</button>
+          <button type="button" onClick={() => runtimeRef.current?.jump()}>Hop</button>
+        </div>
+      )}
       {ready && !dialogue && !deskOpen ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD to walk</span>
           <span>Shift to run</span>
-          <span>F to {z ? "spray" : "mist"}</span>
+          <span>F to {z ? "taze" : "mist"}</span>
           <span>E to talk</span>
           <span>Ropes go up a floor</span>
         </div>
       ) : null}
 
-      {climbing !== null ? (
-        <div className={styles.climbMeter} role="status" data-testid="century-park-east-climb">
-          <b>{z ? "Climb! The zombie is right behind you." : "Climb! Keep pulling."}</b>
-          <div className={styles.climbBar}><span style={{ width: `${Math.round(climbing * 100)}%` }} /></div>
-          <small>Tap E, Space or the button fast. Stop and you slip. S lets go.</small>
+      {climbing ? (
+        <div className={`${styles.climbMeter} ${climbing.stamina < 0.25 ? styles.tired : ""}`} role="status" data-testid="century-park-east-climb" data-resting={climbing.resting ? "yes" : "no"}>
+          <b>{climbing.resting ? "Resting. Grip coming back." : climbing.stamina < 0.25 ? "Arms burning. Hang still a moment." : z ? "Hand over hand. Don't look down." : "Hand over hand."}</b>
+          <div className={styles.climbBar} aria-label="Grip"><span style={{ width: `${Math.round(climbing.stamina * 100)}%` }} /></div>
+          <small>A and D are your hands; alternate them. Hold still to rest. S lets go.</small>
         </div>
       ) : null}
 
@@ -527,6 +629,14 @@ export default function CenturyParkEast3D({ onExit }: { onExit?: () => void }) {
           <div className={styles.partyTitle}>Century Park East is sorted.</div>
           <div className={styles.partySub}>{z ? "The concierge is out. The zombies have learned a line dance." : "The concierge is back from vacation and is crying a little."}</div>
         </div>
+      ) : null}
+
+      {roomWrecked && z ? (
+        <div className={styles.roomBanner} data-testid="century-park-east-room-wrecked">{PACK.lines.roomDone(brand)}</div>
+      ) : null}
+
+      {shotgunSlot !== null && shotgunTarget ? (
+        <ShotgunDesk target={shotgunTarget} brand={brand} tazedAt={tazedAtRef.current.get(shotgunSlot) ?? Date.now()} shellsLeft={shells} isSending={o.isSending} onFire={fire} onNotNow={notNow} onFuseOut={fuseOut} />
       ) : null}
 
       {o.selectedTarget ? (

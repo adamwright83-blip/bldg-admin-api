@@ -70,6 +70,7 @@ vi.mock("../conversation/liveCall", () => ({
   linkClaireCallAction: vi.fn(async () => undefined),
   linkClaireActionIds: vi.fn(async () => undefined),
   endClaireCallLedger: vi.fn(async () => undefined),
+  finalizeClaireCallLedger: vi.fn(async () => undefined),
 }));
 
 vi.mock("../conversation/ledgerService", () => ({

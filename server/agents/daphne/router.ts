@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
+import { legacyDayforgeTenantAdminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
+import { inspectDaphneOperatorLoop } from "./inspection";
+import { identityForCanonicalOperator } from "../../planning/operatingMandate/loadOperatingMandate";
 import {
   CanonicalOperatorIdentityError,
   requireCanonicalOperatorIdentityForUser,
@@ -29,6 +31,25 @@ function identityFailure(error:unknown):never{
 const controlKey=z.enum(DAPHNE_META_PREFERENCE_KEYS);
 
 export const daphneRouter=router({
+ /**
+  * Tenant owner/admin only, read-only: one operator's card, goals and preferences with
+  * their source words, decision/outcome counts and last 20 observations. Defaults to self.
+  */
+ inspect:legacyDayforgeTenantAdminProcedure
+  .input(z.object({canonicalOperatorId:z.string().trim().min(1).max(191).optional(),agentId:z.string().trim().min(1).max(128).default("claire")}).optional())
+  .query(async({ctx,input})=>{
+   try{
+    const identity=input?.canonicalOperatorId
+     ? await identityForCanonicalOperator(ctx.tenantId,input.canonicalOperatorId)
+     : await requireCanonicalOperatorIdentityForUser({tenantId:ctx.tenantId,user:ctx.user,subsystem:"daphne.v2.inspect"});
+    if(!identity||identity.tenantId!==ctx.tenantId) throw new TRPCError({code:"NOT_FOUND",message:"Operator not found in this tenant"});
+    return await inspectDaphneOperatorLoop({
+     tenantId:identity.tenantId,canonicalOperatorId:identity.canonicalOperatorId,
+     operatorUserIds:[identity.canonicalOpenId,identity.sourceOpenId,...identity.aliases.map(a=>a.openId)],
+     agentId:input?.agentId??"claire",
+    });
+   }catch(e){identityFailure(e);}
+  }),
  card:legacyDayforgeTenantMemberProcedure
   .input(z.object({agentId:z.string().trim().min(1).max(128).default("claire")}).optional())
   .query(async({ctx,input})=>{

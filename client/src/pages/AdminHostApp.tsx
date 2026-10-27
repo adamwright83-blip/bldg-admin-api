@@ -41,7 +41,7 @@ import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6
 const LanternCityV7 = lazy(() => import("@/components/admin/control-room/LanternCityV7/LanternCityV7"));
 const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
 const SilverLake3D = lazy(() => import("./goldline/silverLake3d/SilverLake3D"));
-const BeverlyHills3D = lazy(() => import("./goldline/beverlyHills3d/BeverlyHills3D"));
+const BeverlyHills2D = lazy(() => import("./goldline/beverlyHills2d/BeverlyHills2D"));
 const CenturyParkEast3D = lazy(() => import("./goldline/centuryParkEast3d/CenturyParkEast3D"));
 const Channel382 = lazy(() => import("./goldline/channel382/Channel382"));
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
@@ -61,6 +61,7 @@ const ArchivedLevel4OffensiveHost = lazy(() =>
 );
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
+const ReferralsPage = lazy(() => import("./ReferralsPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
 const ClaireScheduledOutreach = lazy(() => import("./admin/ClaireScheduledOutreach"));
@@ -215,6 +216,7 @@ export default function AdminHostApp() {
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
   const isGrowthBuildings = path === "/growth/buildings";
   const isGrowthOffers = path === "/growth/offers";
+  const isGrowthReferrals = path === "/growth/referrals";
   const isCommercialPipeline = path === "/commercial-pipeline";
   const isChurnRadar = path === "/churn-radar";
   const isSalesIntel = path === "/sales-intel";
@@ -243,6 +245,7 @@ export default function AdminHostApp() {
     isDriverIntelligence ||
     isGrowthBuildings ||
     isGrowthOffers ||
+    isGrowthReferrals ||
     isCommercialPipeline ||
     isChurnRadar ||
     isSalesIntel ||
@@ -441,8 +444,8 @@ export default function AdminHostApp() {
               />
             </Suspense>
           ) : lanternScene === "beverlyHills3d" ? (
-            <Suspense fallback={<div className="cr-route-loading">Rolling out the red carpet…</div>}>
-              <BeverlyHills3D onExit={() => window.location.assign("/growth/lantern-city")} />
+            <Suspense fallback={<div className="cr-route-loading">Finding the other Rodeo…</div>}>
+              <BeverlyHills2D onExit={() => window.location.assign("/growth/lantern-city")} />
             </Suspense>
           ) : lanternScene === "channel382" ? (
             <Suspense fallback={<div className="cr-route-loading">Warming up the cameras…</div>}>
@@ -554,6 +557,10 @@ export default function AdminHostApp() {
           <GrowthBuildingsPage />
         ) : isGrowthOffers ? (
           <GrowthOffersPage />
+        ) : isGrowthReferrals ? (
+          <Suspense fallback={<div className="cr-route-loading">Loading Referrals…</div>}>
+            <ReferralsPage />
+          </Suspense>
         ) : isCommercialPipeline ? (
           <Suspense
             fallback={

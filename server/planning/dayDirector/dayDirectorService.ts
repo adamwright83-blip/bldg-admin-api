@@ -5,7 +5,7 @@ import {
   presentationFor,
 } from "../../agents/daphne/missionFollowUp";
 import { enforceTitleContract } from "../../claire/briefing/titleContract";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
   dayDirectorCommitments,
@@ -854,6 +854,47 @@ export async function searchDayDirectorCommitmentsByTitle(input: {
     .limit(Math.max(1, Math.min(input.limit ?? 8, 50)));
 }
 
+
+/**
+ * Open commitments across a date range, as the Day Line would show them (cancelled and hidden rows are
+ * excluded). One query, so a carried-over commitment open on several business dates can be seen as one.
+ */
+export async function listOpenDayDirectorCommitmentsBetween(input: {
+  tenantId: string;
+  actorIds: string[];
+  fromBusinessDate: string;
+  throughBusinessDate: string;
+}): Promise<Array<{ id: string; title: string; businessDate: string; status: "open"; sourceText: string | null }>> {
+  const actorIds = [...new Set(input.actorIds.map(id => id.trim()).filter(Boolean))];
+  if (!input.tenantId.trim() || !actorIds.length) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        inArray(dayDirectorCommitments.actorId, actorIds),
+        eq(dayDirectorCommitments.status, "open"),
+        gte(dayDirectorCommitments.businessDate, input.fromBusinessDate),
+        lte(dayDirectorCommitments.businessDate, input.throughBusinessDate)
+      )
+    );
+  return rows
+    .filter(row => {
+      const metadata = row.metadataJson && typeof row.metadataJson === "object" ? (row.metadataJson as Record<string, unknown>) : {};
+      const overlay = readDayLineOverlay(metadata);
+      return metadata.hiddenFromDayPlan !== true && !overlay.notPursuing && !overlay.cancelledAt;
+    })
+    .map(row => ({
+      id: row.id,
+      title: row.title,
+      businessDate: row.businessDate,
+      status: "open" as const,
+      sourceText: row.sourceText ?? null,
+    }));
+}
 
 export async function listDayDirectorProcessingLocationNames(
   tenantIdInput: string

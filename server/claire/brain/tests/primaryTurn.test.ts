@@ -475,3 +475,82 @@ describe("unlicensedFigures", () => {
     expect(unlicensedFigures("About 40% more.", "nothing numeric")).toEqual(["40%"]);
   });
 });
+
+describe("Brain V2 primary — standing instructions and the promise ledger", () => {
+  const scopeOf = { tenantId: "laundry_farm", canonicalOperatorId: "adam-admin" };
+  const resolver = (async () => ({ ok: true, identity: { canonicalOperatorId: "adam-admin" } })) as never;
+  const noObservation = (async () => ({})) as never;
+
+  async function withStore() {
+    const { inMemoryStandingInstructionStore, captureStandingInstructions } = await import("../../../agents/daphne/standingInstructions");
+    const store = inMemoryStandingInstructionStore();
+    const h = harness();
+    h.deps.captureInstructions = ({ utterance, turnId, priorClaireTurn }) =>
+      captureStandingInstructions(
+        { tenantId: "laundry_farm", operatorUserId: "adam-admin", utterance, conversationId: "claire-call:v2-primary", turnId, priorClaireTurn },
+        { resolveIdentity: resolver, store, recordObservation: noObservation }
+      );
+    h.deps.loadStandingInstructions = () => store.listActive(scopeOf);
+    h.deps.resolvePromiseScope = async () => ({ ...scopeOf, dayDirectorActorId: "42", dayDirectorActorIds: ["42"] });
+    return { h, store };
+  }
+
+  it("the Sunday-call rule is saved, read back, spoken from the row, and bound to the very next answer", async () => {
+    const { h, store } = await withStore();
+    const state: ClaireV2PrimaryState = {
+      history: [
+        { speaker: "operator", text: "Anything else?", at: 1 },
+        { speaker: "claire", text: "The Louise follow-up is overdue. Do you want to deal with it now?", at: 2 },
+      ],
+    };
+    const saved = await runClaireV2PrimaryTurn(
+      turnInput(state, "when we do our week call on Sunday from 5 to 7 PM, that's a good time for you to ask me about stuff like that."),
+      h.deps
+    );
+    expect(saved.brainV2.composition).toBe("preference");
+    expect(saved.speak).toBe("That's a standing rule now, saved: overdue follow-ups wait for Sunday between 5 PM and 7 PM.");
+    expect(h.speak).not.toHaveBeenCalled();
+    expect(store.rows.map(row => row.kind)).toEqual(["review_window"]);
+  });
+
+  it("a rule stated with Claire's previous line in view is captured and shapes the next composed answer", async () => {
+    const { h, store } = await withStore();
+    const state: ClaireV2PrimaryState = {
+      history: [
+        { speaker: "operator", text: "How realistic is fifty customers?", at: 1 },
+        { speaker: "claire", text: "Fifty is attainable if you count buildings.", at: 2 },
+      ],
+    };
+    const saved = await runClaireV2PrimaryTurn(turnInput(state, "I want that on every call."), h.deps);
+    expect(saved.speak).toBe("That's a standing rule now, saved for every call: one grounded line of encouragement.");
+    expect(store.rows.map(row => row.kind)).toEqual(["encouragement_every_call"]);
+
+    await runClaireV2PrimaryTurn(turnInput(state, "What do you think I should focus on this week to grow revenue?"), h.deps);
+    const organ = h.speak.mock.calls.at(-1)![0] as { standingInstructionsSection: string; promiseContext: { scope: { canonicalOperatorId: string } } };
+    expect(organ.standingInstructionsSection).toContain("OPERATOR STANDING INSTRUCTIONS");
+    expect(organ.standingInstructionsSection).toContain("ENCOURAGEMENT");
+    expect(organ.promiseContext.scope.canonicalOperatorId).toBe("adam-admin");
+  });
+
+  it("when the rule cannot be saved Claire says so and does not claim to remember it", async () => {
+    const { h } = await withStore();
+    h.deps.captureInstructions = async () => ({
+      status: "persistence_failed", detected: [{ kind: "encouragement_every_call" }] as never, records: [], readbackVerified: false,
+      speech: "I heard that as a standing rule, but I couldn't save it, so I won't claim it is remembered.",
+    });
+    const result = await runClaireV2PrimaryTurn(turnInput({}, "I want encouragement on every call."), h.deps);
+    expect(result.speak).toMatch(/couldn't save it/);
+    expect(result.speak).not.toMatch(/saved/i);
+  });
+
+  it("the chief-of-staff complaint is acknowledged only from a saved row", async () => {
+    const { h, store } = await withStore();
+    const result = await runClaireV2PrimaryTurn(
+      turnInput({}, "You're the one who's supposed to be calling me as a chief of staff… telling me what the missions are gonna be each day."),
+      h.deps
+    );
+    expect(result.speak).toContain("that's on me");
+    expect(store.rows.map(row => row.kind)).toEqual(["role_feedback"]);
+    expect(store.rows[0]!.quote).toContain("chief of staff");
+  });
+});

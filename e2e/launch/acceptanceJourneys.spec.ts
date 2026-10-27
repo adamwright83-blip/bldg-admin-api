@@ -219,6 +219,23 @@ test.describe("ACCEPTANCE 2: Three-Question Onboarding & Personalized Preview", 
         });
       }
 
+      if (url.includes("system.goldlineOnboarding.previewDraftCustomerList")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            trpcResponse({
+              rows: 3,
+              usable: 3,
+              duplicates: 0,
+              needsReview: 0,
+              localities: [{ label: "Pasadena, CA", count: 3 }],
+              sampleNames: ["Arroyo Dental", "Lake Ave Medical", "Colorado Blvd Offices"],
+            })
+          ),
+        });
+      }
+
       if (url.includes("system.saas.plans")) {
         return route.fulfill({
           status: 200,
@@ -249,6 +266,22 @@ test.describe("ACCEPTANCE 2: Three-Question Onboarding & Personalized Preview", 
     await page.goto("/joystick-start");
     await expect(page.locator(".ja-shell")).toBeVisible();
 
+    // 1b. Bring your business: the list is read back before any question
+    await expect(page.getByTestId("bring-your-business")).toBeVisible();
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: "customers.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Name,Address,City,State\nArroyo Dental,10 Arroyo Pkwy,Pasadena,CA\nLake Ave Medical,20 Lake Ave,Pasadena,CA\nColorado Blvd Offices,30 Colorado Blvd,Pasadena,CA\n"
+      ),
+    });
+    const mirror = page.getByTestId("customer-list-mirror");
+    await expect(mirror).toContainText("3 customers.");
+    await expect(mirror).toContainText("Mostly in Pasadena, CA.");
+    await expect(mirror).toContainText("Arroyo Dental");
+    await expect(mirror).toContainText("Nothing is saved until your workspace opens.");
+    await page.getByRole("button", { name: "THAT'S MY BUSINESS" }).click();
+
     // 2. Answer Question 1: Daily Work
     const kicker = page.locator(".ja-kicker");
     await expect(kicker).toContainText("1 OF 3");
@@ -257,8 +290,10 @@ test.describe("ACCEPTANCE 2: Three-Question Onboarding & Personalized Preview", 
     await textarea.fill("Commercial carpet cleaner maintaining office buildings and medical suites");
     await page.locator('button:has-text("CONTINUE")').click();
 
-    // 3. Answer Question 2: Service Area
+    // 3. Answer Question 2: Service Area, suggested from the list and editable
     await expect(kicker).toContainText("2 OF 3");
+    await expect(page.getByTestId("service-area-from-list")).toContainText("Pasadena, CA");
+    await expect(textarea).toHaveValue("Pasadena, CA");
     await textarea.fill("Pasadena and the San Gabriel Valley");
     await page.locator('button:has-text("CONTINUE")').click();
 
@@ -287,6 +322,9 @@ test.describe("ACCEPTANCE 2: Three-Question Onboarding & Personalized Preview", 
     await expect(briefing).toContainText("Commercial carpet cleaner maintaining office buildings and medical suites");
     await expect(briefing).toContainText("Pasadena and the San Gabriel Valley");
     await expect(briefing).toContainText("Following up on sent quotes and calling back cold facility managers");
+
+    // 8b. The list is credited, with its source, and still only in the browser
+    await expect(page.getByTestId("held-list-receipt")).toContainText("3 from customers.csv, mostly Pasadena, CA.");
 
     // 9. Verify preview is clearly labeled as a draft preview
     const draftLabel = page.locator('[data-testid="draft-preview-label"]');

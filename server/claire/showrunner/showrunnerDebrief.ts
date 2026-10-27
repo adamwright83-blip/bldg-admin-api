@@ -30,6 +30,8 @@ export type DebriefDevelopment = {
   place: string;
   operatorWords: string;
   reportedAt: string;
+  /** Already on the Day Line as the operator's own commitment (reportedWork.ts); never re-proposed. */
+  landed?: boolean;
 };
 
 const short = (v: string) => createHash("sha256").update(v).digest("hex").slice(0, 16);
@@ -204,7 +206,7 @@ export async function replanFromShowrunnerCall(state: ShowrunnerCallState, now: 
   }
   // The latest report about the same contact supersedes earlier ones in this call.
   const latestByContact = new Map<string, DebriefDevelopment>();
-  for (const d of state.captured.developments.filter(d => ["meeting", "opportunity", "commitment"].includes(d.kind)))
+  for (const d of state.captured.developments.filter(d => !d.landed && ["meeting", "opportunity", "commitment"].includes(d.kind)))
     latestByContact.set((d.who || d.what).toLowerCase(), d);
   const developmentItems = [...latestByContact.values()]
     .map(d => {

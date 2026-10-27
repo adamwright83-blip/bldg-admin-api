@@ -22,7 +22,6 @@ import {
   isLaundryFarmCompanyViewRequest,
   LAUNDRY_FARM_COMPANY_READER,
   readLaundryFarmCompanyView,
-  requestedTenantIdsFor,
   type CompanyViewEvidencePayload,
 } from "../../../analytics/laundryFarmCompanyView";
 import {
@@ -49,6 +48,19 @@ import { evidenceFromAccountHistory } from "./accountEvidence";
 import { resolveEntityMentions } from "./entityResolution";
 import { isNarratorBusinessContamination } from "./narratorFirewall";
 import { admitsToOperatorEvidence } from "./sourceProvenance";
+import {
+  evidenceFromGameMasterView,
+  productionGameMasterReaders,
+  readGameMasterView,
+  type GameMasterView,
+} from "./gameMasterView";
+import {
+  evidenceFromGoalProgress,
+  productionGoalProgressReaders,
+  readGoalProgress,
+  type GoalProgress,
+} from "./goalProgress";
+import { addDaysYmd } from "../../../analytics/businessPeriods";
 
 export type BusinessMemoryContext = {
   tenantId: string;
@@ -59,6 +71,8 @@ export type BusinessMemoryContext = {
   businessDate?: string;
   timeZone?: string;
   priorClaimReceipts?: FactualClaimReceipt[];
+  /** Keys Lost Property chapter unlocks. Present on scheduled calls (showrunner identity). */
+  canonicalOperatorId?: string | null;
 };
 
 export type BusinessMemoryDeps = {
@@ -87,6 +101,22 @@ export type BusinessMemoryDeps = {
   }) => Promise<DailyCommand>;
   /** The tenant is passed in; it is never assumed. */
   verifyClaim: (receipt: FactualClaimReceipt, tenantId: string) => Promise<PriorClaimVerification>;
+  /**
+   * The game master view (every Kingdom, Day 1 outcomes, progression, companions,
+   * chapters), read by the signed-in openId. Absent means unsupported, never "no game".
+   */
+  loadGameMasterView?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    canonicalOperatorId?: string | null;
+  }) => Promise<GameMasterView>;
+  /** Distance to the macro goal. Absent means unsupported; null means no active goal. */
+  loadGoalProgress?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    now: Date;
+    timeZone: string;
+  }) => Promise<GoalProgress | null>;
 };
 
 export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
@@ -112,6 +142,8 @@ export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
     verifyPriorClaim(receipt, {
       rerun: query => runBusinessQuery(tenantId, query, defaultBusinessQueryDeps),
     }),
+  loadGameMasterView: input => readGameMasterView(input, productionGameMasterReaders),
+  loadGoalProgress: input => readGoalProgress(input, productionGoalProgressReaders),
 };
 
 /** Marks a capability that has no reader yet, so it cannot be mistaken for "none". */
@@ -131,13 +163,13 @@ export function lookupPriorClaimReceipt(
 }
 
 function unsupportedEvidence(input: {
-  kind: "open_orders" | "operations" | "day_line_read" | "field_today" | "workday_command";
+  kind: "open_orders" | "operations" | "day_line_read" | "field_today" | "workday_command" | "game_state" | "goal_progress";
   reason: string;
   nowIso: string;
 }): EvidenceItem {
   return {
     id: `${input.kind}:${UNSUPPORTED_REQUEST}`,
-    type: input.kind === "field_today" ? "field_today" : input.kind === "open_orders" ? "open_orders" : input.kind === "workday_command" ? "workday_command" : input.kind === "operations" ? "operations" : "day_line_read",
+    type: input.kind,
     source: UNSUPPORTED_REQUEST,
     provenance: { reader: UNSUPPORTED_REQUEST },
     observedAt: input.nowIso,
@@ -354,6 +386,39 @@ export async function retrieveBusinessEvidence(
       return admitBusinessEvidence([item]);
     }
 
+    case "game_state": {
+      const loadView = deps.loadGameMasterView;
+      if (!loadView) {
+        return [
+          unsupportedEvidence({
+            kind: "game_state",
+            reason: "game master view reader not configured",
+            nowIso: ctx.nowIso,
+          }),
+        ];
+      }
+      const view = await loadView({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.operatorUserId,
+        canonicalOperatorId: ctx.canonicalOperatorId ?? null,
+      });
+      return admitBusinessEvidence([evidenceFromGameMasterView({ view, observedAtIso: ctx.nowIso })]);
+    }
+
+    case "goal_progress": {
+      const loadGoal = deps.loadGoalProgress;
+      if (!loadGoal) {
+        return [unsupportedEvidence({ kind: "goal_progress", reason: "goal progress reader not configured", nowIso: ctx.nowIso })];
+      }
+      const progress = await loadGoal({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.operatorUserId,
+        now: new Date(ctx.nowIso),
+        timeZone: ctx.timeZone ?? "America/Los_Angeles",
+      });
+      return progress ? admitBusinessEvidence([evidenceFromGoalProgress({ progress, observedAtIso: ctx.nowIso })]) : [];
+    }
+
     case "operations":
     case "day_line_read":
     case "field_today":
@@ -367,6 +432,11 @@ export async function retrieveBusinessEvidence(
           }),
         ];
       }
+      // "What do you have for me tomorrow" reads tomorrow's day, not today's.
+      const businessDate =
+        request.dayOffset && Number.isInteger(request.dayOffset) && request.dayOffset > 0
+          ? addDaysYmd(ctx.businessDate, request.dayOffset)
+          : ctx.businessDate;
       if (request.kind === "workday_command") {
         const loadCommand = deps.loadDailyCommand;
         if (!loadCommand) {
@@ -382,7 +452,7 @@ export async function retrieveBusinessEvidence(
           tenantId: ctx.tenantId,
           operatorUserId: ctx.operatorUserId,
           dayDirectorActorId: ctx.dayDirectorActorId,
-          businessDate: ctx.businessDate,
+          businessDate,
           now: new Date(ctx.nowIso),
           timeZone: ctx.timeZone,
         });
@@ -408,7 +478,7 @@ export async function retrieveBusinessEvidence(
         tenantId: ctx.tenantId,
         operatorUserId: ctx.operatorUserId,
         dayDirectorActorId: ctx.dayDirectorActorId,
-        businessDate: ctx.businessDate,
+        businessDate,
         now: new Date(ctx.nowIso),
         timeZone: ctx.timeZone,
       });
@@ -437,15 +507,11 @@ export async function retrieveBusinessEvidence(
           operatorUserId: ctx.operatorUserId,
           now: new Date(ctx.nowIso),
           period: query.period,
-          requestedTenantIds: requestedTenantIdsFor(query),
-          requireAllRequested: query.scope !== "clarify",
         });
         const payload: CompanyViewEvidencePayload = {
           companyView: true,
           aspect: query.aspect,
           questionPeriod: query.period,
-          scope: query.scope,
-          building: query.building,
           view,
         };
         const item: EvidenceItem = {
@@ -457,15 +523,8 @@ export async function retrieveBusinessEvidence(
           asOf: view.period.end,
           freshness: null,
           coverage: {
-            complete: query.scope === "both" ? view.mayStateCompanyTotal : view.bookComplete,
-            gaps:
-              query.scope === "both"
-                ? view.mayStateCompanyTotal
-                  ? []
-                  : ["cross_business_total_not_authorized_or_incomplete"]
-                : view.bookComplete
-                  ? []
-                  : ["business_ledger_not_authorized_or_incomplete"],
+            complete: view.mayStateCompanyTotal,
+            gaps: view.mayStateCompanyTotal ? [] : ["company_total_not_authorized_or_incomplete"],
           },
           authoritativeFor: ["current_business_truth"],
           payload,

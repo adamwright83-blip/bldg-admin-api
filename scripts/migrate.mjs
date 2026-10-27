@@ -65,6 +65,12 @@ const runRequired = async (sql, label, params) => {
   }
 };
 
+// Evidence-only Beverly Hills ledger. Does not create orders or business activity.
+const beverlyOutreachDdl = await readFile(new URL("../drizzle/0147_beverly_hills_outreach.sql", import.meta.url), "utf8");
+for (const statement of beverlyOutreachDdl.split(";").map(sql => sql.trim()).filter(Boolean)) {
+  await runRequired(statement, "Beverly Hills outreach evidence");
+}
+
 // Strategy proposals are required durable preparation; no business rows backfilled.
 const strategicDdl = await readFile(new URL("../drizzle/0128_claire_strategic_preparation.sql", import.meta.url), "utf8");
 // Existing tenant/authority tables are created later in this boot; extensions are
@@ -5656,6 +5662,99 @@ await assertRequiredColumns("personal_outreach_replies", [
     "created_at",
   ]);
 }
+
+// 0146: Claire standing instructions and prepared items (promise ledger). Idempotent CREATE IF NOT EXISTS.
+{
+  const statements = await readSqlStatements("../drizzle/0146_claire_standing_instructions.sql");
+  for (const statement of statements) await runRequired(statement, "Claire standing instructions and prepared items");
+  await assertRequiredColumns("claire_operator_instructions", [
+    "id", "tenantId", "canonicalOperatorId", "operatorUserId", "kind", "subjectKey", "version", "status",
+    "instructionText", "quote", "payloadJson", "fingerprint", "sourceConversationKey", "sourceTurnId", "createdAt",
+  ]);
+  await assertRequiredColumns("claire_prepared_items", [
+    "id", "tenantId", "canonicalOperatorId", "kind", "forBusinessDate", "promiseText", "payloadJson", "status",
+    "sourceConversationKey", "consumedConversationKey", "consumedAt", "createdAt",
+  ]);
+}
+
+// JOYSTICK referrals (shared/referralProgram.ts). Idempotent CREATE IF NOT EXISTS.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referral_programs (
+    tenant_id varchar(64) NOT NULL,
+    source enum('cleancloud','joystick') NOT NULL,
+    mode enum('off','one_time_credit') NOT NULL DEFAULT 'off',
+    referrer_credit_cents int NOT NULL DEFAULT 1000,
+    new_customer_credit_cents int NOT NULL DEFAULT 1000,
+    cleancloud_setup_confirmed_at timestamp NULL,
+    cleancloud_last_synced_at timestamp NULL,
+    updated_by varchar(128) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id)
+  )`,
+  "Referral programs"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referral_codes (
+    tenant_id varchar(64) NOT NULL,
+    code varchar(32) NOT NULL,
+    customer_name varchar(191) NOT NULL,
+    customer_phone varchar(32) NULL,
+    customer_email varchar(191) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id, code),
+    KEY idx_referral_codes_tenant_phone (tenant_id, customer_phone)
+  )`,
+  "Referral codes"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS referrals (
+    id varchar(64) NOT NULL,
+    tenant_id varchar(64) NOT NULL,
+    source enum('cleancloud','joystick') NOT NULL,
+    external_key varchar(191) NULL,
+    code varchar(32) NULL,
+    referrer_name varchar(191) NOT NULL,
+    referred_name varchar(191) NOT NULL,
+    referred_phone varchar(32) NULL,
+    referred_email varchar(191) NULL,
+    used_at timestamp NOT NULL,
+    external_orders int NULL,
+    external_spending_cents int NULL,
+    referrer_credit_applied_at timestamp NULL,
+    referrer_credit_applied_by varchar(128) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_referrals_tenant_external (tenant_id, external_key),
+    KEY idx_referrals_tenant_used (tenant_id, used_at)
+  )`,
+  "Referrals"
+);
+
+// JOYSTICK referrals, part 2: native store credit, and where Jawbreaker reads CleanCloud's referral activity.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS customer_credit_entries (
+    id varchar(64) NOT NULL,
+    tenant_id varchar(64) NOT NULL,
+    customer_phone varchar(16) NOT NULL,
+    amount_cents int NOT NULL,
+    reason enum('referral_new_customer','referral_referrer','redeemed','adjustment') NOT NULL,
+    referral_id varchar(64) NULL,
+    order_id int NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_credit_referral_grant (tenant_id, reason, referral_id),
+    UNIQUE KEY uq_credit_order_redemption (tenant_id, reason, order_id),
+    KEY idx_credit_tenant_phone (tenant_id, customer_phone)
+  )`,
+  "Customer credit entries"
+);
+await ensureRequiredColumn(
+  "referral_programs",
+  "cleancloud_referral_usage_url",
+  "ALTER TABLE referral_programs ADD COLUMN cleancloud_referral_usage_url varchar(512) NULL"
+);
 
 console.log("\nMigration complete.");
 await conn.end();

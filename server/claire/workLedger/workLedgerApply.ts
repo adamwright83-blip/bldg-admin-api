@@ -17,6 +17,7 @@ import {
 import { cancelDayLineItem, editDayLineItem } from "../../planning/dayline/dayLineMutationService";
 import { joinList } from "../business/businessSpeech";
 import type { DayLineItemRef } from "../../../shared/goldlineDayLine";
+import { executionTypePhrase } from "../../../shared/objectiveExecution";
 import type {
   LedgerDayLineItem,
   LedgerExecutionType,
@@ -54,12 +55,12 @@ export function defaultWorkLedgerApplyDeps(): WorkLedgerApplyDeps {
 }
 
 export type VerifiedLedgerChange =
-  | { kind: "created"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; timing: string; ref: string }
-  | { kind: "updated"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; previousTitle: string; what: string[] }
+  | { kind: "created"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; timing: string; ref: string; operatorWords?: string }
+  | { kind: "updated"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; previousTitle: string; what: string[]; operatorWords?: string }
   | { kind: "moved"; id: string; title: string; businessDate: string; fromDate: string }
   | { kind: "completed"; id: string; title: string; businessDate: string }
   | { kind: "removed"; id: string; title: string; businessDate: string; reason: string }
-  | { kind: "confirmed"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; status: string };
+  | { kind: "confirmed"; id: string; title: string; businessDate: string; executionType: LedgerExecutionType; status: string; operatorWords?: string };
 
 export type WorkLedgerApplyResult = {
   changes: VerifiedLedgerChange[];
@@ -68,6 +69,11 @@ export type WorkLedgerApplyResult = {
   /** Held refs that are now on the Day Line. */
   savedRefs: string[];
   savedIds: string[];
+  /**
+   * Held work the title gate refused to write because no clear task could be made from the operator's
+   * own words. Nothing was saved for these; Claire asks the question and keeps holding the work.
+   */
+  clarifications?: Array<{ title: string; question: string }>;
 };
 
 function dayLineRef(item: LedgerDayLineItem): DayLineItemRef {
@@ -139,11 +145,14 @@ export async function applyWorkLedgerPlan(input: {
   target: WorkLedgerTarget;
   clock: { today: string; minutesNow: number };
   deps?: Partial<WorkLedgerApplyDeps>;
+  /** What the operator said this turn, so a declared kind ("marketing challenge") can be echoed in their words. */
+  operatorWords?: string;
 }): Promise<WorkLedgerApplyResult> {
   const deps: WorkLedgerApplyDeps = { ...defaultWorkLedgerApplyDeps(), ...input.deps };
   const { plan, target, clock } = input;
   const byId = new Map(input.dayLine.map(item => [item.id, item]));
   const failures: WorkLedgerApplyResult["failures"] = [];
+  const clarifications: NonNullable<WorkLedgerApplyResult["clarifications"]> = [];
   const expected: Array<
     | { kind: "created"; id: string; ref: string; held: LedgerHeldItem }
     | { kind: "updated"; id: string; previous: LedgerDayLineItem; title: string | null; executionType: LedgerExecutionType | "unchanged"; detailNote: string | null; scheduleLabel: string | null }
@@ -177,6 +186,10 @@ export async function applyWorkLedgerPlan(input: {
       continue;
     }
     const id = result.commitmentIds[0];
+    if (!id && result.needsClarification?.length) {
+      clarifications.push({ title: held.title, question: result.needsClarification[0]!.question });
+      continue;
+    }
     if (result.failed.length || !id) {
       failures.push({ title: held.title, error: result.failed[0]?.error ?? "Day Line write returned no id" });
       continue;
@@ -296,7 +309,7 @@ export async function applyWorkLedgerPlan(input: {
         const title = entry.kind === "created" ? entry.held.title : entry.previous.title;
         failures.push({ title, error: `readback failed: ${error instanceof Error ? error.message : String(error)}` });
       }
-      return { changes, failures, receipts, savedRefs, savedIds };
+      return { changes, failures, receipts, savedRefs, savedIds, clarifications };
     }
     for (const entry of expected) {
       if (entry.kind === "created") {
@@ -305,7 +318,7 @@ export async function applyWorkLedgerPlan(input: {
           failures.push({ title: entry.held.title, error: "Day Line readback did not show the saved item" });
           continue;
         }
-        changes.push({ kind: "created", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, timing: entry.held.timing, ref: entry.ref });
+        changes.push({ kind: "created", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, timing: entry.held.timing, ref: entry.ref, operatorWords: [entry.held.quote, entry.held.title, entry.held.detail, input.operatorWords].filter(Boolean).join(" ") });
         receipts.push({ claimedState: "created", entityId: row.id, statement: `Added ${row.title} on the Day Line` });
         savedRefs.push(entry.ref);
         savedIds.push(row.id);
@@ -325,7 +338,7 @@ export async function applyWorkLedgerPlan(input: {
           entry.executionType !== "unchanged" ? "type" : null,
           entry.detailNote ? "detail" : null,
         ].filter((value): value is string => Boolean(value));
-        changes.push({ kind: "updated", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, previousTitle: entry.previous.title, what });
+        changes.push({ kind: "updated", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, previousTitle: entry.previous.title, what, operatorWords: [entry.previous.sourceText, entry.previous.title, entry.previous.detail, input.operatorWords].filter(Boolean).join(" ") });
         receipts.push({ claimedState: "updated", entityId: row.id, statement: `Updated ${row.title} on the Day Line` });
         continue;
       }
@@ -363,10 +376,10 @@ export async function applyWorkLedgerPlan(input: {
     for (const item of confirmTargets) {
       const row = rows.get(item.id);
       if (!row) continue;
-      changes.push({ kind: "confirmed", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, status: row.status });
+      changes.push({ kind: "confirmed", id: row.id, title: row.title, businessDate: row.businessDate, executionType: row.executionType, status: row.status, operatorWords: [item.sourceText, item.title, input.operatorWords].filter(Boolean).join(" ") });
     }
   }
-  return { changes, failures, receipts, savedRefs, savedIds };
+  return { changes, failures, receipts, savedRefs, savedIds, clarifications };
 }
 
 function lowerFirst(text: string): string {
@@ -377,11 +390,10 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-function typePhrase(type: LedgerExecutionType): string {
-  if (type === "challenge") return " as a marketing challenge";
-  if (type === "mission") return " as a sales mission";
-  if (type === "hybrid_objective") return " as a hybrid objective";
-  return "";
+/** "as a challenge" / "as a mission" unless the operator's own words named the kind ("marketing challenge", "sales mission"). */
+function typePhrase(type: LedgerExecutionType, operatorWords?: string): string {
+  const phrase = executionTypePhrase(type, operatorWords);
+  return phrase ? ` as ${phrase}` : "";
 }
 
 function dayLabel(ymd: string, today: string): string {
@@ -402,7 +414,7 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
   const byDate = new Map<string, typeof created>();
   for (const change of created) byDate.set(change.businessDate, [...(byDate.get(change.businessDate) ?? []), change]);
   for (const [date, items] of Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b))) {
-    const phrases = items.map(item => `${lowerFirst(item.title)}${typePhrase(item.executionType)}`);
+    const phrases = items.map(item => `${lowerFirst(item.title)}${typePhrase(item.executionType, item.operatorWords)}`);
     sentences.push(`On ${dayLabel(date, today)}: ${joinList(phrases)}.`);
   }
   const completed = result.changes.filter(change => change.kind === "completed");
@@ -415,8 +427,8 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
       // A detail-only update is recorded but not read aloud; it is not news to the operator.
       if (!renamed && !typed) continue;
       updatedIds.add(change.id);
-      if (renamed) sentences.push(`Now it reads: ${lowerFirst(change.title)}${typed ? typePhrase(change.executionType) : ""}, on ${dayLabel(change.businessDate, today)}.`);
-      else sentences.push(`${change.title} is on ${dayLabel(change.businessDate, today)}${change.executionType ? typePhrase(change.executionType) : " with no classification"}.`);
+      if (renamed) sentences.push(`Now it reads: ${lowerFirst(change.title)}${typed ? typePhrase(change.executionType, change.operatorWords) : ""}, on ${dayLabel(change.businessDate, today)}.`);
+      else sentences.push(`${change.title} is on ${dayLabel(change.businessDate, today)}${change.executionType ? typePhrase(change.executionType, change.operatorWords) : " with no classification"}.`);
     } else if (change.kind === "moved") {
       sentences.push(`Moved ${lowerFirst(change.title)} to ${dayLabel(change.businessDate, today)}.`);
     }
@@ -429,7 +441,7 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
     sentences.push(
       only.status === "completed"
         ? `${only.title} is already marked done.`
-        : `${only.title} is on ${dayLabel(only.businessDate, today)}${typePhrase(only.executionType)}.`
+        : `${only.title} is on ${dayLabel(only.businessDate, today)}${typePhrase(only.executionType, only.operatorWords)}.`
     );
   } else if (confirmed.length > 1) {
     const byDay = new Map<string, typeof confirmed>();
@@ -438,7 +450,7 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, items]) => {
         const label = spokenDay(date, today);
-        const phrases = items.map(item => `${lowerFirst(item.title)}${item.status === "completed" ? " (done)" : typePhrase(item.executionType)}`);
+        const phrases = items.map(item => `${lowerFirst(item.title)}${item.status === "completed" ? " (done)" : typePhrase(item.executionType, item.operatorWords)}`);
         return `${label === "today" ? "Today" : label === "tomorrow" ? "Tomorrow" : label.charAt(0).toUpperCase() + label.slice(1)}: ${joinList(phrases)}.`;
       });
     sentences.push(`Here's what I have. ${parts.join(" ")}`);
@@ -451,6 +463,7 @@ export function speakVerifiedLedgerChanges(result: WorkLedgerApplyResult, today:
         : `Took ${joinList(removed.map(change => `"${change.title}"`))} off the line.`
     );
   }
+  if (result.clarifications?.length) sentences.push(result.clarifications[0]!.question);
   if (result.failures.length) {
     const titles = Array.from(new Set(result.failures.map(failure => lowerFirst(failure.title))));
     sentences.push(

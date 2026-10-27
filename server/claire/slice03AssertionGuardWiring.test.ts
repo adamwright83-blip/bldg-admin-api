@@ -203,7 +203,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
     const turn = await answerClaireBusinessTurn(
       {
         tenantId: "tenant-1",
-        utterance: "What was revenue from OPUS in the last 30 days?",
+        utterance: "What was revenue in the last 30 days?",
         state: {},
         surface: "voice",
         context,

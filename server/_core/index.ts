@@ -343,6 +343,10 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // 2026-10-22: a public "request a demo call" route here dialled any number anyone typed, unauthenticated
+  // and unthrottled, from Claire's Twilio number. Removed: outbound calls stay behind operator authorization
+  // (server/twilioPlatform/twilioPlatform.test.ts). A demo-call lead form must record the lead, not dial.
   registerPresidentAgentRoutes(app);
   registerLegacyDayforgeRetentionRoute(app);
   registerLegacyDayforgeSaasAuthRoute(app);
@@ -902,6 +906,9 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      void import("../claire/conversation/ledgerService")
+        .then(({ startClaireSessionIdleSweep }) => startClaireSessionIdleSweep())
+        .catch(error => console.warn("[ClaireLedger] idle sweep not started", error instanceof Error ? error.message : error));
       const stopCleanCloudDirectScheduler = startCleanCloudDirectScheduler();
       server.once("close", stopCleanCloudDirectScheduler);
       void import("../claire/conversation/transcriptLog")
