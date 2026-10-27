@@ -50,6 +50,7 @@ const ROOT = resolve(__dirname, "../../..");
  * server/geography/customerOrderTruth.ts is forbidden unless the diff is
  * exactly the owner-approved CleanCloud receipt-matcher change below.
  * geographicTruthRouter.ts is forbidden unless the diff only adds territoryReport.
+ * An APPROVED_GEOGRAPHY_FILES entry is forbidden unless the file is byte-for-byte the approved version.
  */
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
@@ -65,11 +66,6 @@ const APPROVED_MITCH_EXECUTOR_SMOKE_SHA256: Readonly<Record<string, string>> = {
   "server/mitch/mitchProducerCoordinator.ts": "55f4a4fc6d8758404f643f87a334be5006f37f3b124b9c060a00c5eb52ffa149",
   "server/mitch/producerWorkerMain.ts": "001d82948e8954d7776265cb022dc3b2c8f060da4159725fdc843ba63717f19e",
 };
-
-function mitchExecutorSmokeSha256(file: string): string | null {
-  const filePath = join(ROOT, file);
-  return existsSync(filePath) ? createHash("sha256").update(readFileSync(filePath)).digest("hex") : null;
-}
 
 const PAYMENT_RECONCILIATION_ROUTER_ADDITIONS = [
   "  ignoreReconciliationRow,",
@@ -182,12 +178,27 @@ function customerOrderTruthDiffIsReceiptMatcherOnly(diffText: string): boolean {
   );
 }
 
+/**
+ * Geography reconciliation runs per tenant listed in GEOGRAPHY_RECONCILE_TENANTS, so Lantern City can
+ * locate Laundry Farm's customers instead of showing zero (#692, PR #693). Approved by the owner on
+ * 2026-10-23. The file may differ from main only by being exactly this reviewed version (sha256).
+ */
+const APPROVED_GEOGRAPHY_FILES: Readonly<Record<string, string>> = {
+  "server/geography/geographicReconciliationScheduler.ts":
+    "f77453b9fcb4c3fc2c7e8d3c522e887adfabeca90f3a8bd8f0d2f28b0961fa18",
+};
+
+function currentFileSha256(file: string): string | null {
+  const path = join(ROOT, file);
+  return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+}
+
 function invariant28ForbiddenHits(
   files: readonly string[],
   routersDiff: string,
   customerOrderTruthDiff = "",
   geographyRouterDiff = "",
-  mitchDigest: (file: string) => string | null = mitchExecutorSmokeSha256
+  fileSha256: (file: string) => string | null = currentFileSha256
 ): string[] {
   return files.filter(file => {
     if (file.endsWith(".test.ts")) return false;
@@ -197,8 +208,8 @@ function invariant28ForbiddenHits(
     if (file === "server/geography/geographicTruthRouter.ts") {
       return !additionOnly(geographyRouterDiff, LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS);
     }
-    const approvedMitchDigest = APPROVED_MITCH_EXECUTOR_SMOKE_SHA256[file];
-    if (approvedMitchDigest) return mitchDigest(file) !== approvedMitchDigest;
+    const approved = APPROVED_GEOGRAPHY_FILES[file] ?? APPROVED_MITCH_EXECUTOR_SMOKE_SHA256[file];
+    if (approved) return fileSha256(file) !== approved;
     return true;
   });
 }
@@ -958,6 +969,19 @@ describe("static safety (10, 28)", () => {
     expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => "0".repeat(64))).toEqual([smokePath]);
     expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => null)).toEqual([smokePath]);
     expect(invariant28ForbiddenHits(["server/mitch/unreviewedChange.ts"], routersDiff)).toEqual(["server/mitch/unreviewedChange.ts"]);
+    const scheduler = "server/geography/geographicReconciliationScheduler.ts";
+    expect(invariant28ForbiddenHits([scheduler], routersDiff)).toEqual([]);
+    expect(invariant28ForbiddenHits([scheduler], routersDiff, "", "", () => "0".repeat(64))).toEqual([scheduler]);
+    expect(invariant28ForbiddenHits([scheduler], routersDiff, "", "", () => null)).toEqual([scheduler]);
+    expect(
+      invariant28ForbiddenHits(
+        ["server/geography/geographicTruthService.ts"],
+        routersDiff,
+        "",
+        "",
+        () => APPROVED_GEOGRAPHY_FILES[scheduler]!
+      )
+    ).toEqual(["server/geography/geographicTruthService.ts"]);
     expect(invariant28ForbiddenHits(diff, routersDiff, customerOrderTruthDiff, geographyRouterDiff)).toEqual([]);
 
     // President's durable table stays registered on every branch.

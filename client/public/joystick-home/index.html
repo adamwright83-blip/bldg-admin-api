@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fffdf8">
+  <title>Joystick — Get lost in a game that knows your business.</title>
+  <meta name="description" content="A little escape. A real way forward. Discover adventures built around your business, with unexpected companions and real opportunities.">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/mara.webp">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/prop-mara.webp">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/rook.webp" fetchpriority="low">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/sable.webp" fetchpriority="low">
+  <link rel="preload" as="image" href="/joystick-home/assets/acting/luma.webp" fetchpriority="low">
+  <link rel="icon" type="image/svg+xml" href="/joystick-home/favicon.svg">
+  <link rel="stylesheet" href="/joystick-home/styles.css">
+  <script src="/joystick-home/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#adventures">Skip to adventures</a>
+<div class="page">
+  <header>
+    <a class="brand" href="./" aria-label="Joystick home"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M32 10H53.847A28 28 0 0 0 86 47.35V64A26 26 0 0 1 60 90H32A26 26 0 0 1 6 64V36A26 26 0 0 1 32 10Z" fill="#252620"/><circle cx="82" cy="18" r="16" fill="#e6b944"/></svg>Joystick</a>
+    <span class="brand-line"></span><span class="tagline">A BUSINESS YOU CAN PLAY.</span>
+    <nav aria-label="Main navigation">
+      <a href="#adventures">The worlds</a>
+      <button data-open-about>About</button>
+      <button class="nav-play" data-play>Play a sample <span aria-hidden="true">↗</span></button>
+      <button class="nav-menu" id="nav-menu" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
+    </nav>
+    <div class="mobile-menu" id="mobile-menu" hidden>
+      <a href="#adventures" data-menu-item>The worlds</a>
+      <button data-open-about data-menu-item>About</button>
+      <button class="nav-play" data-play data-menu-item>Play a sample <span aria-hidden="true">↗</span></button>
+    </div>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Get lost in a game<br>that knows<br><em>your business.</em></h1>
+        <div class="invitation">
+          <span class="little-rule" aria-hidden="true"></span>
+          <p>A little escape. A real way forward.</p>
+          <div class="invitation-action"><button class="primary" data-play>Let’s play <span aria-hidden="true">↗</span></button><small>No account needed.</small></div>
+          <p class="founder-note"><span class="glyph" aria-hidden="true">↳</span><span><strong>Founder-reported:</strong> two past customers reordered after outreach made through this game.</span></p>
+        </div>
+      </div>
+      <div class="theatre" aria-label="Four unexpected companions, each with a little surprise">
+        <div class="scene" id="scene" data-character="mara" data-beat="idle">
+                    <div class="performer" id="performer" role="img" aria-label="Mara the fox examines her paw, then catches an enormous key."><div class="falling-prop" id="prop" aria-hidden="true"></div><div class="pose" id="pose"></div></div>
+          <span class="impact-line one" aria-hidden="true"></span><span class="impact-line two" aria-hidden="true"></span>
+          <div class="laser" aria-hidden="true"></div>
+          <span class="smoke puff-a" aria-hidden="true"></span><span class="smoke puff-b" aria-hidden="true"></span><span class="smoke puff-c" aria-hidden="true"></span>
+        </div>
+        <div class="cast-controls" role="group" aria-labelledby="cast-label">
+          <span class="section-label" id="cast-label">Companions</span>
+          <div class="cast-names"><button data-cast="0" aria-pressed="true">Mara</button><button data-cast="1" aria-pressed="false">Rook</button><button data-cast="2" aria-pressed="false">Sable</button><button data-cast="3" aria-pressed="false">Luma</button></div>
+          <button id="pause" class="motion-control" aria-label="Pause character animation" aria-pressed="false"><span aria-hidden="true">Ⅱ</span></button>
+          <button id="replay" class="motion-control" aria-label="Replay this character’s reveal"><span aria-hidden="true">↻</span></button>
+        </div>
+      </div>
+    </section>
+    <section class="adventures" id="adventures" aria-label="Explore the games">
+      <div class="tabs-row">
+        <span class="section-label" id="worlds-label">Worlds</span>
+        <div class="tabs" role="tablist" aria-labelledby="worlds-label">
+        <button id="tab-cozy" role="tab" aria-selected="true" aria-controls="panel-cozy" tabindex="0" data-world="cozy"><span>01</span> Lantern City</button>
+        <button id="tab-road" role="tab" aria-selected="false" aria-controls="panel-road" tabindex="-1" data-world="road"><span>02</span> Trailblazer</button>
+        </div>
+      </div>
+      <div class="adventure-panel" id="panel-cozy" role="tabpanel" aria-labelledby="tab-cozy" tabindex="0">
+        <div><p class="eyebrow">WHAT YOU’RE ACTUALLY PLAYING</p><h2>Help a porcupine. Catch up with a customer.</h2><p class="explanation">A neighbor needs a favor. Their animal friend turns out to be a real customer who hasn’t ordered in 60 days. A little conversation later, you’re putting your own touch on a text you’d probably never have sent.</p></div>
+        <button class="text-link" data-play="cozy">Play a sample <span aria-hidden="true">↗</span></button>
+      </div>
+      <div class="adventure-panel" id="panel-road" role="tabpanel" aria-labelledby="tab-road" tabindex="0" hidden>
+        <div><p class="eyebrow">WHAT YOU’RE ACTUALLY PLAYING</p><h2>His weakness? That sales visit you keep putting off.</h2><p class="explanation">A clock villain hides behind six doors while his hologram fires at you. Joystick finds room on your route for a real prospect visit. Make the introduction, earn a key, then get back in there and find him.</p></div>
+        <button class="text-link" data-play="road">Play a sample <span aria-hidden="true">↗</span></button>
+      </div>
+    </section>
+    <section class="moments" id="how" aria-labelledby="how-label">
+      <p class="eyebrow" id="how-label">HOW IT WORKS</p>
+      <article class="moment">
+        <div class="moment-copy">
+          <p class="moment-number">01</p>
+          <h2>A game you want to play.</h2>
+          <p>Lantern City is a courtyard where the neighbours are animals and the favours are small. Trailblazer is a bright arena where a clock villain keeps saying “after review.” Both are screens from the games as they run today, not concept art.</p>
+        </div>
+        <div class="moment-visual captures">
+          <figure><img src="/joystick-home/assets/worlds/lantern-city-quest.webp" alt="Lantern City: the player stands by a sleeping porcupine in a sunny courtyard while a quest card lists Hazel’s HOA complaint." loading="lazy" width="1280" height="880"><figcaption>Lantern City · Silver Lake</figcaption></figure>
+          <figure><img src="/joystick-home/assets/worlds/trailblazer-arena.webp" alt="Trailblazer: a huge golden clock face hangs over a marble arena, its rim reading Pending, After Review, Next Week, Not Yet." loading="lazy" width="1402" height="925"><figcaption>Trailblazer · The First Kingdom</figcaption></figure>
+        </div>
+      </article>
+      <article class="moment">
+        <div class="moment-copy">
+          <p class="moment-number">02</p>
+          <h2>A game that knows your business.</h2>
+          <p>In October 2026, Joystick read the founder’s own laundry business and found eight Silver Lake customers who had gone quiet. It wrote a first draft for each and put them in the courtyard as neighbours. You read the draft, change what you like, and decide whether it goes.</p>
+        </div>
+        <div class="moment-visual">
+          <div class="hud" role="img" aria-label="The in-game neighbours panel: Silver Lake, 0 of 8 neighbours reached, eight customers each marked Draft prepared.">
+            <div class="hud-head"><span class="hud-dot" aria-hidden="true"></span><div><strong>Silver Lake</strong><small>Lantern City · 0 of 8 neighbours reached</small></div></div>
+            <p class="hud-label">Neighbours</p>
+            <ul class="hud-list">
+              <li><span>Priya Natarajan</span><em>Draft prepared</em></li>
+              <li><span>Tom Delgado</span><em>Draft prepared</em></li>
+              <li><span>Hannah Beck</span><em>Draft prepared</em></li>
+              <li><span>Marisol Vega</span><em>Draft prepared</em></li>
+              <li><span>Devin Okafor</span><em>Draft prepared</em></li>
+              <li><span>Lena Fischer</span><em>Draft prepared</em></li>
+              <li><span>Rosa Alvarez</span><em>Draft prepared</em></li>
+              <li><span>Sam Whitfield</span><em>Draft prepared</em></li>
+            </ul>
+          </div>
+          <p class="moment-caption">The founder’s own game, October 2026. Customer names changed.</p>
+        </div>
+      </article>
+      <article class="moment">
+        <div class="moment-copy">
+          <p class="moment-number">03</p>
+          <h2>A game where progress means something.</h2>
+          <p>Here is everything we can say so far, and nothing more.</p>
+        </div>
+        <div class="moment-visual">
+          <blockquote class="proof">
+            <p><span class="glyph" aria-hidden="true">↳</span><span><strong>Founder-reported:</strong> two past customers reordered after outreach made through this game.</span></p>
+            <footer>One laundry business, reported by its owner. Not a study. When Joystick can verify more, this line will change.</footer>
+          </blockquote>
+        </div>
+      </article>
+      <div class="closing"><button class="primary" data-play>Let’s play <span aria-hidden="true">↗</span></button><small>No account needed.</small><button class="text-link bring-link" data-bring>Bring your own business <span aria-hidden="true">↗</span></button><small>Your customers, in the world you choose. 7-day trial, then $49/month. Card required.</small></div>
+    </section>
+  </main>
+  <footer>
+    <span class="foot-brand">Joystick</span><span>A business you can play.</span>
+    <nav aria-label="Footer navigation"><a href="#adventures">The worlds</a><button data-open-about>About</button><button class="nav-play" data-play>Play a sample <span aria-hidden="true">↗</span></button></nav>
+  </footer>
+</div>
+<dialog id="sample-dialog" aria-labelledby="sample-title">
+  <button class="close-dialog" aria-label="Close sample">×</button>
+  <div class="sample-layout"><div class="sample-visual"><img id="sample-image" src="/joystick-home/assets/lantern-city.webp" alt="A courtyard in Lantern City"><span id="sample-location">LANTERN CITY · SILVER LAKE</span></div>
+  <div class="sample-content"><p class="eyebrow">A LITTLE TASTE OF THE ADVENTURE</p><h2 id="sample-title"></h2><div id="sample-story"></div><div id="sample-actions"></div><p class="sample-disclaimer">Interactive sample. No messages are sent, no visits are booked, and no customer data is connected.</p></div></div>
+</dialog>
+<dialog id="about-dialog" aria-labelledby="about-title"><button class="close-dialog" aria-label="Close about">×</button><p class="eyebrow">A BUSINESS YOU CAN PLAY.</p><h2 id="about-title">A little company.<br>A different way forward.</h2><p>You’re good at what you do. Joystick brings a little adventure to the rest.</p><p>It finds opportunities in your customer history and business records, then builds games around taking the next step. Help a neighbor. Open a door. Find your way back to someone you’ve been meaning to reach.</p><p>You review the real messages and choose the real actions. The companions make getting there more interesting.</p><button class="primary" id="about-play">Try a little adventure ↗</button></dialog>
+<noscript><p class="no-js">Turn on JavaScript to play the character reveals and interactive samples. Joystick brings real business opportunities into playful adventures.</p></noscript>
+</body></html>

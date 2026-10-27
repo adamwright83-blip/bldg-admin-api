@@ -10803,3 +10803,101 @@ export const clairePreparedItems = mysqlTable(
 );
 
 export type ClairePreparedItemRow = typeof clairePreparedItems.$inferSelect;
+
+/** Beverly Hills outreach reports. Fiction rewards require a separate administrator's evidence review. */
+export const beverlyHillsOutreach = mysqlTable('beverly_hills_outreach', {
+  id: varchar('id',{length:36}).notNull(), tenantId: varchar('tenant_id',{length:64}).notNull(),
+  prospectId: varchar('prospect_id',{length:191}).notNull(), address: varchar('address',{length:512}).notNull(),
+  operatorId: varchar('operator_id',{length:191}).notNull(), performedOn: varchar('performed_on',{length:10}).notNull(),
+  hangerId: varchar('hanger_id',{length:100}).notNull(), count: int('hanger_count').notNull(),
+  permission: text('permission_note').notNull(), evidenceUrl: text('evidence_url').notNull(), notes: text('notes').notNull(),
+  status: varchar('status',{length:20}).notNull().default('submitted'),
+  reviewerId: varchar('reviewer_id',{length:191}), reviewNote: text('review_note'), reviewedAt: timestamp('reviewed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, t => [primaryKey({columns:[t.tenantId,t.id]})]);
+
+// ── JOYSTICK referrals (shared/referralProgram.ts) ─────────────
+// One program per business. "cleancloud": CleanCloud runs it and JOYSTICK keeps a copy of its Referral Code Usage
+// list. "joystick": the native POS tier, where JOYSTICK is the referral system.
+export const referralPrograms = mysqlTable("referral_programs", {
+  tenantId: varchar("tenant_id", { length: 64 }).primaryKey(),
+  source: mysqlEnum("source", ["cleancloud", "joystick"]).notNull(),
+  mode: mysqlEnum("mode", ["off", "one_time_credit"]).notNull().default("off"),
+  referrerCreditCents: int("referrer_credit_cents").notNull().default(1000),
+  newCustomerCreditCents: int("new_customer_credit_cents").notNull().default(1000),
+  cleancloudSetupConfirmedAt: timestamp("cleancloud_setup_confirmed_at"),
+  cleancloudLastSyncedAt: timestamp("cleancloud_last_synced_at"),
+  /** Where CleanCloud serves its Referral Code Usage window; GumballPals records it, Jawbreaker fetches it. */
+  cleancloudReferralUsageUrl: varchar("cleancloud_referral_usage_url", { length: 512 }),
+  updatedBy: varchar("updated_by", { length: 128 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ReferralProgramRow = typeof referralPrograms.$inferSelect;
+
+/** Native tier: each customer's own code. */
+export const referralCodes = mysqlTable(
+  "referral_codes",
+  {
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    code: varchar("code", { length: 32 }).notNull(),
+    customerName: varchar("customer_name", { length: 191 }).notNull(),
+    customerPhone: varchar("customer_phone", { length: 32 }),
+    customerEmail: varchar("customer_email", { length: 191 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({
+    pk: primaryKey({ columns: [table.tenantId, table.code] }),
+    tenantPhoneIdx: index("idx_referral_codes_tenant_phone").on(table.tenantId, table.customerPhone),
+  })
+);
+export type ReferralCodeRow = typeof referralCodes.$inferSelect;
+
+/** Every referral, from either tier. CleanCloud rows are keyed by external_key so a re-read updates them. */
+export const referrals = mysqlTable(
+  "referrals",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    source: mysqlEnum("source", ["cleancloud", "joystick"]).notNull(),
+    externalKey: varchar("external_key", { length: 191 }),
+    code: varchar("code", { length: 32 }),
+    referrerName: varchar("referrer_name", { length: 191 }).notNull(),
+    referredName: varchar("referred_name", { length: 191 }).notNull(),
+    referredPhone: varchar("referred_phone", { length: 32 }),
+    referredEmail: varchar("referred_email", { length: 191 }),
+    usedAt: timestamp("used_at").notNull(),
+    externalOrders: int("external_orders"),
+    externalSpendingCents: int("external_spending_cents"),
+    referrerCreditAppliedAt: timestamp("referrer_credit_applied_at"),
+    referrerCreditAppliedBy: varchar("referrer_credit_applied_by", { length: 128 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    externalUnique: uniqueIndex("uq_referrals_tenant_external").on(table.tenantId, table.externalKey),
+    tenantUsedIdx: index("idx_referrals_tenant_used").on(table.tenantId, table.usedAt),
+  })
+);
+export type ReferralRow = typeof referrals.$inferSelect;
+
+/** Native tier store credit. Positive rows grant, negative rows spend. Balance = sum per phone. */
+export const customerCreditEntries = mysqlTable(
+  "customer_credit_entries",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    customerPhone: varchar("customer_phone", { length: 16 }).notNull(),
+    amountCents: int("amount_cents").notNull(),
+    reason: mysqlEnum("reason", ["referral_new_customer", "referral_referrer", "redeemed", "adjustment"]).notNull(),
+    referralId: varchar("referral_id", { length: 64 }),
+    orderId: int("order_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({
+    referralGrant: uniqueIndex("uq_credit_referral_grant").on(table.tenantId, table.reason, table.referralId),
+    orderRedemption: uniqueIndex("uq_credit_order_redemption").on(table.tenantId, table.reason, table.orderId),
+    tenantPhoneIdx: index("idx_credit_tenant_phone").on(table.tenantId, table.customerPhone),
+  })
+);
+export type CustomerCreditEntryRow = typeof customerCreditEntries.$inferSelect;
