@@ -1,0 +1,48 @@
+name: CleanCloud late sales recovery
+on:
+  pull_request:
+    paths:
+      - "server/integrations/cleancloud/browserSync/cleancloudDirectSync.ts"
+      - "server/integrations/cleancloud/browserSync/lateSalesRecovery.mysql.integration.test.ts"
+      - "server/integrations/cleancloud/cleancloudPaidEvidence.ts"
+      - "server/analytics/paidOrderLedger.ts"
+      - "docs/verification/CLEANCLOUD_LATE_SALES.md"
+      - ".github/workflows/cleancloud-late-sales.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  late-sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cleancloud_late_sales_disposable
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec vitest run server/integrations/cleancloud/browserSync/cleancloudDirectSync.test.ts server/integrations/cleancloud/browserSync/validation.test.ts
+      - run: node --test extensions/gumballpals/core.test.mjs extensions/gumballpals/schedule.test.mjs
+      - run: node scripts/migrate.mjs
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/cleancloud_late_sales_disposable
+      - run: pnpm exec vitest run --config vitest.integration.config.ts server/integrations/cleancloud/browserSync/lateSalesRecovery.mysql.integration.test.ts server/integrations/cleancloud/cleancloudResyncCanonicalRevenue.mysql.integration.test.ts
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/cleancloud_late_sales_disposable
+          ALLOW_TEST_DB: "1"

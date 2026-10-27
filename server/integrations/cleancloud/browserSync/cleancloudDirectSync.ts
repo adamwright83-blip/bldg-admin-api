@@ -12,6 +12,7 @@ import {
 } from "./ingestion";
 import { pacificToday, validateRange } from "../../../../extensions/gumballpals/core";
 import { isLegacyDayforgeTenant } from "../../../saas/tenantAccess";
+import { addDaysYmd } from "../../../analytics/businessPeriods";
 
 export const DIRECT_AUTH_FAILED = "direct_auth_failed";
 
@@ -332,8 +333,12 @@ export async function runCleanCloudDirectSync(
       const snapshot = await loadBusinessSourceCoverage({ tenantId });
       const cleancloud = snapshot.sources.find(s => s.sourceId === "cleancloud");
       if (cleancloud?.coveredThrough) {
-        // Start from coveredThrough (overlapping day) to ensure contiguous boundary
-        from = cleancloud.coveredThrough;
+        // Sales may commit before Revenue fails. Resume from the earlier
+        // proven payment checkpoint so that retrying cannot skip that gap.
+        const paymentThrough = snapshot.book.scope.cleancloudEconomicEvents?.through;
+        from = paymentThrough && paymentThrough < cleancloud.coveredThrough
+          ? paymentThrough
+          : cleancloud.coveredThrough;
       }
     } catch {
       // fallback to binding.lastSuccessAt
@@ -342,7 +347,7 @@ export async function runCleanCloudDirectSync(
 
   if (!from) {
     if (binding.lastSuccessAt) {
-      // Default to 1 day before last success date to ensure overlapping boundary completeness
+      // Fall back to the last successful import's Pacific calendar date.
       const lastDate = new Date(binding.lastSuccessAt);
       const pacificParts = new Intl.DateTimeFormat("en-US", {
         timeZone: "America/Los_Angeles",
@@ -368,6 +373,14 @@ export async function runCleanCloudDirectSync(
       const day = pacificParts.find(p => p.type === "day")!.value;
       from = `${y}-${m}-${day}`;
     }
+  }
+
+  if (!options.from) {
+    // A checkpoint for today was taken mid-day, not after every later sale.
+    // Always include the previous Pacific calendar day on automatic/retry
+    // runs; explicit operator-selected ranges keep their exact boundaries.
+    const previousDay = addDaysYmd(today, -1);
+    if (from > previousDay) from = previousDay;
   }
 
   const range = validateRange(from, to, today);
