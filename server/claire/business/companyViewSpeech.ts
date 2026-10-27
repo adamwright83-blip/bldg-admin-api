@@ -91,6 +91,19 @@ export function speakLaundryFarmCompanyView(
 ): void {
   scopeSentence(view, speech);
   if (view.scope === "unauthorized" || !view.tenantsRead.length) return;
+  if (aspect === "breakdown") {
+    const farm = view.businessRevenue.find(item => item.tenantId === LAUNDRY_FARM_TENANT_ID);
+    const butler = view.businessRevenue.find(item => item.tenantId === LAUNDRY_BUTLER_TENANT_ID);
+    if (farm) speech.say(`Laundry Farm recorded sales ${view.period.label}: ${speech.money(farm.figures.recordedSalesCents, true)}.`);
+    else speech.say("Laundry Farm's book is unavailable for this breakdown.");
+    if (butler) speech.say(`Laundry Butler recorded sales ${view.period.label}: ${speech.money(butler.figures.recordedSalesCents, true)}.`);
+    else speech.say("Laundry Butler's book is unavailable for this breakdown.");
+    if (view.mayStateCompanyTotal && farm && butler) {
+      speech.say(`Together, recorded sales ${view.period.label} are ${speech.money(view.totals.recordedSalesCents, true)}.`);
+    }
+    overlapSentences(view, speech);
+    return;
+  }
   if (aspect === "orders") {
     speech.say(
       `There ${view.totals.orderCount === 1 ? "is" : "are"} ${speech.count(view.totals.orderCount)} paid ${view.totals.orderCount === 1 ? "order" : "orders"} ${view.period.label}.`

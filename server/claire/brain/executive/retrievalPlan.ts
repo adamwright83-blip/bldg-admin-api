@@ -21,6 +21,8 @@ import {
   companyQuestionFromParameters,
   companyViewRequest,
   matchLaundryFarmCompanyQuestion,
+  LAUNDRY_FARM_TENANT_ID,
+  LAUNDRY_BUTLER_TENANT_ID,
 } from "../../../analytics/laundryFarmCompanyView";
 import type { AttentionPlan } from "../contracts/attention";
 import type { EvidenceItem } from "../contracts/evidence";
@@ -187,10 +189,12 @@ export function planRetrievalPassA(
       // A bounded semantic planner may choose query CRITERIA, never facts or numbers.
       // If it is absent or fails, the deterministic parser remains the fallback.
       // A company question replaces that query: the company reader is the authority.
-      const company = matchLaundryFarmCompanyQuestion(
-        perceived.assembledText,
-        companyQuestionFromParameters(memory.orderedQuery?.parameters)
-      );
+      const company = memory.currentCallContext.tenantId === LAUNDRY_FARM_TENANT_ID || memory.currentCallContext.tenantId === LAUNDRY_BUTLER_TENANT_ID
+        ? matchLaundryFarmCompanyQuestion(
+            perceived.assembledText,
+            companyQuestionFromParameters(memory.orderedQuery?.parameters)
+          )
+        : null;
       const query = company
         ? companyViewRequest(company)
         : semanticBusinessQuery ??

@@ -317,6 +317,33 @@ describe("Claire company questions", () => {
     return { turn, runQuery };
   }
 
+  it("keeps the monthly combined default and offers a verified breakdown only on request", async () => {
+    const all = ["laundry_farm", "default"];
+    const question = matchLaundryFarmCompanyQuestion("What's the month's current revenue?");
+    expect(question).toEqual({ aspect: "revenue", period: { kind: "this_month" } });
+    const combined = await ask("What's the month's current revenue?", all);
+    expect(combined.turn.reader).toBe("company_view");
+    expect(combined.turn.handled && combined.turn.speak).toContain("Recorded sales this month so far are $657.00 across 7 orders.");
+    const direct = await ask("Break down this month's revenue between Laundry Farm and Laundry Butler", all);
+    expect(direct.turn.reader).toBe("company_view");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Farm recorded sales this month so far: $265.00.");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Laundry Butler recorded sales this month so far: $392.00.");
+    expect(direct.turn.handled && direct.turn.speak).toContain("Together, recorded sales this month so far are $657.00.");
+    expect(matchLaundryFarmCompanyQuestion("Break that down by business", question)).toEqual({
+      aspect: "breakdown", period: { kind: "this_month" },
+    });
+    expect(matchLaundryFarmCompanyQuestion("Compare Stripe vs CleanCloud revenue this month")?.aspect).toBe("breakdown");
+    const limited = await ask("Break down our revenue by business", ["laundry_farm"]);
+    expect(limited.turn.handled && limited.turn.speak).toContain("Laundry Butler's book is unavailable");
+    expect(limited.turn.handled && limited.turn.speak).not.toContain("$392.00");
+    expect(limited.turn.handled && limited.turn.speak).not.toContain("Together:");
+    expect(matchLaundryFarmCompanyQuestion("What was wash-and-fold revenue in August?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Split wash-and-fold revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Break down cash revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Break down OPUS LA revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("whats the months current revenue")?.aspect).toBe("revenue");
+  });
+
   it("answers company questions from the company view, including both rails", async () => {
     const revenue = await ask("How much have we made this month?", ["laundry_farm", "default"]);
     expect(revenue.runQuery).not.toHaveBeenCalled();
@@ -372,7 +399,7 @@ describe("Claire company questions", () => {
       period: { kind: "last_month" },
     });
     expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?")).toBeNull();
-    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toEqual({ aspect: "revenue", period: { kind: "this_month" } });
     expect(matchLaundryFarmCompanyQuestion("What was revenue from OPUS last month?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much did Laundry Farm make in August?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much profit did we make last month?")).toBeNull();

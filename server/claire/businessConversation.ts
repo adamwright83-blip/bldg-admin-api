@@ -56,6 +56,8 @@ import {
 import {
   matchLaundryFarmCompanyQuestion,
   readLaundryFarmCompanyView,
+  LAUNDRY_FARM_TENANT_ID,
+  LAUNDRY_BUTLER_TENANT_ID,
   type LaundryFarmCompanyQuestion,
 } from "../analytics/laundryFarmCompanyView";
 import type { ServiceType } from "../analytics/paidOrderLedger";
@@ -1160,7 +1162,13 @@ export async function answerClaireBusinessTurn(
   const goalTurn = await settleBusinessGoal(input, deps, now, timeZone);
   if (goalTurn) return goalTurn;
   let reader: ClaireBusinessReader = "query";
-  const companyQuestion = matchLaundryFarmCompanyQuestion(input.utterance, input.state.companyQuestion ?? null);
+  // Real company books default to combined. Injected tenant-query callers without an explicit
+  // company reader retain their existing service, source, and period query semantics.
+  const companyReaderAvailable = (input.tenantId === LAUNDRY_FARM_TENANT_ID || input.tenantId === LAUNDRY_BUTLER_TENANT_ID) &&
+    (deps.readCompanyView != null || deps.runQuery == null);
+  const companyQuestion = companyReaderAvailable
+    ? matchLaundryFarmCompanyQuestion(input.utterance, input.state.companyQuestion ?? null)
+    : null;
   input.state.companyQuestion = companyQuestion;
   if (companyQuestion) {
     reader = "company_view";

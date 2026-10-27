@@ -26,7 +26,7 @@ export const NON_CUSTOMER_PROOF_IDS = [
 ] as const;
 
 export type CompanyPaymentRail = "stripe" | "cleancloud_clearant" | "other";
-export type CompanyQuestionAspect = "revenue" | "orders" | "health" | "buildings";
+export type CompanyQuestionAspect = "revenue" | "orders" | "health" | "buildings" | "breakdown";
 
 export type CompanyMoneyFigures = {
   recordedSalesCents: number;
@@ -66,6 +66,8 @@ export type LaundryFarmCompanyView = {
   tenantsRead: string[];
   tenantsUnread: string[];
   totals: CompanyMoneyFigures;
+  /** The same admitted sales, partitioned by authorized business book. Never inferred from payment rail. */
+  businessRevenue: Array<{ tenantId: string; figures: CompanyMoneyFigures }>;
   buildings: CompanyBuildingSlice[];
   overlap: {
     status: "none" | "unresolved";
@@ -201,6 +203,16 @@ const LAUNDRY_FARM_SERVICE_LINE = /\blaundry\s+farm\b[\s\S]{0,48}\b(?:make|made|
 const BUILDING_NAME = /\bopus(?:\s+la)?\b|\bcentury\s+park(?:\s+east)?\b|\bcpe\b/;
 const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+east)?|cpe)\b|\b(?:century\s+park(?:\s+east)?|cpe)\b[\s\S]{0,80}\bopus(?:\s+la)?\b/;
 
+/** A breakdown must be requested; unqualified revenue remains the combined company number. */
+function asksBusinessRevenueBreakdown(text: string, inheritedRevenue = false): boolean {
+  // Never silently turn a service-, payment-method-, or building-filtered question into a company-wide sum.
+  if (/\b(?:wash[\s-]*(?:(?:and|&)[\s-]*)?fold|dry[-\s]?clean(?:ing)?|cash|opus|century\s+park|cpe)\b/.test(text)) return false;
+  const split = /\b(?:break\s+(?:it\s+|that\s+)?down|breakdown|split|separately|by\s+business|each\s+business|versus|vs\.?|compare)\b/.test(text);
+  const aboutRevenue = /\b(?:revenue|sales|income|money|earnings|made|brought\s+in)\b/.test(text) || inheritedRevenue;
+  const aboutBusiness = /\b(?:laundry\s+(?:farm|butler)|clean\s?cloud|stripe|businesses|business|each)\b/.test(text);
+  return split && aboutRevenue && (aboutBusiness || /\b(?:breakdown|break\s+(?:it\s+|that\s+)?down|split)\b/.test(text));
+}
+
 function normalizeCompanyUtterance(utterance: string): string {
   return utterance
     .trim()
@@ -228,6 +240,7 @@ function companyPeriod(text: string): PeriodSpec {
 }
 
 function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null {
+  if (asksBusinessRevenueBreakdown(text)) return { aspect: "breakdown", period: companyPeriod(text) };
   if (companyQuestionBlocked(text)) return null;
   if (
     /^how(?:'s| is| are) (?:laundry farm|the company|the business)\b/.test(text) &&
@@ -250,6 +263,10 @@ function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null 
   if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
+  if (/^(?:what(?:'s|s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month'?s|months|month-to-date|this month)\s+){1,3}(?:revenue|sales)\b/.test(text)) {
+    return { aspect: "revenue", period: companyPeriod(text) };
+  }
+  if (/^how much (?:did|do) we (?:make|made|bring in|do)\b/.test(text)) return { aspect: "revenue", period: companyPeriod(text) };
   if (/^how much have we (?:made|brought in)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
@@ -290,6 +307,9 @@ export function matchLaundryFarmCompanyQuestion(
 ): LaundryFarmCompanyQuestion | null {
   const text = normalizeCompanyUtterance(utterance);
   if (!text) return null;
+  if (prior && asksBusinessRevenueBreakdown(text, prior.aspect === "revenue" || prior.aspect === "breakdown")) {
+    return { aspect: "breakdown", period: parsePeriodPhrase(text, new Date(), LAUNDRY_FARM_COMPANY_TIME_ZONE) ?? prior.period };
+  }
   return directCompanyQuestion(text) ?? companyFollowUp(text, prior);
 }
 
@@ -314,7 +334,8 @@ export function companyQuestionFromParameters(parameters: unknown): LaundryFarmC
     parameters.aspect !== "revenue" &&
     parameters.aspect !== "orders" &&
     parameters.aspect !== "health" &&
-    parameters.aspect !== "buildings"
+    parameters.aspect !== "buildings" &&
+    parameters.aspect !== "breakdown"
   ) {
     return null;
   }
@@ -517,6 +538,11 @@ export function composeLaundryFarmCompanyView(input: {
     .filter(building => building.figures.orderCount > 0 || building.figures.refundCents !== 0 || building.figures.unpaidBalanceCents)
     .sort((a, b) => bucketRank(a.bucket) - bucketRank(b.bucket) || a.label.localeCompare(b.label));
 
+  const businessRevenue = input.tenantsRead.map(tenantId => {
+    const money = emptyMoney();
+    for (const sale of counted) if (sale.tenantId === tenantId) addSale(money, sale);
+    return { tenantId, figures: finishMoney(money, false) };
+  });
   const totalsMoney = emptyMoney();
   for (const sale of counted) addSale(totalsMoney, sale);
   for (const row of unpaidRows) addUnpaid(totalsMoney, row.totalCents);
@@ -531,6 +557,7 @@ export function composeLaundryFarmCompanyView(input: {
     tenantsRead: input.tenantsRead,
     tenantsUnread: input.tenantsUnread,
     totals: finishMoney(totalsMoney, input.unpaid != null),
+    businessRevenue,
     buildings,
     overlap: {
       status: overlapUnresolved ? "unresolved" : "none",
