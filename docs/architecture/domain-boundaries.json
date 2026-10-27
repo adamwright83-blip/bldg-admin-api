@@ -120,6 +120,13 @@
       "paths": [
         "server/legacy/dayforge"
       ]
+    },
+    {
+      "domain": "referral",
+      "paths": [
+        "server/domains/referral",
+        "shared/referralProgram.ts"
+      ]
     }
   ],
   "forbiddenImports": [

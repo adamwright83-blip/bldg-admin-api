@@ -1,4 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { JOYSTICK_EXPERIENCES } from "../../shared/joystickSelectedExperience";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -220,6 +221,7 @@ export const saasRouter = router({
         contactName: z.string().trim().min(1).max(255),
         ownerEmail: z.string().trim().email().max(320),
         timeZone: z.string().trim().min(1).max(64),
+        selectedExperience: z.enum(JOYSTICK_EXPERIENCES).nullish(),
       })
     )
     .mutation(async ({ input }) => {

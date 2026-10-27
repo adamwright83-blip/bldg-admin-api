@@ -32,6 +32,7 @@ test("real onboarding persists answers, resumes the same draft and labels propos
       }
     });
     await page.goto("/joystick-start");
+    await page.getByRole("button", { name: "I don't have a list handy" }).click();
     await expect(page.getByText("1 OF 3", { exact: true })).toBeVisible();
     const credentials = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), credentialKey);
     sessionId = credentials.sessionId;

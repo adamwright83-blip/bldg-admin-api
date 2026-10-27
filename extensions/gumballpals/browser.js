@@ -317,6 +317,7 @@ export async function goldlineRequest(operation, input) {
       resolve: "POST",
       reportFailure: "POST",
       recordWitness: "POST",
+      referralUsage: "POST",
     };
     if (!Object.hasOwn(methods, operation))
       throw new Error("Unknown operation.");
@@ -656,3 +657,64 @@ export function assertCleanCloudScreenshotTarget(tab) {
 }
 
 export const sites = { GOLDLINE, CLEANCLOUD, MAX_BYTES };
+
+// Admin → Discounts & Promos → Invite Codes / Referrals → View Referral Activity.
+// Not yet observed by this extension's author: every control is found by its exact visible text (as in Adam's
+// screenshots, 2026-10-26), and capture stops with the stage name if one is missing rather than guessing. Also
+// returns the address the window's rows loaded from, so the server sync (Jawbreaker) can fetch it without a browser.
+export async function readReferralActivity() {
+  let stage = "opening Admin";
+  try {
+    if (location.origin !== "https://cleancloudapp.com" || location.pathname !== "/store")
+      throw new Error("Open the signed-in gumball store.");
+    if (!document.title.endsWith("CleanCloud")) throw new Error("Sign into gumball first.");
+    const pause = () => new Promise(r => setTimeout(r, 100));
+    const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
+    const wait = async (predicate, tries = 100) => {
+      for (let i = 0; i < tries; i++) {
+        const value = predicate();
+        if (value) return value;
+        await pause();
+      }
+      throw new Error(`Referral capture stopped while ${stage}. The expected control did not appear.`);
+    };
+    const byText = (text, root = document) =>
+      [...root.querySelectorAll("a, button, li, span, div, h1, h2, h3, h4")].filter(
+        e => visible(e) && e.textContent.trim() === text && ![...e.children].some(c => c.textContent.trim() === text)
+      );
+    const clickText = async text => {
+      const found = await wait(() => byText(text)[0]);
+      found.click();
+    };
+    if (!byText("Discounts & Promos").length) {
+      const menu = document.querySelector("#accountShow");
+      if (menu) menu.click();
+      await clickText("Admin");
+    }
+    stage = "opening Discounts & Promos";
+    await clickText("Discounts & Promos");
+    stage = "opening Invite Codes / Referrals";
+    await clickText("Invite Codes / Referrals");
+    stage = "opening View Referral Activity";
+    const before = performance.now();
+    await clickText("View Referral Activity");
+    stage = "reading Referral Code Usage";
+    const heading = await wait(() => byText("Referral Code Usage")[0]);
+    let root = heading;
+    for (let i = 0; i < 8 && root && !root.querySelector("tr, [role=row]"); i++) root = root.parentElement;
+    await pause();
+    const rowEls = root ? [...root.querySelectorAll("tr, [role=row]")] : [];
+    const rows = rowEls
+      .map(r => [...r.querySelectorAll("td, th, [role=cell], [role=columnheader]")].map(c => c.textContent.trim().replace(/\s+/g, " ")))
+      .filter(cells => cells.length >= 5);
+    const loads = performance
+      .getEntriesByType("resource")
+      .filter(e => e.startTime >= before && /^https:\/\/cleancloudapp\.com\//.test(e.name) && ["xmlhttprequest", "fetch"].includes(e.initiatorType));
+    const sourceUrl = loads.length ? loads[loads.length - 1].name : null;
+    const close = [...document.querySelectorAll("button, a, span")].find(e => visible(e) && ["×", "✕", "Close"].includes(e.textContent.trim()));
+    if (close) close.click();
+    return { ok: true, value: { rows, sourceUrl } };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}

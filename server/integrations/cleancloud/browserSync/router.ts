@@ -40,6 +40,7 @@ import {
 } from "./gumballOperatorStatus";
 import { assertPulseTenant, loadTenantOperatingPulse } from "./operatingPulse";
 import { loadLatestCleanCloudSales } from "./latestSales";
+import { importCleanCloudReferralUsage, saveCleanCloudReferralUsageUrl } from "../../../domains/referral/referralService";
 
 const store = z.object({
   storeId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -699,6 +700,19 @@ export const cleancloudBrowserSyncRouter = router({
         to: input.to ?? null,
       });
       return { recorded: true as const };
+    }),
+  /** GumballPals: CleanCloud's Referral Code Usage window, read on every sync, and where it loaded from. */
+  referralUsage: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        rows: z.array(z.array(z.string().max(500)).max(12)).max(5000),
+        sourceUrl: z.string().url().max(512).nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await importCleanCloudReferralUsage({ tenantId: ctx.tenantId, rows: input.rows });
+      await saveCleanCloudReferralUsageUrl(ctx.tenantId, input.sourceUrl ?? null);
+      return result;
     }),
   recordWitness: legacyDayforgeTenantOperatorProcedure
     .input(

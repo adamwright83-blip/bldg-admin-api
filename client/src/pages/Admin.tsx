@@ -352,8 +352,11 @@ function RetryChargeButton({
         amountCents,
       });
       if (result.success) {
+        const credit = "creditAppliedCents" in result ? result.creditAppliedCents ?? 0 : 0;
         toast.success(
-          `Charged ${order.firstName} ${order.lastName} ${money(amountCents)}.`
+          credit > 0
+            ? `Charged ${order.firstName} ${order.lastName} ${money(result.chargedCents)} after ${money(credit)} referral credit.`
+            : `Charged ${order.firstName} ${order.lastName} ${money(amountCents)}.`
         );
         onCharged?.();
       } else {
