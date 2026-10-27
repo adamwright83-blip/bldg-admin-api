@@ -75,7 +75,7 @@ export function nextMoneyDiagnostic(input: {
   return null;
 }
 
-function SectionIntro({
+export function SectionIntro({
   eyebrow,
   title,
   copy,
