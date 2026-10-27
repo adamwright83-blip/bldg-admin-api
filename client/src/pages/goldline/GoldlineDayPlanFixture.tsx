@@ -1,4 +1,5 @@
 import DriverPickupFixture from "./DriverPickupFixture";
+import DriverStudioFixture from "./DriverStudioFixture";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
@@ -9,6 +10,7 @@ import type { DayDirectorCommitment } from "@shared/dayDirector";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  if (state === "studio-route") return <DriverStudioFixture />;
   if (state.startsWith("pickup-bridge")) return <DriverPickupFixture failed={state.endsWith("failed")} />;
   return state.startsWith("art-") ? <DaylineGraphicFixture state={state} /> : <LegacyDayPlanFixture state={state} />;
 }
@@ -159,6 +161,7 @@ function LegacyDayPlanFixture({ state }: { state: string }) {
         ];
   return (
     <GoldlineDayPlan
+      defaultSurface="legacy"
       onResolveStop={async stop => {
         const action = stop.action;
         if (action?.type === "order") {

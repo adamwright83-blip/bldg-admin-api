@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e/goldline",
-  testMatch: ["daylineGraphicActions.spec.ts", "daylineViewport.spec.ts", "driverPickupFlow.spec.ts"],
+  testMatch: ["daylineGraphicActions.spec.ts", "daylineViewport.spec.ts", "driverPickupFlow.spec.ts", "driverStudio.spec.ts"],
   timeout: 60000,
   workers: 2,
   retries: 0,

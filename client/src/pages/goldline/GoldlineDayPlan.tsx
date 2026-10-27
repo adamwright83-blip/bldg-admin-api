@@ -51,6 +51,12 @@ import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import DriverStudioDay from "../driver/studio/DriverStudioDay";
+import {
+  readDaylineSurface,
+  switchDaylineSurface,
+  type DaylineSurface,
+} from "../driver/studio/daylineSurface";
+import { openClaireComposer } from "@/components/claire/ClaireComposerSheet";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
@@ -124,6 +130,13 @@ export type GoldlineDayPlanProps = {
   onOpenImport: () => void;
   /** Reuse the driver's existing QuickNewOrderSheet; never create a parallel order mutation. */
   onOpenNewOrder?: () => void;
+  /**
+   * Surface when neither the URL nor this device has chosen one. Production
+   * leaves it unset (Driver Studio); legacy harness fixtures pin "legacy".
+   */
+  defaultSurface?: DaylineSurface;
+  /** Overrides how Studio asks Claire to call (test harness only). */
+  onCallClaire?: () => Promise<void>;
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
   onEnterColosseum: () => void;
@@ -797,12 +810,12 @@ function DaphneMissionAdjustments({
 }
 
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
-  // GOLDLINE world is the default Day Line. The operator can switch to
-  // the previous layout with ?dayline=classic while visual QA continues.
-  const studioView = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dayline") === "studio";
-  const artPreview =
-    typeof window === "undefined" ||
-    new URLSearchParams(window.location.search).get("dayline") !== "classic";
+  // Driver Studio is the default Day Line. ?dayline=legacy returns to the
+  // GOLDLINE world Day Line (remembered on the device); ?dayline=classic is
+  // the older layout kept for visual QA. See driver/studio/daylineSurface.ts.
+  const [surface] = useState(() => readDaylineSurface(props.defaultSurface));
+  const studioView = surface === "studio";
+  const artPreview = surface !== "classic";
   const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   function selectStop(stop: DayPlanStop) {
@@ -909,9 +922,21 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         isLoading={props.isLoading}
         loadError={props.loadError}
         onResolveStop={props.onResolveStop}
+        onRetryPickup={props.onRetryPickup}
         onOriginalStop={stop => setActiveStop(stop)}
         onOpenNewOrder={props.onOpenNewOrder ?? props.onOpenImport}
         onEnterWorld={props.onEnterWorld}
+        onOpenClaireComposer={openClaireComposer}
+        onCallClaire={props.onCallClaire ?? (async () => {
+          await callClaireForMission.mutateAsync({
+            missionId:
+              nextStop?.action?.type === "commercial"
+                ? nextStop.action.missionId
+                : undefined,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          });
+        })}
+        onSwitchToLegacy={() => switchDaylineSurface("legacy")}
       />
       {activeStop && (
         <DriverStopChapter

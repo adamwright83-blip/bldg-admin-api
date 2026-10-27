@@ -68,6 +68,7 @@ export default function DriverPickupFixture({
   }
   return (
     <GoldlineDayPlan
+      defaultSurface="legacy"
       businessDate="2026-08-25"
       externalOrders={jobs}
       onResolveStop={resolve}

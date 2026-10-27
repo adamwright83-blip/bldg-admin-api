@@ -24,6 +24,14 @@ export default defineConfig({
     // The business runs on Pacific time: Day Line, Home and the proof seed all use America/Los_Angeles dates.
     // A UTC browser on CI disagreed with them every evening after 5pm Pacific.
     timezoneId: "America/Los_Angeles",
+    // These smoke journeys assert the previous GOLDLINE Day Line (day-plan-stop
+    // cards, the world navigation menu). Driver Studio is the production
+    // default; the legacy Day Line is the driver's remembered opt-out, pinned
+    // here. Studio's own journey: e2e/goldline/driverStudio.spec.ts.
+    storageState: {
+      cookies: [],
+      origins: [{ origin: new URL(baseURL).origin, localStorage: [{ name: "joystick:dayline", value: "legacy" }] }],
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
