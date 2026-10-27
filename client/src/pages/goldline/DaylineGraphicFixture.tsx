@@ -110,6 +110,7 @@ function DynamicDaylineGraphicFixture({ state }: { state: string }) {
   return (
     <>
       <GoldlineDayPlan
+        defaultSurface="legacy"
         businessDate="2026-10-10"
         pickups={loaded ? pickups : []}
         deliveries={loaded ? deliveries : []}

@@ -1684,6 +1684,7 @@ function LiveGoldlineDriverController({
           pickups.isLoading || deliveries.isLoading || externalOrders.isLoading
         }
         onOpenImport={() => setAddExternalWorkOpen(true)}
+        onOpenNewOrder={() => setNewOrderOpen(true)}
         onOpenWeek={() => setWeekOpen(true)}
         onEnterOperations={() => {
           setDayBriefingOpen(false);
@@ -1765,6 +1766,12 @@ function LiveGoldlineDriverController({
           });
           await externalOrders.refetch();
         }}
+      />
+      {/* The Day Line returns before the scene tree below, so its NEW ORDER needs the same sheet here. */}
+      <QuickNewOrderSheet
+        open={newOrderOpen}
+        onOpenChange={setNewOrderOpen}
+        onOrderCreated={handleOrderCreated}
       />
     </div>
   );

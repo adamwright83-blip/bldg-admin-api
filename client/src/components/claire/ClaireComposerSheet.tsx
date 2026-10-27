@@ -29,6 +29,13 @@ function launcherCoversControl(launcher: HTMLElement): boolean {
   });
 }
 
+const OPEN_EVENT = "joystick:claire-composer-open";
+
+/** Opens the composer sheet from elsewhere in the driver app (Driver Studio's Claire pull). */
+export function openClaireComposer() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
+
 /**
  * Driver entry to Claire's text line: one floating button that opens a sheet over
  * the Day Line. (Claire's portrait in the Day Line header places a phone call;
@@ -43,6 +50,15 @@ export function ClaireComposerSheet({ onTurn }: { onTurn?: () => void }) {
   const [everOpened, setEverOpened] = useState(false);
   const [stepAside, setStepAside] = useState(false);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const openSheet = () => {
+      setEverOpened(true);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_EVENT, openSheet);
+    return () => window.removeEventListener(OPEN_EVENT, openSheet);
+  }, []);
 
   useEffect(() => {
     if (!open) return;

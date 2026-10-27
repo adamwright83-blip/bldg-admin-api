@@ -26,6 +26,11 @@ function ReferenceCrop({
   );
 }
 
+/** Claire's approved head, the same pixels as the Day Line header badge. */
+export function ClairePortrait({ className }: { className?: string }) {
+  return <ReferenceCrop box={[805, 76, 102, 103]} className={className} />;
+}
+
 function dateLabel(businessDate: string) {
   const [year, month, day] = businessDate.split("-").map(Number);
   return new Date(year, month - 1, day)

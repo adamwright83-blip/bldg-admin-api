@@ -50,6 +50,13 @@ import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
+import DriverStudioDay from "../driver/studio/DriverStudioDay";
+import {
+  readDaylineSurface,
+  switchDaylineSurface,
+  type DaylineSurface,
+} from "../driver/studio/daylineSurface";
+import { openClaireComposer } from "@/components/claire/ClaireComposerSheet";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
@@ -96,6 +103,29 @@ function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
   );
 }
 
+function FirstMissionEvidenceCard({
+  evidence,
+}: {
+  evidence?: { text: string; reportedAt: string } | null;
+}) {
+  if (!evidence) return null;
+  return (
+    <section
+      className="gdp-load-error"
+      data-testid="day-line-first-mission-evidence"
+      aria-label="Completed field evidence"
+    >
+      <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
+      <p>{evidence.text}</p>
+      <small>
+        Operator-attested observation ·{" "}
+        {new Date(evidence.reportedAt).toLocaleString()}.
+        No sale or revenue verified.
+      </small>
+    </section>
+  );
+}
+
 export type GoldlineDayPlanProps = {
   businessDate: string;
   pickups?: Order[];
@@ -121,6 +151,15 @@ export type GoldlineDayPlanProps = {
   onOpenFirstMission?: () => void;
   firstMissionEvidence?: { text: string; reportedAt: string } | null;
   onOpenImport: () => void;
+  /** Reuse the driver's existing QuickNewOrderSheet; never create a parallel order mutation. */
+  onOpenNewOrder?: () => void;
+  /**
+   * Surface when neither the URL nor this device has chosen one. Production
+   * leaves it unset (Driver Studio); legacy harness fixtures pin "legacy".
+   */
+  defaultSurface?: DaylineSurface;
+  /** Overrides how Studio asks Claire to call (test harness only). */
+  onCallClaire?: () => Promise<void>;
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
   onEnterColosseum: () => void;
@@ -794,11 +833,12 @@ function DaphneMissionAdjustments({
 }
 
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
-  // GOLDLINE world is the default Day Line. The operator can switch to
-  // the previous layout with ?dayline=classic while visual QA continues.
-  const artPreview =
-    typeof window === "undefined" ||
-    new URLSearchParams(window.location.search).get("dayline") !== "classic";
+  // Driver Studio is the default Day Line. ?dayline=legacy returns to the
+  // GOLDLINE world Day Line (remembered on the device); ?dayline=classic is
+  // the older layout kept for visual QA. See driver/studio/daylineSurface.ts.
+  const [surface] = useState(() => readDaylineSurface(props.defaultSurface));
+  const studioView = surface === "studio";
+  const artPreview = surface !== "classic";
   const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   function selectStop(stop: DayPlanStop) {
@@ -896,6 +936,84 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     if (!nextStop) return props.onOpenImport();
     selectStop(nextStop);
   };
+
+  if (studioView) return (
+    <>
+      <DriverStudioDay
+        businessDate={props.businessDate}
+        stops={plan.stops}
+        isLoading={props.isLoading}
+        loadError={props.loadError}
+        onResolveStop={props.onResolveStop}
+        onRetryPickup={props.onRetryPickup}
+        onOriginalStop={stop => setActiveStop(stop)}
+        onOpenNewOrder={props.onOpenNewOrder ?? props.onOpenImport}
+        onEnterWorld={props.onEnterWorld}
+        onOpenClaireComposer={openClaireComposer}
+        onCallClaire={props.onCallClaire ?? (async () => {
+          await callClaireForMission.mutateAsync({
+            missionId:
+              nextStop?.action?.type === "commercial"
+                ? nextStop.action.missionId
+                : undefined,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          });
+        })}
+        onSwitchToLegacy={() => switchDaylineSurface("legacy")}
+        navigation={[
+          { label: "JOURNAL", onSelect: props.onOpenJournal ?? props.onEnterOperations },
+          ...(props.onOpenWeek ? [{ label: "WEEK", onSelect: props.onOpenWeek }] : []),
+          { label: "BUILD MISSION", onSelect: () => setBuildMissionOpen(true) },
+          { label: "IMPORT OR ADD STOPS", onSelect: props.onOpenImport },
+          { label: "FIELD OPERATIONS", onSelect: props.onEnterOperations },
+          { label: "EXPLORE OVERWORLD", onSelect: () => props.onEnterWorld() },
+          ...(props.onEnterChapter ? [{ label: "ENTER KINGDOM", onSelect: () => props.onEnterChapter?.() }] : []),
+          ...(props.onOpenFirstMission ? [{ label: "THE FIRST SPARK", onSelect: () => props.onOpenFirstMission?.() }] : []),
+          { label: "PLAY", onSelect: () => setPlaying(true) },
+        ]}
+        briefing={
+          <>
+            <MissionFollowUpCard
+              followUp={props.missionFollowUp ?? null}
+              onAnswer={props.onAnswerMissionFollowUp}
+            />
+            <DaphneMissionAdjustments commitments={props.commitments} />
+            <CarriedForwardCard
+              work={props.carriedForward ?? null}
+              onComplete={props.onCompleteCommitment}
+            />
+            {props.currentDayLine ? (
+              <details className="gdp-dayline-disclosure">
+                <summary>DAY LINE DETAILS</summary>
+                <CurrentDayLineBlock line={props.currentDayLine} />
+              </details>
+            ) : null}
+            <FirstMissionEvidenceCard evidence={props.firstMissionEvidence} />
+          </>
+        }
+      />
+      {activeStop && (
+        <DriverStopChapter
+          stop={plan.stops.find(stop => stop.id === activeStop.id) ?? activeStop}
+          onClose={() => setActiveStop(null)}
+          onResolve={props.onResolveStop}
+          onRetryPickup={props.onRetryPickup}
+          onArchive={props.onArchiveStop}
+          onCallClaireForMission={async missionId => {
+            await callClaireForMission.mutateAsync({ missionId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+          }}
+          onEnter={() => { props.onEnterWorld(activeStop.id); setActiveStop(null); }}
+          onJournal={() => { setActiveStop(null); (props.onOpenJournal ?? props.onEnterOperations)(); }}
+          onPlay={() => { setActiveStop(null); setPlaying(true); }}
+        />
+      )}
+      <BuildMissionSheet
+        open={buildMissionOpen}
+        onOpenChange={setBuildMissionOpen}
+      />
+      {playing && <LanternRun onClose={() => setPlaying(false)} />}
+    </>
+  );
 
   return (
     <main
@@ -1190,21 +1308,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <CurrentDayLineBlock line={props.currentDayLine} />
         </details>
       )}
-      {props.firstMissionEvidence && (
-        <section
-          className="gdp-load-error"
-          data-testid="day-line-first-mission-evidence"
-          aria-label="Completed field evidence"
-        >
-          <strong>THE FIRST SPARK · FIELD OBSERVATION RECORDED</strong>
-          <p>{props.firstMissionEvidence.text}</p>
-          <small>
-            Operator-attested observation ·{" "}
-            {new Date(props.firstMissionEvidence.reportedAt).toLocaleString()}.
-            No sale or revenue verified.
-          </small>
-        </section>
-      )}
+      <FirstMissionEvidenceCard evidence={props.firstMissionEvidence} />
       {artPreview && (
         <details
           className="gdp-v2-operations"

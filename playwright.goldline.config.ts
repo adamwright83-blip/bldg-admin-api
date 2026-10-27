@@ -35,6 +35,12 @@ export default defineConfig({
           origin: baseURL,
           localStorage: [
             { name: "goldline:day1:dismissed", value: "1" },
+            // Driver Studio is the production default Day Line. These suites
+            // regress the previous GOLDLINE Day Line, which stays reachable as
+            // the driver's own opt-out (?dayline=legacy, remembered under this
+            // key). Studio is covered by e2e/goldline/driverStudio.spec.ts
+            // with an empty profile, i.e. the real default.
+            { name: "joystick:dayline", value: "legacy" },
           ],
         },
       ],
