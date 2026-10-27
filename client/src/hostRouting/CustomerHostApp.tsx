@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { trpc } from "@/lib/trpc";
+import { signedInWithLegacyDriverPassword } from "@/lib/legacyDriverSession";
 import {
   isPlatformAdminPath,
   normalizePath,
@@ -44,14 +45,6 @@ function CustomerRefusal() {
       <p>This host does not serve the control room.</p>
     </main>
   );
-}
-
-function signedInWithLegacyDriverPassword(user: {
-  openId?: string | null;
-  role?: string | null;
-} | null): boolean {
-  if (!user?.openId || user.role !== "driver") return false;
-  return !user.openId.startsWith("dayforge:");
 }
 
 function CustomerMembershipGate({ children }: { children: ReactNode }) {
