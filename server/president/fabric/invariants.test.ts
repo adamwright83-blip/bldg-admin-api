@@ -55,6 +55,18 @@ const ROOT = resolve(__dirname, "../../..");
 const DOMAIN_PROTECTED_RE =
   /^(server\/(commercialPipeline|commercialCampaigns|authority|geography|goldlineWorld|lanternCity|mitch)\/|server\/routers\.ts|package\.json)/;
 
+/**
+ * Explicitly reviewed Mitch executor smoke implementation (#705). Every
+ * protected implementation path remains denied by default; only these exact
+ * file bytes may pass. A follow-up edit requires re-review and a new digest.
+ */
+const APPROVED_MITCH_EXECUTOR_SMOKE_SHA256: Readonly<Record<string, string>> = {
+  "server/mitch/executorSmokeOrder.ts": "613ea09e07b270921b7f1271d3c69f4c854b902e3997f423b1cef4232a4041bb",
+  "server/mitch/mitchProducerPlans.ts": "ab57c627b58687c54ef3f89008a3b0fb0246ffa0d4be7ba5ad37ba24d7eab466",
+  "server/mitch/mitchProducerCoordinator.ts": "55f4a4fc6d8758404f643f87a334be5006f37f3b124b9c060a00c5eb52ffa149",
+  "server/mitch/producerWorkerMain.ts": "001d82948e8954d7776265cb022dc3b2c8f060da4159725fdc843ba63717f19e",
+};
+
 const PAYMENT_RECONCILIATION_ROUTER_ADDITIONS = [
   "  ignoreReconciliationRow,",
   "  recordManualReconciliationMatch,",
@@ -196,7 +208,7 @@ function invariant28ForbiddenHits(
     if (file === "server/geography/geographicTruthRouter.ts") {
       return !additionOnly(geographyRouterDiff, LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS);
     }
-    const approved = APPROVED_GEOGRAPHY_FILES[file];
+    const approved = APPROVED_GEOGRAPHY_FILES[file] ?? APPROVED_MITCH_EXECUTOR_SMOKE_SHA256[file];
     if (approved) return fileSha256(file) !== approved;
     return true;
   });
@@ -950,6 +962,13 @@ describe("static safety (10, 28)", () => {
         `${LANTERN_TERRITORY_REPORT_ROUTER_ADDITIONS.split("\n").map(line => `+${line}`).join("\n")}\n-  geocodePending: legacyAdminRoleProcedure`
       )
     ).toEqual(["server/geography/geographicTruthRouter.ts"]);
+    // The Mitch opt-in executor smoke change is the exact reviewed content.
+    // A replaced file, an unknown Mitch file, or a missing file stays forbidden.
+    const smokePath = "server/mitch/executorSmokeOrder.ts";
+    expect(invariant28ForbiddenHits([smokePath], routersDiff)).toEqual([]);
+    expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => "0".repeat(64))).toEqual([smokePath]);
+    expect(invariant28ForbiddenHits([smokePath], routersDiff, "", "", () => null)).toEqual([smokePath]);
+    expect(invariant28ForbiddenHits(["server/mitch/unreviewedChange.ts"], routersDiff)).toEqual(["server/mitch/unreviewedChange.ts"]);
     const scheduler = "server/geography/geographicReconciliationScheduler.ts";
     expect(invariant28ForbiddenHits([scheduler], routersDiff)).toEqual([]);
     expect(invariant28ForbiddenHits([scheduler], routersDiff, "", "", () => "0".repeat(64))).toEqual([scheduler]);

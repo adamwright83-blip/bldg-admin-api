@@ -7,6 +7,7 @@ import {
   SMALL_COMFORTS_GAME_ID,
   seedSmallComfortsProducerWork,
 } from "./smallComfortsProduction";
+import { seedExecutorSmokeOrder, withExecutorSmokeSeedLock } from "./executorSmokeOrder";
 import type { MitchProductionService } from "./mitchService";
 import type { IMitchProductionStore } from "./mitchStore";
 
@@ -26,6 +27,8 @@ export function createMitchProducerPlan(input: {
   service: MitchProductionService;
   baseBranch?: string;
   baseSha?: string;
+  /** Opt-in (MITCH_EXECUTOR_SMOKE_ORDER=true): add one trivial order to prove the executor loop. */
+  executorSmokeOrder?: boolean;
 }): MitchProducerPlan {
   if (input.gameId === SMALL_COMFORTS_GAME_ID) {
     return {
@@ -50,7 +53,11 @@ export function createMitchProducerPlan(input: {
   return {
     gameId: "kingdom.boreslay",
     gameTitle: "Boreslay",
-    seed: async () => {
+    seed: async () => withExecutorSmokeSeedLock({
+      tenantId: input.tenantId,
+      gameId: "kingdom.boreslay",
+      enabled: input.executorSmokeOrder === true,
+    }, async () => {
       const state = await seedKingdomTwoProductionState({
         tenantId: input.tenantId,
         store: input.store,
@@ -63,6 +70,21 @@ export function createMitchProducerPlan(input: {
       );
       if (!milestone)
         throw new Error("Kingdom Two producer milestone was not seeded");
+
+      if (input.executorSmokeOrder) {
+        const smoke = await seedExecutorSmokeOrder({
+          tenantId: input.tenantId,
+          gameId: "kingdom.boreslay",
+          store: input.store,
+          service: input.service,
+          baseBranch: input.baseBranch,
+          baseSha: input.baseSha,
+        });
+        // Smoke mode is isolated from the install-duel production lane.
+        // On later ticks (or after smoke failure), do not fall through and mint
+        // a different work order while this one-off probe is enabled.
+        return { state, workOrder: smoke };
+      }
 
       const orders = await input.store.listWorkOrders(
         input.tenantId,
@@ -127,6 +149,6 @@ export function createMitchProducerPlan(input: {
         ],
       });
       return { state, workOrder };
-    },
+    }),
   };
 }
