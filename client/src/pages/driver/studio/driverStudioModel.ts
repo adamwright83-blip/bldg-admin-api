@@ -42,7 +42,7 @@ export const SCENES: Record<DriverSceneId, { label: string; image: string | null
   },
   "beverly-hills": {
     label: "The Other Rodeo",
-    image: "/assets/goldline/beverly-hills-2d/08-ranch-far.png",
+    image: "/assets/goldline/beverly-hills-2d/01-look.png",
     position: "center",
     effect: "The herd stirs",
   },
@@ -60,9 +60,9 @@ export const SCENES: Record<DriverSceneId, { label: string; image: string | null
   },
   "koreatown": {
     label: "Koreatown",
-    image: null,
+    image: "/joystick/driver-studio/koreatown-boba.svg",
     position: "center",
-    effect: "The neighborhood responds",
+    effect: "The boba shop responds",
   },
   "hollywood": {
     label: "Hollywood",
@@ -120,6 +120,6 @@ export function formatJobKind(kind: DayPlanStop["kind"]) {
 }
 
 export function canHoldToComplete(stop: DayPlanStop): boolean {
-  return Boolean(stop.action && stop.status !== "blocked" && stop.status !== "cancelled" && stop.status !== "completed" &&
+  return Boolean((stop.kind === "pickup" || stop.kind === "dropoff") && stop.action && stop.status !== "blocked" && stop.status !== "cancelled" && stop.status !== "completed" &&
     (stop.action.type !== "order" || stop.action.eligible));
 }
