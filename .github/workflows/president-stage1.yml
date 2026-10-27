@@ -21,6 +21,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   president-stage1:
     runs-on: ubuntu-latest

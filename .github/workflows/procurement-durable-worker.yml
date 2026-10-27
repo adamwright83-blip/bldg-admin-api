@@ -6,6 +6,11 @@ name: Procurement durable worker characterization
 
 on:
   pull_request:
+    # Docs and captured artifacts never reach this gate; any code change still runs it.
+    paths-ignore:
+      - "docs/**"
+      - "artifacts/**"
+      - "**/*.md"
   workflow_dispatch:
 
 permissions:
