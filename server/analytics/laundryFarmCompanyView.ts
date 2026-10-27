@@ -263,9 +263,10 @@ function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null 
   if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
-  if (/^(?:what(?:'s|s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month'?s|months|month-to-date|this month)\s+){0,3}(?:revenue|sales)\b/.test(text)) {
+  if (/^(?:what(?:'s|s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month'?s|months|month-to-date|this month)\s+){1,3}(?:revenue|sales)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
+  if (/^how much (?:did|do) we (?:make|made|bring in|do)\b/.test(text)) return { aspect: "revenue", period: companyPeriod(text) };
   if (/^how much have we (?:made|brought in)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }

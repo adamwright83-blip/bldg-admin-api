@@ -399,7 +399,7 @@ describe("Claire company questions", () => {
       period: { kind: "last_month" },
     });
     expect(matchLaundryFarmCompanyQuestion("What was revenue in the last 30 days?")).toBeNull();
-    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("How much did we make?")).toEqual({ aspect: "revenue", period: { kind: "this_month" } });
     expect(matchLaundryFarmCompanyQuestion("What was revenue from OPUS last month?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much did Laundry Farm make in August?")).toBeNull();
     expect(matchLaundryFarmCompanyQuestion("How much profit did we make last month?")).toBeNull();
