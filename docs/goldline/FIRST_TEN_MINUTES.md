@@ -44,7 +44,7 @@ the apex serves, and `JoystickAcquisitionPage.tsx` reads only `checkout` from th
 | Step | Screen | Where in code |
 |---|---|---|
 | 1 | "Building your starting point…" | `JoystickAcquisitionPage.tsx` |
-| 2 | Five text questions: what you do all day, where you work, where best customers come from, what you avoid, what changes in 90 days | `shared/goldlineOnboarding.ts:6-10` |
+| 2 | Three text questions before checkout: what you do all day, where you work, what you avoid (`JOYSTICK_PREPAY_QUESTION_KEYS`). The other two (best customers, 90-day change) come after checkout in `/onboarding` | `shared/goldlineOnboarding.ts:6-24` |
 | 3 | "CLAIRE'S OPENING READ": canonical address and a briefing built from the answers only | `server/goldlineOnboarding/interpreter.ts` |
 | 4 | Business name, contact, email ("SAVE THIS WORLD") | `saveJoystickIdentity` |
 | 5 | "7 days, then $49/month. Card required." then Stripe | `server/saas/joystickStripeOffer.ts` |
@@ -180,7 +180,7 @@ throwaway business. Each PR says which was done.
 | Slice | What | Touches |
 |---|---|---|
 | **A** | Entry: homepage "Bring your own business" into the funnel on gojoystick.com; `vercel.json` rewrite for `/joystick-start`; Stripe returns to the starting origin (allowlisted); the chosen world is carried and stored on the draft | `client/public/joystick-home/`, `vercel.json`, `server/saas/saasBilling.ts`, `saasRouter.ts`, `saasStore.ts`, `JoystickAcquisitionPage.tsx` |
-| **B** | Pre-card mirror from a CSV held on the draft, committed to the tenant at provisioning; questions cut to two and skippable | `JoystickAcquisitionPage.tsx`, `server/saas/saasStore.ts`, `server/goldlineOnboarding/customerImport.ts` |
+| **B** | Pre-card mirror from a customer CSV. The list stays in the visitor's browser (no server storage, no geocoding before payment); a draft-scoped endpoint returns a summary only; the service-area question is pre-filled from the list for the operator to confirm; after activation the list goes through the normal tenant import and paid sessions can import at all. Cutting to two skippable questions is deferred until the billing-origin change lands, because it touches the same signup-draft file | `JoystickAcquisitionPage.tsx`, `server/saas/saasStore.ts`, `server/goldlineOnboarding/customerImport.ts` |
 | **C** | Opening Read v2 from records, with receipts and an explicit "not sure" line | `prepareClaireOpening`, assertion guard path, `interpreter.ts` |
 | **D** | Board population from onboarding evidence in the chosen world, with visible progress | `firstMission.ts` `revealWorld`, game builders |
 | **E** | Opportunity selector and the playable preview; draft held through checkout; real send only after activation | `server/claire/`, existing `server/agents/tools/` only |

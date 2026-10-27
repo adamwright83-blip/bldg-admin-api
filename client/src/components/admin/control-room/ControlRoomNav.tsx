@@ -59,6 +59,7 @@ const GROWTH_WEST: WestItem[] = [
   { label: "Driver Intelligence", path: "/growth/driver-intelligence", icon: Sparkles },
   { label: "Buildings", path: "/growth/buildings", icon: Building2 },
   { label: "Offers", path: "/growth/offers", icon: Bell },
+  { label: "Referrals", path: "/growth/referrals", icon: Users },
 ];
 const DRIVER_WEST: WestItem[] = [
   { label: "Overlook — Scout", path: "/growth/driver-intelligence/overlook", icon: Map, nested: true },

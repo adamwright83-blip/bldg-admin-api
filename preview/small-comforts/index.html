@@ -1,0 +1,44 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Small Comforts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+/* One rainy night on purpose: the game keeps a single dark palette in light and dark mode. */
+:root{--ink:#07080b;--cream:#f4e4c7;--muted:#cdb592;--amber:#ffbf73;--line:rgba(244,228,199,.22);color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--ink);color:var(--cream);font-family:Fraunces,Georgia,serif}
+body{min-height:100vh;background:radial-gradient(ellipse at 50% 30%,rgba(7,8,11,.35),rgba(7,8,11,.92) 70%),url(plate.jpg) center/cover fixed,var(--ink)}
+main{max-width:980px;margin:0 auto;padding:clamp(28px,7vh,72px) 16px 48px}
+h1{font-weight:400;font-size:clamp(40px,8vw,76px);margin:0;letter-spacing:-.01em;text-align:center}
+.sub{text-align:center;color:var(--muted);font-family:"Patrick Hand",Georgia,serif;font-size:20px;margin:8px 0 34px}
+.cont{display:flex;justify-content:center;margin-bottom:34px}
+.cont a{font:600 16px Fraunces,Georgia,serif;color:#1a1008;background:var(--amber);border-radius:999px;padding:13px 30px;text-decoration:none;min-height:44px}
+.cont a:focus-visible,.ch:focus-visible{outline:2px solid var(--cream);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.ch{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:14px;padding:20px 20px 18px;background:rgba(10,9,8,.62);backdrop-filter:blur(6px);transition:transform .2s,border-color .2s}
+.ch:hover{transform:translateY(-2px);border-color:rgba(255,191,115,.55)}
+.n{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:26px;margin:6px 0 8px}
+.d{font-family:"Patrick Hand",Georgia,serif;font-size:18px;line-height:1.35;color:#e8d6b6;margin:0}
+.done{margin-top:12px;font-size:13px;color:var(--amber);min-height:1em}
+.note{text-align:center;margin-top:34px;font-size:13px;color:var(--muted)}
+</style>
+<main>
+  <h1>Small Comforts</h1>
+  <p class="sub">Three mice live in a lost suitcase. He has no idea.</p>
+  <div class="cont"><a id="go" href="ch1.html">Start</a></div>
+  <div class="grid">
+    <a class="ch" href="ch1.html" data-n="1"><div class="n">Chapter One</div><div class="t">Breakfast in Bed</div><p class="d">His lunch is on top of the tin. Pip's bed is up on the shelf. Nobody can reach either.</p><div class="done"></div></a>
+    <a class="ch" href="ch2.html" data-n="2"><div class="n">Chapter Two</div><div class="t">This Is a Sign</div><p class="d">He's asleep, and his beard is in the way. Somebody has a trimmer.</p><div class="done"></div></a>
+    <a class="ch" href="ch3.html" data-n="3"><div class="n">Chapter Three</div><div class="t">Leftovers</div><p class="d">They owe him dinner. The week's scraps, fed to him on the in-breath.</p><div class="done"></div></a>
+  </div>
+  <p class="note">Sound on. Best sideways on a phone.</p>
+</main>
+<script>
+const get=k=>{try{return JSON.parse(localStorage.getItem("smallcomforts."+k))}catch(e){return null}};
+let next=1;for(const n of[1,2,3]){if(get("done"+n)){document.querySelector(`.ch[data-n="${n}"] .done`).textContent="✓ finished";next=n+1}}
+const go=document.getElementById("go");
+if(next>3){go.textContent="Play again from the start";go.href="ch1.html"}else if(next>1||get("last")){go.textContent=`Continue: Chapter ${["One","Two","Three"][next-1]}`;go.href=`ch${next}.html`}
+</script>
+
+</body></html>
