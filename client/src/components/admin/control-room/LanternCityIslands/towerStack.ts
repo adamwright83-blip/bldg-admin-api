@@ -59,12 +59,7 @@ export type Resident = { key: string; name: string; address: string; unit: strin
 /** where a unit string lands: floor 1..floors, slot 1..unitsPerFloor (null when the floor is known but the door isn't) */
 export type UnitSpot = { floor: number; slot: number | null };
 
-/** the unit a customer gave: the unit field, or failing that the apartment written into the address ("3545 Wilshire Blvd Apt#1607") */
-export function unitOf(unit: string | null | undefined, address: string): string | null {
-  if (unit && unit.trim()) return unit.trim();
-  const m = /(?:\b(?:apt|apartment|unit|ste|suite)\.?\s*#?\s*|#\s*)([a-z0-9-]+)\b/i.exec(address);
-  return m ? m[1] : null;
-}
+export { unitOf } from "@shared/towerDesk";
 
 export function parseUnit(unit: string | null, t: Pick<TowerSpec, "floors" | "unitsPerFloor">): UnitSpot | null {
   if (!unit) return null;

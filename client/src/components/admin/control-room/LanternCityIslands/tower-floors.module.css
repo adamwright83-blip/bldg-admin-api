@@ -287,3 +287,26 @@
   text-transform: uppercase;
   cursor: pointer;
 }
+/* the column under the tower: plain stage, or stage plus the front desk scrolling beneath it */
+.stageColumn {
+  position: relative;
+  min-height: 0;
+  display: grid;
+}
+.deskColumn {
+  position: relative;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.deskColumn .stageWrap {
+  height: clamp(340px, 46vh, 520px);
+}
+.list .showAll {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+}

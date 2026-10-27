@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeographicCustomer } from "../customerGeography";
 import { createTowerRooms, type LobbyRect, type RoomHover } from "./towerRooms";
 import { buildTowerModel, darkFloors, TOWER_BUILDINGS, unitOf, type Resident } from "./towerStack";
+import TowerDesk from "./TowerDesk";
+import { TOWER_DESK_BUILDINGS, type TowerDeskBuildingId } from "@shared/towerDesk";
 import { openCenturyParkEastGame } from "@/pages/goldline/centuryParkEast3d/centuryParkEastEntry";
 import styles from "./tower-floors.module.css";
 
@@ -16,6 +18,7 @@ import styles from "./tower-floors.module.css";
  */
 const QUIET_DAYS = 45;
 const GAME_BUILDINGS = new Set(["century_park_east"]);
+const DESK_BUILDINGS = new Set<string>(TOWER_DESK_BUILDINGS);
 
 /** spend and order counts are null when the atlas feed doesn't carry them: never shown as zero */
 type Row = Resident & { phone: string | null; days: number | null; spendCents: number | null; orders: number | null };
@@ -47,6 +50,8 @@ export default function TowerFloors({
   const [hover, setHover] = useState<RoomHover>(null);
   const [picked, setPicked] = useState<NonNullable<RoomHover> | null>(null);
   const [lobbies, setLobbies] = useState<LobbyRect[]>([]);
+  const [quietOnly, setQuietOnly] = useState(false);
+  const list = useRef<HTMLElement>(null);
   const spec = TOWER_BUILDINGS.find(b => b.id === buildingId);
   const residents = useMemo<Row[]>(
     () =>
@@ -103,6 +108,8 @@ export default function TowerFloors({
     }
   })();
   const hasGame = GAME_BUILDINGS.has(spec.id);
+  const hasDesk = DESK_BUILDINGS.has(spec.id);
+  const listed = quietOnly ? rows.filter(r => r.quiet) : rows;
 
   return (
     <div className={styles.overlay} role="dialog" aria-label={`${spec.name} floors`} data-tower-floors={spec.id}>
@@ -131,6 +138,7 @@ export default function TowerFloors({
         </div>
       </header>
       <div className={styles.body}>
+        <div className={hasDesk ? styles.deskColumn : styles.stageColumn}>
         <div className={styles.stageWrap}>
           <div ref={host} className={styles.stage} />
           {hasGame
@@ -150,10 +158,21 @@ export default function TowerFloors({
               ))
             : null}
         </div>
-        <aside className={styles.list} aria-label="Customers in this building">
-          <h3>{here.length} customer{here.length === 1 ? "" : "s"} here</h3>
+        {hasDesk ? (
+          <TowerDesk
+            buildingId={spec.id as TowerDeskBuildingId}
+            spec={spec}
+            model={model}
+            rows={rows}
+            onShowQuiet={() => { setQuietOnly(true); list.current?.scrollTo({ top: 0, behavior: "smooth" }); }}
+          />
+        ) : null}
+        </div>
+        <aside ref={list} className={styles.list} aria-label="Customers in this building">
+          <h3>{quietOnly ? `${listed.length} quiet 45+ days` : `${here.length} customer${here.length === 1 ? "" : "s"} here`}</h3>
+          {quietOnly ? <button type="button" className={styles.showAll} onClick={() => setQuietOnly(false)}>Show all {rows.length}</button> : null}
           <ul>
-            {rows.map(r => (
+            {listed.map(r => (
               <li key={r.key} className={r.quiet ? styles.quietRow : ""}>
                 <span>{r.name}</span>
                 <small>
