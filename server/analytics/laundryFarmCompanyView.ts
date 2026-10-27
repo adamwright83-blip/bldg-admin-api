@@ -205,6 +205,8 @@ const BOTH_BUILDINGS = /\bopus(?:\s+la)?\b[\s\S]{0,80}\b(?:century\s+park(?:\s+e
 
 /** A breakdown must be requested; unqualified revenue remains the combined company number. */
 function asksBusinessRevenueBreakdown(text: string, inheritedRevenue = false): boolean {
+  // Never silently turn a service-, payment-method-, or building-filtered question into a company-wide sum.
+  if (/\b(?:wash[\s-]*(?:(?:and|&)[\s-]*)?fold|dry[-\s]?clean(?:ing)?|cash|opus|century\s+park|cpe)\b/.test(text)) return false;
   const split = /\b(?:break\s+(?:it\s+|that\s+)?down|breakdown|split|separately|by\s+business|each\s+business|versus|vs\.?|compare)\b/.test(text);
   const aboutRevenue = /\b(?:revenue|sales|income|money|earnings|made|brought\s+in)\b/.test(text) || inheritedRevenue;
   const aboutBusiness = /\b(?:laundry\s+(?:farm|butler)|clean\s?cloud|stripe|businesses|business|each)\b/.test(text);
@@ -261,7 +263,7 @@ function directCompanyQuestion(text: string): LaundryFarmCompanyQuestion | null 
   if (/^(?:what(?:'s| is| was| were)|how(?:'s| is| much is| are)) (?:my|our) (?:revenue|sales)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
-  if (/^(?:what(?:\x27s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month\x27s|month-to-date|this month)\s+){0,3}(?:revenue|sales)\b/.test(text)) {
+  if (/^(?:what(?:'s|s| is| was)|how much(?: is| was)?)\s+(?:(?:the|our)\s+)?(?:(?:current|monthly|month'?s|months|month-to-date|this month)\s+){0,3}(?:revenue|sales)\b/.test(text)) {
     return { aspect: "revenue", period: companyPeriod(text) };
   }
   if (/^how much have we (?:made|brought in)\b/.test(text)) {

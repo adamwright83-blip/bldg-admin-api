@@ -338,6 +338,10 @@ describe("Claire company questions", () => {
     expect(limited.turn.handled && limited.turn.speak).not.toContain("$392.00");
     expect(limited.turn.handled && limited.turn.speak).not.toContain("Together:");
     expect(matchLaundryFarmCompanyQuestion("What was wash-and-fold revenue in August?")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Split wash-and-fold revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Break down cash revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("Break down OPUS LA revenue by business")).toBeNull();
+    expect(matchLaundryFarmCompanyQuestion("whats the months current revenue")?.aspect).toBe("revenue");
   });
 
   it("answers company questions from the company view, including both rails", async () => {
