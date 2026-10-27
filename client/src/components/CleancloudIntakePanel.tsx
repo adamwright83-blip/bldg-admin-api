@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { validateIntakePlan } from "@shared/cleancloudIntake";
+import { operatorConnectionWarning } from "@shared/operatorConnectionWarning";
 import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 export function CleancloudIntakePanel() {
   const feed = trpc.system.gumball.intake.list.useQuery(undefined, {
@@ -13,9 +14,13 @@ export function CleancloudIntakePanel() {
   const directStatus = trpc.system.gumball.directStatus.useQuery(undefined, {
     retry: false,
   });
+  const syncContext = trpc.system.gumball.context.useQuery(undefined, {
+    retry: false,
+  });
   const gmailConnect = trpc.system.gumball.gmailConnectUrl.useMutation();
   const directSync = trpc.system.gumball.directSync.useMutation();
   const [syncNote, setSyncNote] = useState("");
+  const [syncAlert, setSyncAlert] = useState("");
   const [selected, setSelected] = useState<string | null>(null),
     [search, setSearch] = useState(""),
     [quantities, setQuantities] = useState<Record<string, string>>({}),
@@ -39,6 +44,16 @@ export function CleancloudIntakePanel() {
   }
   const button =
     "min-h-11 rounded-lg border px-4 py-2 text-base disabled:opacity-50";
+  const connectionWarning = operatorConnectionWarning({
+    tenantId: syncContext.data?.tenantId ?? null,
+    gmailStatusKnown: directStatus.isSuccess,
+    gmailConfigured: Boolean(directStatus.data?.gmail.configured),
+    gmailConnected: Boolean(directStatus.data?.gmail.connected),
+    lastAttemptOutcome:
+      syncContext.data?.observability?.lastAttemptOutcome ?? null,
+    lastAttemptMessage:
+      syncContext.data?.observability?.lastAttemptMessage ?? null,
+  });
   return (
     <section
       className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4"
@@ -49,6 +64,22 @@ export function CleancloudIntakePanel() {
         {/* Which business's CleanCloud this panel connects and syncs (only owners of more than one see a choice). */}
         <BusinessSwitcher />
       </div>
+      {connectionWarning ? (
+        <p
+          role="alert"
+          className="my-2 rounded-lg border border-red-400 bg-red-50 p-3 text-sm font-medium"
+        >
+          {connectionWarning}
+        </p>
+      ) : null}
+      {syncAlert ? (
+        <p
+          role="alert"
+          className="my-2 rounded-lg border border-red-400 bg-red-50 p-3 text-sm font-medium"
+        >
+          {syncAlert}
+        </p>
+      ) : null}
       {directStatus.data?.gmail.configured ? (
         <div className="my-2 flex items-center gap-3 text-sm">
           <span>
@@ -67,11 +98,15 @@ export function CleancloudIntakePanel() {
                 const { url } = await gmailConnect.mutateAsync();
                 window.location.assign(url);
               } catch (e) {
-                setError(e instanceof Error ? e.message : "Gmail connection failed.");
+                setError(
+                  e instanceof Error ? e.message : "Gmail connection failed."
+                );
               }
             }}
           >
-            {directStatus.data.gmail.connected ? "Reconnect Gmail" : "Connect Gmail"}
+            {directStatus.data.gmail.connected
+              ? "Reconnect Gmail"
+              : "Connect Gmail"}
           </button>
         </div>
       ) : null}
@@ -81,7 +116,7 @@ export function CleancloudIntakePanel() {
             CleanCloud {directStatus.data.storeLabel ?? "store"} last synced:{" "}
             {directStatus.data.lastSuccessAt
               ? new Date(directStatus.data.lastSuccessAt).toLocaleString()
-              : "never"}
+              : "no successful sync recorded. That is not a zero."}
           </span>
           <button
             type="button"
@@ -90,21 +125,31 @@ export function CleancloudIntakePanel() {
             onClick={async () => {
               setError("");
               setSyncNote("");
+              setSyncAlert("");
               try {
                 const result = await directSync.mutateAsync();
-                setSyncNote(
-                  result.success
-                    ? `Synced ${result.range.from} to ${result.range.to}.`
-                    : `Sync did not complete for ${result.range.from} to ${result.range.to}.`
-                );
+                if (result.success) {
+                  setSyncNote(
+                    `Synced ${result.range.from} to ${result.range.to}.`
+                  );
+                } else {
+                  setSyncAlert(
+                    `Sync did not complete for ${result.range.from} to ${result.range.to}. A failed sync stays a failure. That is not a zero.`
+                  );
+                }
               } catch (e) {
-                setError(e instanceof Error ? e.message : "CleanCloud sync failed.");
+                setError(
+                  e instanceof Error ? e.message : "CleanCloud sync failed."
+                );
               } finally {
                 await directStatus.refetch();
+                await syncContext.refetch();
               }
             }}
           >
-            {directSync.isPending ? "Syncing… (up to 2 min)" : "Sync CleanCloud now"}
+            {directSync.isPending
+              ? "Syncing… (up to 2 min)"
+              : "Sync CleanCloud now"}
           </button>
           {syncNote ? <span role="status">{syncNote}</span> : null}
         </div>

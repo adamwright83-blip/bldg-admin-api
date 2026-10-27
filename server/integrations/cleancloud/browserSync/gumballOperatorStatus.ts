@@ -1,7 +1,9 @@
 /**
  * Operator-facing GUMBALL / Jawbreaker status. Distinguishes capture, parse,
  * validation, database write, and downstream customer-truth assimilation.
+ * A failed sync stays a failure. It is not described as a captured export.
  */
+import { isFailedSyncOutcome } from "@shared/operatorConnectionWarning";
 
 export type GumballAssimilationStatus =
   | "refreshed"
@@ -65,7 +67,10 @@ export function formatPacificClock(value: string | Date): string {
   }).format(asDate(value) ?? new Date(value));
 }
 
-function countPart(count: number | null | undefined, noun: string): string | null {
+function countPart(
+  count: number | null | undefined,
+  noun: string
+): string | null {
   if (count == null || !Number.isFinite(count)) return null;
   return `${count} ${noun}`;
 }
@@ -77,9 +82,14 @@ function attemptStageLine(
   const value = String(outcome ?? "").toLowerCase();
   const text = String(message ?? "").toLowerCase();
   if (!value) return "export never captured";
-  if (value === "extension_export" || value === "extension_failed") {
-    return "export never captured";
+  if (text.includes("gmail is not connected")) {
+    return "sync failed because Jawbreaker Gmail is not connected. That is not a zero";
   }
+  if (value === "direct_auth_failed") {
+    return "sync failed because CleanCloud sign-in failed. That is not a zero";
+  }
+  if (value === "extension_export") return "export never captured";
+  if (value === "extension_failed") return "sync failed";
   if (value === "extension_parse") {
     return "CSV parse rejected";
   }
@@ -99,6 +109,7 @@ function attemptStageLine(
   if (value === "failed" || value === "unavailable") {
     return "database import failed";
   }
+  if (isFailedSyncOutcome(value)) return "sync failed";
   return null;
 }
 
@@ -113,7 +124,10 @@ export function formatGumballOperatorStatus(
     : "GUMBALL";
 
   const outcome = String(input.lastAttemptOutcome ?? "");
-  if (outcome === "imported" || (!outcome && successAt && input.rowsParsed != null)) {
+  if (
+    outcome === "imported" ||
+    (!outcome && successAt && input.rowsParsed != null)
+  ) {
     const parts = [
       prefix,
       countPart(input.rowsParsed, "rows parsed"),
@@ -127,7 +141,10 @@ export function formatGumballOperatorStatus(
       parts.push("customer truth failed");
       if (input.map === "refreshed") parts.push("map refreshed");
       else parts.push("map not refreshed");
-    } else if (input.customerTruth === "refreshed" && input.map === "refreshed") {
+    } else if (
+      input.customerTruth === "refreshed" &&
+      input.map === "refreshed"
+    ) {
       parts.push("customer truth refreshed");
       parts.push("map refreshed");
     } else if (input.customerTruth === "refreshed" && input.map === "pending") {
