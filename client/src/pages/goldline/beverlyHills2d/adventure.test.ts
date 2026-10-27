@@ -309,6 +309,18 @@ describe("The Lost Creek: one place, two eras", () => {
     expect(moods(s, "boxer")).not.toContain("tender");
   });
 
+  it("8b. if she crosses ahead of them, home waits at the seam until the two catch up", () => {
+    const s = freshAdventure();
+    solveWithTheBoxer(s);
+    walkTo(s, SEAM - 40, 0.6);
+    s.calf.x = s.boxer.x = s.player.x - 600;
+    const before = s.beat.side;
+    for (let n = 0; n < 120 && s.beat.side === before; n++) tick(s, 1 / 60, { dx: 1, dy: 0 });
+    expect(s.beat.side).not.toBe(before);
+    expect(s.chapter).toBe("creek");
+    expect(until(s, () => s.chapter === "home", 12)).toBe(true);
+  });
+
   it("8. the three walk through the seam into the overlap; home is a place she walks; lying down ends it", () => {
     const s = freshAdventure();
     solveWithTheBoxer(s);

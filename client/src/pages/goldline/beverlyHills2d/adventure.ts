@@ -84,7 +84,7 @@ export type Adventure = {
   /** sounds this tick asked for; the renderer plays and clears them */
   cues: Cue[];
   /** private timers for repeating sounds and edge detection */
-  beat: { hose: number; fill: number; knockArmed: boolean; side: Side };
+  beat: { hose: number; fill: number; knockArmed: boolean; side: Side; homeward: boolean };
 };
 
 export const WIDTH = 3800;
@@ -186,7 +186,7 @@ export function freshAdventure(): Adventure {
     card: null,
     tear: null,
     cues: [],
-    beat: { hose: 0, fill: 0, knockArmed: true, side: "now" },
+    beat: { hose: 0, fill: 0, knockArmed: true, side: "now", homeward: false },
   };
 }
 
@@ -909,19 +909,23 @@ function seam(s: Adventure, input: Input) {
   const now = side(s.player.x);
   const before = s.beat.side;
   s.beat.side = now;
-  if (before === now) return;
-  cue(s, "rustle");
-  if (!s.flags.crossed) {
-    s.flags.crossed = true;
-    card(s, "Two times, one courtyard");
+  if (before !== now) {
+    cue(s, "rustle");
+    if (!s.flags.crossed) {
+      s.flags.crossed = true;
+      card(s, "Two times, one courtyard");
+    }
+    // after the rescue, walking through is the way home; it waits for the two to catch up
+    s.beat.homeward = s.flags.rescued && input.dx !== 0;
   }
   // the three walk through together: into the overlap
-  if (s.flags.rescued && dist(s.calf, s.player) < 320 && dist(s.boxer, s.player) < 360 && input.dx !== 0) goHome(s);
+  if (s.beat.homeward && dist(s.calf, s.player) < 320 && dist(s.boxer, s.player) < 360) goHome(s);
 }
 
 function goHome(s: Adventure) {
   s.tear = { from: s.chapter, t: 0 };
   s.chapter = "home";
+  s.beat.homeward = false;
   s.player.x = 200;
   s.card = null;
   placeHome(s);
