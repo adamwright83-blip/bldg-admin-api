@@ -171,7 +171,6 @@ function VisitDetail({ visit, savedIds, onBack, onSave, onOriginalStop, onNext, 
   onSave: (s: DayPlanStop, counts?: PickupCounts) => Promise<boolean>;
   onOriginalStop: (s: DayPlanStop) => void;
   onNext: () => void;
-  isDriving?: boolean;
 }) {
   const [arrived, setArrived] = useState(false);
   const [lastEffect, setLastEffect] = useState(0);
@@ -179,6 +178,11 @@ function VisitDetail({ visit, savedIds, onBack, onSave, onOriginalStop, onNext, 
   const first = visit.jobs[0];
   const night = (timeOfStop(first.timeLabel) ?? 0) >= 18 * 60;
   useEffect(() => { setArrived(visit.jobs.every(s => hasSavedJob(s, savedIds))); setLastEffect(0); }, [visit.id]); // switching visits
+  useEffect(() => {
+    if (!lastEffect) return;
+    const timeout = window.setTimeout(() => setLastEffect(0), 1850);
+    return () => window.clearTimeout(timeout);
+  }, [lastEffect]);
   const saved = async (s: DayPlanStop, counts?: PickupCounts) => {
     const ok = await onSave(s, counts);
     if (ok) setLastEffect(n => n + 1);
