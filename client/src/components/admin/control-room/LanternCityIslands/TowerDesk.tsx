@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { residentsAsOf, type TowerDesk as Desk, type TowerDeskBuildingId } from "@shared/towerDesk";
+import { GOAL_MAX_CENTS, GOAL_MIN_CENTS, residentsAsOf, type TowerDesk as Desk, type TowerDeskBuildingId } from "@shared/towerDesk";
 import { buildTowerModel, darkFloors, type BuildingModel, type BuildingSpec, type Resident } from "./towerStack";
 import styles from "./tower-desk.module.css";
 
@@ -122,7 +122,7 @@ export function Elevator({ desk }: { desk: Desk }) {
         {run !== null ? <b className={styles.bigMoney} data-testid="desk-run-rate">{money(run)}</b> : <b className={styles.notWiredBox}>Not wired yet</b>}
         {desk.revenue.status === "partial" ? <em>May be low: a sales source didn't load.</em> : null}
         <small>Goal (penthouse)</small>
-        {goal ? <b className={styles.bigMoney}>{money(goal)}/mo</b> : <b className={styles.notWiredBox}>Goal needed</b>}
+        <GoalEditor desk={desk} />
         {run !== null && goal ? <em>{Math.round(level * 100)}% of the way up</em> : null}
         {desk.contract ? (
           <>
@@ -133,6 +133,71 @@ export function Elevator({ desk }: { desk: Desk }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** The operator sets the penthouse themselves: tap the goal, type dollars a month, save. */
+function GoalEditor({ desk }: { desk: Desk }) {
+  const goal = desk.goalMonthlyCents;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const utils = trpc.useUtils();
+  const save = trpc.system.towerDesk.setGoal.useMutation({
+    onSuccess: () => { setEditing(false); void utils.system.towerDesk.read.invalidate({ buildingId: desk.buildingId }); },
+  });
+  const dollars = Number(draft.replace(/[$,\s]/g, ""));
+  const cents = Number.isFinite(dollars) ? Math.round(dollars * 100) : NaN;
+  const valid = draft.trim() !== "" && cents >= GOAL_MIN_CENTS && cents <= GOAL_MAX_CENTS;
+
+  if (!editing) {
+    return (
+      <div className={styles.goalShow}>
+        {goal ? <b className={styles.bigMoney} data-testid="desk-goal">{money(goal)}/mo</b> : <b className={styles.notWiredBox}>Goal needed</b>}
+        <button
+          type="button"
+          className={styles.deskButton}
+          onClick={() => { setDraft(goal ? String(Math.round(goal / 100)) : ""); setEditing(true); }}
+          data-testid="desk-goal-edit"
+        >
+          {goal ? "Change goal" : "Set goal"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form
+      className={styles.goalForm}
+      onSubmit={e => { e.preventDefault(); if (valid) save.mutate({ buildingId: desk.buildingId, monthlyGoalCents: cents }); }}
+    >
+      <label className={styles.goalLabel}>
+        Dollars a month
+        <span className={styles.goalInputWrap}>
+          <span aria-hidden>$</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="800"
+            data-testid="desk-goal-input"
+          />
+        </span>
+      </label>
+      <div className={styles.goalActions}>
+        <button type="submit" className={styles.goalSave} disabled={!valid || save.isPending} data-testid="desk-goal-save">
+          {save.isPending ? "Saving…" : "Save goal"}
+        </button>
+        <button type="button" className={styles.deskButton} onClick={() => setEditing(false)}>Cancel</button>
+        {desk.goalSource === "saved" ? (
+          <button type="button" className={styles.deskButton} onClick={() => save.mutate({ buildingId: desk.buildingId, monthlyGoalCents: null })}>
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {draft.trim() !== "" && !valid ? <em>Between $1 and $1,000,000 a month.</em> : null}
+      {save.error ? <em>Couldn't save: {save.error.message}</em> : null}
+    </form>
   );
 }
 

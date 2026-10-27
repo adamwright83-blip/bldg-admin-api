@@ -84,3 +84,15 @@ describe("OPUS LA", () => {
     expect(buildTowerDesk({ buildingId: "century_park_east", now, residents, ledger: { status: "unavailable" }, referrals: { status: "unavailable" } }).contract).toBeNull();
   });
 });
+
+describe("the operator's own goal", () => {
+  const base = { now, residents, ledger: { status: "unavailable" as const }, referrals: { status: "unavailable" as const } };
+  it("uses the goal saved in the UI over the fallback", () => {
+    expect(buildTowerDesk({ ...base, buildingId: "opus_la", savedGoalCents: 120_000 })).toMatchObject({ goalMonthlyCents: 120_000, goalSource: "saved" });
+    expect(buildTowerDesk({ ...base, buildingId: "century_park_east", savedGoalCents: 50_000 })).toMatchObject({ goalMonthlyCents: 50_000, goalSource: "saved" });
+  });
+  it("falls back to the default, or to none", () => {
+    expect(buildTowerDesk({ ...base, buildingId: "century_park_east" })).toMatchObject({ goalMonthlyCents: 80_000, goalSource: "default" });
+    expect(buildTowerDesk({ ...base, buildingId: "opus_la" })).toMatchObject({ goalMonthlyCents: null, goalSource: "none" });
+  });
+});

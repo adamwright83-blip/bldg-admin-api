@@ -9,6 +9,9 @@ import {
   type TowerDesk,
   type TowerDeskBuildingId,
 } from "../../shared/towerDesk";
+import { and, eq } from "drizzle-orm";
+import { towerDeskGoals } from "../../drizzle/schema";
+import { getDb } from "../db";
 import { identityKeysFor } from "./customerIdentityResolution";
 import { loadPaidOrderLedger } from "./paidOrderLedger";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -67,5 +70,36 @@ export async function readTowerDesk(input: { tenantId: string; buildingId: Tower
       }),
   ]);
 
-  return buildTowerDesk({ buildingId: input.buildingId, now, residents, ledger, referrals });
+  const savedGoalCents = await readSavedGoal(input.tenantId, input.buildingId).catch(error => {
+    console.warn("[towerDesk] saved goal unavailable", error);
+    return undefined;
+  });
+  return buildTowerDesk({ buildingId: input.buildingId, now, residents, ledger, referrals, savedGoalCents });
+}
+
+async function readSavedGoal(tenantId: string, buildingId: TowerDeskBuildingId): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select({ cents: towerDeskGoals.monthlyGoalCents })
+    .from(towerDeskGoals)
+    .where(and(eq(towerDeskGoals.tenantId, tenantId), eq(towerDeskGoals.buildingId, buildingId)))
+    .limit(1);
+  return row?.cents;
+}
+
+/** Save (or with null, clear) the operator's monthly goal for one of their towers. */
+export async function saveTowerDeskGoal(input: { tenantId: string; buildingId: TowerDeskBuildingId; monthlyGoalCents: number | null; actor: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const where = and(eq(towerDeskGoals.tenantId, input.tenantId), eq(towerDeskGoals.buildingId, input.buildingId));
+  if (input.monthlyGoalCents === null) {
+    await db.delete(towerDeskGoals).where(where);
+  } else {
+    await db
+      .insert(towerDeskGoals)
+      .values({ tenantId: input.tenantId, buildingId: input.buildingId, monthlyGoalCents: input.monthlyGoalCents, updatedBy: input.actor })
+      .onDuplicateKeyUpdate({ set: { monthlyGoalCents: input.monthlyGoalCents, updatedBy: input.actor } });
+  }
+  return { ok: true as const };
 }

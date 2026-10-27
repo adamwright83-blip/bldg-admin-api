@@ -10901,3 +10901,19 @@ export const customerCreditEntries = mysqlTable(
   })
 );
 export type CustomerCreditEntryRow = typeof customerCreditEntries.$inferSelect;
+
+/** The monthly revenue goal an operator set for one of their towers (the front desk's elevator penthouse). One row per tenant and building. */
+export const towerDeskGoals = mysqlTable(
+  "tower_desk_goals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    buildingId: varchar("building_id", { length: 32 }).notNull(),
+    monthlyGoalCents: int("monthly_goal_cents").notNull(),
+    updatedBy: varchar("updated_by", { length: 128 }),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantBuilding: uniqueIndex("uq_tower_desk_goals_tenant_building").on(table.tenantId, table.buildingId),
+  })
+);
