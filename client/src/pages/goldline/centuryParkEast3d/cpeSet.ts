@@ -638,7 +638,15 @@ export type SetHandles = {
   dispose(): void;
 };
 
-export function buildSet(world: THREE.Group, scene: THREE.Scene, opts: { softwareGl: boolean; shadows: boolean }): SetHandles {
+/**
+ * `openings` leaves out the partition at the right-hand end of a room (`x` is that room's `x1`), so two rooms read as
+ * one: the story's monitor desk opens the lobby onto the lift so one camera holds both. The game never passes it.
+ */
+export function buildSet(
+  world: THREE.Group,
+  scene: THREE.Scene,
+  opts: { softwareGl: boolean; shadows: boolean; openings?: { floor: number; x: number }[] }
+): SetHandles {
   const k = new Kit();
   const lamps: SetHandles["lamps"] = [];
   const emergency: THREE.Mesh[] = [];
@@ -731,7 +739,7 @@ export function buildSet(world: THREE.Group, scene: THREE.Scene, opts: { softwar
         for (let x = r.x0 + 0.1; x < r.x1; x += 1.4) k.box(x, x + 1.4, y + 3.0 + Math.sin((x + 0.7) * 0.9) * 0.15 - 0.01, y + 3.0 + Math.sin((x + 0.7) * 0.9) * 0.15 + 0.01, -3.81, -3.79, "solid|#2b211c");
         for (const px of [r.x0 + 0.5, r.x1 - 0.5]) k.cyl(px, y + 1.6, -3.8, 0.03, 0.04, 3.2, "metal", 8);
       }
-      partition(k, r, y);
+      if (!opts.openings?.some(o => o.floor === f && o.x === r.x1)) partition(k, r, y);
       dress(k, r, f, y, ceiling);
     }
   });

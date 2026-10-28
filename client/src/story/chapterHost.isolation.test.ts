@@ -154,7 +154,15 @@ describe("story code has no other way out", () => {
 
   it("covers the host, the session, the client and the games", () => {
     expect(files.map(f => f.file).sort()).toEqual(
-      expect.arrayContaining(["ChapterHost.tsx", "chapterSession.ts", "storyClient.ts", path.join("games", "registry.ts"), path.join("games", "FixtureButtonGame.tsx")])
+      expect.arrayContaining([
+        "ChapterHost.tsx",
+        "chapterSession.ts",
+        "storyClient.ts",
+        path.join("games", "registry.ts"),
+        path.join("games", "FixtureButtonGame.tsx"),
+        path.join("games", "monitorDesk", "MonitorDeskGame.tsx"),
+        path.join("games", "monitorDesk", "deskScene.ts"),
+      ])
     );
   });
 
@@ -170,10 +178,56 @@ describe("story code has no other way out", () => {
     }
   });
 
-  it("games import nothing but React and their own types", () => {
+  const importsOf = (source: string) =>
+    [...source.matchAll(/(?:from\s+|import\s*\(\s*|^import\s+)["']([^"']+)["']/gm)].map(match => match[1]);
+
+  it("games import React, three.js, each other and the Century Park East set, nothing else", () => {
+    const gamesDir = path.join(root, "games");
     for (const { file, source } of files.filter(f => f.file.startsWith("games"))) {
-      const imports = [...source.matchAll(/from\s+["']([^"']+)["']/g)].map(match => match[1]);
-      for (const specifier of imports) expect(["react", "./types", "./FixtureButtonGame"], `${file} imports ${specifier}`).toContain(specifier);
+      for (const specifier of importsOf(source)) {
+        const ok =
+          specifier === "react" ||
+          specifier === "three" ||
+          specifier.startsWith("three/examples/jsm/") ||
+          STORY_SAFE_CPE.includes(specifier) ||
+          (specifier.startsWith(".") && path.resolve(path.dirname(path.join(root, file)), specifier).startsWith(gamesDir + path.sep));
+        expect(ok, `${file} imports ${specifier}`).toBe(true);
+      }
+    }
+  });
+
+  it("the Century Park East modules a game may use are only the set, all the way down: no customers, no outreach", () => {
+    const cpeDir = path.resolve(root, "../pages/goldline/centuryParkEast3d");
+    const seen = new Set<string>();
+    const queue = STORY_SAFE_CPE.map(specifier => path.basename(specifier));
+    while (queue.length) {
+      const name = queue.shift()!;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const source = fs.readFileSync(path.join(cpeDir, `${name}.ts`), "utf8");
+      expect(source, name).not.toMatch(/\bfetch\s*\(|@\/lib\/trpc|@trpc\/|XMLHttpRequest|WebSocket|sendBeacon/);
+      for (const specifier of importsOf(source)) {
+        if (specifier === "three" || specifier.startsWith("three/examples/jsm/")) continue;
+        expect(specifier.startsWith("./"), `${name} imports ${specifier}`).toBe(true);
+        queue.push(specifier.slice(2));
+      }
+    }
+    expect([...seen].sort()).toEqual(["cpeCctv", "cpeLayout", "cpeSet", "cpeTextures", "cpeTrade"]);
+    // the business-wired parts of the building never come along
+    for (const wired of ["CenturyParkEast3D", "ShotgunDesk", "shotgunMachine", "cpeRuntime"]) expect(seen.has(wired), wired).toBe(false);
+  });
+
+  it("a game loads nothing over the network but static files under /assets/", () => {
+    for (const { file, source } of files.filter(f => f.file.startsWith("games"))) {
+      for (const match of source.matchAll(/["'`](\/[a-z][^"'`]*\.(?:glb|gltf|png|jpe?g|webp|json|mp3|ogg))["'`]/gi)) expect(match[1], file).toMatch(/^\/assets\//);
+      for (const match of source.matchAll(/["'`](\/assets\/[^"'`]*\/)["'`]/g)) expect(match[1], file).toMatch(/^\/assets\/goldline\//);
     }
   });
 });
+
+/** The pure Century Park East modules (geometry, textures, the tube) a story game may import. */
+const STORY_SAFE_CPE = [
+  "@/pages/goldline/centuryParkEast3d/cpeLayout",
+  "@/pages/goldline/centuryParkEast3d/cpeSet",
+  "@/pages/goldline/centuryParkEast3d/cpeCctv",
+];

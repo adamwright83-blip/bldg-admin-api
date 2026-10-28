@@ -27,13 +27,13 @@ export const THUMB_RECTS: { x: number; y: number; w: number; h: number }[] = [
 const THUMB_W = 224, THUMB_H = 140;
 
 const vertex = /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-const fragment = /* glsl */ `
-  uniform sampler2D tDiffuse, tThumb0, tThumb1, tThumb2;
-  uniform vec4 uRect0, uRect1, uRect2;
-  uniform vec2 uRes;
-  uniform float uDpr, uTime, uCut, uBoot;
-  varying vec2 vUv;
-
+/**
+ * The tube every monitor shares: barrel, a cut's tearing and colour split, phosphor, scanlines, a rolling bar, static.
+ * Needs `uRes`, `uDpr` and `vec4 feed(sampler2D, vec2)` (how a feed is read) declared first. `cutAge` is seconds since
+ * the last cut; `t` drives the roll and the static (a constant holds the picture still). The story's monitor desk
+ * renders its wall through the same tube.
+ */
+export const CRT_TUBE_GLSL = /* glsl */ `
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
@@ -44,18 +44,18 @@ const fragment = /* glsl */ `
   }
 
   /** one monitor: the feed through the tube */
-  vec3 tube(sampler2D tex, vec2 uv, float pxScale, float small) {
+  vec3 tube(sampler2D tex, vec2 uv, float pxScale, float small, float cutAge, float t) {
     vec2 b = barrel(uv, 0.09);
     if (b.x < 0.0 || b.x > 1.0 || b.y < 0.0 || b.y > 1.0) return vec3(0.0);
     // a cut: a few frames of tearing and colour split
-    float cut = smoothstep(0.35, 0.0, uTime - uCut);
-    float tear = step(0.97, hash(vec2(floor(b.y * 60.0), floor(uTime * 24.0)))) * cut;
-    b.x += tear * 0.04 * (hash(vec2(uTime, b.y)) - 0.5);
+    float cut = smoothstep(0.35, 0.0, cutAge);
+    float tear = step(0.97, hash(vec2(floor(b.y * 60.0), floor(t * 24.0)))) * cut;
+    b.x += tear * 0.04 * (hash(vec2(t, b.y)) - 0.5);
     float split = 0.004 * (0.3 + cut * 3.0);
     vec3 c;
-    c.r = texture2D(tex, b + vec2(split, 0.0)).r;
-    c.g = texture2D(tex, b).g;
-    c.b = texture2D(tex, b - vec2(split, 0.0)).b;
+    c.r = feed(tex, b + vec2(split, 0.0)).r;
+    c.g = feed(tex, b).g;
+    c.b = feed(tex, b - vec2(split, 0.0)).b;
     // tone, then phosphor: mostly green with a little of the original colour kept
     c = c * 1.35 / (1.0 + c);
     float l = pow(luma(c), 0.72);
@@ -63,21 +63,30 @@ const fragment = /* glsl */ `
     phosphor = mix(phosphor, c * vec3(0.7, 1.0, 0.8) * 1.5, 0.2);
     // scanlines, a rolling bar, static
     float line = 0.82 + 0.18 * sin(b.y * uRes.y * pxScale * 3.14159 / (1.4 * uDpr));
-    float roll = 0.08 * smoothstep(0.0, 0.08, abs(fract(uTime * 0.11 + b.y * 0.5) - 0.5)) + 0.92;
-    float noise = (hash(b * uRes * 0.5 + fract(uTime) * 100.0) - 0.5) * (0.06 + cut * 0.4 + small * 0.06);
+    float roll = 0.08 * smoothstep(0.0, 0.08, abs(fract(t * 0.11 + b.y * 0.5) - 0.5)) + 0.92;
+    float noise = (hash(b * uRes * 0.5 + fract(t) * 100.0) - 0.5) * (0.06 + cut * 0.4 + small * 0.06);
     phosphor = phosphor * line * roll + noise;
     // the tube's vignette and corners
     vec2 d = b - 0.5;
     phosphor *= 1.0 - dot(d, d) * 1.1;
     return phosphor;
   }
+`;
 
+const fragment = /* glsl */ `
+  uniform sampler2D tDiffuse, tThumb0, tThumb1, tThumb2;
+  uniform vec4 uRect0, uRect1, uRect2;
+  uniform vec2 uRes;
+  uniform float uDpr, uTime, uCut, uBoot;
+  varying vec2 vUv;
+  vec4 feed(sampler2D tex, vec2 uv) { return texture2D(tex, uv); }
+${CRT_TUBE_GLSL}
   void main() {
     vec2 uv = vUv;
     // boot: the picture opens from a horizontal line
     float open = smoothstep(0.0, 1.0, uBoot);
     float band = abs(uv.y - 0.5) < open * 0.5 ? 1.0 : 0.0;
-    vec3 col = tube(tDiffuse, uv, 1.0, 0.0) * band;
+    vec3 col = tube(tDiffuse, uv, 1.0, 0.0, uTime - uCut, uTime) * band;
     if (band < 0.5 && abs(uv.y - 0.5) < open * 0.5 + 0.004) col = vec3(0.7, 1.0, 0.8);
     // the thumbnails: a bezel, then the small tube
     vec4 rects[3]; rects[0] = uRect0; rects[1] = uRect1; rects[2] = uRect2;
@@ -91,7 +100,8 @@ const fragment = /* glsl */ `
         col = vec3(0.05, 0.06, 0.07);
         if (uv.x > lo.x && uv.x < hi.x && uv.y > lo.y && uv.y < hi.y) {
           vec2 suv = (uv - lo) / (hi - lo);
-          vec3 t = i == 0 ? tube(tThumb0, suv, 0.25, 1.0) : i == 1 ? tube(tThumb1, suv, 0.25, 1.0) : tube(tThumb2, suv, 0.25, 1.0);
+          float age = uTime - uCut;
+          vec3 t = i == 0 ? tube(tThumb0, suv, 0.25, 1.0, age, uTime) : i == 1 ? tube(tThumb1, suv, 0.25, 1.0, age, uTime) : tube(tThumb2, suv, 0.25, 1.0, age, uTime);
           col = t * band * 0.9;
         }
       }
