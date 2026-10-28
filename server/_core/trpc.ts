@@ -18,6 +18,7 @@ import {
   isPlatformAdministrator,
 } from "../platform/tenancy/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../legacy/dayforge/security/legacyDayforgeSecurity";
+import { assertStoryRequestAllowed, StoryIsolationViolation } from "../story/storyIsolation";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
 
@@ -44,7 +45,21 @@ const mutationOriginGuard = t.middleware(async opts => {
   return opts.next();
 });
 
-const baseProcedure = t.procedure.use(mutationOriginGuard);
+// Story gameplay may only reach system.story.*: a request carrying the story header is refused by every other
+// procedure before it runs (server/story/storyIsolation.ts). Every procedure in the app is built on this one.
+const storyIsolationGuard = t.middleware(async opts => {
+  try {
+    assertStoryRequestAllowed(opts.ctx.req as { headers?: Record<string, unknown> } | undefined, opts.path);
+  } catch (error) {
+    if (error instanceof StoryIsolationViolation) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Story requests may only reach system.story." });
+    }
+    throw error;
+  }
+  return opts.next();
+});
+
+const baseProcedure = t.procedure.use(storyIsolationGuard).use(mutationOriginGuard);
 export const publicProcedure = baseProcedure;
 
 const requireUser = t.middleware(async opts => {

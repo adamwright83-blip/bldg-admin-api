@@ -31,6 +31,8 @@ export const ADMIN_ALLOWED_HEADERS = [
   "x-trpc-source",
   "x-agent-shared-secret",
   "x-app-shared-secret",
+  // shared/story.ts STORY_REQUEST_HEADER: marks story gameplay so the server can confine it to system.story.*
+  "x-joystick-story",
 ];
 
 function configuredAdminOrigins(): string[] {

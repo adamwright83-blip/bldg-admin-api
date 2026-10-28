@@ -1,0 +1,134 @@
+{
+  "slug": "season-0",
+  "title": "Season 0 (placeholder)",
+  "chapters": [
+    {
+      "number": 1,
+      "gameKey": "fixture.button",
+      "title": "Placeholder chapter one",
+      "questionKey": "s0.first",
+      "config": {
+        "fixture": true
+      },
+      "lines": [
+        {
+          "slot": "before",
+          "key": "b1",
+          "order": 0,
+          "text": "Placeholder before-line one. Lorem ipsum dolor sit amet."
+        },
+        {
+          "slot": "before",
+          "key": "b2",
+          "order": 1,
+          "text": "Placeholder before-line two. Consectetur adipiscing elit."
+        },
+        {
+          "slot": "after",
+          "key": "a1",
+          "order": 0,
+          "text": "Placeholder after-line. Sed do eiusmod tempor."
+        },
+        {
+          "slot": "question",
+          "key": "q",
+          "text": "Placeholder question: left or right?"
+        },
+        {
+          "slot": "option",
+          "key": "left",
+          "order": 0,
+          "text": "Left"
+        },
+        {
+          "slot": "option",
+          "key": "right",
+          "order": 1,
+          "text": "Right"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "gameKey": "fixture.button",
+      "title": "Placeholder chapter two",
+      "lines": [
+        {
+          "slot": "before",
+          "key": "b1",
+          "order": 0,
+          "text": "Placeholder before-line for any answer."
+        },
+        {
+          "slot": "before",
+          "key": "b1",
+          "variant": "chose-left",
+          "order": 0,
+          "when": {
+            "answers": {
+              "s0.first": "left"
+            }
+          },
+          "text": "Placeholder before-line for those who chose left."
+        },
+        {
+          "slot": "before",
+          "key": "b1",
+          "variant": "chose-right",
+          "order": 0,
+          "when": {
+            "answers": {
+              "s0.first": "right"
+            }
+          },
+          "text": "Placeholder before-line for those who chose right."
+        },
+        {
+          "slot": "before",
+          "key": "b0",
+          "variant": "was-away",
+          "order": 0,
+          "when": {
+            "minDaysAway": 2
+          },
+          "text": "Placeholder line shown only after two or more nights away."
+        },
+        {
+          "slot": "after",
+          "key": "a1",
+          "order": 0,
+          "text": "Placeholder after-line for chapter two."
+        },
+        {
+          "slot": "after",
+          "key": "a0",
+          "variant": "was-away",
+          "order": 0,
+          "when": {
+            "minDaysAway": 2
+          },
+          "text": "Placeholder ending line shown only after two or more nights away."
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "gameKey": "fixture.button",
+      "title": "Placeholder chapter three",
+      "lines": [
+        {
+          "slot": "before",
+          "key": "b1",
+          "order": 0,
+          "text": "Placeholder before-line for the last chapter."
+        },
+        {
+          "slot": "after",
+          "key": "a1",
+          "order": 0,
+          "text": "Placeholder season ending."
+        }
+      ]
+    }
+  ]
+}

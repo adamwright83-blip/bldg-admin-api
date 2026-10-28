@@ -8,6 +8,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { storyRequestGate } from "../story/storyIsolation";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
@@ -167,6 +168,8 @@ async function startServer() {
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
   app.use(legacyDayforgeSecurityHeaders());
+  // Story gameplay may only reach system.story.*; refused here before any route, webhook or integration runs.
+  app.use(storyRequestGate());
   const server = createServer(app);
   attachConversationRelayUpgrade(server);
 

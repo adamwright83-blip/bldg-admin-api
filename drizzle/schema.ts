@@ -4,6 +4,7 @@ import {
   boolean,
   char,
   customType,
+  date,
   datetime,
   double,
   decimal,
@@ -10950,4 +10951,100 @@ export const towerDeskContractPayments = mysqlTable(
   table => ({
     tenantBuildingPaid: index("idx_tower_desk_payments_scope").on(table.tenantId, table.buildingId, table.paidOn),
   })
+);
+
+// ------------------------------------------------------------------ story seasons (drizzle/0150)
+// The nightly chapter on the main account page. Authored text is seeded from a private file at deploy time; the repo
+// only ever holds the placeholder Season 0.
+
+export const storySeasons = mysqlTable(
+  "story_seasons",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    title: varchar("title", { length: 200 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({ slug: uniqueIndex("uq_story_seasons_slug").on(table.slug) })
+);
+
+export const storyChapters = mysqlTable(
+  "story_chapters",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    seasonId: int("season_id").notNull(),
+    chapterNumber: int("chapter_number").notNull(),
+    gameKey: varchar("game_key", { length: 64 }).notNull(),
+    title: varchar("title", { length: 200 }).notNull(),
+    questionKey: varchar("question_key", { length: 64 }),
+    configJson: json("config_json"),
+  },
+  table => ({ seasonNumber: uniqueIndex("uq_story_chapters_season_number").on(table.seasonId, table.chapterNumber) })
+);
+
+export const storyLines = mysqlTable(
+  "story_lines",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    chapterId: int("chapter_id").notNull(),
+    slot: varchar("slot", { length: 16 }).notNull(),
+    lineKey: varchar("line_key", { length: 64 }).notNull(),
+    variantKey: varchar("variant_key", { length: 64 }).notNull().default("default"),
+    sortOrder: int("sort_order").notNull().default(0),
+    conditionJson: json("condition_json"),
+    text: text("text").notNull(),
+    stillId: varchar("still_id", { length: 128 }),
+  },
+  table => ({
+    variant: uniqueIndex("uq_story_lines_variant").on(table.chapterId, table.lineKey, table.variantKey),
+    chapter: index("idx_story_lines_chapter").on(table.chapterId),
+  })
+);
+
+export const storyProgress = mysqlTable(
+  "story_progress",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 128 }).notNull(),
+    seasonId: int("season_id").notNull(),
+    highestChapterWon: int("highest_chapter_won").notNull().default(0),
+    lastWonOn: date("last_won_on", { mode: "string" }),
+    lastPlayedOn: date("last_played_on", { mode: "string" }),
+    chapterDaysAway: int("chapter_days_away").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({ operatorSeason: uniqueIndex("uq_story_progress_operator_season").on(table.tenantId, table.operatorId, table.seasonId) })
+);
+
+export const storyAnswers = mysqlTable(
+  "story_answers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 128 }).notNull(),
+    seasonId: int("season_id").notNull(),
+    questionKey: varchar("question_key", { length: 64 }).notNull(),
+    optionKey: varchar("option_key", { length: 64 }).notNull(),
+    answeredAt: timestamp("answered_at").defaultNow().notNull(),
+  },
+  table => ({ once: uniqueIndex("uq_story_answers_once").on(table.tenantId, table.operatorId, table.seasonId, table.questionKey) })
+);
+
+export const storyAttempts = mysqlTable(
+  "story_attempts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).notNull(),
+    operatorId: varchar("operator_id", { length: 128 }).notNull(),
+    seasonId: int("season_id").notNull(),
+    chapterNumber: int("chapter_number").notNull(),
+    outcome: varchar("outcome", { length: 8 }).notNull(),
+    durationMs: int("duration_ms"),
+    localDate: date("local_date", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => ({ operator: index("idx_story_attempts_operator").on(table.tenantId, table.operatorId, table.seasonId) })
 );
