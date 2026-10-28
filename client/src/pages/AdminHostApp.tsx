@@ -175,6 +175,15 @@ export default function AdminHostApp() {
     { q: debouncedCustomerQuery },
     { enabled: debouncedCustomerQuery.length >= 2 && isAuthenticated && user?.role === "admin" }
   );
+  // Customers from the active business's directory, CleanCloud-only customers included.
+  const directoryCustomers = trpc.admin.listCustomers.useQuery(
+    {
+      search: debouncedCustomerQuery.trim(),
+      sortBy: "lastOrder",
+      includeLegacyCleanCloud: false,
+    },
+    { enabled: isAuthenticated && debouncedCustomerQuery.trim().length >= 2 }
+  );
   const platformAdmin = isAuthenticated && user?.role === "admin";
   const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(
     undefined,
@@ -522,6 +531,7 @@ export default function AdminHostApp() {
             setCustomerSearchQuery={setCustomerSearchQuery}
             debouncedCustomerQuery={debouncedCustomerQuery}
             searchOrders={searchOrders}
+            directoryCustomers={directoryCustomers}
             setProfilePhone={setProfilePhone}
             onPrefillNewOrder={phone => {
               setNewOrderPhoneSeed(phone);
