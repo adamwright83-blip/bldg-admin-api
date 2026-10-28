@@ -1011,6 +1011,8 @@
   .sh-world {
     display: grid;
     grid-template-rows: auto auto var(--sh-vignette) auto;
+    /* short content (season complete) leaves spare height at the bottom, never between the rows */
+    align-content: start;
     height: auto;
     min-height: 100svh;
     overflow: visible;
