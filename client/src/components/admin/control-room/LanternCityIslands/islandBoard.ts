@@ -1886,7 +1886,10 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   const labelRects = new Map<number, [number, number, number, number] | null>();
   function placeLabels(cd: number) {
     if (storyLabel) {
-      const scale = 30 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov/2)) / Math.max(1,container.clientHeight);
+      const portrait = container.clientWidth < 700;
+      const destination = ourTowers.find(t => t.id === storyLocation);
+      if (portrait && destination) storyLabel.position.y = H(destination.x, destination.z) + destination.h + 420;
+      const scale = (portrait ? 22 : 30) * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov/2)) / Math.max(1,container.clientHeight);
       storyLabel.scale.set(scale*5,scale,1);
     }
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
