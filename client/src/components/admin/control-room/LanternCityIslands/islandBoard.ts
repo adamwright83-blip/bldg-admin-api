@@ -647,6 +647,41 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
             pool.layers.set(INK_SKIP);
             room.add(pool);
             world.add(room);
+            // Small rising embers make the impossible floor feel electrically alive.
+            // One draw call; shader animation stops with the user's motion preference.
+            const sparkGeometry = new THREE.BufferGeometry();
+            const sparkPositions = new Float32Array(48 * 3);
+            const sparkSeeds = new Float32Array(48);
+            const random = rng(21408);
+            for (let i = 0; i < 48; i++) {
+              const angle = random() * Math.PI * 2, radius = 45 + random() * 90;
+              sparkPositions.set([Math.cos(angle) * radius, random() * 180, Math.sin(angle) * radius], i * 3);
+              sparkSeeds[i] = random();
+            }
+            sparkGeometry.setAttribute("position", new THREE.BufferAttribute(sparkPositions, 3));
+            sparkGeometry.setAttribute("aSeed", new THREE.BufferAttribute(sparkSeeds, 1));
+            const sparks = new THREE.Points(sparkGeometry, new THREE.ShaderMaterial({
+              uniforms: { uTime: uniforms.uTime, uMotion: { value: reducedMotion ? 0 : 1 } },
+              transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+              vertexShader: `attribute float aSeed; uniform float uTime; uniform float uMotion; varying float vLife;
+                void main() {
+                  vec3 p = position;
+                  float life = fract(aSeed + uTime * .14 * uMotion);
+                  p.y += life * 160.; p.x += sin(life * 5. + aSeed * 20.) * 18.;
+                  vLife = sin(life * 3.14159);
+                  vec4 mv = modelViewMatrix * vec4(p, 1.);
+                  gl_Position = projectionMatrix * mv;
+                  gl_PointSize = clamp((7. + aSeed * 9.) * 850. / -mv.z, 1.5, 7.);
+                }`,
+              fragmentShader: `varying float vLife; void main() {
+                float d = length(gl_PointCoord - .5) * 2.;
+                float alpha = pow(max(0., 1. - d), 2.) * vLife;
+                gl_FragColor = vec4(vec3(2.4, 1.35, .35), alpha);
+              }`,
+            }));
+            sparks.position.copy(room.position); sparks.position.y += tall / 2;
+            sparks.layers.set(INK_SKIP); world.add(sparks);
+
           }
           const cv = document.createElement("canvas"); cv.width=640; cv.height=128;
           const g=cv.getContext("2d")!;g.fillStyle="rgba(20,35,45,.94)";g.beginPath();g.roundRect(0,0,640,128,18);g.fill();
