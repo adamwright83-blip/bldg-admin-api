@@ -57,6 +57,7 @@ export default function LanternCityIslands({
   insetLeft = 0,
   skyBoard = false,
   storyLocation,
+  storyAnomaly,
   onEmbeddedChange,
 }: {
   onOpenCustomer: (phone: string) => void;
@@ -80,6 +81,7 @@ export default function LanternCityIslands({
   /** The account home: the glass game board loops over the city and the camera sits lower, showing the sky. Read once, at mount. */
   skyBoard?: boolean;
   storyLocation?: import("@shared/story").StoryLocation;
+  storyAnomaly?: import("@shared/story").StoryAnomaly;
   /** A full-screen view opened from the board (a tower's floors, Small Comforts) opened or closed. */
   onEmbeddedChange?: (open: boolean) => void;
 }) {
@@ -178,7 +180,7 @@ export default function LanternCityIslands({
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
-      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current });
+      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current, storyAnomaly });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
       console.warn("Lantern City needs WebGL", e);
@@ -366,7 +368,7 @@ export default function LanternCityIslands({
         <TowerFloors buildingId={tower} customers={allCustomers} onClose={() => setTower(null)} onOpenCustomer={phone => onOpenCustomer(phone)} />
       ) : null}
 
-      {usingSample ? <div className={styles.sample}>Sample customers · dev build, no database</div> : null}
+      {usingSample ? <div className={styles.sample} data-lantern-state="sample">Sample customers · dev build, no database</div> : null}
       {showUtilityDock && mode === "explore" && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>

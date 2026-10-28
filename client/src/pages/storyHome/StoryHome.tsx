@@ -105,6 +105,7 @@ export default function StoryHome({
             }
           >
             <LanternCityIslands
+              key={`${chapter?.location ?? "city"}:${chapter?.anomaly ?? "none"}`}
               intro={playIntro}
               onIntroPhase={setIntro}
               homeChrome
@@ -115,6 +116,7 @@ export default function StoryHome({
               insetLeft={insetLeft}
               skyBoard
               storyLocation={chapter?.location}
+              storyAnomaly={chapter?.anomaly}
               onEmbeddedChange={setEmbedded}
             />
           </Suspense>
@@ -122,9 +124,6 @@ export default function StoryHome({
         <div className="sh-world-overlay">
           <TopBar operatorName={operatorName} />
           <GlassStats />
-          <p className="sh-world-caption" aria-hidden="true">
-            YOUR CITY. ANOTHER SIDE OF IT.
-          </p>
           <ChapterCard
             tonight={tonight}
             onPlay={() => setPlaying(true)}

@@ -25,6 +25,7 @@ const chapterOne = {
   title: "Placeholder chapter one",
   gameKey: "fixture.button",
   location: "century_park_east",
+  anomaly: "lit_floor",
   before: [
     { key: "b1", text: "Placeholder before-line one. Lorem ipsum dolor sit amet.", still: null },
     { key: "b2", text: "Placeholder before-line two. Consectetur adipiscing elit.", still: null },

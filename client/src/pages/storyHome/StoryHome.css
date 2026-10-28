@@ -892,3 +892,22 @@
 /* Neighborhood links share the home materials instead of mixing unrelated art treatments. */
 .sh-card{border-top:1px solid #f3ebdd25;padding:10px 0 18px}.sh-cards{grid-auto-columns:minmax(180px,1fr)}
 @media(max-width:600px){.sh-cards{grid-auto-columns:75%}}
+
+/* Keep the chapter and destination in the same vertical band; reserve the corner for operational notices. */
+@media(min-width:901px){.sh-chapter{padding-top:44px;padding-bottom:44px;margin-top:clamp(40px,7vh,90px);margin-bottom:auto}.sh-world [data-lantern-state^="mapping-"]{right:24px;bottom:24px;max-width:320px;line-height:1.5;transform:none}}
+
+.sh-world [data-lantern-state="sample"] {
+  top: 8px;
+  padding: 5px 9px;
+  max-width: calc(100% - 24px);
+  font: 500 10px/1.3 "DM Sans", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  background: #172b35e6;
+  color: #c3ced0;
+}
+.sh-world [data-lantern-state^="mapping-"] {
+  font: 400 11px/1.5 "DM Sans", sans-serif;
+  color: #c3ced0;
+  opacity: 1;
+}

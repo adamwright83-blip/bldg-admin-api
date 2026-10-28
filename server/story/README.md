@@ -56,6 +56,10 @@ DATABASE_URL=mysql://root:root@127.0.0.1:3407/story_test pnpm exec vitest run --
 
 Keep location in the existing chapter `config` JSON. For the real Chapter 1, Claude should add
 `"location": "century_park_east"` to that chapter's `config` in the private season file and reseed it.
+For Chapter 1’s floating illuminated floor, also add `"anomaly": "lit_floor"` in `config`.
+This optional validated presentation cue is projected by `tonight`; without it no fictional floor is rendered.
+Reseed only after this PR’s spoiler-safe server changes have merged and deployed.
+
 The validated values currently correspond to existing landmark ids: `century_park_east` and `opus_la`.
 No schema migration is needed. Season 0 includes both values for visual verification.
 
@@ -69,6 +73,7 @@ Optional authored closing content also lives in `config`:
 ```json
 {
   "location": "century_park_east",
+  "anomaly": "lit_floor",
   "closing": {
     "responses": { "left": "Placeholder response to left.", "right": "Placeholder response to right." },
     "keepsake": { "title": "Placeholder keepsake", "text": "Placeholder keepsake description." },

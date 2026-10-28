@@ -111,7 +111,7 @@ describe("story service: a full night", () => {
   it("projects only the reached location and withholds all closing content until answered", async () => {
     const h = harness();
     const first = await h.service.tonight(ADAM);
-    expect(first).toMatchObject({ chapter: { location: "century_park_east" } });
+    expect(first).toMatchObject({ chapter: { location: "century_park_east", anomaly: "lit_floor" } });
     expect(JSON.stringify(first)).not.toContain("keepsake");
     const opened = await h.service.start(ADAM, 1);
     expect(opened.config.location).toBe("century_park_east");

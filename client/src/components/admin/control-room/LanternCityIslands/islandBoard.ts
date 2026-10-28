@@ -99,7 +99,7 @@ const COMMON = /* glsl */ `
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
 const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 
-export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean; storyLocation?: string } = {}) {
+export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean; storyLocation?: string; storyAnomaly?: string } = {}) {
   let storyLocation = opts.storyLocation;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const homeHaze = opts.skyBoard ? new THREE.Color("#809ca4") : HAZE;
@@ -507,7 +507,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const rx = (b.x1 - b.x0) * 0.095;
     skyRing = { cx: (b.x0 + b.x1) / 2, cz: b.z1 + rx * 0.5, rx, y: cloudTop * 0.45 };
     const destination = ourTowers.find(t => t.id === storyLocation);
-    if (destination) skyRing = {cx: destination.x + 900, cz: destination.z + 700, rx: 650, y: 130};
+    if (destination) skyRing = {cx: destination.x + 850, cz: destination.z + 1050, rx: 850, y: 230};
     // the home is crisp: no tilt-shift blur and no brush smear over the glass and the adventurer
     tilt.enabled = false;
     paint.enabled = false;
@@ -540,6 +540,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   let operationsHub: { x: number; z: number; h: number } | null = null;
   /** Small Comforts: the lost-property suitcase on Hollywood. Zoom to the island, click it, you're inside. */
   let suitcase: { x: number; z: number; h: number } | null = null;
+  let storyLabel: THREE.Sprite | null = null;
   const ourTowers: { id: string; planId: number; x: number; z: number; h: number }[] = [];
   /** the tower of ours under the pointer (within 40px of its shaft on screen) */
   function towerAt(cx: number, cy: number) {
@@ -566,6 +567,22 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         if (opts.skyBoard && L.id === storyLocation) {
           const marker = new THREE.Mesh(new THREE.TorusGeometry(105, 3, 8, 64), new THREE.MeshBasicMaterial({ color: "#d8ac59", transparent: true, opacity: 0.8 }));
           marker.rotation.x = -Math.PI / 2; marker.position.set(x, H(x,z) + 12, z); marker.layers.set(INK_SKIP); world.add(marker);
+        }
+        if (opts.skyBoard && L.id === storyLocation) {
+          const height = L.h! * VS * S;
+          if (opts.storyAnomaly === "lit_floor") {
+            // Authored fiction overlay only: the actual landmark and customer projection are unchanged.
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(30*S, 14, 34*S), new THREE.MeshBasicMaterial({color: new THREE.Color(2.2, 1.45, .48), toneMapped:false}));
+            floor.position.set(x, H(x,z) + height + 26, z); floor.layers.set(INK_SKIP); world.add(floor);
+            const frame = new THREE.LineSegments(new THREE.EdgesGeometry(floor.geometry),new THREE.LineBasicMaterial({color:0xffefbf}));
+            floor.add(frame);
+          }
+          const cv = document.createElement("canvas"); cv.width=640; cv.height=128;
+          const g=cv.getContext("2d")!;g.fillStyle="rgba(20,35,45,.94)";g.beginPath();g.roundRect(0,0,640,128,18);g.fill();
+          g.strokeStyle="#d8ac59";g.lineWidth=3;g.stroke();g.fillStyle="#f3ebdd";g.textAlign="center";g.font='500 54px "DM Sans",sans-serif';g.fillText(L.name,320,83);
+          const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
+          storyLabel=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,sizeAttenuation:false}));
+          storyLabel.position.set(x,H(x,z)+height+180,z);storyLabel.renderOrder=20;labelScene.add(storyLabel);
         }
         ourTowers.push({ id: L.id!, planId: id, x, z, h: L.h! * VS * S });
         isl.plans.push({ i: id, cx: id, cz: 0, h: L.h!, u: 0, type: "office", hood: isl.name, x: x / S, z: z / S, fx: 0, fz: 1, W: 30, D: 34, fill: 1 });
@@ -1577,7 +1594,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   let puffBusy = false;
   function buildClouds() {
     const r = rng(7);
-    const STEP = opts.skyBoard ? 350 : 210;
+    const STEP = opts.skyBoard ? 510 : 210;
     for (let z = rect.z0; z < rect.z1; z += STEP) for (let x = rect.x0; x < rect.x1; x += STEP) {
       const px = x + (r() - 0.5) * STEP * 0.9, pz = z + (r() - 0.5) * STEP * 0.9;
       const c = coastAt(F, px, pz);
@@ -1588,7 +1605,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         o = ownerAt(F, p.x, p.z);
       }
       if (o < 0) continue;
-      const r0 = (opts.skyBoard ? 270 + r() * 100 : 150 + r() * 90) * (c < 40 ? 0.7 : 1);
+      const r0 = (opts.skyBoard ? 350 + r() * 110 : 150 + r() * 90) * (c < 40 ? 0.7 : 1);
       puffList.push({ x: px, z: pz, y: H(px, pz, o) + 90 + r() * 50, r0, seed: r(), island: o, cur: 0, from: 0, to: 0, t: 1, delay: 0 });
     }
     const lobeC = (rr: number, x: number, y: number, z: number) => mergeVertices(new THREE.IcosahedronGeometry(rr, opts.skyBoard ? 2 : 1).deleteAttribute("uv").deleteAttribute("normal")).translate(x, y, z);
@@ -1600,6 +1617,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     geo.setAttribute("aGlow", puffGlow);
     const mat = new THREE.ShaderMaterial({
       uniforms: { ...uniforms, ...fogU }, fog: true,
+      transparent: !!opts.skyBoard, depthWrite: !opts.skyBoard,
       vertexShader: /* glsl */ `
         attribute float aGlow; varying vec3 vN; varying vec3 vW; varying float vH; varying float vGlow;
         ${FOG_V}
@@ -1626,12 +1644,14 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
           c += vec3(1., .66, .38) * smoothstep(.2, .32, rim) * .45;
           c = mix(c, vec3(1., .74, .34) * 2.2, vGlow);
           c = mix(c, c * vec3(.63,.76,.82), uHome);
-          gl_FragColor = vec4(c, 1.);
+          float alpha = mix(1., .42 * smoothstep(0., .38, max(dot(n,V),0.)), uHome);
+          gl_FragColor = vec4(c, alpha);
           #include <fog_fragment>
         }`,
     });
     puffs = new THREE.InstancedMesh(geo, mat, puffList.length);
     puffs.frustumCulled = false;
+    if (opts.skyBoard) puffs.layers.set(INK_SKIP);
     world.add(puffs);
   }
   function setClouds(open: Set<number>, immediate: boolean) {
@@ -1780,12 +1800,12 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     g.clearRect(0, 0, cv.width, cv.height);
     const open = n > 0;
     if (opts.skyBoard) {
-      g.font = '500 36px "DM Sans", sans-serif';
+      g.font = '500 52px "DM Sans", sans-serif';
       g.fillStyle = "rgba(20,35,45,.78)";
-      g.beginPath(); g.roundRect(65, 40, 510, 62, 12); g.fill();
+      g.beginPath(); g.roundRect(35, 25, 570, 110, 16); g.fill();
       g.fillStyle = "#f3ebdd"; g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillText(name, cv.width / 2, 72);
-      return 510;
+      g.fillText(name, cv.width / 2, 82);
+      return 570;
     }
     g.font = `700 64px "Barlow Condensed", "Arial Narrow", sans-serif`;
     const text = name.toUpperCase();
@@ -1833,6 +1853,10 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   /** where each visible island name tag sits on screen (container pixels), so tapping a tag picks its island */
   const labelRects = new Map<number, [number, number, number, number] | null>();
   function placeLabels(cd: number) {
+    if (storyLabel) {
+      const scale = 30 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov/2)) / Math.max(1,container.clientHeight);
+      storyLabel.scale.set(scale*5,scale,1);
+    }
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const a = THREE.MathUtils.smoothstep(cd, 2200, 4200);
     // Silver Lake first (it is the place you walk into, and on a phone Koreatown's tag would otherwise sit on top
@@ -1842,18 +1866,23 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const order = labels.slice().sort((p, q) => walkIn(q) - walkIn(p) || (islandCounts.get(q.island) ?? 0) - (islandCounts.get(p.island) ?? 0) || islands[q.island].area - islands[p.island].area);
     const taken: [number, number, number, number][] = [];
     const v = new THREE.Vector3();
+    if (storyLabel) {
+      v.copy(storyLabel.position).project(camera);
+      const sx = ((v.x + 1) / 2) * w, sy = ((1 - v.y) / 2) * h;
+      taken.push([sx - 83, sy - 23, sx + 83, sy + 23]);
+    }
     for (const L of order) {
       const open = (islandCounts.get(L.island) ?? 0) > 0;
       // the home names only the places with customers, and quieter, so the page has one focal point
       if (opts.skyBoard && !open) { L.sprite.visible = false; labelRects.set(L.island, null); continue; }
-      const px = opts.skyBoard ? 34 : open ? 72 : 54;       // label height on screen
+      const px = opts.skyBoard ? 46 : open ? 72 : 54;       // label height on screen
       const s = (px * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h;
       L.sprite.scale.set(s * (640 / 190), s, 1);
       v.copy(L.sprite.position).project(camera);
       const sx = ((v.x + 1) / 2) * w, sy = ((1 - v.y) / 2) * h, hw = (L.w * px) / 190 / 2 + 6;
       const r: [number, number, number, number] = [sx - hw, sy - px - 4, sx + hw, sy + 4];
       const clash = taken.some(t => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]);
-      L.sprite.visible = a > 0.02 && !clash && v.z < 1;
+      L.sprite.visible = a > 0.02 && !clash && v.z < 1 && !(opts.skyBoard && w >= 700 && sy < 180);
       L.sprite.material.opacity = a;
       if (L.sprite.visible) taken.push(r);
       labelRects.set(L.island, L.sprite.visible ? r : null);
@@ -1880,7 +1909,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     if (focal) {
       camera.fov = 42; camera.updateProjectionMatrix();
       const portrait = container.clientWidth < 700;
-      frame(focal.x + (portrait ? 0 : 500), focal.z, portrait ? 6200 : 7800, -0.22, 0.88);
+      frame(focal.x + (portrait ? 150 : 650), focal.z + 150, portrait ? 4400 : 5600, -0.22, 0.88);
       return true;
     }
     if (!skyRing) return false;

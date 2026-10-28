@@ -1,4 +1,4 @@
-import { storyLocationSchema, storyClosingSchema } from "../../shared/story";
+import { storyLocationSchema, storyClosingSchema, storyAnomalySchema } from "../../shared/story";
 import type { StoryOutcome, StoryQuestion, StoryResolvedLine, StoryTonight } from "../../shared/story";
 import {
   answerDecision,
@@ -99,6 +99,7 @@ export function createStoryService(deps: StoryServiceDeps) {
         gameKey: chapter.gameKey,
         before: resolveSlot(rows, "before", context),
         location: storyLocationSchema.safeParse(chapter.config?.location).data,
+        anomaly: storyAnomalySchema.safeParse(chapter.config?.anomaly).data,
       };
       if (availability.state === "won_tonight") {
         view.after = resolveSlot(rows, "after", context);

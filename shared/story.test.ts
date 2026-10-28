@@ -17,6 +17,9 @@ describe("story season file format", () => {
     s.chapters[0].config.location = "unknown_landmark";
     expect(storySeasonSchema.safeParse(s).success).toBe(false);
     s.chapters[0].config.location = "century_park_east";
+    s.chapters[0].config.anomaly = "unknown_effect";
+    expect(storySeasonSchema.safeParse(s).success).toBe(false);
+    s.chapters[0].config.anomaly = "lit_floor";
     s.chapters[0].config.closing.tomorrow = 42;
     expect(storySeasonSchema.safeParse(s).success).toBe(false);
     delete s.chapters[0].config.closing;
