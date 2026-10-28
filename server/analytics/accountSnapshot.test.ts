@@ -82,6 +82,16 @@ describe("readAccountSnapshot", () => {
     expect(snapshot.month.newCustomers.value).toBeNull();
   });
 
+  it("a quiet week on a ledger that holds orders reads 0 recorded, not Not wired yet", async () => {
+    // Coverage unproven (null) and a week with no orders: the month still holds orders, so the week's zero is real.
+    const loaders = fixtureLoaders();
+    const quietWeek = deps(loaders, null, { now: () => new Date("2026-09-08T02:00:00.000Z") }); // Monday Sep 7, 7pm LA
+    const snapshot = await readAccountSnapshot({ tenantId: "tenant-1", deps: quietWeek });
+    expect(snapshot.month.orders.value).toBeGreaterThan(0);
+    expect(snapshot.week.revenueCents).toMatchObject({ value: 0, precision: "recorded" });
+    expect(snapshot.week.orders).toMatchObject({ value: 0, precision: "recorded" });
+  });
+
   it("without proven coverage, recorded figures stay but say they are recorded", async () => {
     const snapshot = await readAccountSnapshot({ tenantId: "tenant-1", deps: deps(fixtureLoaders(), null) });
     expect(snapshot.week.revenueCents).toMatchObject({ value: 10000, precision: "recorded" });

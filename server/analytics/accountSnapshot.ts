@@ -22,7 +22,8 @@ import type { BusinessSourceCoverageSnapshot } from "./sourceCoverage";
  * overview states. New customers are the canonical business query's `new_customers` (first paid order ever falls in
  * the period), over one full-history ledger load. Periods and their comparisons come from `businessPeriods`.
  *
- * A figure the read cannot license is null. A zero is returned only when coverage proves it exact.
+ * A figure the read cannot license is null. A zero is stated when coverage proves it exact, or as "recorded" when
+ * the books hold paid orders elsewhere (nothing recorded yet this week is a real answer); never on an empty ledger.
  */
 
 export type AccountSnapshotDeps = {
@@ -93,10 +94,23 @@ type Sourced = { value: number | null; precision: AccountSnapshotPrecision };
 
 const UNAVAILABLE: Sourced = { value: null, precision: "unavailable" };
 
-/** An unproven zero is not a zero: it is withheld. */
-function sourced(value: number, exact: boolean): Sourced {
-  if (exact) return { value, precision: "exact" };
-  return value === 0 ? UNAVAILABLE : { value, precision: "recorded" };
+/** A figure as read, before deciding whether an unproven zero may be stated. */
+type Raw = { value: number; exact: boolean } | null;
+
+function raw(value: number, exact: boolean): Raw {
+  return { value, exact };
+}
+
+/**
+ * An exact figure is stated. A recorded figure is stated as recorded. A recorded ZERO is stated only when the books
+ * hold paid orders in some other span: then "nothing recorded this week" is what the ledger says. On an empty ledger
+ * (nothing connected) an unproven zero is withheld, never shown as $0.
+ */
+function settle(figure: Raw, bookHasRecords: boolean): Sourced {
+  if (!figure) return UNAVAILABLE;
+  if (figure.exact) return { value: figure.value, precision: "exact" };
+  if (figure.value === 0 && !bookHasRecords) return UNAVAILABLE;
+  return { value: figure.value, precision: "recorded" };
 }
 
 function metric(current: Sourced, previous: Sourced): AccountSnapshotMetric {
@@ -108,11 +122,11 @@ function metric(current: Sourced, previous: Sourced): AccountSnapshotMetric {
   };
 }
 
-function revenueOf(read: CanonicalRevenueResult): { revenueCents: Sourced; orders: Sourced } {
-  if (read.status !== "ok") return { revenueCents: UNAVAILABLE, orders: UNAVAILABLE };
+function revenueOf(read: CanonicalRevenueResult): { revenueCents: Raw; orders: Raw } {
+  if (read.status !== "ok") return { revenueCents: null, orders: null };
   return {
-    revenueCents: sourced(read.mayStateExact ? (read.statedExactCents ?? read.recordedCents) : read.recordedCents, read.mayStateExact),
-    orders: sourced(read.exactIncludedOrderCount, read.mayStateExact),
+    revenueCents: raw(read.mayStateExact ? (read.statedExactCents ?? read.recordedCents) : read.recordedCents, read.mayStateExact),
+    orders: raw(read.exactIncludedOrderCount, read.mayStateExact),
   };
 }
 
@@ -133,7 +147,7 @@ export async function readAccountSnapshot(input: {
       return revenueOf(await deps.readRevenue({ tenantId: input.tenantId, from: span.start, to: span.end, timeZone, now, coverage }));
     } catch (error) {
       console.warn("[AccountSnapshot] revenue read failed", error instanceof Error ? error.message : error);
-      return { revenueCents: UNAVAILABLE, orders: UNAVAILABLE };
+      return { revenueCents: null as Raw, orders: null as Raw };
     }
   };
 
@@ -155,11 +169,11 @@ export async function readAccountSnapshot(input: {
     loadLedger: () => ledgerOnce(),
     readSourceCoverage: async () => coverage,
   };
-  const newCustomers = async (span: ResolvedPeriod): Promise<Sourced> => {
+  const newCustomers = async (span: ResolvedPeriod): Promise<Raw> => {
     const result = await runBusinessQuery(input.tenantId, { ...defaultBusinessQuery("new_customers"), period: freezePeriod(span), comparison: null }, businessDeps);
-    if (result.status !== "ok" || result.data.kind !== "customers") return UNAVAILABLE;
+    if (result.status !== "ok" || result.data.kind !== "customers") return null;
     const complete = result.coverage?.completeness === "complete" && result.coverage.failedSources.length === 0 && coverage?.book.status === "fresh";
-    return sourced(result.data.population.count, complete);
+    return raw(result.data.population.count, complete);
   };
 
   const [weekRevenue, previousWeekRevenue, monthRevenue, previousMonthRevenue, weekNew, previousWeekNew, monthNew, previousMonthNew, city] =
@@ -175,20 +189,24 @@ export async function readAccountSnapshot(input: {
       deps.loadCity(input.tenantId).catch(() => null),
     ]);
 
+  // The books hold paid orders if any span read recorded one. Only then is an unproven zero stated as "0 recorded".
+  const bookHasRecords = [weekRevenue, previousWeekRevenue, monthRevenue, previousMonthRevenue].some(r => (r.orders?.value ?? 0) > 0);
+  const s = (figure: Raw) => settle(figure, bookHasRecords);
+
   const period = (
     key: AccountSnapshotPeriod["key"],
     current: ResolvedPeriod,
     previous: ResolvedPeriod,
-    reads: [Awaited<ReturnType<typeof revenue>>, Awaited<ReturnType<typeof revenue>>, Sourced, Sourced]
+    reads: [Awaited<ReturnType<typeof revenue>>, Awaited<ReturnType<typeof revenue>>, Raw, Raw]
   ): AccountSnapshotPeriod => ({
     key,
     label: key === "week" ? "Week to date" : "Month to date",
     start: current.start,
     end: current.end,
     comparison: { start: previous.start, end: previous.end, label: previous.label },
-    revenueCents: metric(reads[0].revenueCents, reads[1].revenueCents),
-    orders: metric(reads[0].orders, reads[1].orders),
-    newCustomers: metric(reads[2], reads[3]),
+    revenueCents: metric(s(reads[0].revenueCents), s(reads[1].revenueCents)),
+    orders: metric(s(reads[0].orders), s(reads[1].orders)),
+    newCustomers: metric(s(reads[2]), s(reads[3])),
   });
 
   return {
