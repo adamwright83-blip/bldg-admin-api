@@ -8,7 +8,7 @@
 export type AccountSnapshotPrecision = "exact" | "recorded" | "unavailable";
 
 export type AccountSnapshotMetric = {
-  /** Null when the figure cannot be sourced, or when it would be an unproven zero. */
+  /** Null when the figure cannot be sourced, or when it would be a zero on an empty ledger. */
   value: number | null;
   previous: number | null;
   /** Percent change against `previous`, one decimal. Null without two sourced figures or when `previous` is 0. */
