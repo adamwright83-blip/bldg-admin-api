@@ -18,4 +18,6 @@ export type StoryGameModule = {
    * doing. It must be taken before anything the chapter reveals.
    */
   poster?: { src: string; alt: string };
+  /** Names the first interaction without disclosing a story outcome. */
+  launchLabel?: string;
 };

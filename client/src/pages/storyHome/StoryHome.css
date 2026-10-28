@@ -76,7 +76,11 @@
       rgba(var(--sh-ink-rgb), 0.38) 160px,
       rgba(var(--sh-ink-rgb), 0) 230px
     ),
-    linear-gradient(0deg, rgba(var(--sh-ink-rgb), 0.8) 0, rgba(var(--sh-ink-rgb), 0) 16%);
+    linear-gradient(
+      0deg,
+      rgba(var(--sh-ink-rgb), 0.8) 0,
+      rgba(var(--sh-ink-rgb), 0) 16%
+    );
 }
 .sh-world-overlay {
   position: relative;
@@ -177,7 +181,9 @@
   padding: 9px 15px;
   border: 1px solid #f3ebdd2e;
   border-radius: 999px;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 .sh-pill:hover {
   background: #ffffff0f;
@@ -464,7 +470,11 @@
   inset: 0;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 50% 35%, transparent 45%, rgba(var(--sh-ink-rgb), 0.55) 100%),
+    radial-gradient(
+      circle at 50% 35%,
+      transparent 45%,
+      rgba(var(--sh-ink-rgb), 0.55) 100%
+    ),
     linear-gradient(200deg, #d8ac5926, transparent 55%);
 }
 .sh-claire-note {
@@ -483,90 +493,6 @@
 .sh-claire-sign:before {
   content: "— ";
 }
-/* the feed Claire means, clipped to her note: a real frame from tonight's game, taken before anything happens */
-.sh-feed {
-  position: relative;
-  display: block;
-  width: min(100%, 248px);
-  margin: 12px 0 0;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #0b1310;
-  cursor: pointer;
-  box-shadow:
-    0 0 0 1px rgba(216, 172, 89, 0.28),
-    0 14px 30px -14px rgba(0, 0, 0, 0.7);
-  transform: rotate(0.6deg);
-  transition:
-    transform 0.25s var(--sh-ease),
-    box-shadow 0.25s var(--sh-ease);
-}
-.sh-feed img {
-  display: block;
-  width: 100%;
-  height: auto;
-  filter: saturate(0.85) brightness(0.92);
-  transition: filter 0.25s var(--sh-ease);
-}
-.sh-feed-cue {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(8, 14, 12, 0.78);
-  color: #cfe8c8;
-  font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sh-feed:hover:not(:disabled),
-.sh-feed:focus-visible {
-  transform: rotate(0deg) translateY(-2px);
-  box-shadow:
-    0 0 0 1px rgba(216, 172, 89, 0.6),
-    0 18px 34px -14px rgba(0, 0, 0, 0.75);
-}
-.sh-feed:hover:not(:disabled) img,
-.sh-feed:focus-visible img {
-  filter: none;
-}
-.sh-feed:focus-visible {
-  outline: 2px solid var(--sh-gold);
-  outline-offset: 3px;
-}
-.sh-feed:disabled {
-  cursor: default;
-}
-@media (prefers-reduced-motion: reduce) {
-  .sh-feed,
-  .sh-feed img {
-    transition: none;
-  }
-  .sh-feed:hover:not(:disabled),
-  .sh-feed:focus-visible {
-    transform: none;
-  }
-}
-
-/* a laptop screen keeps the whole invitation, feed included, above the fold */
-@media (min-width: 601px) and (max-height: 860px) {
-  .sh-title {
-    font-size: clamp(44px, 4.2vw, 58px);
-  }
-  .sh-claire {
-    margin-top: 18px;
-  }
-  .sh-feed {
-    width: min(100%, 220px);
-  }
-}
-
 /* ---- tonight, finished -------------------------------------------------------------------------------------------- */
 
 .sh-settled,
@@ -794,14 +720,13 @@
 }
 /* the destination stays in view to the right of the stage */
 .story-host[data-arrived="true"] {
-  background:
-    linear-gradient(
-      90deg,
-      rgba(var(--sh-ink-rgb), 0.9) 0%,
-      rgba(var(--sh-ink-rgb), 0.78) 38%,
-      rgba(var(--sh-ink-rgb), 0.25) 62%,
-      rgba(var(--sh-ink-rgb), 0.1) 100%
-    );
+  background: linear-gradient(
+    90deg,
+    rgba(var(--sh-ink-rgb), 0.9) 0%,
+    rgba(var(--sh-ink-rgb), 0.78) 38%,
+    rgba(var(--sh-ink-rgb), 0.25) 62%,
+    rgba(var(--sh-ink-rgb), 0.1) 100%
+  );
 }
 .story-host[data-leaving] {
   background: rgba(var(--sh-ink-rgb), 0.96);
@@ -813,7 +738,11 @@
   padding: 34px 40px 38px;
   border: 1px solid #d8ac5938;
   border-radius: 16px;
-  background: linear-gradient(160deg, rgba(34, 58, 68, 0.96), rgba(20, 35, 45, 0.97));
+  background: linear-gradient(
+    160deg,
+    rgba(34, 58, 68, 0.96),
+    rgba(20, 35, 45, 0.97)
+  );
   box-shadow:
     inset 0 1px 0 #ffffff0f,
     0 34px 80px -24px #040c12d9;
@@ -1165,7 +1094,11 @@
   }
   .sh-world-board:after {
     background:
-      linear-gradient(180deg, rgba(var(--sh-ink-rgb), 0.85) 0, rgba(var(--sh-ink-rgb), 0) 22%),
+      linear-gradient(
+        180deg,
+        rgba(var(--sh-ink-rgb), 0.85) 0,
+        rgba(var(--sh-ink-rgb), 0) 22%
+      ),
       linear-gradient(0deg, var(--sh-ink) 0, rgba(var(--sh-ink-rgb), 0) 26%);
   }
   .sh-world [data-lantern-state="sample"],
@@ -1284,5 +1217,227 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* The evidence and its action form one invitation. */
+.sh-evidence-play {
+  display: block;
+  width: 100%;
+  max-width: 460px;
+  padding: 0;
+  margin: 24px 0 0;
+  border: 1px solid #d8ac5970;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #152820;
+  color: #14232d;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 16px 48px #0005;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.sh-evidence-image {
+  display: block;
+  height: 170px;
+  overflow: hidden;
+  background: #0b1715;
+}
+.sh-evidence-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 48%;
+  filter: saturate(0.65);
+  transition:
+    filter 0.2s,
+    transform 0.4s;
+}
+.sh-evidence-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 54px;
+  padding: 14px 22px;
+  background: linear-gradient(115deg, #efd08c, #d8ac59);
+  font: 600 15px var(--sh-sans);
+}
+.sh-evidence-play:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 16px 48px #0007,
+    0 0 24px #d8ac5918;
+}
+.sh-evidence-play:hover img {
+  filter: saturate(0.85) brightness(1.12);
+  transform: scale(1.025);
+}
+.sh-evidence-play:active {
+  transform: translateY(0);
+}
+.sh-evidence-play:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+.sh-duration {
+  margin: 10px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+.sh-claire {
+  margin-top: 22px;
+  padding-top: 18px;
+}
+.sh-claire-portrait img {
+  filter: sepia(0.35) saturate(0.55);
+}
+@media (min-width: 901px) {
+  .sh-chapter {
+    width: clamp(420px, 38vw, 580px);
+    padding-top: 28px;
+    padding-bottom: 30px;
+  }
+  .sh-title {
+    font-size: clamp(40px, 4vw, 62px);
+  }
+}
+@media (max-width: 600px) {
+  .sh-page {
+    --sh-vignette: 170px;
+  }
+  .sh-evidence-play {
+    margin-top: 18px;
+  }
+  .sh-evidence-image {
+    height: 130px;
+  }
+  .sh-evidence-action {
+    min-height: 52px;
+    padding: 12px 18px;
+  }
+  .sh-duration {
+    text-align: left;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-evidence-play,
+  .sh-evidence-image img {
+    transition: none;
+  }
+  .sh-evidence-play:hover,
+  .sh-evidence-play:hover img {
+    transform: none;
+  }
+}
+
+/* The invitation builds from the premise, through Claire, into the evidence. */
+.sh-claire {
+  margin: 20px 0 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.sh-claire-note p {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.sh-evidence-play {
+  padding: 6px;
+  background: #081614;
+  border-color: #d8ac5960;
+}
+.sh-evidence-image {
+  height: 185px;
+  border-radius: 5px 5px 0 0;
+}
+.sh-evidence-action {
+  border-radius: 0 0 5px 5px;
+}
+.sh-evidence-tether {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+.sh-evidence-tether path {
+  fill: none;
+  stroke: #e9bc65;
+}
+.sh-tether-glow {
+  stroke-width: 5;
+  opacity: 0.25;
+  filter: blur(3px);
+}
+.sh-tether-line {
+  stroke-width: 1;
+  opacity: 0.8;
+}
+.sh-evidence-tether circle {
+  fill: #ffe4a0;
+  filter: drop-shadow(0 0 5px #e9bc65);
+}
+@media (min-width: 901px) {
+  .sh-topbar {
+    height: 62px;
+  }
+  .sh-glass-stats {
+    padding-bottom: 12px;
+  }
+  .sh-chapter {
+    padding-top: 24px;
+  }
+  .sh-title {
+    font-size: clamp(40px, 3.65vw, 60px);
+  }
+  .sh-hook {
+    margin-top: 18px;
+    font-size: 16px;
+  }
+  .sh-evidence-play {
+    margin-top: 18px;
+  }
+}
+@media (max-width: 600px) {
+  .sh-page {
+    --sh-vignette: 110px;
+  }
+  .sh-glass-stats {
+    gap: 6px 16px;
+    padding-bottom: 10px;
+  }
+  .sh-glass-value {
+    font-size: 16px;
+  }
+  .sh-claire {
+    margin-top: 16px;
+    gap: 12px;
+    grid-template-columns: 36px 1fr;
+  }
+  .sh-claire-portrait {
+    width: 36px;
+    height: 36px;
+  }
+  .sh-claire-note p {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .sh-claire-sign {
+    font-size: 18px;
+    margin-top: 3px;
+  }
+  .sh-evidence-play {
+    margin-top: 14px;
+  }
+  .sh-evidence-image {
+    height: 120px;
+  }
+  .sh-hook {
+    font-size: 15px;
   }
 }
