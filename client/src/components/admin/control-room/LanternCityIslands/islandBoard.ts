@@ -147,6 +147,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   controls.screenSpacePanning = false;
   controls.minAzimuthAngle = -0.5;
   controls.maxAzimuthAngle = 0.5;
+  // The account home is a page that scrolls: the wheel and pinch belong to the page, not the camera.
+  if (opts.skyBoard) controls.enableZoom = false;
 
   // the sun: west-south-west, low; shadows stretch east-north-east across the channels
   const SUN = new THREE.Vector3(-0.78, 0.5, 0.38).normalize();

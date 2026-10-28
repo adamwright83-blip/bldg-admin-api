@@ -68,6 +68,7 @@ export default function LanternCityIslands({
   storyAnomaly,
   onEmbeddedChange,
   onStage,
+  onDestination,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -95,6 +96,8 @@ export default function LanternCityIslands({
   onEmbeddedChange?: (open: boolean) => void;
   /** The account home's handle on the camera for entering tonight's chapter and coming back; null once the board is gone. */
   onStage?: (stage: LanternStage | null) => void;
+  /** The account home: tonight's chapter can be played, and a click on its destination tower plays it. */
+  onDestination?: () => void;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -128,6 +131,8 @@ export default function LanternCityIslands({
   storyLocationRef.current = storyLocation;
   const stageRef = useRef(onStage);
   stageRef.current = onStage;
+  const destinationRef = useRef(onDestination);
+  destinationRef.current = onDestination;
   const insetAtMount = useRef(insetLeft);
   insetAtMount.current = insetLeft;
 
@@ -188,7 +193,10 @@ export default function LanternCityIslands({
           if (modeRef.current === "report" && info?.name) setSelectedTerritoryId(normalizeTerritoryName(info.name));
         },
         onHover: setHover,
-        onTower: towerId => { if (modeRef.current === "explore") setTower(towerId); },
+        onTower: towerId => {
+          if (skyBoardAtMount.current && towerId === storyLocationRef.current && destinationRef.current) { setHover(null); destinationRef.current(); return; }
+          if (modeRef.current === "explore") setTower(towerId);
+        },
         onOperationsHub: () => { if (modeRef.current === "explore") window.location.assign("/operations/floor"); },
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
@@ -302,7 +310,7 @@ export default function LanternCityIslands({
           ) : null}
         </>
       ) : null}
-      {mode === "explore" ? (
+      {mode === "explore" && !skyBoard ? (
         <ObjectiveMarksLayer
           board={board}
           ready={ready}
@@ -329,7 +337,12 @@ export default function LanternCityIslands({
         </section>
       ) : null}
 
-      {hover && (hovered.length || hover.tower) ? (
+      {hover?.tower && skyBoard && onDestination && hover.tower === storyLocation ? (
+        // below the pointer, so the tip never sits over the floor it points at
+        <div className={styles.tip} data-lantern-tip style={{ left: Math.min(hover.x + 16, window.innerWidth - 280), top: hover.y + 24 }}>
+          <span className={styles.tipHint}>Tonight's chapter · click to play</span>
+        </div>
+      ) : hover && (hovered.length || hover.tower) ? (
         <div className={styles.tip} data-lantern-tip style={{ left: Math.min(hover.x + 16, window.innerWidth - 280), top: Math.max(hover.y - 80, 8) }}>
           {hovered.slice(0, 4).map(c => (
             <div key={c.identityKey} className={styles.tipRow}>
@@ -400,7 +413,7 @@ export default function LanternCityIslands({
           </div>
         </div>
       ) : null}
-      {mapping.kind === "unmapped" || mapping.kind === "partial" ? (
+      {mapping.kind === "unmapped" || mapping.kind === "partial" && !skyBoard ? (
         <div className={styles.mappingNotice} role="status" data-lantern-state={`mapping-${mapping.kind}`}>
           <div>
             {mapping.kind === "unmapped"
