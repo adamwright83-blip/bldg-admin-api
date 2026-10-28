@@ -1,5 +1,4 @@
-import { useEffect, useState, type ComponentType, type SVGProps } from "react";
-import LanternCityIslands from "@/components/admin/control-room/LanternCityIslands/LanternCityIslands";
+import { lazy, Suspense, useEffect, useState, type ComponentType, type SVGProps } from "react";
 import type { IslandIntroPhase } from "@/components/admin/control-room/LanternCityIslands/islandBoard";
 import { Link } from "wouter";
 import { ArrowRight, Bell, Box, Map, Settings, Users, Wallet } from "lucide-react";
@@ -21,6 +20,9 @@ import {
   type StoryEnabled,
 } from "./homeModel";
 import "./StoryHome.css";
+
+// The 3D board (three.js) loads on its own, after the page: three.js never sits in the home's own chunk.
+const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
 
 /**
  * The main account page while a story season is on: one five-minute chapter tonight, over business numbers that
@@ -63,6 +65,7 @@ export default function StoryHome({
     <div className="sh-page is-world" data-testid="story-home" data-intro={intro}>
       <section className="sh-world" aria-label="Lantern City">
         <div className="sh-world-board">
+          <Suspense fallback={null}>
           <LanternCityIslands
             intro={playIntro}
             onIntroPhase={setIntro}
@@ -74,6 +77,7 @@ export default function StoryHome({
             insetLeft={insetLeft}
             skyBoard
           />
+          </Suspense>
         </div>
         <div className="sh-world-overlay">
           <TopBar operatorName={operatorName} />
