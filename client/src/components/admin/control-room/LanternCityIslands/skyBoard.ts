@@ -76,7 +76,7 @@ const GLOW_F = /* glsl */ `
     #include <fog_fragment>
   }`;
 
-type Tile = { group: THREE.Object3D; home: THREE.Vector3; delay: number; t: number };
+type Tile = { group: THREE.Object3D; home: THREE.Vector3; delay: number; t: number; alphas: { value: number }[] };
 
 export function createSkyBoard(opts: SkyBoardOptions) {
   const root = new THREE.Group();
@@ -125,7 +125,7 @@ export function createSkyBoard(opts: SkyBoardOptions) {
       uniforms: { ...opts.fog, uTime: time, uPhase: { value: phase }, uColor: { value: color }, uAlpha: { value: alpha } },
       vertexShader: GLASS_V,
       fragmentShader: GLOW_F,
-      transparent: alpha < 1,
+      transparent: true,
       fog: true,
       toneMapped: false,
     });
@@ -142,27 +142,29 @@ export function createSkyBoard(opts: SkyBoardOptions) {
     groups.forEach((g, i) => {
       const phase = i / count;
       const gold = i === 0;
+      const alphas: { value: number }[] = [];
+      const fadeable = (m: THREE.Material) => { const u = (m as THREE.ShaderMaterial).uniforms?.uAlpha; if (u) alphas.push(u); return m; };
       g.traverse(o => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.layers.set(opts.layer);
         mesh.frustumCulled = false;
         if (mesh.name.startsWith("slab_")) {
-          mesh.material = glass(phase, gold);
+          mesh.material = fadeable(glass(phase, gold));
           mesh.renderOrder = 1;
         } else if (mesh.name.startsWith("rim_")) {
-          mesh.material = glow(phase, gold ? new THREE.Color(1.45, 1.1, 0.55) : new THREE.Color(1.05, 1.2, 1.45));
+          mesh.material = fadeable(glow(phase, gold ? new THREE.Color(1.45, 1.1, 0.55) : new THREE.Color(1.05, 1.2, 1.45)));
           mesh.renderOrder = 2;
         } else if (mesh.name.startsWith("icon_")) {
-          mesh.material = glow(phase, gold ? new THREE.Color(1.4, 1.15, 0.65) : new THREE.Color(1.25, 1.12, 0.85));
+          mesh.material = fadeable(glow(phase, gold ? new THREE.Color(1.4, 1.15, 0.65) : new THREE.Color(1.25, 1.12, 0.85)));
           mesh.renderOrder = 2;
         } else if (mesh.name.startsWith("crystal_")) {
-          mesh.material = glow(phase, new THREE.Color(1.1, 1.25, 1.5), 0.9);
+          mesh.material = fadeable(glow(phase, new THREE.Color(1.1, 1.25, 1.5), 0.9));
           crystals.push(mesh);
         }
       });
       root.add(g);
-      tiles.push({ group: g, home: g.position.clone(), delay: i * 0.11, t: 1 });
+      tiles.push({ group: g, home: g.position.clone(), delay: i * 0.11, t: 1, alphas });
     });
 
     // the adventurer on tonight's tile, back to us, looking over the city
@@ -214,7 +216,18 @@ export function createSkyBoard(opts: SkyBoardOptions) {
         else t.t = Math.min(t.t, 0);
       }
     },
-    update(dt: number) {
+    update(dt: number, cameraPos?: THREE.Vector3) {
+      // fade the far side of the loop, so the glass reads as floating in front of the city rather than over it
+      if (cameraPos && tiles.length) {
+        const w = new THREE.Vector3();
+        const ds = tiles.map(t => t.group.getWorldPosition(w).distanceTo(cameraPos));
+        const near = Math.min(...ds), far = Math.max(...ds);
+        tiles.forEach((t, i) => {
+          const k = far > near ? (ds[i] - near) / (far - near) : 0;
+          const a = 1 - 0.78 * k * k;
+          for (const u of t.alphas) u.value = a;
+        });
+      }
       time.value += dt;
       mixer?.update(dt);
       for (const c of crystals) c.rotation.z += dt * 0.6;

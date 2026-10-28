@@ -38,8 +38,11 @@ export type MetricView = {
 
 export function metricView(metric: AccountSnapshotMetric | null | undefined, kind: "cents" | "count"): MetricView {
   if (!metric || metric.value == null) return { text: NOT_WIRED, wired: false, recorded: false, change: null };
-  const text = kind === "cents" ? usd.format(metric.value / 100) : count.format(metric.value);
-  const pct = metric.changePct;
+  const formatted = kind === "cents" ? usd.format(metric.value / 100) : count.format(metric.value);
+  // a quiet stretch on books that are not fully confirmed: say "so far", and skip a −100% that would read as a crash
+  const quiet = metric.value === 0 && metric.precision === "recorded";
+  const text = quiet ? `${formatted} so far` : formatted;
+  const pct = quiet ? null : metric.changePct;
   const change =
     pct == null
       ? null

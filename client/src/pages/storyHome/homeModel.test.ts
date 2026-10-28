@@ -129,3 +129,15 @@ describe("claimDailyIntro", () => {
     expect(localDay(new Date(2026, 0, 5, 23, 59))).toBe("2026-01-05");
   });
 });
+
+describe("metricView: a quiet stretch", () => {
+  it("says 'so far' and drops the change for a recorded zero, so a quiet week never reads as a crash", () => {
+    const v = metricView({ value: 0, previous: 48200, changePct: -100, precision: "recorded" }, "cents");
+    expect(v).toMatchObject({ text: "$0 so far", wired: true, change: null });
+  });
+  it("keeps an exact zero and its change as they are", () => {
+    const v = metricView({ value: 0, previous: 3, changePct: -100, precision: "exact" }, "count");
+    expect(v.text).toBe("0");
+    expect(v.change?.text).toBe("−100%");
+  });
+});

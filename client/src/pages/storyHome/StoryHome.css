@@ -261,11 +261,15 @@
    board, and stay clickable: they link to a real fix. */
 @media (min-width: 901px) {
   .sh-world [data-lantern-state^="mapping-"] {
-    top: 212px;
-    right: 32px;
-    bottom: auto;
+    top: auto;
+    right: 24px;
+    bottom: 24px;
     left: auto;
     transform: none;
+    max-width: 380px;
+    padding: 8px 12px;
+    font-size: 12px;
+    opacity: 0.88;
   }
 }
 

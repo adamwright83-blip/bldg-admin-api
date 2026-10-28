@@ -1820,7 +1820,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const v = new THREE.Vector3();
     for (const L of order) {
       const open = (islandCounts.get(L.island) ?? 0) > 0;
-      const px = open ? 72 : 54;       // label height on screen
+      // the home names only the places with customers, and quieter, so the page has one focal point
+      if (opts.skyBoard && !open) { L.sprite.visible = false; labelRects.set(L.island, null); continue; }
+      const px = opts.skyBoard ? 46 : open ? 72 : 54;       // label height on screen
       const s = (px * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h;
       L.sprite.scale.set(s * (640 / 190), s, 1);
       v.copy(L.sprite.position).project(camera);
@@ -1847,7 +1849,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
    * at HORIZON so the sky shows above the city, the loop's far side at BACK, its near side at FRONT. With a fixed
    * vertical lens that fixes the camera's height, its distance and its tilt.
    */
-  const HOME_FOV = 50, HOME_HORIZON = 0.27, HOME_BACK = 0.55, HOME_FRONT = 0.9;
+  const HOME_FOV = 50, HOME_HORIZON = 0.24, HOME_BACK = 0.55, HOME_FRONT = 0.9;
   function frameHome() {
     if (!skyRing) return false;
     camera.fov = HOME_FOV;
@@ -2049,7 +2051,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     }
     controls.update();
     const cd = camera.position.distanceTo(controls.target);
-    const near = cd * 1.6, far = cd * 4.5;
+    // the home looks across the whole city toward the horizon: push the haze back so the far islands still read
+    const near = cd * (opts.skyBoard ? 2.4 : 1.6), far = cd * (opts.skyBoard ? 7 : 4.5);
     fogU.fogNear.value = near; fogU.fogFar.value = far;
     (scene.fog as THREE.Fog).near = near; (scene.fog as THREE.Fog).far = far;
     camera.near = Math.max(10, cd * 0.02);
@@ -2061,7 +2064,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     ink.uniforms.uStrength.value = THREE.MathUtils.clamp(1.15 - cd / 16000, 0.35, 0.9);
     if (ready) {
       stepIntro(dt);
-      sky?.update(dt);
+      sky?.update(dt, camera.position);
       const built = pumpBuildings(opts.capture ? 1e9 : 10);
       if (built && !readySent) { readySent = true; events.onReady?.(); }
       moveBoats(dt);
