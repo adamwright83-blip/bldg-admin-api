@@ -19,7 +19,13 @@ export const HOME_NAV = [
 
 /** Fixed art paths. Final art lands at these paths in its own commit; until then the page falls back. */
 export const HOME_ART = {
-  heroPlate: "/assets/goldline/home/hero-plate.webp",
+  /** The hero's layers (see HeroScene): the city plate, the traveller, and the glass tiles of the path. */
+  hero: {
+    sky: "/assets/goldline/home/hero/sky-city.webp",
+    traveller: "/assets/goldline/home/hero/traveller.webp",
+    tileStar: "/assets/goldline/home/hero/tile-star.webp",
+    tileBlank: "/assets/goldline/home/hero/tile-blank.webp",
+  },
   claire: "/assets/goldline/home/claire-masked.png",
   neighbourhood: (slug: string) => `/assets/goldline/home/neighbourhoods/${slug}.webp`,
   neighbourhoodFallback: (slug: string) => `/assets/admin/control-room/world/territories-v2/${slug}.webp`,

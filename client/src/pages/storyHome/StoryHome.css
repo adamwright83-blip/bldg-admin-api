@@ -223,24 +223,172 @@
 
 .sh-hero {
   position: relative;
-  min-height: 560px;
+  min-height: clamp(580px, 46vw, 720px);
   display: flex;
   align-items: center;
   padding: 56px 32px;
   color: var(--sh-cream);
-  /* The plate, when its art lands; until then the dusk gradient under it is the stand-in. */
-  background-color: #1d2233;
-  background-image:
-    linear-gradient(90deg, rgba(14, 16, 26, 0.86) 0%, rgba(14, 16, 26, 0.55) 45%, rgba(14, 16, 26, 0) 75%),
-    var(--sh-hero-plate, none),
-    radial-gradient(ellipse at 78% 18%, rgba(233, 196, 120, 0.55) 0%, rgba(233, 196, 120, 0) 42%),
-    linear-gradient(160deg, #2b3350 0%, #3c3a5c 38%, #7a5a62 72%, #c48a5c 100%);
-  background-size: cover, cover, cover, cover;
-  background-position: center, center, center, center;
+  background: linear-gradient(160deg, #2b3350 0%, #3c3a5c 38%, #7a5a62 72%, #c48a5c 100%);
   overflow: hidden;
+  isolation: isolate;
+}
+
+/* ── Hero scene: the city, the glass path, the traveller ─────────────────── */
+
+.sh-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* The scene is the size reference for the stage (container units), so the hero can still grow with its copy. */
+  container-type: size;
+}
+/* The plate's own proportions (1852 × 849), covering the hero like object-fit: cover, so tile positions in percent
+   always land on the same spot of the painting. */
+.sh-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100cqw, calc(100cqh * 2.1814));
+  aspect-ratio: 1852 / 849;
+  transform: translate(-50%, -50%);
+}
+.sh-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.sh-layer-sky {
+  transform: translate3d(calc(var(--sh-mx, 0) * -10px), calc(var(--sh-my, 0) * -6px), 0);
+}
+.sh-layer-path {
+  transform: translate3d(calc(var(--sh-mx, 0) * -22px), calc(var(--sh-my, 0) * -12px), 0);
+}
+.sh-layer-near {
+  transform: translate3d(calc(var(--sh-mx, 0) * -36px), calc(var(--sh-my, 0) * -18px), 0);
+}
+.sh-sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: 72% 40%;
+  animation: sh-drift 42s ease-in-out infinite alternate;
+}
+@keyframes sh-drift {
+  from { transform: scale(1.03) translate3d(0, 0, 0); }
+  to { transform: scale(1.09) translate3d(-1.2%, -0.9%, 0); }
+}
+
+.sh-tile {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: calc(20 - var(--i));
+}
+.sh-tile-body {
+  position: relative;
+  animation: sh-float calc(5.2s + var(--i) * 0.45s) ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -0.8s);
+}
+@keyframes sh-float {
+  from { transform: translate3d(0, calc(4px * var(--s)), 0); }
+  to { transform: translate3d(0, calc(-9px * var(--s)), 0); }
+}
+.sh-tile-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 calc(22px * var(--s)) rgba(150, 175, 255, 0.55));
+  /* A pulse of light travels up the path, nearest tile first. */
+  animation: sh-pulse 4.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.32s);
+}
+@keyframes sh-pulse {
+  0%, 62%, 100% { filter: drop-shadow(0 0 calc(22px * var(--s)) rgba(150, 175, 255, 0.55)) brightness(1); }
+  18% { filter: drop-shadow(0 0 calc(34px * var(--s)) rgba(255, 214, 150, 0.85)) brightness(1.28); }
+}
+.sh-traveller {
+  position: absolute;
+  left: 50%;
+  bottom: 56%;
+  width: 36%;
+  height: auto;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 10px 14px rgba(10, 12, 30, 0.45));
+  animation: sh-breathe 5.5s ease-in-out infinite;
+}
+@keyframes sh-breathe {
+  0%, 100% { transform: translateX(-50%) scale(1, 1); }
+  50% { transform: translateX(-50%) scale(1.004, 1.012); }
+}
+
+.sh-cloud {
+  position: absolute;
+  bottom: -6%;
+  height: 34%;
+  border-radius: 50%;
+  filter: blur(18px);
+  opacity: 0.55;
+  background:
+    radial-gradient(ellipse at 30% 60%, rgba(255, 236, 222, 0.95) 0%, rgba(255, 236, 222, 0) 60%),
+    radial-gradient(ellipse at 65% 45%, rgba(255, 214, 196, 0.85) 0%, rgba(255, 214, 196, 0) 58%);
+}
+.sh-cloud-a {
+  left: -12%;
+  width: 62%;
+  animation: sh-cloud 70s ease-in-out infinite alternate;
+}
+.sh-cloud-b {
+  right: -18%;
+  width: 54%;
+  opacity: 0.4;
+  animation: sh-cloud 96s ease-in-out infinite alternate-reverse;
+}
+@keyframes sh-cloud {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(9%, -2%, 0); }
+}
+.sh-spark {
+  position: absolute;
+  bottom: 8%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 226, 170, 0.95);
+  box-shadow: 0 0 10px 2px rgba(255, 210, 140, 0.7);
+  opacity: 0;
+  animation: sh-rise calc(8s + var(--k) * 0.37s) linear infinite;
+  animation-delay: calc(var(--k) * -1.1s);
+}
+@keyframes sh-rise {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  15% { opacity: 0.9; }
+  80% { opacity: 0.6; }
+  100% { transform: translate3d(14px, -42cqh, 0); opacity: 0; }
+}
+/* Keeps the copy readable over the brightest part of the sky. */
+.sh-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(14, 16, 26, 0.84) 0%, rgba(14, 16, 26, 0.58) 34%, rgba(14, 16, 26, 0.12) 58%, rgba(14, 16, 26, 0) 70%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-scene *,
+  .sh-scene *::before,
+  .sh-scene *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .sh-spark {
+    display: none;
+  }
 }
 .sh-hero-copy {
   position: relative;
+  z-index: 1;
   max-width: 560px;
 }
 .sh-eyebrow {
@@ -694,11 +842,25 @@
   .sh-hero {
     min-height: 0;
     padding: 40px 16px 44px;
-    background-image:
-      linear-gradient(180deg, rgba(14, 16, 26, 0.35) 0%, rgba(14, 16, 26, 0.85) 70%),
-      var(--sh-hero-plate, none),
-      radial-gradient(ellipse at 80% 10%, rgba(233, 196, 120, 0.5) 0%, rgba(233, 196, 120, 0) 50%),
-      linear-gradient(170deg, #2b3350 0%, #3c3a5c 40%, #7a5a62 75%, #c48a5c 100%);
+  }
+  /* Narrow screens: the copy needs the room. The city and clouds stay; the path and traveller step aside. */
+  .sh-stage {
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    transform: none;
+  }
+  .sh-layer-path,
+  .sh-spark {
+    display: none;
+  }
+  .sh-sky {
+    object-position: 72% 50%;
+  }
+  .sh-scrim {
+    background: linear-gradient(180deg, rgba(14, 16, 26, 0.35) 0%, rgba(14, 16, 26, 0.86) 70%);
   }
   .sh-hook {
     font-size: 17px;

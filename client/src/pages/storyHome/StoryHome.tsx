@@ -17,6 +17,7 @@ import {
   NOT_WIRED,
   type StoryEnabled,
 } from "./homeModel";
+import { HeroScene } from "./HeroScene";
 import "./StoryHome.css";
 
 /**
@@ -153,7 +154,8 @@ function ClairePortrait() {
 function Hero({ tonight, onPlay, onAnswered }: { tonight: StoryEnabled; onPlay: () => void; onAnswered: () => void }) {
   const chapter = tonight.chapter;
   return (
-    <section className="sh-hero" style={{ ["--sh-hero-plate" as string]: `url("${HOME_ART.heroPlate}")` }} data-testid="story-home-hero" data-state={tonight.state}>
+    <section className="sh-hero" data-testid="story-home-hero" data-state={tonight.state}>
+      <HeroScene />
       <div className="sh-hero-copy">
         {tonight.state === "season_complete" || !chapter ? (
           <>
