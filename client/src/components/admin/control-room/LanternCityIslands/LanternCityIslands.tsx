@@ -56,6 +56,7 @@ export default function LanternCityIslands({
   homeChrome = false,
   insetLeft = 0,
   skyBoard = false,
+  onEmbeddedChange,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -77,6 +78,8 @@ export default function LanternCityIslands({
   insetLeft?: number;
   /** The account home: the glass game board loops over the city and the camera sits lower, showing the sky. Read once, at mount. */
   skyBoard?: boolean;
+  /** A full-screen view opened from the board (a tower's floors, Small Comforts) opened or closed. */
+  onEmbeddedChange?: (open: boolean) => void;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -216,6 +219,9 @@ export default function LanternCityIslands({
   }, [customers, atlas.data, atlas.isError, usingSample]);
 
   useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
+  const embeddedRef = useRef(onEmbeddedChange);
+  embeddedRef.current = onEmbeddedChange;
+  useEffect(() => { embeddedRef.current?.(tower !== null || inSuitcase); }, [tower, inSuitcase]);
   useEffect(() => { board.current?.setInsetLeft(insetLeft); }, [insetLeft]);
   useEffect(() => {
     if (mode !== "report" || !territoryReport.data) return;

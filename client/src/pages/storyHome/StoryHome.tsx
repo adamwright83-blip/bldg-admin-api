@@ -60,9 +60,11 @@ export default function StoryHome({
   const refreshTonight = useRefreshStoryTonight();
   const chapter = tonight.chapter;
   const insetLeft = useChapterCardInset();
+  // a tower's floors or Small Comforts opened from the board: the home's own cards step aside
+  const [embedded, setEmbedded] = useState(false);
 
   return (
-    <div className="sh-page is-world" data-testid="story-home" data-intro={intro}>
+    <div className={embedded ? "sh-page is-world is-embedded" : "sh-page is-world"} data-testid="story-home" data-intro={intro}>
       <section className="sh-world" aria-label="Lantern City">
         <div className="sh-world-board">
           <Suspense fallback={null}>
@@ -76,6 +78,7 @@ export default function StoryHome({
             onNavigate={onNavigate}
             insetLeft={insetLeft}
             skyBoard
+            onEmbeddedChange={setEmbedded}
           />
           </Suspense>
         </div>

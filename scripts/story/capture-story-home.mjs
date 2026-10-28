@@ -153,8 +153,9 @@ async function mockTrpc(page) {
 }
 
 async function settle(page) {
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
+  // The home's live 3D board refreshes its map data on a timer, so the network is never idle: wait for load instead.
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(1500);
 }
 
 await fs.mkdir(outputDir, { recursive: true });
