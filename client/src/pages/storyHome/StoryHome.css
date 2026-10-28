@@ -221,28 +221,121 @@
 
 /* ── Hero ────────────────────────────────────────────────────────────────── */
 
-.sh-hero {
+/* ── The world: the live Lantern City board, with the page laid over it ─────── */
+
+.sh-page.is-world {
+  background: #b9c9e0;
+}
+.sh-world {
   position: relative;
-  min-height: 560px;
-  display: flex;
-  align-items: center;
-  padding: 56px 32px;
-  color: var(--sh-cream);
-  /* The plate, when its art lands; until then the dusk gradient under it is the stand-in. */
-  background-color: #1d2233;
-  background-image:
-    linear-gradient(90deg, rgba(14, 16, 26, 0.86) 0%, rgba(14, 16, 26, 0.55) 45%, rgba(14, 16, 26, 0) 75%),
-    var(--sh-hero-plate, none),
-    radial-gradient(ellipse at 78% 18%, rgba(233, 196, 120, 0.55) 0%, rgba(233, 196, 120, 0) 42%),
-    linear-gradient(160deg, #2b3350 0%, #3c3a5c 38%, #7a5a62 72%, #c48a5c 100%);
-  background-size: cover, cover, cover, cover;
-  background-position: center, center, center, center;
+  height: 100dvh;
+  min-height: 640px;
   overflow: hidden;
+  isolation: isolate;
 }
-.sh-hero-copy {
+.sh-world-board {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+/* The overlay passes clicks and drags through to the map; only the cards themselves take the pointer. */
+.sh-world-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.sh-world-overlay > * {
+  pointer-events: auto;
+}
+.is-world .sh-topbar {
+  background: rgba(255, 253, 248, 0.78);
+  border-bottom-color: rgba(228, 221, 205, 0.7);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* The board's own notices (e.g. customers without a map location) move up under the stat cards, clear of the sky
+   board, and stay clickable: they link to a real fix. */
+@media (min-width: 901px) {
+  .sh-world [data-lantern-state^="mapping-"] {
+    top: 212px;
+    right: 32px;
+    bottom: auto;
+    left: auto;
+    transform: none;
+  }
+}
+
+/* ── Glass stat cards ────────────────────────────────────────────────────── */
+
+.sh-glass-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px 32px 0;
+  pointer-events: none;
+}
+.sh-glass-card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(255, 253, 248, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 30px rgba(40, 50, 90, 0.12);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+.sh-glass-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--sh-muted);
+}
+.sh-glass-value {
+  font-family: var(--sh-serif);
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--sh-ink);
+}
+.sh-glass-value.is-not-wired {
+  font-family: var(--sh-sans);
+  font-size: 15px;
+  color: var(--sh-muted);
+}
+
+/* ── Tonight's chapter, on glass over the sky ────────────────────────────── */
+
+.sh-chapter {
+  margin: auto auto auto 32px;
+  max-width: 500px;
+  padding: 28px 30px 24px;
+  border-radius: 22px;
+  color: var(--sh-ink);
+  background: rgba(255, 251, 242, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 20px 60px rgba(40, 40, 80, 0.2);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+}
+.sh-chapter-copy {
   position: relative;
-  max-width: 560px;
 }
+.sh-chapter .sh-title {
+  font-size: clamp(34px, 3.6vw, 52px);
+}
+.sh-chapter .sh-hook,
+.sh-chapter .sh-facts {
+  color: var(--sh-ink-soft);
+}
+.sh-chapter .sh-eyebrow {
+  color: var(--sh-gold-deep);
+}
+
 .sh-eyebrow {
   margin: 0 0 14px;
   font-size: 12px;
@@ -691,14 +784,26 @@
     justify-content: space-between;
     font-size: 16px;
   }
-  .sh-hero {
-    min-height: 0;
-    padding: 40px 16px 44px;
-    background-image:
-      linear-gradient(180deg, rgba(14, 16, 26, 0.35) 0%, rgba(14, 16, 26, 0.85) 70%),
-      var(--sh-hero-plate, none),
-      radial-gradient(ellipse at 80% 10%, rgba(233, 196, 120, 0.5) 0%, rgba(233, 196, 120, 0) 50%),
-      linear-gradient(170deg, #2b3350 0%, #3c3a5c 40%, #7a5a62 75%, #c48a5c 100%);
+  .sh-world {
+    height: auto;
+    min-height: 100dvh;
+  }
+  /* Phones: the cards stack over the board. */
+  .sh-glass-stats {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 62%;
+    overflow-x: auto;
+    padding: 12px 16px 0;
+    scroll-snap-type: x mandatory;
+  }
+  .sh-glass-card {
+    scroll-snap-align: start;
+  }
+  .sh-chapter {
+    margin: auto 12px 16px;
+    max-width: none;
+    padding: 22px 20px 20px;
   }
   .sh-hook {
     font-size: 17px;

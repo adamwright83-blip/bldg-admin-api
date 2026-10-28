@@ -19,7 +19,7 @@ export const HOME_NAV = [
 
 /** Fixed art paths. Final art lands at these paths in its own commit; until then the page falls back. */
 export const HOME_ART = {
-  heroPlate: "/assets/goldline/home/hero-plate.webp",
+
   claire: "/assets/goldline/home/claire-masked.png",
   neighbourhood: (slug: string) => `/assets/goldline/home/neighbourhoods/${slug}.webp`,
   neighbourhoodFallback: (slug: string) => `/assets/admin/control-room/world/territories-v2/${slug}.webp`,
@@ -113,4 +113,46 @@ export function chapterEyebrow(number: number): string {
 export function heroLines(before: readonly StoryResolvedLine[]): { hook: StoryResolvedLine[]; note: StoryResolvedLine | null } {
   if (before.length < 2) return { hook: [...before], note: null };
   return { hook: before.slice(0, -1), note: before[before.length - 1]! };
+}
+
+
+const INTRO_KEY = "joystick.home.intro.v1";
+
+/** YYYY-MM-DD in the viewer's own time zone. */
+export function localDay(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Whether tonight's open plays the opening sequence: the first open of each day, never with reduced motion.
+ * `?intro=1` forces it (demos, checks). Storage is a per-browser convenience; if it is unavailable the intro plays.
+ */
+export function claimDailyIntro(
+  env: { now?: Date; reducedMotion?: boolean; search?: string; storage?: Pick<Storage, "getItem" | "setItem"> | null } = {}
+): boolean {
+  const search = env.search ?? (typeof window !== "undefined" ? window.location.search : "");
+  if (new URLSearchParams(search).get("intro") === "1") return true;
+  const reduced =
+    env.reducedMotion ??
+    (typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if (reduced) return false;
+  const today = localDay(env.now ?? new Date());
+  let storage = env.storage;
+  if (storage === undefined) {
+    try {
+      storage = typeof window !== "undefined" ? window.localStorage : null;
+    } catch {
+      storage = null;
+    }
+  }
+  try {
+    if (storage?.getItem(INTRO_KEY) === today) return false;
+    storage?.setItem(INTRO_KEY, today);
+  } catch {
+    /* no storage: play it */
+  }
+  return true;
 }

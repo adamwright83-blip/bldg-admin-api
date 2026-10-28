@@ -22,6 +22,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { createSkyBoard, type SkyBoard } from "./skyBoard";
 import { K, LABuilder, planLA, VS, type Plan, type PlanInput } from "../LanternCityV7/laBuildings";
 import {
   canonicalIslandFor, buildField, coastAt, heightSampler, layoutIslands, lonLatToBoard, ontoLand, ownerAt, pointInRing, repairOutlines,
@@ -30,8 +31,13 @@ import {
 
 export type IslandLantern = { key: string; latitude: number; longitude: number; name?: string; territoryName?: string };
 export type IslandInfo = { name: string; lanterns: number; served: boolean; x: number; z: number };
+/** The opening sequence (opts.intro): the city brightens from dusk, then the clouds lift over every island with customers. */
+export type IslandIntroPhase = "lighting" | "lifting" | "settled";
+
 export type IslandEvents = {
   onReady?: () => void;
+  /** the opening sequence moved on (only with opts.intro) */
+  onIntro?: (phase: IslandIntroPhase) => void;
   /** the islands are drawn and clickable; buildings may still be rising */
   onInteractive?: () => void;
   onError?: (e: unknown) => void;
@@ -91,7 +97,7 @@ const COMMON = /* glsl */ `
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
 const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 
-export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean } = {}) {
+export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean } = {}) {
   const ASSETS = opts.assetBase ?? DEFAULT_BASE;
   let disposed = false;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: !!opts.capture });
@@ -293,6 +299,14 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   composer.addPass(tilt);
   composer.addPass(new OutputPass());
 
+  // Pixels on the left that the page covers with its own cards: the view is shifted so the board centres in the
+  // open space to the right, and frameBoard fits the board into that space.
+  let insetLeft = 0;
+  function applyViewOffset() {
+    const w = container.clientWidth || 1, h = container.clientHeight || 1;
+    if (insetLeft > 0) camera.setViewOffset(w, h, -insetLeft / 2, 0, w, h);
+    else camera.clearViewOffset();
+  }
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     renderer.setSize(w, h, false);
@@ -306,6 +320,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     paint.uniforms.uPx.value.set(1 / db.x, 1 / db.y);
     tilt.uniforms.uRes.value.set(w, h);
     camera.aspect = w / h;
+    applyViewOffset();
     camera.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(resize);
@@ -318,6 +333,53 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   let H = (_x: number, _z: number, _o?: number) => 0;
   let islands: IslandLayout[] = [];
   let ready = false;
+
+  // ----------------------------------------------------------------- the opening sequence (opts.intro)
+  // Every island starts under cloud with the city dim and the camera pulled back. The city brightens and the camera
+  // eases in; then the clouds over every island with customers burn off, slower than usual so it can be watched.
+  // Grabbing the map ends the camera move at once; the clouds still finish.
+  let introHold = !!opts.intro && !opts.capture;
+  let introT = -1;
+  let introLifted = false;
+  let introCameraFree = false;
+  let cloudSlow = 1;
+  const introFrom = new THREE.Vector3();
+  const introTo = new THREE.Vector3();
+  const INTRO_DARK = 0.3;
+  const introPhase = (phase: IslandIntroPhase) => { try { events.onIntro?.(phase); } catch { /* the page's handler must not stop the city */ } };
+  function startIntro() {
+    introTo.copy(camera.position);
+    introFrom.copy(controls.target).add(camera.position.clone().sub(controls.target).multiplyScalar(1.22));
+    camera.position.copy(introFrom);
+    renderer.toneMappingExposure = INTRO_DARK;
+    introT = 0;
+    sky?.hold();
+    introPhase("lighting");
+  }
+  function stepIntro(dt: number) {
+    if (introT < 0) return;
+    introT += dt;
+    renderer.toneMappingExposure = INTRO_DARK + (1 - INTRO_DARK) * THREE.MathUtils.smoothstep(introT, 0, 2.8);
+    if (!introCameraFree && introT <= 5.5) {
+      const e = 1 - Math.pow(1 - Math.min(1, introT / 5.5), 3);
+      camera.position.lerpVectors(introFrom, introTo, e);
+    }
+    if (!introLifted && introT >= 1.9) {
+      introLifted = true;
+      introHold = false;
+      cloudSlow = 2;
+      applyLanterns(false);
+      sky?.land(false);
+      introPhase("lifting");
+    }
+    if (introLifted && ((!puffBusy && introT >= 3.2) || introT >= 14)) {
+      cloudSlow = 1;
+      renderer.toneMappingExposure = 1;
+      introT = -1;
+      introPhase("settled");
+    }
+  }
+  controls.addEventListener("start", () => { introCameraFree = true; });
   const labelScene = new THREE.Scene();      // drawn after the post chain, crisp
   const world = new THREE.Group();          // board space
   const mini = new THREE.Group();           // mini space, drawn S times larger
@@ -368,10 +430,95 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     fitSun(rect.x0 + 1000, rect.z0 + 1000, rect.x1 - 1000, rect.z1 - 1000);
     startBuildings();
     ready = true;
+    if (opts.skyBoard && !opts.capture) addSkyBoard();
     frameBoard();
+    if (introHold) startIntro();
     events.onInteractive?.();
     applyLanterns(true);
     if (opts.capture) console.log(`[islands] ${islands.map(l => `${l.name}:${l.plans.length}`).join(" ")}`);
+  }
+
+  // ----------------------------------------------------------------- the game board in the sky (opts.skyBoard)
+  let sky: SkyBoard | null = null;
+  let skyRing: { cx: number; cz: number; rx: number; y: number } | null = null;
+  function landBounds() {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let k = 0; k < F.c.length; k++) if (F.c[k] > 0) {
+      const x = F.x0 + (k % F.nx) * F.cell, z = F.z0 + Math.floor(k / F.nx) * F.cell;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+    }
+    return { x0, x1, z0, z1 };
+  }
+  function addHomeSky() {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 48, 24),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthTest: false,
+        toneMapped: false,
+        uniforms: { uHaze: { value: HAZE.clone() } },
+        vertexShader: /* glsl */ `varying vec3 vD; void main(){ vD = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_Position = p.xyww; }`,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uHaze; varying vec3 vD;
+          float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+            return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+          void main() {
+            vec3 d = normalize(vD);
+            float e = d.y;
+            vec3 col = uHaze;
+            col = mix(col, vec3(1., .78, .56), smoothstep(-.01, .05, e));
+            col = mix(col, vec3(.98, .74, .7), smoothstep(.05, .13, e));
+            col = mix(col, vec3(.74, .72, .9), smoothstep(.13, .28, e));
+            col = mix(col, vec3(.47, .62, .9), smoothstep(.28, .6, e));
+            // the low sun's glow, off to the north-west over the far islands
+            vec3 sunDir = normalize(vec3(-.55, .07, -.83));
+            float g = max(dot(d, sunDir), 0.);
+            col += vec3(1., .72, .4) * (pow(g, 10.) * .55 + pow(g, 120.) * 1.6);
+            // soft streaks of high cloud, lit from below
+            vec2 uv = d.xz / max(e + .12, .05) * 1.6;
+            float c = n(uv * vec2(1., 4.)) * .6 + n(uv * vec2(2.3, 8.)) * .4;
+            float band = smoothstep(.05, .12, e) * (1. - smoothstep(.35, .55, e));
+            col = mix(col, vec3(1., .86, .8), smoothstep(.55, .85, c) * band * .45);
+            gl_FragColor = vec4(col, 1.);
+          }`,
+      }),
+    );
+    dome.renderOrder = -10;
+    dome.frustumCulled = false;
+    dome.layers.set(INK_SKIP);
+    dome.onBeforeRender = () => { dome.position.copy(camera.position); };
+    dome.scale.setScalar(1000);
+    scene.add(dome);
+  }
+  function addSkyBoard() {
+    addHomeSky();
+    const b = landBounds();
+    let cloudTop = 0;
+    for (const p of puffList) cloudTop = Math.max(cloudTop, p.y + p.r0 * 0.8);
+    // the board floats in front of the city (south of it, nearer the camera) at cloud height, the way the concept
+    // draws it: its near tiles fill the foreground, its far side passes over the city's southern shore
+    const rx = (b.x1 - b.x0) * 0.22;
+    skyRing = { cx: (b.x0 + b.x1) / 2, cz: b.z1 + rx * 0.5, rx, y: cloudTop + rx * 0.1 };
+    // the home is crisp: no tilt-shift blur and no brush smear over the glass and the adventurer
+    tilt.enabled = false;
+    paint.enabled = false;
+    sky = createSkyBoard({
+      parent: world,
+      yaw: -0.62,
+      centre: new THREE.Vector3(skyRing.cx, skyRing.y, skyRing.cz),
+      radius: rx,
+      trackUrl: "/assets/goldline/home/board/sky-track.glb",
+      heroUrl: "/assets/goldline/silver-lake-3d/hero/adventurer.glb",
+      layer: INK_SKIP,
+      fog: fogU,
+    });
+    void sky.ready.then(() => {
+      // the opening sequence may still be holding the sky; otherwise the board is simply there
+      if (introHold || (introT >= 0 && !introLifted)) sky?.hold();
+      else sky?.land(true);
+    });
   }
 
   // ----------------------------------------------------------------- landmarks: our two towers, the observatory
@@ -1473,6 +1620,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   }
   function setClouds(open: Set<number>, immediate: boolean) {
     if (!puffs) return;
+    // the opening sequence keeps every island under cloud until it lifts them
+    if (introHold) { open = new Set(); immediate = true; }
     for (const p of puffList) {
       const target = open.has(p.island) ? 0 : p.r0;
       if (immediate) { p.cur = p.to = target; p.t = 1; continue; }
@@ -1480,7 +1629,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       p.from = p.cur; p.to = target; p.t = 0;
       // burn off from the island's heart outward, a rolling wave
       const l = islands[p.island];
-      p.delay = p.seed * 0.7 + Math.hypot(p.x - l.label[0], p.z - l.label[1]) / 1400;
+      p.delay = (p.seed * 0.7 + Math.hypot(p.x - l.label[0], p.z - l.label[1]) / 1400) * cloudSlow;
       puffBusy = true;
     }
     writePuffs();
@@ -1508,7 +1657,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         if (p.t >= 1) return;
         busy = true;
         if (p.delay > 0) { p.delay -= dt; return; }
-        p.t = Math.min(1, p.t + dt / 1.2);
+        p.t = Math.min(1, p.t + dt / (1.2 * cloudSlow));
         const t = p.t;
         if (p.to < p.from) {
           const c1 = 2.2, e = (c1 + 1) * t * t * t - c1 * t * t;
@@ -1693,9 +1842,36 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     camera.position.set(x + Math.sin(yaw) * Math.sin(pitch) * dist, ty + Math.cos(pitch) * dist, z + Math.cos(yaw) * Math.sin(pitch) * dist);
     controls.update();
   }
+  /**
+   * The home's camera, solved from where things should sit on screen (fractions of the height, top = 0): the horizon
+   * at HORIZON so the sky shows above the city, the loop's far side at BACK, its near side at FRONT. With a fixed
+   * vertical lens that fixes the camera's height, its distance and its tilt.
+   */
+  const HOME_FOV = 50, HOME_HORIZON = 0.27, HOME_BACK = 0.55, HOME_FRONT = 0.9;
+  function frameHome() {
+    if (!skyRing) return false;
+    camera.fov = HOME_FOV;
+    camera.updateProjectionMatrix();
+    controls.maxPolarAngle = 1.48;
+    const deg = Math.PI / 180;
+    const rz = skyRing.rx * 0.62;
+    const front = skyRing.cz + rz, back = skyRing.cz - rz;
+    const aFront = (HOME_FRONT - HOME_HORIZON) * HOME_FOV * deg;
+    const aBack = (HOME_BACK - HOME_HORIZON) * HOME_FOV * deg;
+    const aCentre = (0.5 - HOME_HORIZON) * HOME_FOV * deg;
+    const lift = (front - back) / (1 / Math.tan(aBack) - 1 / Math.tan(aFront));
+    const height = skyRing.y + lift;
+    const camZ = front + lift / Math.tan(aFront);
+    const targetZ = camZ - height / Math.tan(aCentre);
+    const dist = height / Math.sin(aCentre);
+    controls.maxDistance = Math.max(30000, dist * 1.4);
+    frame(skyRing.cx, targetZ, dist, 0, Math.PI / 2 - aCentre);
+    return true;
+  }
   function frameBoard() {
+    if (frameHome()) return;
     // phones are narrower than 1:2; fit the real ratio so the east islands (Silver Lake) stay on screen
-    const aspect = Math.max(0.3, container.clientWidth / Math.max(1, container.clientHeight));
+    const aspect = Math.max(0.3, Math.max(1, container.clientWidth - insetLeft) / Math.max(1, container.clientHeight));
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let k = 0; k < F.c.length; k++) if (F.c[k] > 0) {
       const x = F.x0 + (k % F.nx) * F.cell, z = F.z0 + Math.floor(k / F.nx) * F.cell;
@@ -1884,6 +2060,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     // ink lines thin out from far away, where they'd only be noise
     ink.uniforms.uStrength.value = THREE.MathUtils.clamp(1.15 - cd / 16000, 0.35, 0.9);
     if (ready) {
+      stepIntro(dt);
+      sky?.update(dt);
       const built = pumpBuildings(opts.capture ? 1e9 : 10);
       if (built && !readySent) { readySent = true; events.onReady?.(); }
       moveBoats(dt);
@@ -1917,8 +2095,18 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     },
     enterSmallComforts,
     board() { activeIslandName = null; frameBoard(); },
+    /** the page covers this many pixels on the left: centre the board in the space that is left */
+    setInsetLeft(px: number) {
+      const next = Math.max(0, Math.min(px, (container.clientWidth || 0) * 0.6));
+      if (Math.abs(next - insetLeft) < 1) return;
+      insetLeft = next;
+      applyViewOffset();
+      camera.updateProjectionMatrix();
+    },
     /** the game sits on top: stop drawing the city underneath */
     setPaused(p: boolean) { paused = p; entering = false; },
+    /** visual checks: where the land and the sky board sit */
+    homeInfo() { return { bounds: ready ? landBounds() : null, ring: skyRing, sky: sky?.stats() ?? null }; },
     /** the camera as jump() takes it */
     cam() {
       const t = controls.target, off = camera.position.clone().sub(t), d = off.length();
@@ -1987,6 +2175,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     },
     setPaint(r: number) { paint.enabled = r > 0; },
     dispose() {
+      sky?.dispose();
       disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();

@@ -342,9 +342,27 @@ export default function AdminHostApp() {
     }
     if (storyTonight.data?.enabled) {
       return (
-        <Suspense fallback={<div className="min-h-screen bg-white" />}>
-          <StoryHome tonight={storyTonight.data} operatorName={user?.name || "Adam"} />
-        </Suspense>
+        <>
+          <Suspense fallback={<div className="min-h-screen bg-white" />}>
+            <StoryHome
+              tonight={storyTonight.data}
+              operatorName={user?.name || "Adam"}
+              onOpenCustomer={phone => setProfilePhone(phone)}
+              onNavigate={nextPath => navigate(nextPath)}
+            />
+          </Suspense>
+          <CustomerProfileDrawer
+            open={profilePhone !== null}
+            onOpenChange={open => {
+              if (!open) setProfilePhone(null);
+            }}
+            phone={profilePhone}
+            onPrefillNewOrder={p => {
+              setNewOrderPhoneSeed(p);
+              navigate("/new-order");
+            }}
+          />
+        </>
       );
     }
     return (
