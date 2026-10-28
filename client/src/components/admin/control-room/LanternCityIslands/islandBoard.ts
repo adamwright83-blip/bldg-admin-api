@@ -524,7 +524,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       centre: new THREE.Vector3(skyRing.cx, skyRing.y, skyRing.cz),
       radius: skyRing.rx,
       trackUrl: "/assets/goldline/home/board/sky-track.glb",
-      heroUrl: "/assets/goldline/silver-lake-3d/hero/adventurer.glb",
+      heroUrl: "/assets/goldline/home/board/traveller.glb",
       layer: INK_SKIP,
       fog: fogU,
     });
@@ -1947,7 +1947,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       frame(focal.x + (portrait ? 150 : 650), focal.z + 150, portrait ? 4400 : 5600, -0.22, 0.88);
       return true;
     }
-    if (!skyRing) return false;
+    // An unlocated chapter or completed season receives the wider city overview.
+    // The ring camera otherwise enlarges its front tile without a destination to balance it.
+    if (!skyRing || !storyLocation) return false;
     camera.fov = HOME_FOV;
     camera.updateProjectionMatrix();
     controls.maxPolarAngle = 1.48;

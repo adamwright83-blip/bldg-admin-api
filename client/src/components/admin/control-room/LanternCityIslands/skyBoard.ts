@@ -180,7 +180,7 @@ export function createSkyBoard(opts: SkyBoardOptions) {
       const box = new THREE.Box3().setFromObject(model);
       const height = box.max.y - box.min.y || 1;
       // a little under half a tile tall: big enough to read, small enough to belong to the world
-      model.scale.setScalar(0.12 / height);
+      model.scale.setScalar(0.17 / height);
       model.position.set(0, 0.05, 0);
       model.rotation.y = Math.PI;
       const front = groups[0];
