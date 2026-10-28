@@ -580,34 +580,66 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         if (opts.skyBoard && L.id === storyLocation) {
           const height = L.h! * VS * S;
           if (opts.storyAnomaly === "lit_floor") {
-            // A fictional room suspended above the real roof. This never changes customer lighting.
+            // A fictional floor hanging a storey above the real roof: a dark frame, mullions, warm rooms behind the
+            // glass, and a little of its light falling on the roof below. It never changes customer lighting.
             const room = new THREE.Group();
-            room.position.set(x, H(x, z) + height + 44, z);
-            room.layers.set(INK_SKIP);
-            const brass = new THREE.MeshBasicMaterial({ color: 0xb78343 });
-            const glass = new THREE.MeshBasicMaterial({ color: 0x65492d, transparent: true, opacity: .86 });
-            const light = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.08, .43), toneMapped: false });
+            const gap = 16, tall = 58, W = 30 * S, D = 34 * S;
+            room.position.set(x, H(x, z) + height + gap + tall / 2, z);
+            const frame = new THREE.MeshBasicMaterial({ color: 0x1b252b });
             const piece = (w: number, h: number, d: number, px: number, py: number, pz: number, material: THREE.Material) => {
               const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
               mesh.position.set(px, py, pz);
-              mesh.layers.set(INK_SKIP);
+              // solid parts join the ink pass like any building, so the city's outlines never draw across them
               room.add(mesh);
             };
-            piece(30*S, 5, 34*S, 0, -15, 0, brass);
-            piece(27*S, 23, 31*S, 0, 0, 0, glass);
-            piece(30*S, 5, 34*S, 0, 15, 0, brass);
-            for (const side of [-1, 1]) for (const n of [-1, 0, 1]) {
-              piece(2, 25, 2, n * 30*S/3, 0, side * 34*S/2, brass);
-              piece(2, 25, 2, side * 30*S/2, 0, n * 34*S/3, brass);
+            // slab and roof, a touch wider than the glass, so the floor reads as architecture rather than a lamp
+            piece(W + 4, 5, D + 4, 0, -tall / 2, 0, frame);
+            piece(W + 4, 4, D + 4, 0, tall / 2, 0, new THREE.MeshBasicMaterial({ color: 0x3d4a52 }));
+            // from above, the camera mostly sees its roof: a skylight shows the same warm rooms
+            piece(W * 0.62, 1, D * 0.62, 0, tall / 2 + 2.2, 0, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 0.8, 0.34), toneMapped: false }));
+            for (const f of [-1, 0, 1]) piece(2, 1.6, D * 0.62, f * W * 0.207, tall / 2 + 2.6, 0, frame);
+            // the seam: the dark stilts and shadow line between the real roof and the floor that isn't there
+            for (const sx of [-1, 1]) for (const sz of [-1, 1]) piece(5, gap, 5, sx * (W / 2 - 6), -tall / 2 - gap / 2, sz * (D / 2 - 6), frame);
+            // the rooms: a warm core, then each bay's pane a slightly different warmth (people's lamps, not a sign)
+            piece(W - 6, tall - 6, D - 6, 0, 0, 0, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.15, 0.7, 0.3), toneMapped: false }));
+            const warm = [new THREE.Color(1.5, 0.92, 0.38), new THREE.Color(1.25, 0.74, 0.3), new THREE.Color(0.95, 0.56, 0.24), new THREE.Color(1.6, 1.02, 0.46)]
+              .map(c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
+            const BAYS = 6, paneH = tall - 10;
+            let k = 0;
+            for (const side of [-1, 1]) for (let n = 0; n < BAYS; n++) {
+              const bw = W / BAYS, bd = D / BAYS;
+              piece(bw - 4, paneH, 1, -W / 2 + bw * (n + 0.5), 0, side * (D / 2 + 0.6), warm[(k += 3) % warm.length]);
+              piece(1, paneH, bd - 4, side * (W / 2 + 0.6), 0, -D / 2 + bd * (n + 0.5), warm[(k += 1) % warm.length]);
             }
-            const panes = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.45, .87, .34), toneMapped: false });
-            for (const side of [-1, 1]) for (const n of [-1, 0, 1]) {
-              piece(30*S/3 - 5, 15, 1, (n + .5) * 30*S/3 - 30*S/6, -1, side * (34*S/2 + 1), panes);
-              piece(1, 15, 34*S/3 - 5, side * (30*S/2 + 1), -1, (n + .5) * 34*S/3 - 34*S/6, panes);
+            // mullions at every bay, corner posts and a transom: the window divisions that make it a floor
+            for (const side of [-1, 1]) for (let n = 0; n <= BAYS; n++) {
+              piece(2.4, tall, 2.4, -W / 2 + (W / BAYS) * n, 0, side * (D / 2 + 1.2), frame);
+              piece(2.4, tall, 2.4, side * (W / 2 + 1.2), 0, -D / 2 + (D / BAYS) * n, frame);
             }
-            piece(27*S, 4, 31*S, 0, -7, 0, light);
-            const halo = new THREE.Mesh(new THREE.RingGeometry(36*S, 43*S, 64), new THREE.MeshBasicMaterial({ color: 0xe0ad62, transparent: true, opacity: .26, side: THREE.DoubleSide, depthWrite: false }));
-            halo.rotation.x = -Math.PI / 2; halo.position.y = -31; halo.layers.set(INK_SKIP); room.add(halo);
+            for (const side of [-1, 1]) {
+              piece(W + 2, 2, 2, 0, tall / 2 - 7, side * (D / 2 + 1.2), frame);
+              piece(2, 2, D + 2, side * (W / 2 + 1.2), tall / 2 - 7, 0, frame);
+            }
+            // its light: a faint glow around the glass and a warm pool on the roof below, both additive
+            const c = document.createElement("canvas");
+            c.width = c.height = 128;
+            const g = c.getContext("2d")!, gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+            gr.addColorStop(0, "rgba(255,190,110,0.55)");
+            gr.addColorStop(0.45, "rgba(255,160,80,0.16)");
+            gr.addColorStop(1, "rgba(255,150,70,0)");
+            g.fillStyle = gr;
+            g.fillRect(0, 0, 128, 128);
+            const glowTex = new THREE.CanvasTexture(c);
+            glowTex.colorSpace = THREE.SRGBColorSpace;
+            const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.75 }));
+            glow.scale.set(W * 2.1, W * 1.3, 1);
+            glow.layers.set(INK_SKIP);
+            room.add(glow);
+            const pool = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.4, D * 1.4), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6 }));
+            pool.rotation.x = -Math.PI / 2;
+            pool.position.y = -tall / 2 - gap + 1.5;
+            pool.layers.set(INK_SKIP);
+            room.add(pool);
             world.add(room);
           }
           const cv = document.createElement("canvas"); cv.width=640; cv.height=128;
@@ -615,7 +647,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
           g.strokeStyle="#d8ac59";g.lineWidth=3;g.stroke();g.fillStyle="#f3ebdd";g.textAlign="center";g.font='500 54px "DM Sans",sans-serif';g.fillText(L.name,320,83);
           const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
           storyLabel=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,sizeAttenuation:false}));
-          storyLabel.position.set(x,H(x,z)+height+290,z);storyLabel.renderOrder=20;labelScene.add(storyLabel);
+          // at the tower's foot, never over the floor the page points at
+          storyLabel.position.set(x,H(x,z)+height*0.18,z+34*S*1.6);storyLabel.renderOrder=20;labelScene.add(storyLabel);
         }
         ourTowers.push({ id: L.id!, planId: id, x, z, h: L.h! * VS * S });
         isl.plans.push({ i: id, cx: id, cz: 0, h: L.h!, u: 0, type: "office", hood: isl.name, x: x / S, z: z / S, fx: 0, fz: 1, W: 30, D: 34, fill: 1 });
@@ -1889,8 +1922,6 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   function placeLabels(cd: number) {
     if (storyLabel) {
       const portrait = container.clientWidth < 700;
-      const destination = ourTowers.find(t => t.id === storyLocation);
-      if (portrait && destination) storyLabel.position.y = H(destination.x, destination.z) + destination.h + 420;
       const scale = (portrait ? 22 : 30) * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov/2)) / Math.max(1,container.clientHeight);
       storyLabel.scale.set(scale*5,scale,1);
     }
