@@ -10,7 +10,7 @@ import {
 import { normalizeTerritoryName } from "@shared/lanternTerritories";
 import type { LanternReportWindowDays } from "@shared/lanternTerritoryReport";
 import LanternReportPanel from "./LanternReportPanel";
-import { createIslandBoard, type IslandBoard, type IslandInfo } from "./islandBoard";
+import { createIslandBoard, type IslandBoard, type IslandInfo, type IslandIntroPhase } from "./islandBoard";
 import TowerFloors from "./TowerFloors";
 import { buildingsWithResidents } from "./towerStack";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
@@ -51,6 +51,12 @@ export default function LanternCityIslands({
   showUtilityDock = true,
   showBrand = true,
   driverCurrentStop = null,
+  intro = false,
+  onIntroPhase,
+  homeChrome = false,
+  insetLeft = 0,
+  skyBoard = false,
+  onEmbeddedChange,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -62,6 +68,18 @@ export default function LanternCityIslands({
   showBrand?: boolean;
   /** Set by Home when the driver line has a current stop. Other boards omit it. */
   driverCurrentStop?: DriverCurrentStop | null;
+  /** Play the opening sequence (everything under cloud, the city brightens, customers' islands clear). Read once, at mount. */
+  intro?: boolean;
+  /** The opening sequence moved on. */
+  onIntroPhase?: (phase: IslandIntroPhase) => void;
+  /** The account home draws its own chrome over the board: hide the Explore/Report switch too. */
+  homeChrome?: boolean;
+  /** Pixels on the left covered by the page's own cards; the board centres in the space to their right. */
+  insetLeft?: number;
+  /** The account home: the glass game board loops over the city and the camera sits lower, showing the sky. Read once, at mount. */
+  skyBoard?: boolean;
+  /** A full-screen view opened from the board (a tower's floors, Small Comforts) opened or closed. */
+  onEmbeddedChange?: (open: boolean) => void;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -87,6 +105,12 @@ export default function LanternCityIslands({
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const introPhaseRef = useRef(onIntroPhase);
+  introPhaseRef.current = onIntroPhase;
+  const introAtMount = useRef(intro);
+  const skyBoardAtMount = useRef(skyBoard);
+  const insetAtMount = useRef(insetLeft);
+  insetAtMount.current = insetLeft;
 
   // The normal world always reads the authenticated tenant, never platform support authority.
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
@@ -129,6 +153,7 @@ export default function LanternCityIslands({
         onInteractive: () => setInteractive(true),
         onError: e => { console.error("Lantern City failed to load", e); setFailed(true); },
         onStats: setStats,
+        onIntro: phase => introPhaseRef.current?.(phase),
         onIsland: info => {
           // Silver Lake is a place you can walk into: clicking it opens the 3D courtyard
           if (modeRef.current === "explore" && info?.name === "Silver Lake") {
@@ -149,7 +174,7 @@ export default function LanternCityIslands({
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
-      });
+      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
       console.warn("Lantern City needs WebGL", e);
@@ -157,8 +182,17 @@ export default function LanternCityIslands({
       return;
     }
     board.current = b;
+    b.setInsetLeft(insetAtMount.current);
     // read-only screen lookups so browser tests can click an island the way a person does
-    const probe = { islandScreen: (name: string) => b.islandScreen(name), islandLabelScreen: (name: string) => b.islandLabelScreen(name), hubScreen: () => b.hubScreen() };
+    const probe = {
+      islandScreen: (name: string) => b.islandScreen(name),
+      islandLabelScreen: (name: string) => b.islandLabelScreen(name),
+      hubScreen: () => b.hubScreen(),
+      // camera read/write for visual checks (dev and visual-test builds only)
+      ...(import.meta.env.DEV || import.meta.env.VITE_ADMIN_VISUAL_TEST
+        ? { cam: () => b.cam(), homeInfo: () => b.homeInfo(), jump: (x: number, z: number, d: number, pitch?: number, yaw?: number) => b.jump(x, z, d, pitch, yaw) }
+        : {}),
+    };
     (window as unknown as { __lanternIslands?: typeof probe }).__lanternIslands = probe;
     return () => {
       b.dispose();
@@ -185,6 +219,10 @@ export default function LanternCityIslands({
   }, [customers, atlas.data, atlas.isError, usingSample]);
 
   useEffect(() => { board.current?.setPaused(inSuitcase); }, [inSuitcase]);
+  const embeddedRef = useRef(onEmbeddedChange);
+  embeddedRef.current = onEmbeddedChange;
+  useEffect(() => { embeddedRef.current?.(tower !== null || inSuitcase); }, [tower, inSuitcase]);
+  useEffect(() => { board.current?.setInsetLeft(insetLeft); }, [insetLeft]);
   useEffect(() => {
     if (mode !== "report" || !territoryReport.data) return;
     if (selectedTerritoryId && territoryReport.data.territories.some(territory => territory.id === selectedTerritoryId)) return;
@@ -206,10 +244,12 @@ export default function LanternCityIslands({
   return (
     <div className={styles.scene} data-lantern-city="islands">
       <div ref={host} className={styles.stage} aria-label="Lantern City island board" />
-      <div className={styles.modeSwitch} role="tablist" aria-label="Lantern City mode" data-lantern-mode={mode}>
-        <button type="button" role="tab" aria-selected={mode === "explore"} onClick={() => chooseMode("explore")}>Explore</button>
-        <button type="button" role="tab" aria-selected={mode === "report"} onClick={() => chooseMode("report")}>Report</button>
-      </div>
+      {homeChrome ? null : (
+        <div className={styles.modeSwitch} role="tablist" aria-label="Lantern City mode" data-lantern-mode={mode}>
+          <button type="button" role="tab" aria-selected={mode === "explore"} onClick={() => chooseMode("explore")}>Explore</button>
+          <button type="button" role="tab" aria-selected={mode === "report"} onClick={() => chooseMode("report")}>Report</button>
+        </div>
+      )}
       {showBrand ? (
         <>
           <header className={styles.top}>

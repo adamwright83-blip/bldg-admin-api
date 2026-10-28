@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LanternTerritoryMetric, LanternTerritoryReport } from "@shared/lanternTerritoryReport";
-import { chapterEyebrow, heroLines, HOME_NAV, metricView, neighbourhoodCards, neighbourhoodHref, NOT_WIRED } from "./homeModel";
+import { chapterEyebrow, heroLines, HOME_NAV, metricView, neighbourhoodCards, neighbourhoodHref, NOT_WIRED, claimDailyIntro, localDay } from "./homeModel";
 
 function territory(id: string, name: string, revenueCents: number | null, locatedCustomers: number): LanternTerritoryMetric {
   return {
@@ -96,5 +96,36 @@ describe("hero copy", () => {
   it("numbers the chapter", () => {
     expect(chapterEyebrow(1)).toBe("CHAPTER 01");
     expect(chapterEyebrow(12)).toBe("CHAPTER 12");
+  });
+});
+
+describe("claimDailyIntro", () => {
+  const memory = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  const evening = new Date(2026, 9, 27, 21, 0);
+  const nextMorning = new Date(2026, 9, 28, 8, 0);
+
+  it("plays on the first open of the day and not again that day", () => {
+    const storage = memory();
+    expect(claimDailyIntro({ now: evening, reducedMotion: false, search: "", storage })).toBe(true);
+    expect(claimDailyIntro({ now: evening, reducedMotion: false, search: "", storage })).toBe(false);
+    expect(claimDailyIntro({ now: nextMorning, reducedMotion: false, search: "", storage })).toBe(true);
+  });
+
+  it("never plays with reduced motion, unless forced with ?intro=1", () => {
+    expect(claimDailyIntro({ now: evening, reducedMotion: true, search: "", storage: memory() })).toBe(false);
+    expect(claimDailyIntro({ now: evening, reducedMotion: true, search: "?intro=1", storage: memory() })).toBe(true);
+  });
+
+  it("plays when storage is unavailable rather than failing", () => {
+    const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    expect(claimDailyIntro({ now: evening, reducedMotion: false, search: "", storage: broken })).toBe(true);
+    expect(claimDailyIntro({ now: evening, reducedMotion: false, search: "", storage: null })).toBe(true);
+  });
+
+  it("uses the viewer's own calendar day", () => {
+    expect(localDay(new Date(2026, 0, 5, 23, 59))).toBe("2026-01-05");
   });
 });

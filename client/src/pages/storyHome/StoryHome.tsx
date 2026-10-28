@@ -1,4 +1,5 @@
-import { useState, type ComponentType, type SVGProps } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType, type SVGProps } from "react";
+import type { IslandIntroPhase } from "@/components/admin/control-room/LanternCityIslands/islandBoard";
 import { Link } from "wouter";
 import { ArrowRight, Bell, Box, Map, Settings, Users, Wallet } from "lucide-react";
 import { PRODUCT_NAME } from "@shared/productIdentity";
@@ -9,6 +10,7 @@ import { storyClient } from "@/story/storyClient";
 import { useRefreshStoryTonight } from "@/story/useStoryTonight";
 import {
   chapterEyebrow,
+  claimDailyIntro,
   heroLines,
   HOME_ART,
   HOME_NAV,
@@ -18,6 +20,9 @@ import {
   type StoryEnabled,
 } from "./homeModel";
 import "./StoryHome.css";
+
+// The 3D board (three.js) loads on its own, after the page: three.js never sits in the home's own chunk.
+const LanternCityIslands = lazy(() => import("@/components/admin/control-room/LanternCityIslands/LanternCityIslands"));
 
 /**
  * The main account page while a story season is on: one five-minute chapter tonight, over business numbers that
@@ -34,16 +39,55 @@ const NAV_ICONS: Record<(typeof HOME_NAV)[number]["key"], ComponentType<SVGProps
   settings: Settings,
 };
 
-export default function StoryHome({ tonight, operatorName }: { tonight: StoryEnabled; operatorName: string }) {
+type IntroState = "waiting" | IslandIntroPhase;
+
+export default function StoryHome({
+  tonight,
+  operatorName,
+  onOpenCustomer,
+  onNavigate,
+}: {
+  tonight: StoryEnabled;
+  operatorName: string;
+  /** A lit home on the board was clicked: open that customer. */
+  onOpenCustomer?: (phone: string) => void;
+  onNavigate?: (path: string) => void;
+}) {
   const [playing, setPlaying] = useState(false);
+  // The opening sequence plays on the first open of the day (never with reduced motion); every later open lands lit.
+  const [playIntro] = useState(claimDailyIntro);
+  const [intro, setIntro] = useState<IntroState>(playIntro ? "waiting" : "settled");
   const refreshTonight = useRefreshStoryTonight();
   const chapter = tonight.chapter;
+  const insetLeft = useChapterCardInset();
+  // a tower's floors or Small Comforts opened from the board: the home's own cards step aside
+  const [embedded, setEmbedded] = useState(false);
 
   return (
-    <div className="sh-page" data-testid="story-home">
-      <TopBar operatorName={operatorName} />
-      <SnapshotStrip />
-      <Hero tonight={tonight} onPlay={() => setPlaying(true)} onAnswered={() => void refreshTonight()} />
+    <div className={embedded ? "sh-page is-world is-embedded" : "sh-page is-world"} data-testid="story-home" data-intro={intro}>
+      <section className="sh-world" aria-label="Lantern City">
+        <div className="sh-world-board">
+          <Suspense fallback={null}>
+          <LanternCityIslands
+            intro={playIntro}
+            onIntroPhase={setIntro}
+            homeChrome
+            showBrand={false}
+            showUtilityDock={false}
+            onOpenCustomer={phone => onOpenCustomer?.(phone)}
+            onNavigate={onNavigate}
+            insetLeft={insetLeft}
+            skyBoard
+            onEmbeddedChange={setEmbedded}
+          />
+          </Suspense>
+        </div>
+        <div className="sh-world-overlay">
+          <TopBar operatorName={operatorName} />
+          <GlassStats />
+          <ChapterCard tonight={tonight} onPlay={() => setPlaying(true)} onAnswered={() => void refreshTonight()} />
+        </div>
+      </section>
       <CityStrip />
       {playing && chapter ? (
         <ChapterHost
@@ -58,6 +102,32 @@ export default function StoryHome({ tonight, operatorName }: { tonight: StoryEna
       ) : null}
     </div>
   );
+}
+
+/**
+ * How much of the board the chapter card covers on the left (its right edge plus a gap), so the board can centre in
+ * the open space beside it. Zero on narrow screens, where the card sits below the board's centre instead.
+ */
+function useChapterCardInset(): number {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      const card = document.querySelector<HTMLElement>(".sh-chapter");
+      const world = document.querySelector<HTMLElement>(".sh-world");
+      if (!card || !world || window.innerWidth <= 900) return setInset(0);
+      setInset(Math.round(card.getBoundingClientRect().right - world.getBoundingClientRect().left + 24));
+    };
+    measure();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    const card = document.querySelector(".sh-chapter");
+    if (ro && card) ro.observe(card);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  return inset;
 }
 
 function TopBar({ operatorName }: { operatorName: string }) {
@@ -93,51 +163,33 @@ function TopBar({ operatorName }: { operatorName: string }) {
   );
 }
 
-function SnapshotStrip() {
+/** The business at a glance, as glass cards over the sky. Truthful numbers only: unsourced reads "Not wired yet". */
+function GlassStats() {
   const snapshot = trpc.system.accountSnapshot.get.useQuery(undefined, { retry: 1, staleTime: 60_000, refetchInterval: 120_000 });
   const data = snapshot.data;
-  return (
-    <section className="sh-snapshot" aria-label="Business snapshot" data-testid="story-home-snapshot">
-      <div className="sh-snapshot-periods">
-        <SnapshotPeriod title="Week to date" period={data?.week} />
-        <SnapshotPeriod title="Month to date" period={data?.month} />
-      </div>
-      {data ? (
-        <div className="sh-snapshot-place">
-          <span>{data.monthName}</span>
-          {data.city ? <span>{data.city}</span> : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function SnapshotPeriod({ title, period }: { title: string; period: AccountSnapshotPeriod | undefined }) {
-  const items = [
-    { label: "Revenue", view: metricView(period?.revenueCents, "cents") },
-    { label: "Orders", view: metricView(period?.orders, "count") },
-    { label: "New customers", view: metricView(period?.newCustomers, "count") },
+  const cards = [
+    { key: "week", label: "Week to date", view: metricView(data?.week.revenueCents, "cents"), against: data?.week.comparison.label },
+    { key: "month", label: "Month to date", view: metricView(data?.month.revenueCents, "cents"), against: data?.month.comparison.label },
+    { key: "orders", label: "Orders (MTD)", view: metricView(data?.month.orders, "count"), against: data?.month.comparison.label },
+    { key: "new", label: "New customers (MTD)", view: metricView(data?.month.newCustomers, "count"), against: data?.month.comparison.label },
   ];
   return (
-    <div className="sh-period">
-      <h2 className="sh-period-title">{title}</h2>
-      <dl className="sh-metrics">
-        {items.map(item => (
-          <div key={item.label} className="sh-metric">
-            <dt>{item.label}</dt>
-            <dd className={item.view.wired ? "sh-metric-value" : "sh-metric-value is-not-wired"}>
-              {item.view.text}
-              {item.view.recorded ? <span className="sh-metric-recorded" title="What the books hold so far; not every source is confirmed for this stretch.">recorded</span> : null}
-            </dd>
-            {item.view.change && period ? (
-              <dd className={`sh-metric-change is-${item.view.change.direction}`} title={`Against ${period.comparison.label}`}>
-                {item.view.change.text}
-              </dd>
-            ) : null}
-          </div>
-        ))}
-      </dl>
-    </div>
+    <section className="sh-glass-stats" aria-label="Business snapshot" data-testid="story-home-snapshot">
+      {cards.map(card => (
+        <div key={card.key} className="sh-glass-card">
+          <span className="sh-glass-label">{card.label}</span>
+          <span className={card.view.wired ? "sh-glass-value" : "sh-glass-value is-not-wired"}>
+            {card.view.text}
+            {card.view.recorded ? <span className="sh-metric-recorded" title="What the books hold so far; not every source is confirmed for this stretch.">recorded</span> : null}
+          </span>
+          {card.view.change ? (
+            <span className={`sh-metric-change is-${card.view.change.direction}`} title={card.against ? `Against ${card.against}` : undefined}>
+              {card.view.change.text}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -150,11 +202,12 @@ function ClairePortrait() {
   );
 }
 
-function Hero({ tonight, onPlay, onAnswered }: { tonight: StoryEnabled; onPlay: () => void; onAnswered: () => void }) {
+/** Tonight's chapter, on a glass card over the sky. Story words come only from `system.story.tonight`. */
+function ChapterCard({ tonight, onPlay, onAnswered }: { tonight: StoryEnabled; onPlay: () => void; onAnswered: () => void }) {
   const chapter = tonight.chapter;
   return (
-    <section className="sh-hero" style={{ ["--sh-hero-plate" as string]: `url("${HOME_ART.heroPlate}")` }} data-testid="story-home-hero" data-state={tonight.state}>
-      <div className="sh-hero-copy">
+    <section className="sh-chapter" data-testid="story-home-hero" data-state={tonight.state}>
+      <div className="sh-chapter-copy">
         {tonight.state === "season_complete" || !chapter ? (
           <>
             <p className="sh-eyebrow">SEASON COMPLETE</p>
