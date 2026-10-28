@@ -2122,6 +2122,15 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
   renderer.domElement.addEventListener("pointermove", onMove);
+  // the pointer left the map (or something opened over it): no tooltip may outlive it
+  const onLeave = () => {
+    if (hoverSig) events.onHover?.(null);
+    hoverSig = "";
+    events.onOperationsHubHover?.(null);
+    events.onSuitcaseHover?.(null);
+    renderer.domElement.style.cursor = "";
+  };
+  renderer.domElement.addEventListener("pointerleave", onLeave);
 
   // ----------------------------------------------------------------- the loop
   let raf = 0;
@@ -2296,6 +2305,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onMove);
+      renderer.domElement.removeEventListener("pointerleave", onLeave);
       controls.dispose();
       scene.traverse(o => {
         const m = o as THREE.Mesh;
