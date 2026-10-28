@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChapterSession, type ChapterHostState } from "./chapterSession";
 import { storyGameFor } from "./games/registry";
-import type { StoryClosing } from "@shared/story";
+import type { StoryClosing, StoryQuestion } from "@shared/story";
+import { Keepsake } from "./Keepsake";
 import type { StoryClient } from "./storyClient";
 
 /**
@@ -12,13 +13,29 @@ export function ChapterHost({
   client,
   chapterNumber,
   title,
+  arrival = null,
   onClose,
 }: {
   client: StoryClient;
   chapterNumber: number;
   title: string;
+  /** Settles when the camera has reached tonight's destination; the stage rises then. Null: rise at once. */
+  arrival?: Promise<void> | null;
   onClose: () => void;
 }) {
+  // The stage rises once the camera reaches the destination. The chapter starts loading at once either way.
+  const [arrived, setArrived] = useState(arrival === null);
+  useEffect(() => {
+    if (!arrival) return;
+    let active = true;
+    void arrival.then(() => {
+      if (active) setArrived(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [arrival]);
+  const [leaving, setLeaving] = useState(false);
   const [state, setState] = useState<ChapterHostState>({ phase: "starting" });
   const session = useMemo(
     () => createChapterSession({ client, chapterNumber, onChange: setState }),
@@ -42,9 +59,16 @@ export function ChapterHost({
     void session.begin();
   }, [session]);
 
+  // Leaving: the veil closes over the stage, then the page returns to the city beneath it.
   const close = () => {
+    if (leaving) return;
+    setLeaving(true);
     void session.leave();
-    onClose();
+    const reduced =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) onClose();
+    else window.setTimeout(onClose, 260);
   };
 
   useEffect(() => {
@@ -82,6 +106,10 @@ export function ChapterHost({
       role="dialog"
       aria-modal="true"
       aria-label={`${heading}: ${title}`}
+      aria-busy={!arrived}
+      data-arrived={arrived}
+      data-leaving={leaving || undefined}
+      data-phase={state.phase}
       data-testid="story-chapter-host"
     >
       <div className="story-host-card">
@@ -102,6 +130,7 @@ export function ChapterHost({
           session={session}
           onClose={close}
           client={client}
+          chapterNumber={chapterNumber}
         />
       </div>
     </div>
@@ -113,8 +142,10 @@ function ChapterBody({
   session,
   onClose,
   client,
+  chapterNumber,
 }: {
   client: StoryClient;
+  chapterNumber: number;
   state: ChapterHostState;
   session: ReturnType<typeof createChapterSession>;
   onClose: () => void;
@@ -177,6 +208,16 @@ function ChapterBody({
         </div>
       );
     case "ended":
+      if (state.answered)
+        return (
+          <EarnedClosing
+            client={client}
+            chapterNumber={chapterNumber}
+            question={state.question}
+            answered={state.answered}
+            onClose={onClose}
+          />
+        );
       return (
         <div className="story-host-block" data-testid="story-host-ended">
           <div className="story-host-lines">
@@ -184,7 +225,7 @@ function ChapterBody({
               <p key={line.key}>{line.text}</p>
             ))}
           </div>
-          {state.question && !state.answered ? (
+          {state.question ? (
             <div className="story-host-question">
               <p className="story-host-question-text">{state.question.text}</p>
               <div className="story-host-options">
@@ -192,9 +233,8 @@ function ChapterBody({
                   <button
                     key={option.key}
                     type="button"
-                    className={`story-host-option${state.answered === option.key ? " is-chosen" : ""}`}
-                    disabled={Boolean(state.answered) || state.answering}
-                    aria-pressed={state.answered === option.key}
+                    className="story-host-option"
+                    disabled={state.answering}
                     onClick={() => void session.choose(option.key)}
                     data-testid={`story-host-option-${option.key}`}
                   >
@@ -202,16 +242,13 @@ function ChapterBody({
                   </button>
                 ))}
               </div>
+              {state.answering ? (
+                <p className="story-host-wait" aria-live="polite">
+                  Saving your answer…
+                </p>
+              ) : null}
             </div>
-          ) : null}
-          {state.answered ? (
-            <div className="story-host-saved" role="status">
-              <p>Your choice is saved.</p>
-              <EarnedClosing client={client} />
-              <p>The next chapter opens tomorrow night.</p>
-            </div>
-          ) : null}
-          {!state.question || state.answered ? (
+          ) : (
             <button
               type="button"
               className="story-host-button is-gold"
@@ -220,7 +257,7 @@ function ChapterBody({
             >
               Back to the city
             </button>
-          ) : null}
+          )}
         </div>
       );
     case "error":
@@ -248,33 +285,76 @@ function ChapterBody({
   }
 }
 
-function EarnedClosing({ client }: { client: StoryClient }) {
-  const [closing, setClosing] = useState<StoryClosing>();
+/**
+ * After the answer is saved: the closing the server reveals now (the response to that answer, the keepsake, tomorrow's
+ * line), read fresh from `tonight` so nothing earned is ever sent before it is earned.
+ */
+function EarnedClosing({
+  client,
+  chapterNumber,
+  question,
+  answered,
+  onClose,
+}: {
+  client: StoryClient;
+  chapterNumber: number;
+  question: StoryQuestion | null;
+  answered: string;
+  onClose: () => void;
+}) {
+  const [closing, setClosing] = useState<StoryClosing | null | undefined>();
   useEffect(() => {
     let active = true;
     void client
       .tonight()
       .then(result => {
-        if (active && result.enabled) setClosing(result.chapter?.closing);
+        if (active) setClosing((result.enabled && result.chapter?.closing) || null);
       })
       .catch(() => {
-        /* The saved answer stands; earned material is available again from the home. */
+        // The saved answer stands; the earned material is on the home once it loads again.
+        if (active) setClosing(null);
       });
     return () => {
       active = false;
     };
   }, [client]);
+  const chosen = question?.options.find(option => option.key === answered);
   return (
-    <>
-      {closing?.response ? <p>{closing.response}</p> : null}
-      {closing?.keepsake ? (
-        <div className="sh-keepsake">
-          <span>KEPT FROM TONIGHT</span>
-          <h3>{closing.keepsake.title}</h3>
-          <p>{closing.keepsake.text}</p>
-        </div>
-      ) : null}
-      {closing?.tomorrow ? <p>{closing.tomorrow}</p> : null}
-    </>
+    <div
+      className="story-host-closing"
+      data-testid="story-host-closing"
+      data-loaded={closing !== undefined}
+      role="status"
+    >
+      {chosen ? <p className="story-host-chosen">{chosen.text}</p> : null}
+      {closing === undefined ? (
+        <p className="story-host-wait">Your answer is saved.</p>
+      ) : (
+        <>
+          <p className="story-host-response">
+            {closing?.response ?? "Your answer is saved."}
+          </p>
+          {closing?.keepsake ? (
+            <Keepsake
+              chapterNumber={chapterNumber}
+              title={closing.keepsake.title}
+              text={closing.keepsake.text}
+              headingLevel={3}
+            />
+          ) : null}
+          <p className="story-host-tomorrow">
+            {closing?.tomorrow ?? "The next chapter opens tomorrow night."}
+          </p>
+        </>
+      )}
+      <button
+        type="button"
+        className="story-host-button is-gold"
+        onClick={onClose}
+        data-testid="story-host-done"
+      >
+        Back to the city
+      </button>
+    </div>
   );
 }
