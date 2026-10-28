@@ -180,10 +180,15 @@ export function ClaireComposer({
             <li className="cc-line cc-line-claire cc-thinking" data-testid="claire-composer-thinking">
               <span className="cc-who">Claire</span>
               <p>
-                <span className="cc-dots" aria-hidden>
-                  <i />
-                  <i />
-                  <i />
+                <span className="cc-mist" aria-hidden>
+                  <i className="cc-mist-a" />
+                  <i className="cc-mist-b" />
+                  <i className="cc-mist-c" />
+                  <b />
+                  <b />
+                  <b />
+                  <b />
+                  <b />
                 </span>
                 <span className="cc-sr">Claire is thinking…</span>
               </p>
