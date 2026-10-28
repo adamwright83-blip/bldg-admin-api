@@ -89,5 +89,26 @@ returns the selected response, keepsake and teaser. Other responses stay server-
 revisit the current earned ending without starting a second game. This does not create business
 progress or an inventory spanning earlier nights.
 
-The story registry currently contains only `fixture.button`. Customer release still needs the
-approved real game and authored presentation content; the new shell does not replace either.
+## Games
+
+The client registry (`client/src/story/games/registry.ts`) holds `fixture.button` (Season 0's two-button
+placeholder) and `cpe.monitor-desk` (Century Park East's camera wall, played from the desk; see
+`client/src/story/games/monitorDesk/README.md`). A chapter names its game with `gameKey`; switching a real
+chapter's game is a reseed of the private season file.
+
+The monitor desk reads its night from `config.desk`; every key is optional and falls back to a neutral default:
+
+```json
+{
+  "desk": {
+    "clockStart": "1:00",
+    "window": "1:16",
+    "windowSeconds": 90,
+    "panelFloors": 9,
+    "litFloor": 10,
+    "tint": "#6d6a66"
+  }
+}
+```
+
+The values above are placeholders. A real season's hours, floors and colours live only in its private file.

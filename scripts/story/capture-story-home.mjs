@@ -19,11 +19,14 @@ const origin = process.env.STORY_HOME_ORIGIN || "http://127.0.0.1:5178";
 const outputDir = process.env.STORY_HOME_CAPTURE_DIR || path.join(os.tmpdir(), "story-home-captures");
 const STORY_HEADER = "x-joystick-story";
 
-// Season 0, chapter 1, exactly as server/story/fixtures/season-0.json resolves it.
+// Season 0, chapter 1, as server/story/fixtures/season-0.json resolves it, but mounting the monitor desk game.
+const GAME_KEY = "cpe.monitor-desk";
+// placeholder hours and floors; a real season's live only in its private file
+const DESK = { clockStart: "1:00", window: "1:16", windowSeconds: 90, panelFloors: 9, litFloor: 10 };
 const chapterOne = {
   number: 1,
   title: "Placeholder chapter one",
-  gameKey: "fixture.button",
+  gameKey: GAME_KEY,
   location: "century_park_east",
   anomaly: "lit_floor",
   before: [
@@ -116,7 +119,7 @@ function respond(procedure, input) {
   switch (procedure) {
     case "auth.me": return { openId: "visual-test", name: "Admin Preview", email: null, role: "admin" };
     case "system.story.tonight": return tonight();
-    case "system.story.start": return { chapterNumber: input?.chapterNumber ?? 1, gameKey: "fixture.button", config: { fixture: true, location: "century_park_east" } };
+    case "system.story.start": return { chapterNumber: input?.chapterNumber ?? 1, gameKey: GAME_KEY, config: { location: "century_park_east", anomaly: "lit_floor", desk: DESK } };
     case "system.story.finish":
       if (input?.outcome !== "win") return { advanced: false, after: null, question: null };
       if (story === "available") story = "won";
@@ -155,6 +158,66 @@ async function mockTrpc(page) {
   });
 }
 
+// ---------------------------------------------------------------- the monitor desk, driven through its own controls
+// (the dev-only hook `window.__storyMonitorDesk` only reads the night and skips its clock ahead)
+async function deskReady(page) {
+  await page.getByTestId("story-monitor-desk").waitFor({ timeout: 60000 });
+  await page.waitForFunction(() => window.__storyMonitorDesk && !document.querySelector(".md-loading"), null, { timeout: 60000 });
+  await page.waitForTimeout(600);
+}
+const desk = (page, fn, arg) => page.evaluate(([source, a]) => new Function("d", "a", `return (${source})(d, a)`)(window.__storyMonitorDesk, a), [fn.toString(), arg]);
+const deskJump = (page, pick) => desk(page, (d, src) => d.jump(new Function("s", `return (${src})(s)`)(d.snapshot())), pick.toString());
+async function pull(page, cam, touch) {
+  if (touch) await page.getByTestId(`story-monitor-cam-${cam}`).tap();
+  else await page.keyboard.press(String(cam));
+}
+/** The first motion alert of the shift, pulled up on the main monitor. */
+async function deskRound(page, touch) {
+  await deskJump(page, s => s.timeline.alerts[0].at + 1.5);
+  const cam = await desk(page, d => d.snapshot().timeline.alerts[0].cam + 1);
+  await pull(page, cam, touch);
+}
+/** The lobby, zoomed and panned onto the lift, while the indicator is lit. */
+async function deskOnTheLift(page, touch) {
+  await deskJump(page, s => s.timeline.windowStart + 1);
+  await pull(page, 1, touch);
+  if (touch) {
+    await page.getByRole("button", { name: "Zoom in" }).tap();
+    await desk(page, d => d.pan(2.5));
+  } else {
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(800);
+    await page.keyboard.up("ArrowRight");
+  }
+  // settle between two of the lobby feed's signal drops
+  await deskJump(page, s => s.timeline.drops.find(d => d.at > s.t + 1.6).until + 0.15);
+  await page.waitForTimeout(400);
+}
+/** Waits for the figure, then takes stills until one holds; returns how many it took. */
+async function deskWin(page, touch) {
+  await deskOnTheLift(page, touch);
+  await deskJump(page, s => s.timeline.figure.out - 0.6);
+  for (let i = 1; i <= 14; i++) {
+    if (touch) await page.getByTestId("story-monitor-still").tap();
+    else await page.keyboard.press(" ");
+    await page.waitForTimeout(150);
+    if (await page.getByTestId("story-monitor-win").count()) return i;
+    await page.waitForTimeout(1100);
+  }
+  violations.push("the monitor desk was never won");
+  return null;
+}
+async function frameTimes(page, label) {
+  return page.evaluate(label => new Promise(resolve => {
+    const samples = []; let last = performance.now();
+    function frame(now) { samples.push(now - last); last = now;
+      if (samples.length < 120) requestAnimationFrame(frame);
+      else { samples.sort((a, b) => a - b); resolve({ viewport: label, samples: 120, medianMs: samples[60], p95Ms: samples[114], medianFps: 1000 / samples[60] }); }
+    } requestAnimationFrame(frame);
+  }), label);
+}
+
 async function settle(page) {
   // The home's live 3D board refreshes its map data on a timer, so the network is never idle: wait for load instead.
   await page.waitForLoadState("load");
@@ -165,6 +228,7 @@ await fs.mkdir(outputDir, { recursive: true });
 // PLAYWRIGHT_CHROMIUM_EXECUTABLE points at a preinstalled Chromium when the pinned Playwright has no browser of its own.
 const browser = await chromium.launch({ args: ["--use-angle=metal"], ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
 const shots = [];
+const deskStills = {};
 const errors = [];
 const frames = [];
 
@@ -173,13 +237,22 @@ async function session(name, viewport, run) {
   const page = await context.newPage();
   page.on("pageerror", error => errors.push(`${name}: ${error.message}`));
   await mockTrpc(page);
-  const shot = async (file, fullPage = true) => {
-    await settle(page);
+  const capture = async (file, fullPage) => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     if(overflow) violations.push(`${file}: horizontal page overflow`);
     await page.screenshot({ path: path.join(outputDir, file), fullPage });
     shots.push(file);
   };
+  const shot = async (file, fullPage = true) => {
+    await settle(page);
+    await capture(file, fullPage);
+  };
+  // a game moment: the page is long settled, and the game's clock must not run on for ten seconds
+  const snap = async file => {
+    await page.waitForTimeout(500);
+    await capture(file, false);
+  };
+  shot.snap = snap;
   await run(page, shot);
   await context.close();
 }
@@ -211,13 +284,24 @@ await session("desktop", desktop, async (page, shot) => {
   await shot("desktop-reduced-motion.png",false);
   await page.emulateMedia({reducedMotion:"no-preference"});
   await page.getByTestId("story-home-play").click();
-  await page.getByTestId("story-fixture-game").waitFor();
-  await shot("desktop-host-playing.png", false);
-  await page.getByTestId("story-fixture-lose").click();
+  await deskReady(page);
+  await shot.snap("desktop-desk-boot.png");
+  await deskRound(page, false);
+  await shot.snap("desktop-host-playing.png");
+  frames.push(await frameTimes(page, "1440x900 monitor desk"));
+  await deskOnTheLift(page, false);
+  await shot.snap("desktop-desk-lit.png");
+  // a loss: the doors shut with no still
+  await deskJump(page, s => s.timeline.figure.doorsShut + 1.4);
+  await page.getByTestId("story-monitor-lose").waitFor();
+  await shot.snap("desktop-desk-no-still.png");
   await page.getByTestId("story-host-lost").waitFor();
   await shot("desktop-host-lost.png", false);
+  // the retry starts half a minute before the window
   await page.getByTestId("story-host-retry").click();
-  await page.getByTestId("story-fixture-win").click();
+  await deskReady(page);
+  deskStills.desktop = await deskWin(page, false);
+  await shot.snap("desktop-desk-win.png");
   await page.getByTestId("story-host-ended").waitFor();
   await shot("desktop-host-ending.png", false);
   await page.getByTestId("story-host-option-left").click();
@@ -233,8 +317,27 @@ await session("phone", phone, async (page, shot) => {
   await page.getByTestId("story-home-hero").waitFor();
   await shot("phone-available.png");
   await page.getByTestId("story-home-play").click();
-  await page.getByTestId("story-fixture-game").waitFor();
-  await shot("phone-host-playing.png", false);
+  await deskReady(page);
+  await deskRound(page, true);
+  await shot.snap("phone-host-playing.png");
+  deskStills.phone = await deskWin(page, true);
+  await shot.snap("phone-desk-win.png");
+  await page.getByTestId("story-host-ended").waitFor();
+  await shot("phone-host-ending.png", false);
+  await page.getByTestId("story-host-option-left").tap();
+  await page.getByTestId("story-host-closing").waitFor();
+  await shot("phone-host-closing.png", false);
+});
+
+story = "available";
+await session("desk-reduced-motion", desktop, async (page, shot) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`${origin}/home`);
+  await page.getByTestId("story-home-play").waitFor();
+  await page.getByTestId("story-home-play").click();
+  await deskReady(page);
+  await deskOnTheLift(page, false);
+  await shot.snap("desktop-desk-reduced-motion.png");
 });
 
 story = "answered";
@@ -272,7 +375,7 @@ await session("long-content", phone, async(page,shot) => {
   await shot("phone-long-content.png");
   await page.getByTestId("story-home-play").scrollIntoViewIfNeeded();
   await page.getByTestId("story-home-play").click();
-  await page.getByTestId("story-fixture-game").waitFor();
+  await page.getByTestId("story-monitor-desk").waitFor();
   await page.keyboard.press("Escape");
   if(await page.getByTestId("story-chapter-host").count()) violations.push("Escape did not close the chapter");
 });
@@ -280,6 +383,6 @@ chapterOne.title = originalTitle;
 chapterOne.before[0].text = originalHook;
 await browser.close();
 
-const report = { outputDir, shots, storyCalls, frames, violations, pageErrors: errors, gateOffRendersStoryHome };
+const report = { outputDir, shots, storyCalls, frames, deskStills, violations, pageErrors: errors, gateOffRendersStoryHome };
 console.log(JSON.stringify(report, null, 2));
 if (violations.length || gateOffRendersStoryHome) process.exit(1);
