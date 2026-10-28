@@ -5,7 +5,6 @@ import {
   canStart,
   daysAway as daysAwayOf,
   localDateOf,
-  progressAfter,
   resolveSlot,
   type ResolutionContext,
   type StoryLineRow,
@@ -112,7 +111,8 @@ export function createStoryService(deps: StoryServiceDeps) {
       if (!canStart(progress, chapters.length, today, chapterNumber)) throw new StoryAccessError("chapter_locked");
       const chapter = chapterByNumber(chapters, chapterNumber);
       if (!chapter) throw new StoryAccessError("chapter_locked");
-      if (progress.lastPlayedOn !== today) await deps.store.writeProgress(scope, { ...progress, lastPlayedOn: today });
+      // Touches only the last-played fields, and only once a night, so it cannot undo a win that lands meanwhile.
+      if (progress.lastPlayedOn !== today) await deps.store.markPlayed(scope, today, daysAwayOf(progress, today));
       return { chapterNumber, gameKey: chapter.gameKey, config: chapter.config ?? {} };
     },
 
@@ -125,22 +125,32 @@ export function createStoryService(deps: StoryServiceDeps) {
       const chapter = chapterByNumber(chapters, input.chapterNumber);
       if (!chapter) throw new StoryAccessError("chapter_locked");
       const open = canStart(progress, chapters.length, today, input.chapterNumber);
-      const wonTonightAlready = progress.highestChapterWon === input.chapterNumber && progress.lastWonOn === today;
-      if (!open && !wonTonightAlready) throw new StoryAccessError("chapter_locked");
+      const wonTonight = (p: typeof progress) => p.highestChapterWon === input.chapterNumber && p.lastWonOn === today;
+      if (!open && !wonTonight(progress)) throw new StoryAccessError("chapter_locked");
+
+      // The absence this chapter resolves with: measured when it was opened, or now if the client skipped `start`.
+      const away = daysAwayOf(progress, today);
+      if (open && progress.lastPlayedOn !== today) await deps.store.markPlayed(scope, today, away);
 
       let advanced = false;
-      if (open) {
+      let endingEarned = wonTonight(progress) && input.outcome === "win";
+      if (open && input.outcome !== "win") {
         await deps.store.recordAttempt(scope, { chapterNumber: input.chapterNumber, outcome: input.outcome, durationMs: input.durationMs ?? null, localDate: today });
-        const next = progressAfter(progress, chapters.length, today, input.chapterNumber, input.outcome);
-        if (next.advanced) {
-          await deps.store.writeProgress(scope, next.progress);
-          advanced = true;
+      } else if (open) {
+        // Atomic: of any number of concurrent wins, exactly one advances and is recorded.
+        advanced = await deps.store.recordWin(scope, input.chapterNumber, today);
+        if (advanced) {
+          await deps.store.recordAttempt(scope, { chapterNumber: input.chapterNumber, outcome: "win", durationMs: input.durationMs ?? null, localDate: today });
+          endingEarned = true;
+        } else {
+          // Another request won it first; this one is a retry of the same win.
+          endingEarned = wonTonight(await deps.store.readProgress(scope));
         }
       }
       // A retried win after the first one landed returns the same ending and question; it records and advances nothing.
-      if (!advanced && !(wonTonightAlready && input.outcome === "win")) return { advanced: false, after: null, question: null };
+      if (!endingEarned) return { advanced: false, after: null, question: null };
       const rows = await linesFor(chapter);
-      const context = { answers: await deps.store.listAnswers(scope), daysAway: daysAwayOf(progress, today) };
+      const context = { answers: await deps.store.listAnswers(scope), daysAway: away };
       return { advanced, after: resolveSlot(rows, "after", context), question: questionFor(chapter, rows, context) ?? null };
     },
 

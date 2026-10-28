@@ -11013,6 +11013,7 @@ export const storyProgress = mysqlTable(
     highestChapterWon: int("highest_chapter_won").notNull().default(0),
     lastWonOn: date("last_won_on", { mode: "string" }),
     lastPlayedOn: date("last_played_on", { mode: "string" }),
+    chapterDaysAway: int("chapter_days_away").notNull().default(0),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
   },
   table => ({ operatorSeason: uniqueIndex("uq_story_progress_operator_season").on(table.tenantId, table.operatorId, table.seasonId) })

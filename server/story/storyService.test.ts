@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { storySeasonSchema, type StorySeasonInput } from "../../shared/story";
-import { EMPTY_PROGRESS, type StoryLineRow, type StoryProgressState } from "./storyEngine";
+import { EMPTY_PROGRESS, progressAfter, type StoryLineRow, type StoryProgressState } from "./storyEngine";
 import { createStoryService, StoryAccessError } from "./storyService";
 import type { StoryChapterRow, StoryScope, StoryStore } from "./storyStore";
 
@@ -33,8 +33,19 @@ function memoryStore(season: StorySeasonInput) {
     findSeasonBySlug: async slug => (slug === season.slug ? { id: 7, slug, title: season.title, status: "draft" } : null),
     listChapters: async () => chapters,
     listLines: async ids => new Map(ids.map(id => [id, lines.get(id) ?? []])),
-    readProgress: async s => progress.get(k(s)) ?? EMPTY_PROGRESS,
-    writeProgress: async (s, p) => void progress.set(k(s), p),
+    readProgress: async s => ({ ...(progress.get(k(s)) ?? EMPTY_PROGRESS) }),
+    // Same contract as the database: only the last-played fields, only if not already tonight's.
+    markPlayed: async (s, today, away) => {
+      const p = progress.get(k(s)) ?? EMPTY_PROGRESS;
+      if (p.lastPlayedOn !== today) progress.set(k(s), { ...p, lastPlayedOn: today, chapterDaysAway: away });
+    },
+    // Same contract as the database: a conditional update, so only one concurrent win can succeed.
+    recordWin: async (s, n, today) => {
+      const p = progress.get(k(s)) ?? EMPTY_PROGRESS;
+      if (p.highestChapterWon !== n - 1 || (p.lastWonOn !== null && p.lastWonOn >= today)) return false;
+      progress.set(k(s), { ...p, highestChapterWon: n, lastWonOn: today });
+      return true;
+    },
     listAnswers: async s => ({ ...(answers.get(k(s)) ?? {}) }),
     insertAnswer: async (s, q, o) => {
       const a = answers.get(k(s)) ?? {};
@@ -167,9 +178,48 @@ describe("story service: retries and failures", () => {
 
   it("a storage failure surfaces as an error and writes nothing partial", async () => {
     const h = harness();
-    h.store.writeProgress = vi.fn().mockRejectedValue(new Error("db down"));
+    h.store.recordWin = vi.fn().mockRejectedValue(new Error("db down"));
     await expect(h.service.finish(ADAM, { chapterNumber: 1, outcome: "win" })).rejects.toThrow("db down");
     expect(await h.service.tonight(ADAM)).toMatchObject({ state: "available", chapter: { number: 1 } });
+  });
+});
+
+describe("story service: concurrent requests", () => {
+  it("a slow start cannot undo a win that lands while it is in flight", async () => {
+    const h = harness();
+    // Hold start between its read and its write, let a whole winning finish run, then release start.
+    const realMark = h.store.markPlayed;
+    let release!: () => void;
+    const held = new Promise<void>(r => (release = r));
+    let marks = 0;
+    h.store.markPlayed = async (...args) => {
+      if (marks++ === 0) await held;
+      return realMark(...args);
+    };
+    const slowStart = h.service.start(ADAM, 1);
+    await new Promise(r => setTimeout(r, 0));
+    const won = await h.service.finish(ADAM, { chapterNumber: 1, outcome: "win" });
+    expect(won.advanced).toBe(true);
+    release();
+    await slowStart;
+    const p = await h.store.readProgress({ ...ADAM, seasonId: 7 });
+    expect(p).toMatchObject({ highestChapterWon: 1, lastWonOn: "2026-10-27" });
+    expect(await h.service.tonight(ADAM)).toMatchObject({ state: "won_tonight" });
+  });
+
+  it("of many concurrent wins exactly one advances and is recorded; all return the ending", async () => {
+    const h = harness();
+    await h.service.start(ADAM, 1);
+    const results = await Promise.all(Array.from({ length: 6 }, () => h.service.finish(ADAM, { chapterNumber: 1, outcome: "win" })));
+    expect(results.filter(r => r.advanced)).toHaveLength(1);
+    expect(results.every(r => r.after?.length === 1 && r.question?.key === "s0.first")).toBe(true);
+    expect(h.attempts.filter(a => a.outcome === "win")).toHaveLength(1);
+    expect((await h.store.readProgress({ ...ADAM, seasonId: 7 })).highestChapterWon).toBe(1);
+  });
+
+  it("the in-memory store's win rule matches the engine's", () => {
+    const p = { ...EMPTY_PROGRESS };
+    expect(progressAfter(p, 3, "2026-10-27", 1, "win").advanced).toBe(true);
   });
 });
 
@@ -222,6 +272,26 @@ describe("story service: decisions persist and steer later lines", () => {
     expect(JSON.stringify(await h.service.tonight(ADAM))).not.toContain("two or more nights away");
     h.nextNight(2);
     expect(JSON.stringify(await h.service.tonight(ADAM))).toContain("two or more nights away");
+  });
+
+  it("keeps the absence through the whole chapter: reload after start, and the ending after the win", async () => {
+    const h = harness();
+    await winChapter1(h, "left");
+    h.nextNight(8);
+    await h.service.start(ADAM, 2);
+    expect(JSON.stringify(await h.service.tonight(ADAM))).toContain("line shown only after two or more nights away");
+    const won = await h.service.finish(ADAM, { chapterNumber: 2, outcome: "win" });
+    expect(won.after?.map(l => l.text)).toContain("Placeholder ending line shown only after two or more nights away.");
+    expect(JSON.stringify(await h.service.tonight(ADAM))).toContain("ending line shown only after two or more nights away");
+  });
+
+  it("does not show the away ending to an operator who came back the next night", async () => {
+    const h = harness();
+    await winChapter1(h, "left");
+    h.nextNight();
+    await h.service.start(ADAM, 2);
+    const won = await h.service.finish(ADAM, { chapterNumber: 2, outcome: "win" });
+    expect(JSON.stringify(won)).not.toContain("nights away");
   });
 
   it("completes the season after the last chapter", async () => {

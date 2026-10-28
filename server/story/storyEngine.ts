@@ -13,9 +13,11 @@ export type StoryProgressState = {
   lastWonOn: string | null;
   /** YYYY-MM-DD, business-local, the last night a chapter was started */
   lastPlayedOn: string | null;
+  /** nights away measured when tonight's chapter was opened (meaningful only while lastPlayedOn is today) */
+  chapterDaysAway: number;
 };
 
-export const EMPTY_PROGRESS: StoryProgressState = { highestChapterWon: 0, lastWonOn: null, lastPlayedOn: null };
+export const EMPTY_PROGRESS: StoryProgressState = { highestChapterWon: 0, lastWonOn: null, lastPlayedOn: null, chapterDaysAway: 0 };
 
 export type ChapterAvailability =
   | { state: "available"; chapterNumber: number }
@@ -70,9 +72,14 @@ export function progressAfter(
   return { progress: { ...progress, highestChapterWon: chapterNumber, lastWonOn: today }, advanced: true };
 }
 
-/** Nights since the operator last started a chapter. 0 on the first night and on a night they already played. */
+/**
+ * Nights since the operator last opened a chapter, as tonight's chapter should see it. Once tonight's chapter is opened
+ * the value measured at that moment is kept, so its opening on reload, its ending and its question resolve with the same
+ * absence the operator came back from. 0 on the very first night.
+ */
 export function daysAway(progress: StoryProgressState, today: string): number {
   if (!progress.lastPlayedOn) return 0;
+  if (progress.lastPlayedOn === today) return Math.max(0, progress.chapterDaysAway);
   return Math.max(0, daysBetween(progress.lastPlayedOn, today));
 }
 

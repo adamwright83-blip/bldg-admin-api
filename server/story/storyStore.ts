@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { storyAnswers, storyAttempts, storyChapters, storyLines, storyProgress, storySeasons } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { storyConditionSchema, type StoryCondition, type StoryOutcome, type StorySeasonInput, type StorySlot } from "../../shared/story";
@@ -25,7 +25,16 @@ export interface StoryStore {
   listChapters(seasonId: number): Promise<StoryChapterRow[]>;
   listLines(chapterIds: readonly number[]): Promise<Map<number, StoryLineRow[]>>;
   readProgress(scope: StoryScope): Promise<StoryProgressState>;
-  writeProgress(scope: StoryScope, progress: StoryProgressState): Promise<void>;
+  /**
+   * Record that tonight's chapter was opened, with the nights away measured at that moment. Touches only the
+   * last-played fields, only if they are not already tonight's, so it can never undo a win that landed meanwhile.
+   */
+  markPlayed(scope: StoryScope, today: string, daysAway: number): Promise<void>;
+  /**
+   * Advance to `chapterNumber` won tonight, atomically: succeeds only if the previous chapter is the highest won and it
+   * was not won tonight. Exactly one of any number of concurrent wins returns true.
+   */
+  recordWin(scope: StoryScope, chapterNumber: number, today: string): Promise<boolean>;
   listAnswers(scope: StoryScope): Promise<Record<string, string>>;
   /** false when an answer to that question already exists (the unique key held) */
   insertAnswer(scope: StoryScope, questionKey: string, optionKey: string): Promise<boolean>;
@@ -56,6 +65,20 @@ function parseConfig(raw: unknown): Record<string, unknown> | null {
   if (raw === null || raw === undefined) return null;
   const value = typeof raw === "string" ? JSON.parse(raw) : raw;
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+/** mysql2 through drizzle answers an UPDATE with [ResultSetHeader, fields]; some drivers return the header alone. */
+function affectedRows(result: unknown): number {
+  const header = Array.isArray(result) ? result[0] : result;
+  return Number((header as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
+}
+
+/** Create the operator's progress row if it is missing; never changes an existing row. */
+async function ensureProgressRow(handle: Awaited<ReturnType<typeof db>>, scope: StoryScope) {
+  await handle
+    .insert(storyProgress)
+    .values({ ...scope })
+    .onDuplicateKeyUpdate({ set: { seasonId: sql`${storyProgress.seasonId}` } });
 }
 
 const scopeWhere = <T extends { tenantId: any; operatorId: any; seasonId: any }>(table: T, scope: StoryScope) =>
@@ -110,16 +133,37 @@ export const drizzleStoryStore: StoryStore = {
   async readProgress(scope) {
     const [row] = await (await db()).select().from(storyProgress).where(scopeWhere(storyProgress, scope)).limit(1);
     if (!row) return EMPTY_PROGRESS;
-    return { highestChapterWon: row.highestChapterWon, lastWonOn: row.lastWonOn ?? null, lastPlayedOn: row.lastPlayedOn ?? null };
+    return {
+      highestChapterWon: row.highestChapterWon,
+      lastWonOn: row.lastWonOn ?? null,
+      lastPlayedOn: row.lastPlayedOn ?? null,
+      chapterDaysAway: row.chapterDaysAway ?? 0,
+    };
   },
 
-  async writeProgress(scope, progress) {
-    await (await db())
-      .insert(storyProgress)
-      .values({ ...scope, highestChapterWon: progress.highestChapterWon, lastWonOn: progress.lastWonOn, lastPlayedOn: progress.lastPlayedOn })
-      .onDuplicateKeyUpdate({
-        set: { highestChapterWon: progress.highestChapterWon, lastWonOn: progress.lastWonOn, lastPlayedOn: progress.lastPlayedOn },
-      });
+  async markPlayed(scope, today, daysAway) {
+    const handle = await db();
+    await ensureProgressRow(handle, scope);
+    await handle
+      .update(storyProgress)
+      .set({ lastPlayedOn: today, chapterDaysAway: daysAway })
+      .where(and(scopeWhere(storyProgress, scope), or(isNull(storyProgress.lastPlayedOn), ne(storyProgress.lastPlayedOn, today))));
+  },
+
+  async recordWin(scope, chapterNumber, today) {
+    const handle = await db();
+    await ensureProgressRow(handle, scope);
+    const result = await handle
+      .update(storyProgress)
+      .set({ highestChapterWon: chapterNumber, lastWonOn: today })
+      .where(
+        and(
+          scopeWhere(storyProgress, scope),
+          eq(storyProgress.highestChapterWon, chapterNumber - 1),
+          or(isNull(storyProgress.lastWonOn), lt(storyProgress.lastWonOn, today))
+        )
+      );
+    return affectedRows(result) === 1;
   },
 
   async listAnswers(scope) {

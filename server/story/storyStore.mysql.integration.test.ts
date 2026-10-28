@@ -104,6 +104,28 @@ describe.skipIf(!allowed)("story tables on real MySQL", () => {
     expect(answers).toEqual([{ question_key: "s0.first", option_key: "left" }]);
   });
 
+  it("concurrent wins advance once, and a start racing a win cannot undo it", async () => {
+    const service = createStoryService({
+      store: drizzleStoryStore,
+      now: () => new Date("2026-10-27T19:00:00Z"),
+      timeZone: () => "America/Los_Angeles",
+      isEnabled: () => true,
+      seasonSlug: () => "season-0",
+    });
+    const who = { tenantId: "story-proof", operatorId: `race-${Date.now()}` };
+    const results = await Promise.all([
+      service.start(who, 1).catch(() => null),
+      ...Array.from({ length: 8 }, () => service.finish(who, { chapterNumber: 1, outcome: "win" })),
+      service.start(who, 1).catch(() => null),
+    ]);
+    const finishes = results.slice(1, 9) as { advanced: boolean }[];
+    expect(finishes.filter(r => r.advanced)).toHaveLength(1);
+    const [wins] = await conn.query("SELECT COUNT(*) AS n FROM story_attempts WHERE operator_id = ? AND outcome = 'win'", [who.operatorId]);
+    expect(Number((wins as { n: number }[])[0]!.n)).toBe(1);
+    const [rows] = await conn.query("SELECT highest_chapter_won AS h, DATE_FORMAT(last_won_on, '%Y-%m-%d') AS w FROM story_progress WHERE operator_id = ?", [who.operatorId]);
+    expect(rows).toEqual([{ h: 1, w: "2026-10-27" }]);
+  });
+
   it("the rollback drops exactly the six story tables and nothing else", async () => {
     const before = await tables();
     for (const s of await statements("0150_story_tables.rollback.sql")) await conn.query(s);

@@ -45,24 +45,24 @@ describe("story engine: one chapter per night", () => {
   });
 
   it("locks the next chapter until the next local date after a win", () => {
-    const p = { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27" };
+    const p = { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27", chapterDaysAway: 0 };
     expect(chapterAvailability(p, 3, "2026-10-27")).toEqual({ state: "won_tonight", chapterNumber: 1 });
     expect(chapterAvailability(p, 3, "2026-10-28")).toEqual({ state: "available", chapterNumber: 2 });
     expect(chapterAvailability(p, 3, "2026-11-05")).toEqual({ state: "available", chapterNumber: 2 });
   });
 
   it("never opens more than one chapter after a long absence", () => {
-    const p = { highestChapterWon: 2, lastWonOn: "2026-10-01", lastPlayedOn: "2026-10-01" };
+    const p = { highestChapterWon: 2, lastWonOn: "2026-10-01", lastPlayedOn: "2026-10-01", chapterDaysAway: 0 };
     expect(chapterAvailability(p, 8, "2026-10-27")).toEqual({ state: "available", chapterNumber: 3 });
   });
 
   it("treats a clock that went backwards as won tonight, not as a new chapter", () => {
-    const p = { highestChapterWon: 1, lastWonOn: "2026-10-28", lastPlayedOn: "2026-10-28" };
+    const p = { highestChapterWon: 1, lastWonOn: "2026-10-28", lastPlayedOn: "2026-10-28", chapterDaysAway: 0 };
     expect(chapterAvailability(p, 3, "2026-10-27").state).toBe("won_tonight");
   });
 
   it("finishes the season the night after the last win", () => {
-    const p = { highestChapterWon: 3, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27" };
+    const p = { highestChapterWon: 3, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27", chapterDaysAway: 0 };
     expect(chapterAvailability(p, 3, "2026-10-27")).toEqual({ state: "won_tonight", chapterNumber: 3 });
     expect(chapterAvailability(p, 3, "2026-10-28")).toEqual({ state: "season_complete", chapterNumber: null });
   });
@@ -71,7 +71,7 @@ describe("story engine: one chapter per night", () => {
     expect(canStart(EMPTY_PROGRESS, 3, "2026-10-27", 1)).toBe(true);
     expect(canStart(EMPTY_PROGRESS, 3, "2026-10-27", 2)).toBe(false);
     expect(canStart(EMPTY_PROGRESS, 3, "2026-10-27", 0)).toBe(false);
-    const wonTonight = { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27" };
+    const wonTonight = { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: "2026-10-27", chapterDaysAway: 0 };
     expect(canStart(wonTonight, 3, "2026-10-27", 1)).toBe(false);
     expect(canStart(wonTonight, 3, "2026-10-27", 2)).toBe(false);
   });
@@ -83,7 +83,7 @@ describe("story engine: outcomes", () => {
     expect(progressAfter(EMPTY_PROGRESS, 3, "2026-10-27", 1, "quit").advanced).toBe(false);
     expect(progressAfter(EMPTY_PROGRESS, 3, "2026-10-27", 2, "win").advanced).toBe(false);
     const won = progressAfter(EMPTY_PROGRESS, 3, "2026-10-27", 1, "win");
-    expect(won).toEqual({ progress: { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: null }, advanced: true });
+    expect(won).toEqual({ progress: { highestChapterWon: 1, lastWonOn: "2026-10-27", lastPlayedOn: null, chapterDaysAway: 0 }, advanced: true });
   });
 
   it("a repeated win the same night is a no-op", () => {
@@ -93,8 +93,15 @@ describe("story engine: outcomes", () => {
 
   it("days away counts nights since the last start", () => {
     expect(daysAway(EMPTY_PROGRESS, "2026-10-27")).toBe(0);
-    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-24" }, "2026-10-27")).toBe(3);
-    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-28" }, "2026-10-27")).toBe(0);
+    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-24", chapterDaysAway: 0 }, "2026-10-27")).toBe(3);
+    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-28", chapterDaysAway: 0 }, "2026-10-27")).toBe(0);
+  });
+});
+
+describe("story engine: absence", () => {
+  it("keeps the absence measured when tonight's chapter was opened", () => {
+    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-27", chapterDaysAway: 8 }, "2026-10-27")).toBe(8);
+    expect(daysAway({ ...EMPTY_PROGRESS, lastPlayedOn: "2026-10-27", chapterDaysAway: 8 }, "2026-10-28")).toBe(1);
   });
 });
 

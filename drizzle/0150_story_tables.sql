@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS story_progress (
   highest_chapter_won int NOT NULL DEFAULT 0,
   last_won_on date NULL,
   last_played_on date NULL,
+  -- nights away measured when tonight's chapter was opened, so its ending resolves with the same context
+  chapter_days_away int NOT NULL DEFAULT 0,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_story_progress_operator_season (tenant_id, operator_id, season_id)

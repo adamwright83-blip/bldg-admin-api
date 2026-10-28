@@ -60,8 +60,7 @@
     "dev:president-worker": "NODE_ENV=development tsx watch server/president/workerMain.ts",
     "president:stage1:witness": "tsx scripts/president-stage1-witness.ts",
     "president:schema:migrate": "node scripts/president-migrate.mjs",
-    "test:launch:real": "node scripts/real-acceptance.mjs",
-    "check:story-spoilers": "node scripts/story/spoiler-guard.mjs"
+    "test:launch:real": "node scripts/real-acceptance.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
