@@ -16,6 +16,7 @@ import {
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
 import JoystickHome from "./JoystickHome";
+import { useStoryTonight } from "@/story/useStoryTonight";
 import AdminLive from "./AdminLive";
 import AdminCatalog from "./AdminCatalog";
 import OperatorReflection from "./OperatorReflection";
@@ -70,6 +71,7 @@ const ClaireCallAnalysis = lazy(() => import("./goldline/ClaireCallAnalysis"));
 const ClaireRoutingAudit = lazy(() => import("./goldline/ClaireRoutingAudit"));
 const CapabilityGapPage = lazy(() => import("./goldline/CapabilityGapPage"));
 const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
+const StoryHome = lazy(() => import("./storyHome/StoryHome"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -163,6 +165,8 @@ export default function AdminHostApp() {
   const path = normalizePath(loc);
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const goldlineEntry = trpc.system.goldlineOnboarding.state.useQuery(undefined, { enabled: isAuthenticated, retry: false });
+  // The story season's main page replaces Home only while `system.story.tonight` says enabled (off by default).
+  const storyTonight = useStoryTonight(isAuthenticated && (path === "/" || path === "/home"));
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
   const [newOrderPhoneSeed, setNewOrderPhoneSeed] = useState<string | null>(
     null
@@ -329,6 +333,20 @@ export default function AdminHostApp() {
   if (isWorldHome && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
 
   if (path === "/" || path === "/home") {
+    if (storyTonight.isLoading) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <Loader2 className="animate-spin w-8 h-8 text-black/30" />
+        </div>
+      );
+    }
+    if (storyTonight.data?.enabled) {
+      return (
+        <Suspense fallback={<div className="min-h-screen bg-white" />}>
+          <StoryHome tonight={storyTonight.data} operatorName={user?.name || "Adam"} />
+        </Suspense>
+      );
+    }
     return (
       <JoystickHome
         operatorName={user?.name || "Adam"}
