@@ -888,3 +888,7 @@
 }
 
 @media(max-width:600px){.sh-actions .sh-pill{display:none}.sh-menu{margin-left:auto}.sh-menu summary{min-width:44px;min-height:44px;text-align:center;font-size:20px}.sh-menu nav{left:auto;right:0}.sh-actions{margin-left:0}.sh-topbar{gap:8px}.sh-world-caption{display:none}}
+
+/* Neighborhood links share the home materials instead of mixing unrelated art treatments. */
+.sh-card{border-top:1px solid #f3ebdd25;padding:10px 0 18px}.sh-cards{grid-auto-columns:minmax(180px,1fr)}
+@media(max-width:600px){.sh-cards{grid-auto-columns:75%}}

@@ -505,25 +505,6 @@ function WonTonight({
   );
 }
 
-function NeighbourhoodImage({ slug }: { slug: string }) {
-  const [step, setStep] = useState(0);
-  const sources = [
-    HOME_ART.neighbourhood(slug),
-    HOME_ART.neighbourhoodFallback(slug),
-  ];
-  if (step >= sources.length)
-    return <span className="sh-card-image is-empty" aria-hidden="true" />;
-  return (
-    <img
-      className="sh-card-image"
-      src={sources[step]}
-      alt=""
-      loading="lazy"
-      onError={() => setStep(s => s + 1)}
-    />
-  );
-}
-
 function CityStrip() {
   const report = trpc.system.geographicTruth.territoryReport.useQuery(
     { windowDays: 30 },
@@ -559,7 +540,6 @@ function CityStrip() {
                 className="sh-card-link"
                 aria-label={`Open ${card.name}`}
               >
-                <NeighbourhoodImage slug={card.id} />
                 <span className="sh-card-name">{card.name.toUpperCase()}</span>
                 <span className="sh-card-figures">
                   <span>
