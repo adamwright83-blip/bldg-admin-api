@@ -303,6 +303,7 @@ function integrateBusiness(input: {
       horizon: perceived.leadRequest.horizon,
       today: ctx.today,
       goalAsked: asksAboutGoal(perceived.assembledText),
+      relief: perceived.leadRequest.relief === true,
     });
     if (plan) {
       const cited = evidence.filter(item => plan.evidenceIds.includes(item.id));

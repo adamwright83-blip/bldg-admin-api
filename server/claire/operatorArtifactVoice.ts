@@ -3,6 +3,12 @@ import type {
   OperatorArtifactDecisionResult,
 } from "./operatorArtifactDecision";
 import type { ClaireTurnHistoryEntry } from "./turn/claireTurn";
+import {
+  OPERATOR_DRAFT_FAILED_SPEAK,
+  OPERATOR_DRAFT_SENT_SPEAK,
+  OPERATOR_DRAFT_UNAVAILABLE_SPEAK,
+  OPERATOR_DRAFT_UNGROUNDED_SPEAK,
+} from "./operatorDraftVoice";
 
 /**
  * Voice utility for the already-built operator artifact SMS port.
@@ -79,6 +85,10 @@ function isUtilityStatusLine(text: string): boolean {
     normalized === OPERATOR_ARTIFACT_FAILED_SPEAK ||
     normalized === OPERATOR_ARTIFACT_NO_SOURCE_SPEAK ||
     normalized === OPERATOR_ARTIFACT_TOO_LONG_SPEAK ||
+    normalized === OPERATOR_DRAFT_SENT_SPEAK ||
+    normalized === OPERATOR_DRAFT_FAILED_SPEAK ||
+    normalized === OPERATOR_DRAFT_UNGROUNDED_SPEAK ||
+    normalized === OPERATOR_DRAFT_UNAVAILABLE_SPEAK ||
     /^go ahead,? i(?:'|’)m listening\.?$/i.test(normalized) ||
     /^still there\?/i.test(normalized) ||
     /^hey adam\. what(?:'|’)s up\?$/i.test(normalized)

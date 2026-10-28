@@ -90,6 +90,12 @@ export type ShowrunnerBriefing = {
    * question. At most the first is asked on a call. Empty on a weekend for sales follow-ups unless asked.
    */
   carriedOpen?: CarriedOpenItem[];
+  /**
+   * Set by the dialer from the opening it actually spoke: false when the opening shed the carried
+   * item's question to fit the spoken budget. The reply reader then never binds a bare "yes" to an
+   * item that was not asked about. Unset means "derive it from the briefing".
+   */
+  openingAskedCarried?: boolean;
   /** The game master view: every Kingdom, Day 1 outcomes, progression, companions, chapters. Read only. */
   gameState?: ShowrunnerGameState | null;
   /**
@@ -619,10 +625,13 @@ function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
  * The carried open item the opening ASKS about on this call, or null. Shared by the opening and the
  * call's reply reader so a reply is only read as that item's answer when its question was asked.
  */
-export function carriedItemAsked(b: Pick<ShowrunnerBriefing, "carriedOpen" | "standing" | "preparedItems">) {
+export function carriedItemAsked(b: ShowrunnerBriefing) {
   if (preparedItemSpoken(b)) return null;
   const held = b.standing?.heldTopics ?? [];
-  return b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  const carried = b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  if (!carried) return null;
+  const asked = b.openingAskedCarried ?? composeShowrunnerOpening(b).askedCarried;
+  return asked ? carried : null;
 }
 
 /**
@@ -641,8 +650,56 @@ export function sinceYesterdayLine(b: Pick<ShowrunnerBriefing, "developments" | 
   return `Since yesterday: ${what}${d.date ? `, ${spokenDay(d.date, b.businessDate)}` : ""}.`;
 }
 
+/**
+ * How much opening a person on the phone will sit through before they want to
+ * talk. About 30 seconds of speech. The 2026-10-27 evening opening ran 519
+ * characters and closed on a dress-hanging question; the goal and the Day Line
+ * are the opening, everything else is optional colour that is shed, in a fixed
+ * order, until the opening fits.
+ */
+export const OPENING_SPOKEN_BUDGET_CHARS = 400;
+
+/**
+ * Sheds optional sections until the opening fits the budget. `sections` is in
+ * spoken order; `optional` names the indices that may be dropped, in the order
+ * they should go. Required sections are never dropped, so an opening that is
+ * all goal and Day Line can still exceed the budget: that is the operator's
+ * standing instruction, not colour.
+ */
+export function fitOpeningToBudget(
+  sections: string[],
+  optional: number[],
+  budget = OPENING_SPOKEN_BUDGET_CHARS
+): string {
+  const kept = [...sections];
+  const spoken = () => kept.filter(Boolean).join(" ");
+  for (const index of optional) {
+    if (spoken().length <= budget) break;
+    kept[index] = "";
+  }
+  return spoken();
+}
+
 /** The spoken opening, built only from briefing facts. Goal first, then the one move. */
 export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions = {}): string {
+  return composeShowrunnerOpening(b, options).text;
+}
+
+/**
+ * The opening and whether it kept the carried item's yes/no question. The dialer records
+ * `askedCarried` on the briefing so the reply reader binds "yes" only to a question that was asked.
+ */
+export function composeShowrunnerOpening(
+  b: ShowrunnerBriefing,
+  options: ShowrunnerOpeningOptions = {}
+): { text: string; askedCarried: boolean } {
+  const text = composeOpeningText(b, options);
+  const held = b.standing?.heldTopics ?? [];
+  const carried = preparedItemSpoken(b) ? null : b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  return { text, askedCarried: Boolean(carried && text.includes(carried.question)) };
+}
+
+function composeOpeningText(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions): string {
   const tone = options.tone ?? null;
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
     const held = b.standing?.heldTopics ?? [];
@@ -661,7 +718,7 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
       : "";
     const closer = (fallback: string) => prepared ?? (askCarried ? askCarried.question : fallback);
     if (b.purpose === "morning_readiness") {
-      return [
+      const morning = (withCarried: boolean) => [
         "Good morning, it's Claire.",
         showrunnerGoalLine(b),
         line,
@@ -669,11 +726,13 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
         encouragement ?? "",
         gameMoveLine(b, tone),
         sinceYesterdayLine(b),
-        carriedLine,
-        closer("Are you ready to get going?"),
-      ]
-        .filter(Boolean)
-        .join(" ");
+        withCarried ? carriedLine : "",
+        withCarried ? closer("Are you ready to get going?") : prepared ?? "Are you ready to get going?",
+      ];
+      // Shed colour before the question: yesterday's recap, then encouragement. If the opening is
+      // still long, the carried item waits for a later turn and the plain closer asks the question.
+      const fitted = fitOpeningToBudget(morning(true), [5, 3]);
+      return fitted.length <= OPENING_SPOKEN_BUDGET_CHARS || !askCarried ? fitted : fitOpeningToBudget(morning(false), [5, 3]);
     }
     // The operator told Claire to open with the goal and the plan: the evening wrap names tomorrow too.
     const tomorrowOpen = b.tomorrow.filter(i => i.status === "open");
@@ -681,19 +740,21 @@ export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpen
       b.standing?.roleObligation && tomorrowOpen.length
         ? `Tomorrow's plan: ${list(dedupeSpokenTitles(tomorrowOpen.map(i => i.title)))}.`
         : "";
-    return [
+    const evening = (withCarried: boolean) => [
       "Hi, it's Claire for today's wrap.",
       showrunnerGoalLine(b),
       tomorrowPlan,
       "Tonight I need two things from you: what got done, and what's in the way of tomorrow.",
       line,
       encouragement ?? "",
-      carriedLine,
+      withCarried ? carriedLine : "",
       gameMoveLine(b, tone),
-      closer("How did it go?"),
-    ]
-      .filter(Boolean)
-      .join(" ");
+      withCarried ? closer("How did it go?") : prepared ?? "How did it go?",
+    ];
+    // Encouragement is the first colour to go. The carried item (the 2026-10-27 "hang Stella's
+    // dresses" question) goes next: on a long evening it is not the opening's question.
+    const fitted = fitOpeningToBudget(evening(true), [5]);
+    return fitted.length <= OPENING_SPOKEN_BUDGET_CHARS || !askCarried ? fitted : fitOpeningToBudget(evening(false), [5]);
   }
   const held = b.standing?.heldTopics;
   const today = held?.length ? b.today.filter(i => !isHeldTopicItem(i, held)) : b.today;

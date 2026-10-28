@@ -551,3 +551,162 @@ describe("W1 — call hygiene units", () => {
     expect(spoken).toBe("Still open: Los Feliz Towers follow-up, The Louise and Visit sageLA.");
   });
 });
+
+/**
+ * 2026-10-27 evening call, replayed on the same harness. Adam: "I'm, like,
+ * overwhelmed right now. And I feel, like, mentally drained. So my hope is that
+ * you will tell me what to do." Prod answered with 459 characters, two
+ * suggestions and two questions, then put the follow-up on TODAY's line and kept
+ * it there after "I'll do it tomorrow."
+ */
+describe("2026-10-27 — relief and deferral on the evening call", () => {
+  it("relief: one move in one breath, no question back, no Day Line offer", async () => {
+    const h = harness();
+    const state = scheduledState(showrunnerOpening(briefing()));
+    const result = await runClaireV2PrimaryTurn(
+      turn(state, "I'm, like, overwhelmed right now. And I feel, like, mentally drained. So my hope is that you will tell me what to do tomorrow."),
+      h.deps
+    );
+    expect(result.brainV2.businessIntent).toBe("broad_briefing");
+    expect(result.speak).toBe("One thing tomorrow: follow up with The Louise. That's it; the rest can wait.");
+    expect(result.speak).not.toMatch(/\?/);
+    expect(result.speak).not.toMatch(/After that|Colosseum|50 active customers/);
+    expect(h.grants).toHaveLength(0);
+    expect(state.pendingBriefing ?? null).toBeNull();
+  });
+
+  it("a composed relief reply is capped to two sentences and zero questions in code", async () => {
+    const h = harness();
+    // A speaking organ that ignores the brevity instruction, as the 10-27 model did.
+    (h.deps as { speak: unknown }).speak = async () =>
+      "One thing tomorrow: follow up with The Louise. Dana has been overdue since August. Tomorrow, pitch Wilshire Vermont in person. Want me to draft the email? Want me to put that on tomorrow's Day Line?";
+    const state = scheduledState(showrunnerOpening(briefing()));
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'm overwhelmed. Just tell me what to do tomorrow."), h.deps);
+    expect(result.speak).toBe("One thing tomorrow: follow up with The Louise. Dana has been overdue since August.");
+  });
+
+  it("deferral: 'I'll do it tomorrow' moves what Claire just placed, with a receipt", async () => {
+    const h = harness();
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "Yeah. I'll do it tomorrow."), h.deps);
+    expect(move).toHaveBeenCalledWith({ commitmentIds: ["c-dana"], toBusinessDate: TOMORROW });
+    expect(result.speak).toBe("Moved to tomorrow: Follow up with Dana.");
+    expect(state.recentDayLineCommits?.[0]?.businessDate).toBe(TOMORROW);
+    expect(h.grants).toHaveLength(0);
+  });
+
+  it("deferral moves only the item meant, not everything placed this half hour", async () => {
+    const h = harness();
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [
+      { ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 120_000 },
+      { ids: ["c-opus"], title: "Pickup at OPUS", businessDate: TODAY, atMs: START_MS - 90_000 },
+      { ids: ["c-ad"], title: "Post the Instagram ad", businessDate: TODAY, atMs: START_MS - 30_000 },
+    ];
+    // Named: the Dana one, even though two later rows were placed after it.
+    const named = await runClaireV2PrimaryTurn(turn(state, "I'll send the Dana email tomorrow."), h.deps);
+    expect(move).toHaveBeenLastCalledWith({ commitmentIds: ["c-dana"], toBusinessDate: TOMORROW });
+    expect(named.speak).toBe("Moved to tomorrow: Follow up with Dana.");
+    expect(state.recentDayLineCommits.map(c => [c.ids[0], c.businessDate])).toEqual([
+      ["c-dana", TOMORROW],
+      ["c-opus", TODAY],
+      ["c-ad", TODAY],
+    ]);
+    // Unnamed: the most recent one only.
+    const latest = await runClaireV2PrimaryTurn(turn(state, "Tomorrow."), h.deps);
+    expect(move).toHaveBeenLastCalledWith({ commitmentIds: ["c-ad"], toBusinessDate: TOMORROW });
+    expect(latest.speak).toBe("Moved to tomorrow: Post the Instagram ad.");
+    expect(state.recentDayLineCommits.find(c => c.ids[0] === "c-opus")?.businessDate).toBe(TODAY);
+  });
+
+  it("deferral confirms only the rows the table shows moved", async () => {
+    const h = harness();
+    // Two rows behind one title; the database moves one.
+    h.deps.moveDayLineCommitments = vi.fn(async () => ["c-1"]);
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-1", "c-2"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do it tomorrow."), h.deps);
+    expect(result.speak).toBe("Part of Follow up with Dana moved to tomorrow; I couldn't move the rest.");
+    expect(result.actionIds).toEqual(["c-1"]);
+    expect(result.mutationReceipts?.map(r => r.entityId)).toEqual(["c-1"]);
+    expect(state.recentDayLineCommits.map(c => [c.ids, c.businessDate])).toEqual([
+      [["c-1"], TOMORROW],
+      [["c-2"], TODAY],
+    ]);
+    // A mover that reports nothing moved is never a success.
+    h.deps.moveDayLineCommitments = vi.fn(async () => []);
+    const none = await runClaireV2PrimaryTurn(turn(state, "Push it to tomorrow."), h.deps);
+    expect(none.speak).toBe("I couldn't move that to tomorrow just now.");
+  });
+
+  it("one briefing that saves two tasks is remembered per task; naming one moves only that one", async () => {
+    const h = harness();
+    // The operator states two tasks, Claire proposes, "Yes." commits both rows in one briefing,
+    // each with its own receipt, as commitBriefing does.
+    h.deps.interpretPerception = async ({ utterance }) =>
+      /^yes/i.test(utterance)
+        ? { turnKind: "acknowledgement" as const, endsConversation: false }
+        : /need to/i.test(utterance)
+          ? { turnKind: "work_instruction" as const, endsConversation: false }
+          : { turnKind: "unclear" as const, endsConversation: false };
+    h.deps.executeGrant = vi.fn(async (grant: ExecutiveActionGrant, state: ClaireV2PrimaryState): Promise<ClaireTurnResult> => {
+      h.grants.push(grant);
+      if (grant.actionClass === "propose_day_line") {
+        state.pendingBriefing = { parsed: { items: [{ kind: "new_work", title: grant.scope.titles?.[0] ?? "work" }] } as never, createdAt: Date.now() };
+        return { speak: "Want both on today's Day Line?", kind: "briefing_proposed", actionIds: [] };
+      }
+      state.pendingBriefing = null;
+      return {
+        speak: "",
+        receiptBackedCommit: "Saved. Follow up with Dana and Pickup at OPUS are on today's Day Line.",
+        mutationReceipts: [
+          { claimedState: "created", entityId: "c-dana", statement: "Follow up with Dana" },
+          { claimedState: "created", entityId: "c-opus", statement: "Pickup at OPUS" },
+        ] as never,
+        kind: "briefing_saved",
+        actionIds: ["c-dana", "c-opus"],
+      };
+    }) as never;
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state: ClaireV2PrimaryState = { history: [] };
+    await runClaireV2PrimaryTurn(turn(state, "I need to follow up with Dana and do the pickup at OPUS."), h.deps);
+    h.clock.ms += 10_000;
+    await runClaireV2PrimaryTurn(turn(state, "Yes."), h.deps);
+    expect(h.grants.map(grant => grant.actionClass)).toEqual(["propose_day_line", "commit_briefing"]);
+    expect(state.recentDayLineCommits?.map(c => [c.ids, c.title])).toEqual([
+      [["c-dana"], "Follow up with Dana"],
+      [["c-opus"], "Pickup at OPUS"],
+    ]);
+    h.clock.ms += 30_000;
+    const deferred = await runClaireV2PrimaryTurn(turn(state, "I'll send the Dana email tomorrow."), h.deps);
+    expect(move).toHaveBeenCalledTimes(1);
+    expect(move).toHaveBeenCalledWith({ commitmentIds: ["c-dana"], toBusinessDate: TOMORROW });
+    expect(deferred.speak).toBe("Moved to tomorrow: Follow up with Dana.");
+  });
+
+  it("deferral naming a task Claire did not place moves nothing", async () => {
+    const h = harness();
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-opus"], title: "Pickup at OPUS", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do the Louise email tomorrow."), h.deps);
+    expect(move).not.toHaveBeenCalled();
+    expect(result.speak).toBe("I didn't put that on today's line on this call, so I left the line as it is.");
+    expect(state.recentDayLineCommits[0]?.businessDate).toBe(TODAY);
+  });
+
+  it("deferral without a mover never claims the move", async () => {
+    const h = harness();
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do it tomorrow."), h.deps);
+    expect(result.speak).toBe("I couldn't move that to tomorrow just now.");
+  });
+});

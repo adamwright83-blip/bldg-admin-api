@@ -78,6 +78,13 @@ export function buildLeadPlan(input: {
   today: string;
   /** The operator asked for the goal itself ("what is my goal?"). */
   goalAsked?: boolean;
+  /**
+   * The operator asked to be relieved of the decision ("I'm overwhelmed, tell
+   * me what to do"). One move, one breath: no goal recital, no "after that",
+   * no game position, and no Day Line offer, because an offer is a question
+   * handed back to someone who just said they are out of decisions.
+   */
+  relief?: boolean;
 }): LeadPlan {
   const businessDate = input.horizon === "tomorrow" ? addDaysYmd(input.today, 1) : input.today;
 
@@ -118,6 +125,26 @@ export function buildLeadPlan(input: {
     : null;
 
   const when = input.horizon === "tomorrow" ? "Tomorrow" : input.horizon === "today" ? "Today" : "Next";
+  const evidenceIds = [goalItem?.id, goalAdvice?.id, dayWork?.item.id, gameItem?.id].filter((id): id is string => Boolean(id));
+
+  if (input.relief) {
+    const slot = input.horizon === "tomorrow" ? " tomorrow" : input.horizon === "today" ? " tonight" : "";
+    const text = firstAction
+      ? `One thing${slot}: ${firstAction}. That's it; the rest can wait.`
+      : `Nothing is open on the line${slot}, so the one thing is to stop for the night.`;
+    return {
+      horizon: input.horizon,
+      businessDate,
+      goal,
+      firstAction,
+      buildings: firstAction && open[0] ? [open[0]] : buildings.slice(0, 1),
+      gameMove,
+      dayLineMove: null,
+      text,
+      evidenceIds,
+    };
+  }
+
   const sentences: string[] = [];
   // Goal first, always: the operator should never have to bring it up.
   if (goalProgress) sentences.push(input.goalAsked ? speakGoalOnRecord(goalProgress) : speakGoalProgress(goalProgress));
@@ -142,7 +169,7 @@ export function buildLeadPlan(input: {
     gameMove,
     dayLineMove,
     text: sentences.join(" "),
-    evidenceIds: [goalItem?.id, goalAdvice?.id, dayWork?.item.id, gameItem?.id].filter((id): id is string => Boolean(id)),
+    evidenceIds,
   };
 }
 

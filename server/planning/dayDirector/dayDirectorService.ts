@@ -703,6 +703,39 @@ export async function moveDayDirectorCommitment(input: {
 }
 
 /**
+ * Move several open commitments to a business date without naming the date they
+ * are on. Used when the operator defers work Claire placed moments ago ("I'll do
+ * it tomorrow"); the caller knows the ids it wrote, not necessarily the day the
+ * parser chose. Returns the ids that are on the target date after the write,
+ * read back from the table, so the caller can confirm exactly those and no more.
+ */
+export async function moveDayDirectorCommitmentsToDate(input: {
+  tenantId: string;
+  actorId: string;
+  commitmentIds: string[];
+  toBusinessDate: string;
+}): Promise<string[]> {
+  const ids = [...new Set(input.commitmentIds.filter(Boolean))];
+  if (!ids.length) return [];
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const scope = and(
+    eq(dayDirectorCommitments.tenantId, input.tenantId),
+    eq(dayDirectorCommitments.actorId, input.actorId),
+    inArray(dayDirectorCommitments.id, ids)
+  );
+  await db
+    .update(dayDirectorCommitments)
+    .set({ businessDate: input.toBusinessDate })
+    .where(and(scope, eq(dayDirectorCommitments.status, "open")));
+  const rows = await db
+    .select({ id: dayDirectorCommitments.id })
+    .from(dayDirectorCommitments)
+    .where(and(scope, eq(dayDirectorCommitments.businessDate, input.toBusinessDate)));
+  return rows.map(row => String(row.id));
+}
+
+/**
  * Mark one commitment as the day's discretionary primary.
  * Idempotent. Does not insert a second row. Other primaries that date are demoted.
  */

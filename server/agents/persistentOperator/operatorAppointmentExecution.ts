@@ -1,6 +1,6 @@
 import { requireCallableStrategicProposal } from "../../strategy/strategicStore";
 import { DAILY_CLAIRE_CALLS, dailyPurposeForKind, type DailyClairePurpose } from "../../../shared/dailyClaireCalls";
-import { buildShowrunnerBriefing, preparedItemSpoken, showrunnerOpening } from "../../claire/showrunner/showrunnerBriefing";
+import { buildShowrunnerBriefing, composeShowrunnerOpening, preparedItemSpoken } from "../../claire/showrunner/showrunnerBriefing";
 import { prepareDaphneCallDecision } from "../daphne/decisionPointSeam";
 import { prepareStrategicProposal } from "../../strategy/strategicPreparation";
 import { loadStrategicProposal } from "../../strategy/strategicStore";
@@ -353,12 +353,15 @@ export async function executeDailyClaireCall(input: {
       // Daphne decision point (off unless DAPHNE_V2_DECISION_POINTS): recorded before the call
       // is placed; a Daphne failure never blocks or changes the call itself.
       const daphneDecision = await prepareDaphneCallDecision({ identity, purpose, briefing, timeZone: step.timeZone, now });
+      const opening = composeShowrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null });
+      // The reply reader binds a bare "yes" to the carried item only if this opening asked about it.
+      briefing.openingAskedCarried = opening.askedCarried;
       const started = await startClairePreDriveCall({
         tenantId: context.scope.tenantId,
         actorId: identity.communicationOperatorUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
         timeZone: step.timeZone,
-        openingOverride: showrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null }),
+        openingOverride: opening.text,
         sessionKindOverride: purpose,
         showrunner: {
           purpose,

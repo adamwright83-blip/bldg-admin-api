@@ -29,7 +29,7 @@ import {
   isMacroGoalQuestion,
   isRomanticAdvance,
 } from "./conversationalActs";
-import { disputesPriorClaim, leadHorizon } from "./leadRequest";
+import { disputesPriorClaim, leadHorizon, reliefRequest } from "./leadRequest";
 
 export type SemanticReading = {
   turnKind:
@@ -242,7 +242,7 @@ export function applySemanticReading(
     next.strategicShape = "none";
     next.entities = perceived.entities.filter(entity => entity.kind === "temporal");
     if (!priorClaimLane) {
-      next.leadRequest = perceived.leadRequest ?? { horizon: leadHorizon(perceived.assembledText) };
+      next.leadRequest = perceived.leadRequest ?? { horizon: leadHorizon(perceived.assembledText), relief: reliefRequest(perceived.assembledText) };
     }
   }
 
@@ -322,7 +322,7 @@ export function applySemanticReading(
   next.broadBriefingRequest = next.businessIntent === "broad_briefing";
   if (next.broadBriefingRequest && !next.leadRequest && kind !== "small_talk") {
     // A briefing request or a dated "what should I do" asks Claire to lead.
-    next.leadRequest = { horizon: leadHorizon(perceived.assembledText) };
+    next.leadRequest = { horizon: leadHorizon(perceived.assembledText), relief: reliefRequest(perceived.assembledText) };
   }
   if (!next.broadBriefingRequest) next.leadRequest = null;
   next.personalProbe =

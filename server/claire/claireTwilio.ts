@@ -75,6 +75,11 @@ import {
   isStandaloneOperatorArtifactVoiceRequest,
 } from "./operatorArtifactVoice";
 import {
+  appendOperatorDraftVoiceHistory,
+  executeDraftAndTextMeRequest,
+  isDraftAndTextMeRequest,
+} from "./operatorDraftVoice";
+import {
   classifyOperatorMissionVoiceTurn,
   OPERATOR_MISSION_FAILED_SPEAK,
 } from "./operatorMissionCommand";
@@ -1167,6 +1172,63 @@ export function runAuthoritativeClaireVoiceTurn(input: {
 
         result = {
           speak: artifactTurn.speak,
+          kind: "answered",
+          assembledUtterance: artifactCandidate,
+          thoughtCompleteness: "complete",
+        };
+      } else if (isDraftAndTextMeRequest(artifactCandidate)) {
+        /**
+         * "Draft the Dana email and text it to me." Claire writes the message from
+         * this call and texts it to the operator's own phone through the receipted
+         * artifact port. Nothing goes to the customer and nothing lands on the Day
+         * Line; the operator sends it themselves. (2026-10-27: this request fell
+         * through to the brain, which could only say it couldn't send a text.)
+         */
+        if (input.utterance.trim()) {
+          conversation.providerFragments = [
+            ...(conversation.providerFragments ?? []),
+            input.utterance.trim(),
+          ];
+        }
+        conversation.pendingFragment = null;
+        conversation.fragmentHolds = 0;
+
+        if (isClaireProgressionEnabled(conversation.tenantId) && conversation.history?.findLast(entry => entry.speaker === "claire")?.delivery !== "interrupted") {
+          await commitPendingDisclosuresForConversation(getProgressionStore(), {
+            tenantId: conversation.tenantId,
+            conversationId: callStateKey(conversationId),
+          });
+        }
+
+        const { applyOperatorArtifactDecision } = await import(
+          "./operatorArtifactDecision"
+        );
+        const draftTurn = await executeDraftAndTextMeRequest(
+          {
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            utterance: artifactCandidate,
+            history: conversation.history ?? [],
+          },
+          { applyDecision: applyOperatorArtifactDecision }
+        );
+        if (!draftTurn) {
+          throw new Error("operator draft request was not executable");
+        }
+        console.info("[ClaireOperatorDraft]", JSON.stringify({
+          event: "claire_operator_draft_sms",
+          conversationKey: callStateKey(conversationId),
+          drafted: Boolean(draftTurn.draft),
+          providerAccepted: draftTurn.providerAccepted,
+        }));
+
+        conversation.history = appendOperatorDraftVoiceHistory(
+          conversation.history ?? [],
+          { operatorText: artifactCandidate, outcome: draftTurn, at: Date.now() }
+        );
+
+        result = {
+          speak: draftTurn.speak,
           kind: "answered",
           assembledUtterance: artifactCandidate,
           thoughtCompleteness: "complete",

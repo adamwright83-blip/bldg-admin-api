@@ -32,7 +32,46 @@ import { findIndependentFirstPersonWorkClause } from "../../turn/interpretTurn";
 
 export type LeadHorizon = "today" | "tomorrow" | null;
 
-export type LeadRequest = { horizon: LeadHorizon };
+export type LeadRequest = {
+  horizon: LeadHorizon;
+  /**
+   * The operator asked to be relieved of the decision, not briefed: "I'm
+   * overwhelmed, tell me what to do", "just pick one", "decide for me". The
+   * plan then names ONE move, in one breath, with no second suggestion and no
+   * question handed back. Observed on the 2026-10-27 evening call.
+   */
+  relief: boolean;
+};
+
+const RELIEF_STATE = new RegExp(
+  [
+    String.raw`\b(?:i'?m|i\s+am|i\s+feel|i'?m\s+feeling|feeling|been)\s+(?:like\s+)?(?:so\s+|really\s+|pretty\s+|totally\s+|completely\s+|kind\s+of\s+|kinda\s+|a\s+little\s+|very\s+)?(?:overwhelmed|drained|exhausted|fried|burnt\s+out|burned\s+out|wiped(?:\s+out)?|spent|tapped\s+out|running\s+on\s+empty|out\s+of\s+gas)\b`,
+    String.raw`\bmentally\s+(?:drained|exhausted|fried|done|shot)\b`,
+    String.raw`\b(?:it'?s|this\s+is|that'?s|everything\s+is)\s+(?:all\s+|just\s+)?too\s+much\b`,
+    String.raw`\bcan'?t\s+(?:think|decide|focus)\s*(?:straight|right\s+now|tonight|anymore)?\b`,
+    String.raw`\bdon'?t\s+have\s+it\s+in\s+me\b`,
+  ].join("|"),
+  "i"
+);
+
+const RELIEF_ASK = new RegExp(
+  [
+    String.raw`\b(?:just\s+)?(?:decide|pick|choose)\s+(?:one\s+)?for\s+me\b`,
+    String.raw`\byou\s+(?:decide|pick|choose)\b`,
+    String.raw`\bjust\s+(?:tell|give)\s+me\s+(?:the\s+)?one\s+thing\b`,
+    String.raw`\b(?:just\s+)?(?:give|tell)\s+me\s+one\s+thing\b`,
+    String.raw`\bjust\s+pick\s+(?:one|something)\b`,
+    String.raw`\bwhat'?s\s+the\s+one\s+thing\b`,
+  ].join("|"),
+  "i"
+);
+
+/** True when the operator is asking Claire to carry the decision, not to brief them. */
+export function reliefRequest(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return RELIEF_STATE.test(trimmed) || RELIEF_ASK.test(trimmed);
+}
 
 const LEAD_REQUEST = new RegExp(
   [
@@ -54,8 +93,12 @@ const SCOPED_ABOUT = /\b(?:about|with|regarding|concerning)\s+(?!today|tomorrow|
 
 export function leadRequest(text: string): LeadRequest | null {
   const trimmed = text.trim();
-  if (!trimmed || !LEAD_REQUEST.test(trimmed) || SCOPED_ABOUT.test(trimmed)) return null;
-  return { horizon: leadHorizon(trimmed) };
+  if (!trimmed || SCOPED_ABOUT.test(trimmed)) return null;
+  const relief = reliefRequest(trimmed);
+  // "I'm overwhelmed" with no question in it is still a request to be led:
+  // the operator has run out of decisions, and the answer is one move.
+  if (!LEAD_REQUEST.test(trimmed) && !relief) return null;
+  return { horizon: leadHorizon(trimmed), relief };
 }
 
 export function leadHorizon(text: string): LeadHorizon {

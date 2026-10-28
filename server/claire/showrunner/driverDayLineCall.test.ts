@@ -552,7 +552,9 @@ describe("driver Day Line on the Claire call", () => {
       "utf8"
     );
     expect(source).toContain("const briefing = await buildShowrunnerBriefing(");
-    expect(source).toContain("openingOverride: showrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null })");
+    expect(source).toContain("composeShowrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null })");
+    expect(source).toContain("briefing.openingAskedCarried = opening.askedCarried;");
+    expect(source).toContain("openingOverride: opening.text");
     expect(source).toContain("briefing,");
   });
 });

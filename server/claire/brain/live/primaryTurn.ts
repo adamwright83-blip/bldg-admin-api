@@ -109,6 +109,8 @@ export type ClaireV2PrimaryState = ClaireTurnState & {
   sessionKind?: string | null;
   /** Present on scheduled morning-readiness / evening-debrief calls. */
   showrunner?: ShowrunnerCallState | null;
+  /** Day Line rows Claire placed on this call, so a later "I'll do it tomorrow" can move them. */
+  recentDayLineCommits?: RecentDayLineCommit[];
 };
 
 export type ClaireV2Composition =
@@ -169,6 +171,15 @@ import {
   type StandingInstructionRecord,
 } from "../../../agents/daphne/standingInstructions";
 import type { PromiseScope } from "../../promiseReconciler";
+import { capSpokenReply } from "../../speech/spokenReplyCap";
+import { addDaysYmd } from "../../../analytics/businessPeriods";
+import {
+  deferralTarget,
+  deferralToTomorrow,
+  recentDayLineCommits,
+  rememberDayLineCommit,
+  type RecentDayLineCommit,
+} from "./dayLineDeferral";
 
 type SpeakingOrgan = typeof answerClairePreDriveFollowUp;
 
@@ -194,6 +205,12 @@ export type ClaireV2PrimaryDeps = {
   loadStandingInstructions?: () => Promise<StandingInstructionRecord[]>;
   /** Who a spoken promise is prepared for. Without it every promise about a later call is stripped. */
   resolvePromiseScope?: () => Promise<PromiseScope | null>;
+  /**
+   * Moves open Day Line rows Claire placed on this call to another business date.
+   * Returns the ids actually on the target date afterwards, read back. Optional: without it a
+   * deferral is answered honestly as not moved.
+   */
+  moveDayLineCommitments?: (input: { commitmentIds: string[]; toBusinessDate: string }) => Promise<string[]>;
   commitPendingDisclosures: () => Promise<void>;
   /**
    * The scheduled-call conductor (morning readiness, evening debrief). V2 runs
@@ -503,9 +520,11 @@ export function v2SemanticFrame(decision: ExecutiveDecision, state: ClaireV2Prim
       acts.includes("encouragement_request")
         ? "The operator asked for encouragement about their work. This is a work request, not a question about you. Give one short, grounded line from today's verified record, then the next move. Do not decline it, do not speak about yourself."
         : "",
-      decision.conclusions.some(conclusion => conclusion.kind === "lead_plan")
-        ? "Lead plan: you are running the operator. State the goal, the single first move, the named buildings and the open Kingdom targets exactly as the plan evidence gives them. Do not ask which buildings. Nothing is saved; the server asks for approval separately."
-        : "",
+      decision.conclusions.some(conclusion => conclusion.kind === "lead_plan") && decision.perceivedTurn.leadRequest?.relief
+        ? "Relief: the operator said they are out of decisions and asked you to carry this one. Say the single move from the plan evidence in at most two short sentences. No goal recital, no second suggestion, no list, and no question back to them; they asked you to decide."
+        : decision.conclusions.some(conclusion => conclusion.kind === "lead_plan")
+          ? "Lead plan: you are running the operator. State the goal, the single first move, the named buildings and the open Kingdom targets exactly as the plan evidence gives them. Do not ask which buildings. Nothing is saved; the server asks for approval separately."
+          : "",
       perceived.claireRoleFeedback !== "none"
         ? "The operator was telling you how to lead, not reporting their own work. Take it as direction and lead; do not restate it as their intention."
         : "",
@@ -837,6 +856,58 @@ export async function runClaireV2PrimaryTurn(
       }
     }
 
+    // ── "I'll do it tomorrow": move what Claire just placed, before any new reading of the turn ──
+    // The adapter dates a row from the turn that created it, so a deferral spoken one turn later
+    // used to leave the row on today and Claire's "it's on today's Day Line" standing. (2026-10-27)
+    const recentCommits = recentDayLineCommits(state.recentDayLineCommits, { nowMs, today: input.businessDate });
+    const selection = recentCommits.length && deferralToTomorrow(utterance) ? deferralTarget(recentCommits, utterance) : null;
+    if (selection?.kind === "unmatched") {
+      // The operator named something Claire did not place on this call. Nothing moves.
+      return finish(
+        { speak: "I didn't put that on today's line on this call, so I left the line as it is.", kind: "answered", actionIds: [] },
+        "deterministic",
+        null
+      );
+    }
+    const target = selection?.kind === "target" ? selection.commit : null;
+    if (target) {
+      const toBusinessDate = addDaysYmd(input.businessDate, 1);
+      const requested = [...new Set(target.ids)];
+      // Only the rows the table shows on tomorrow afterwards are confirmed; a count is not a receipt.
+      const moved = deps.moveDayLineCommitments
+        ? (await deps.moveDayLineCommitments({ commitmentIds: requested, toBusinessDate }).catch(() => [] as string[])).filter(id =>
+            requested.includes(id)
+          )
+        : [];
+      if (moved.length) {
+        const unmoved = requested.filter(id => !moved.includes(id));
+        state.recentDayLineCommits = (state.recentDayLineCommits ?? []).flatMap(commit =>
+          commit === target
+            ? [
+                { ...commit, ids: moved, businessDate: toBusinessDate },
+                ...(unmoved.length ? [{ ...commit, ids: unmoved }] : []),
+              ]
+            : [commit]
+        );
+        const line = unmoved.length
+          ? `Part of ${target.title} moved to tomorrow; I couldn't move the rest.`
+          : `Moved to tomorrow: ${target.title}.`;
+        return finish(
+          {
+            speak: "",
+            receiptBackedCommit: line,
+            mutationReceipts: moved.map(id => ({ claimedState: "updated", entityId: id, statement: `${target.title} moved to ${toBusinessDate}` })),
+            kind: "briefing_saved",
+            actionIds: moved,
+          },
+          "action",
+          null,
+          ["move_day_line"]
+        );
+      }
+      return finish({ speak: "I couldn't move that to tomorrow just now.", kind: "answered", actionIds: [] }, "deterministic", null);
+    }
+
     // ── Perception → Executive Function, with live read-only retrieval ──
     let adapterResult: ClaireTurnResult | null = null;
     let adapterPromise: Promise<ClaireTurnResult> | null = null;
@@ -1009,6 +1080,22 @@ export async function runClaireV2PrimaryTurn(
     const executed = adapterResult as ClaireTurnResult | null;
     if (executed && !leadPlanned) {
       if (state.showrunner) state.showrunner.turns += 1;
+      if (executed.kind === "briefing_saved" && executed.actionIds?.length) {
+        // Remember what landed and on which day, one entry per saved row, so "I'll do the Dana email
+        // tomorrow" a turn later moves only Dana's row even when one briefing saved several tasks.
+        const committedGrant = decision.actionGrants.find(grant => grant.actionClass === "commit_day_line" || grant.actionClass === "propose_day_line");
+        const scopeTitles = committedGrant?.scope.titles ?? [];
+        const ids = [...new Set(executed.actionIds)];
+        const businessDate = /\btomorrow\b/i.test(utterance) ? addDaysYmd(input.businessDate, 1) : input.businessDate;
+        for (const [index, id] of ids.entries()) {
+          const title =
+            executed.mutationReceipts?.find(receipt => receipt.entityId === id)?.statement?.trim() ||
+            (scopeTitles.length === ids.length ? scopeTitles[index] : null) ||
+            (ids.length === 1 ? scopeTitles.join(", ") || null : null) ||
+            "that";
+          state.recentDayLineCommits = rememberDayLineCommit(state.recentDayLineCommits, { ids: [id], title, businessDate, atMs: nowMs });
+        }
+      }
       return finish(
         { ...executed, endCall: executed.endCall || turn.candidateEndCall || undefined },
         "action",
@@ -1304,6 +1391,16 @@ export async function runClaireV2PrimaryTurn(
       if (leadAsk && leadOfferHeld && !speech.includes(leadAsk) && !said.some(text => text.includes(leadAsk))) {
         speech = `${speech.trim()} ${leadAsk}`.trim();
       }
+      // Enforced, not requested: a plan asks at most one question, and a plan given to an
+      // operator who asked for relief is one move in two sentences with no question at all.
+      // (2026-10-27: 459 characters, two suggestions, two questions, to "I'm overwhelmed.")
+      const relief = decision.perceivedTurn.leadRequest?.relief === true;
+      const heldAsk = leadAsk && leadOfferHeld ? leadAsk : null;
+      const capped = capSpokenReply(
+        speech,
+        relief ? { maxSentences: 2, maxQuestions: 0, keepQuestion: heldAsk } : { maxSentences: Number.MAX_SAFE_INTEGER, maxQuestions: 1, keepQuestion: heldAsk }
+      );
+      speech = capped || (relief ? capSpokenReply(deterministicText, { maxSentences: 2, maxQuestions: 0 }) : "") || speech;
     }
     return finish(
       { speak: speech, kind: "answered", ...(personalEnd ? { endCall: true, endCallReason: "personal_thread_closed" } : {}) },
@@ -1359,6 +1456,15 @@ export function productionClaireV2PrimaryDeps(input: {
         timeZone: input.timeZone,
         surface: input.surface,
       }),
+    moveDayLineCommitments: async ({ commitmentIds, toBusinessDate }) => {
+      const { moveDayDirectorCommitmentsToDate } = await import("../../../planning/dayDirector/dayDirectorService");
+      return moveDayDirectorCommitmentsToDate({
+        tenantId: input.tenantId,
+        actorId: input.dayDirectorActorId,
+        commitmentIds,
+        toBusinessDate,
+      });
+    },
     routeWeekly: async ({ utterance, intent, state }) => {
       const { routeActiveWeeklySession } = await import("../../weeklyMission/route");
       return routeActiveWeeklySession({
