@@ -77,6 +77,13 @@ describe("AdminCustomerSearchBlock", () => {
     expect(onPrefillNewOrder).toHaveBeenCalledWith("3235550142");
   });
 
+  it("shows the business switcher beside the box and points to it when nothing matches", () => {
+    const switcher = React.createElement("span", { "data-testid": "switcher" }, "Laundry Farm");
+    const { tree, text } = render({ businessSwitcher: switcher });
+    expect(collect(tree)).toContain(switcher);
+    expect(text).toContain("searches the selected business only");
+  });
+
   it("keeps the spinner only while both searches are empty and loading", () => {
     const loading = render({
       searchOrders: { isLoading: true },

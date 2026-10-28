@@ -72,6 +72,7 @@ import {
   type AdminWorkspaceTab as Tab,
 } from "@/admin/adminPaths";
 import { getResidentWebOrigin } from "@/const";
+import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { AdminCustomerSearchBlock } from "@/components/admin/AdminCustomerSearchBlock";
 import { directoryCustomerForPhone } from "@/lib/headerCustomerSearch";
 
@@ -584,6 +585,7 @@ export default function Admin() {
           debouncedCustomerQuery={debouncedCustomerQuery}
           searchOrders={searchOrders}
           directoryCustomers={directoryCustomers}
+          businessSwitcher={<BusinessSwitcher />}
           setProfilePhone={setProfilePhone}
           onPrefillNewOrder={phone => {
             setNewOrderPhoneSeed(phone);

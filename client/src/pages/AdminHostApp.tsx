@@ -19,6 +19,7 @@ import JoystickHome from "./JoystickHome";
 import AdminLive from "./AdminLive";
 import AdminCatalog from "./AdminCatalog";
 import OperatorReflection from "./OperatorReflection";
+import { BusinessSwitcher } from "@/components/admin/BusinessSwitcher";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 import TruePnlCockpitPage from "./TruePnlCockpitPage";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
@@ -532,6 +533,7 @@ export default function AdminHostApp() {
             debouncedCustomerQuery={debouncedCustomerQuery}
             searchOrders={searchOrders}
             directoryCustomers={directoryCustomers}
+            businessSwitcher={<BusinessSwitcher />}
             setProfilePhone={setProfilePhone}
             onPrefillNewOrder={phone => {
               setNewOrderPhoneSeed(phone);

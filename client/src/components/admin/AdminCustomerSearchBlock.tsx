@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import {
   headerCustomerSearchSections,
@@ -7,7 +8,8 @@ import {
 
 /**
  * Header "Customer" box. Customers come from the active business's directory, which
- * includes CleanCloud-only customers; order rows below stay as receipt links.
+ * includes CleanCloud-only customers; order rows below stay as receipt links. Search is
+ * scoped to the active business, so the business switcher sits beside the box.
  */
 export function AdminCustomerSearchBlock({
   customerSearchQuery,
@@ -15,6 +17,7 @@ export function AdminCustomerSearchBlock({
   debouncedCustomerQuery,
   searchOrders,
   directoryCustomers,
+  businessSwitcher,
   setProfilePhone,
   onPrefillNewOrder,
 }: {
@@ -31,6 +34,8 @@ export function AdminCustomerSearchBlock({
     isLoading: boolean;
     data?: { customers: HeaderDirectoryCustomer[] };
   };
+  /** Shows and switches the business the search (and new orders) belong to. */
+  businessSwitcher?: ReactNode;
 }) {
   const { customers, orders } = headerCustomerSearchSections({
     directoryCustomers: directoryCustomers?.data?.customers,
@@ -43,8 +48,9 @@ export function AdminCustomerSearchBlock({
 
   return (
     <div className="border-b border-black/10 bg-white">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
-        <div className="relative max-w-md">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        {businessSwitcher ? <div className="shrink-0">{businessSwitcher}</div> : null}
+        <div className="relative max-w-md flex-1">
           <input
             type="text"
             placeholder="Customer"
@@ -141,6 +147,9 @@ export function AdminCustomerSearchBlock({
               ) : (
                 <p className="px-3 py-4 text-sm text-black/50">
                   No customers or orders found.
+                  {businessSwitcher
+                    ? " This searches the selected business only; switch business on the left to search the other one."
+                    : null}
                 </p>
               )}
             </div>
