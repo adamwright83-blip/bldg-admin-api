@@ -40,12 +40,95 @@
 .cc-unanswered { font-size: 12px; font-weight: 600; color: var(--cc-err); }
 .cc-line-claire { justify-self: start; background: var(--cc-panel); border: 1px solid var(--cc-line); }
 
-.cc-dots { display: inline-flex; gap: 4px; padding: 6px 0; }
-.cc-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--cc-muted); animation: cc-blink 1.2s infinite ease-in-out; }
-.cc-dots i:nth-child(2) { animation-delay: 0.15s; }
-.cc-dots i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes cc-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .cc-dots i { animation: none; opacity: 0.6; } }
+/*
+ * While Claire prepares a reply: ink blooming in water, not a pulsing dot. No edge to focus on (the mist is blurred),
+ * low-saturation colours that drift indigo to teal to sage, and three blobs on prime-length cycles so the whole never
+ * visibly repeats. One slow swell underneath keeps it reading as alive, so a wait never looks like a stall.
+ * Specks of sediment drift up through it. Reduced motion: the same mist, still.
+ */
+.cc-mist {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 40px;
+  margin: 2px 0 1px;
+  overflow: visible;
+}
+.cc-mist i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%;
+  mix-blend-mode: multiply;
+  filter: blur(4.5px);
+  opacity: 0.9;
+}
+.cc-mist-a {
+  background: radial-gradient(circle at 40% 40%, #6c7fd2, #6c7fd200 72%);
+  animation: cc-morph-a 7.3s ease-in-out infinite alternate, cc-drift-a 11.9s ease-in-out infinite alternate;
+}
+.cc-mist-b {
+  background: radial-gradient(circle at 50% 45%, #4d9fa6, #4d9fa600 72%);
+  animation: cc-morph-b 9.7s ease-in-out infinite alternate, cc-drift-b 13.1s ease-in-out infinite alternate;
+}
+.cc-mist-c {
+  background: radial-gradient(circle at 55% 50%, #80b48f, #80b48f00 72%);
+  animation: cc-morph-c 8.3s ease-in-out infinite alternate, cc-drift-c 17.3s ease-in-out infinite alternate;
+}
+/* the slow swell and the colour drift, on the whole mist */
+.cc-mist {
+  animation: cc-swell 5.9s ease-in-out infinite, cc-hue 19.7s ease-in-out infinite alternate;
+}
+.cc-mist b {
+  position: absolute;
+  bottom: 6px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #4f6396;
+  opacity: 0;
+  animation: cc-speck 6.1s linear infinite;
+}
+.cc-mist b:nth-of-type(1) { left: 22px; animation-delay: -0.4s; }
+.cc-mist b:nth-of-type(2) { left: 41px; animation-delay: -2.3s; animation-duration: 7.3s; }
+.cc-mist b:nth-of-type(3) { left: 31px; animation-delay: -4.1s; animation-duration: 5.3s; }
+.cc-mist b:nth-of-type(4) { left: 50px; animation-delay: -1.7s; animation-duration: 8.9s; }
+.cc-mist b:nth-of-type(5) { left: 16px; animation-delay: -5.9s; animation-duration: 6.7s; }
+
+@keyframes cc-swell { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.06); } }
+@keyframes cc-hue { from { filter: hue-rotate(-8deg) saturate(0.95); } to { filter: hue-rotate(22deg) saturate(1.05); } }
+@keyframes cc-morph-a {
+  0% { border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%; }
+  50% { border-radius: 58% 42% 38% 62% / 55% 62% 38% 45%; }
+  100% { border-radius: 50% 50% 55% 45% / 38% 58% 42% 62%; }
+}
+@keyframes cc-morph-b {
+  0% { border-radius: 60% 40% 45% 55% / 50% 60% 40% 50%; }
+  50% { border-radius: 40% 60% 62% 38% / 42% 45% 55% 58%; }
+  100% { border-radius: 55% 45% 40% 60% / 60% 38% 62% 40%; }
+}
+@keyframes cc-morph-c {
+  0% { border-radius: 48% 52% 40% 60% / 58% 42% 58% 42%; }
+  50% { border-radius: 62% 38% 55% 45% / 40% 60% 45% 55%; }
+  100% { border-radius: 38% 62% 50% 50% / 52% 48% 60% 40%; }
+}
+@keyframes cc-drift-a { from { transform: translate(-11px, -2px) scale(1); } to { transform: translate(3px, 3px) scale(1.18); } }
+@keyframes cc-drift-b { from { transform: translate(9px, 3px) scale(1.12); } to { transform: translate(-4px, -3px) scale(0.92); } }
+@keyframes cc-drift-c { from { transform: translate(1px, 5px) scale(0.9); } to { transform: translate(12px, -4px) scale(1.15); } }
+@keyframes cc-speck {
+  0% { opacity: 0; transform: translate(0, 0); }
+  20% { opacity: 0.55; }
+  80% { opacity: 0.35; }
+  100% { opacity: 0; transform: translate(4px, -30px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-mist,
+  .cc-mist i { animation: none; }
+  .cc-mist b { display: none; }
+}
 
 .cc-error { margin: 0; font-size: 14px; font-weight: 600; color: var(--cc-err); line-height: 1.4; }
 
