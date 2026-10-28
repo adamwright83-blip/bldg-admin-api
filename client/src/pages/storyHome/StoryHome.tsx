@@ -7,6 +7,7 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
+  type RefObject,
   type SVGProps,
 } from "react";
 import type { IslandIntroPhase } from "@/components/admin/control-room/LanternCityIslands/islandBoard";
@@ -161,10 +162,20 @@ export default function StoryHome({
               storyAnomaly={chapter?.anomaly}
               onEmbeddedChange={setEmbedded}
               onStage={onStage}
-              onDestination={tonight.state === "available" && chapter && !playing ? play : undefined}
+              onDestination={
+                tonight.state === "available" && chapter && !playing
+                  ? play
+                  : undefined
+              }
             />
           </Suspense>
         </div>
+        <EvidenceTether
+          stage={stage}
+          active={
+            !playing && tonight.state === "available" && intro === "settled"
+          }
+        />
         <div className="sh-world-overlay">
           <TopBar operatorName={operatorName} />
           <GlassStats />
@@ -187,6 +198,61 @@ export default function StoryHome({
         />
       ) : null}
     </div>
+  );
+}
+
+function EvidenceTether({
+  stage,
+  active,
+}: {
+  stage: RefObject<LanternStage | null>;
+  active: boolean;
+}) {
+  const svg = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    if (!active) return;
+    let frame = 0,
+      last = 0;
+    const update = (now: number) => {
+      frame = requestAnimationFrame(update);
+      if (now - last < 50) return;
+      last = now;
+      const el = svg.current;
+      const anchor = document.querySelector(".sh-evidence-image");
+      const target = stage.current?.destinationScreen();
+      if (!el || !anchor || !target || !target.visible || innerWidth <= 900) {
+        el?.setAttribute("opacity", "0");
+        return;
+      }
+      const root = el.getBoundingClientRect(),
+        card = anchor.getBoundingClientRect();
+      const x = card.right - root.left,
+        y = card.top + card.height * 0.3 - root.top;
+      const tx = target.x - root.left,
+        ty = target.y - root.top;
+      el.setAttribute("opacity", tx > x + 40 ? "1" : "0");
+      el.querySelectorAll("path").forEach(path =>
+        path.setAttribute("d", `M ${x} ${y} L ${tx} ${ty}`)
+      );
+      const dot = el.querySelector("circle");
+      dot?.setAttribute("cx", String(x));
+      dot?.setAttribute("cy", String(y));
+    };
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [active, stage]);
+  return (
+    <svg
+      ref={svg}
+      className="sh-evidence-tether"
+      aria-hidden="true"
+      opacity="0"
+      style={{ display: active ? undefined : "none" }}
+    >
+      <path className="sh-tether-glow" />
+      <path className="sh-tether-line" />
+      <circle r="3" />
+    </svg>
   );
 }
 
@@ -283,7 +349,9 @@ function TopBar({ operatorName }: { operatorName: string }) {
       </nav>
       <details className="sh-menu">
         <summary aria-label="Open navigation">☰</summary>
-        <nav aria-label="Main navigation"><Link href="/new-order">New order</Link><Link href="/claire">Talk to Claire</Link>
+        <nav aria-label="Main navigation">
+          <Link href="/new-order">New order</Link>
+          <Link href="/claire">Talk to Claire</Link>
           {HOME_NAV.map(item => (
             <Link key={item.key} href={item.path}>
               {item.label}
@@ -449,7 +517,8 @@ function Available({
   onPlay: () => void;
 }) {
   const { hook, note } = heroLines(chapter.before);
-  const poster = storyGameFor(chapter.gameKey)?.poster;
+  const game = storyGameFor(chapter.gameKey);
+  const poster = game?.poster;
   return (
     <>
       <p className="sh-eyebrow">
@@ -461,37 +530,51 @@ function Available({
           <p key={line.key}>{line.text}</p>
         ))}
       </div>
-      <div className="sh-play-row">
+      {note ? <ClaireNote text={note.text} /> : null}
+      {poster ? (
         <button
           type="button"
-          className="sh-play"
+          className="sh-evidence-play"
           onClick={onPlay}
           disabled={playing}
           data-testid="story-home-play"
         >
-          <span>Play tonight’s chapter</span>
-          <ArrowRight size={18} aria-hidden="true" />
+          <span className="sh-evidence-image">
+            <img src={poster.src} alt={poster.alt} width={720} height={496} />
+          </span>
+          <span className="sh-evidence-action">
+            <span>{game?.launchLabel ?? "Play tonight’s chapter"}</span>
+            <ArrowRight size={20} aria-hidden="true" />
+          </span>
         </button>
-        <p className="sh-facts">About 5 minutes</p>
-      </div>
-      {note ? (
-        <ClaireNote text={note.text}>
-          {poster ? (
-            <button type="button" className="sh-feed" onClick={onPlay} disabled={playing} data-testid="story-home-feed">
-              <img src={poster.src} alt={poster.alt} width={720} height={496} decoding="async" />
-              <span className="sh-feed-cue">
-                Pull it up <ArrowRight size={14} aria-hidden="true" />
-              </span>
-            </button>
-          ) : null}
-        </ClaireNote>
-      ) : null}
+      ) : (
+        <div className="sh-play-row">
+          <button
+            type="button"
+            className="sh-play"
+            onClick={onPlay}
+            disabled={playing}
+            data-testid="story-home-play"
+          >
+            Play tonight’s chapter <ArrowRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      <p className="sh-facts sh-duration">
+        About 5 minutes · One chapter tonight
+      </p>
     </>
   );
 }
 
 /** Claire's line under the invitation: a note left for the operator, signed. */
-function ClaireNote({ text, children }: { text: string; children?: ReactNode }) {
+function ClaireNote({
+  text,
+  children,
+}: {
+  text: string;
+  children?: ReactNode;
+}) {
   return (
     <figure className="sh-claire">
       <ClairePortrait />
@@ -568,7 +651,8 @@ function WonTonight({
           />
         ) : null}
         <p className="sh-tomorrow">
-          {chapter.closing?.tomorrow ?? "The next chapter opens tomorrow night."}
+          {chapter.closing?.tomorrow ??
+            "The next chapter opens tomorrow night."}
         </p>
         <button
           type="button"

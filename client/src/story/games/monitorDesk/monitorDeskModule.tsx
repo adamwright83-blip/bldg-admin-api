@@ -22,6 +22,10 @@ function MonitorDesk(props: StoryGameProps) {
 export const monitorDeskGame: StoryGameModule = {
   keys: ["cpe.monitor-desk"],
   Game: MonitorDesk,
+  launchLabel: "Open the lobby camera",
   // the lobby feed half a minute before the window: an empty lobby, the indicator at L
-  poster: { src: "/assets/story/monitor-desk/lobby-before.webp", alt: "The lobby camera's night feed: an empty lobby, the lift indicator at L." },
+  poster: {
+    src: "/assets/story/monitor-desk/lobby-before.webp",
+    alt: "The lobby camera's night feed: an empty lobby, the lift indicator at L.",
+  },
 };

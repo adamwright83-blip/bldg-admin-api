@@ -50,6 +50,7 @@ export type LanternStage = {
   focusDestination(): Promise<void>;
   /** Back to the home framing. */
   returnHome(): void;
+  destinationScreen(): { x: number; y: number; visible: boolean } | null;
 };
 
 export default function LanternCityIslands({
@@ -210,7 +211,7 @@ export default function LanternCityIslands({
     }
     board.current = b;
     b.setInsetLeft(insetAtMount.current);
-    stageRef.current?.({ focusDestination: () => b.focusDestination(), returnHome: () => b.board() });
+    stageRef.current?.({ focusDestination: () => b.focusDestination(), returnHome: () => b.board(), destinationScreen: () => b.destinationScreen() });
     // read-only screen lookups so browser tests can click an island the way a person does
     const probe = {
       islandScreen: (name: string) => b.islandScreen(name),
