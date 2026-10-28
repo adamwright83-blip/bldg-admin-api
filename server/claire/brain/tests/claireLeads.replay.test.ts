@@ -587,7 +587,7 @@ describe("2026-10-27 — relief and deferral on the evening call", () => {
 
   it("deferral: 'I'll do it tomorrow' moves what Claire just placed, with a receipt", async () => {
     const h = harness();
-    const move = vi.fn(async () => 1);
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
     h.deps.moveDayLineCommitments = move;
     const state = scheduledState(showrunnerOpening(briefing()));
     state.recentDayLineCommits = [{ ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
@@ -596,6 +596,52 @@ describe("2026-10-27 — relief and deferral on the evening call", () => {
     expect(result.speak).toBe("Moved to tomorrow: Follow up with Dana.");
     expect(state.recentDayLineCommits?.[0]?.businessDate).toBe(TOMORROW);
     expect(h.grants).toHaveLength(0);
+  });
+
+  it("deferral moves only the item meant, not everything placed this half hour", async () => {
+    const h = harness();
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [
+      { ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 120_000 },
+      { ids: ["c-opus"], title: "Pickup at OPUS", businessDate: TODAY, atMs: START_MS - 90_000 },
+      { ids: ["c-ad"], title: "Post the Instagram ad", businessDate: TODAY, atMs: START_MS - 30_000 },
+    ];
+    // Named: the Dana one, even though two later rows were placed after it.
+    const named = await runClaireV2PrimaryTurn(turn(state, "I'll send the Dana email tomorrow."), h.deps);
+    expect(move).toHaveBeenLastCalledWith({ commitmentIds: ["c-dana"], toBusinessDate: TOMORROW });
+    expect(named.speak).toBe("Moved to tomorrow: Follow up with Dana.");
+    expect(state.recentDayLineCommits.map(c => [c.ids[0], c.businessDate])).toEqual([
+      ["c-dana", TOMORROW],
+      ["c-opus", TODAY],
+      ["c-ad", TODAY],
+    ]);
+    // Unnamed: the most recent one only.
+    const latest = await runClaireV2PrimaryTurn(turn(state, "Tomorrow."), h.deps);
+    expect(move).toHaveBeenLastCalledWith({ commitmentIds: ["c-ad"], toBusinessDate: TOMORROW });
+    expect(latest.speak).toBe("Moved to tomorrow: Post the Instagram ad.");
+    expect(state.recentDayLineCommits.find(c => c.ids[0] === "c-opus")?.businessDate).toBe(TODAY);
+  });
+
+  it("deferral confirms only the rows the table shows moved", async () => {
+    const h = harness();
+    // Two rows behind one title; the database moves one.
+    h.deps.moveDayLineCommitments = vi.fn(async () => ["c-1"]);
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-1", "c-2"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do it tomorrow."), h.deps);
+    expect(result.speak).toBe("Part of Follow up with Dana moved to tomorrow; I couldn't move the rest.");
+    expect(result.actionIds).toEqual(["c-1"]);
+    expect(result.mutationReceipts?.map(r => r.entityId)).toEqual(["c-1"]);
+    expect(state.recentDayLineCommits.map(c => [c.ids, c.businessDate])).toEqual([
+      [["c-1"], TOMORROW],
+      [["c-2"], TODAY],
+    ]);
+    // A mover that reports nothing moved is never a success.
+    h.deps.moveDayLineCommitments = vi.fn(async () => []);
+    const none = await runClaireV2PrimaryTurn(turn(state, "Push it to tomorrow."), h.deps);
+    expect(none.speak).toBe("I couldn't move that to tomorrow just now.");
   });
 
   it("deferral without a mover never claims the move", async () => {

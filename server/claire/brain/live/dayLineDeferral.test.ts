@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deferralTarget,
   deferralToTomorrow,
   recentDayLineCommits,
   rememberDayLineCommit,
@@ -57,5 +58,38 @@ describe("deferral to tomorrow (2026-10-27 evening call)", () => {
         today: "2026-10-27",
       })
     ).toEqual([]);
+  });
+
+  it("picks the named commit, else the most recent, never all of them", () => {
+    const commits = [
+      {
+        ids: ["c-dana"],
+        title: "Follow up with Dana",
+        businessDate: "2026-10-27",
+        atMs: 1,
+      },
+      {
+        ids: ["c-opus"],
+        title: "Pickup at OPUS",
+        businessDate: "2026-10-27",
+        atMs: 2,
+      },
+      {
+        ids: ["c-ad"],
+        title: "Post the Instagram ad",
+        businessDate: "2026-10-27",
+        atMs: 3,
+      },
+    ];
+    expect(
+      deferralTarget(commits, "I'll send the Dana email tomorrow.")?.ids
+    ).toEqual(["c-dana"]);
+    expect(
+      deferralTarget(commits, "Let's do the Opus pickup in the morning.")?.ids
+    ).toEqual(["c-opus"]);
+    expect(deferralTarget(commits, "I'll do it tomorrow.")?.ids).toEqual([
+      "c-ad",
+    ]);
+    expect(deferralTarget([], "Tomorrow.")).toBeNull();
   });
 });

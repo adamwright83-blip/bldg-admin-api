@@ -174,6 +174,7 @@ import type { PromiseScope } from "../../promiseReconciler";
 import { capSpokenReply } from "../../speech/spokenReplyCap";
 import { addDaysYmd } from "../../../analytics/businessPeriods";
 import {
+  deferralTarget,
   deferralToTomorrow,
   recentDayLineCommits,
   rememberDayLineCommit,
@@ -206,9 +207,10 @@ export type ClaireV2PrimaryDeps = {
   resolvePromiseScope?: () => Promise<PromiseScope | null>;
   /**
    * Moves open Day Line rows Claire placed on this call to another business date.
-   * Returns the number moved. Optional: without it a deferral is answered honestly as not moved.
+   * Returns the ids actually on the target date afterwards, read back. Optional: without it a
+   * deferral is answered honestly as not moved.
    */
-  moveDayLineCommitments?: (input: { commitmentIds: string[]; toBusinessDate: string }) => Promise<number>;
+  moveDayLineCommitments?: (input: { commitmentIds: string[]; toBusinessDate: string }) => Promise<string[]>;
   commitPendingDisclosures: () => Promise<void>;
   /**
    * The scheduled-call conductor (morning readiness, evening debrief). V2 runs
@@ -858,24 +860,36 @@ export async function runClaireV2PrimaryTurn(
     // The adapter dates a row from the turn that created it, so a deferral spoken one turn later
     // used to leave the row on today and Claire's "it's on today's Day Line" standing. (2026-10-27)
     const recentCommits = recentDayLineCommits(state.recentDayLineCommits, { nowMs, today: input.businessDate });
-    if (recentCommits.length && deferralToTomorrow(utterance)) {
+    const target = recentCommits.length && deferralToTomorrow(utterance) ? deferralTarget(recentCommits, utterance) : null;
+    if (target) {
       const toBusinessDate = addDaysYmd(input.businessDate, 1);
-      const ids = [...new Set(recentCommits.flatMap(commit => commit.ids))];
+      const requested = [...new Set(target.ids)];
+      // Only the rows the table shows on tomorrow afterwards are confirmed; a count is not a receipt.
       const moved = deps.moveDayLineCommitments
-        ? await deps.moveDayLineCommitments({ commitmentIds: ids, toBusinessDate }).catch(() => 0)
-        : 0;
-      if (moved > 0) {
-        state.recentDayLineCommits = (state.recentDayLineCommits ?? []).map(commit =>
-          recentCommits.includes(commit) ? { ...commit, businessDate: toBusinessDate } : commit
+        ? (await deps.moveDayLineCommitments({ commitmentIds: requested, toBusinessDate }).catch(() => [] as string[])).filter(id =>
+            requested.includes(id)
+          )
+        : [];
+      if (moved.length) {
+        const unmoved = requested.filter(id => !moved.includes(id));
+        state.recentDayLineCommits = (state.recentDayLineCommits ?? []).flatMap(commit =>
+          commit === target
+            ? [
+                { ...commit, ids: moved, businessDate: toBusinessDate },
+                ...(unmoved.length ? [{ ...commit, ids: unmoved }] : []),
+              ]
+            : [commit]
         );
-        const titles = [...new Set(recentCommits.map(commit => commit.title))].join(", ");
+        const line = unmoved.length
+          ? `Part of ${target.title} moved to tomorrow; I couldn't move the rest.`
+          : `Moved to tomorrow: ${target.title}.`;
         return finish(
           {
             speak: "",
-            receiptBackedCommit: `Moved to tomorrow: ${titles}.`,
-            mutationReceipts: ids.map(id => ({ claimedState: "updated", entityId: id, statement: `${titles} moved to ${toBusinessDate}` })),
+            receiptBackedCommit: line,
+            mutationReceipts: moved.map(id => ({ claimedState: "updated", entityId: id, statement: `${target.title} moved to ${toBusinessDate}` })),
             kind: "briefing_saved",
-            actionIds: ids,
+            actionIds: moved,
           },
           "action",
           null,

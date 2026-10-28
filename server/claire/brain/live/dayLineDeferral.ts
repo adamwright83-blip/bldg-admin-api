@@ -56,6 +56,71 @@ export function recentDayLineCommits(
   );
 }
 
+const TARGET_STOPWORDS = new Set([
+  "follow",
+  "with",
+  "that",
+  "this",
+  "from",
+  "into",
+  "then",
+  "them",
+  "they",
+  "will",
+  "just",
+  "tomorrow",
+  "morning",
+  "tonight",
+  "email",
+  "text",
+  "call",
+  "visit",
+  "pitch",
+  "send",
+  "check",
+  "drop",
+  "pick",
+  "the",
+  "and",
+  "for",
+  "about",
+]);
+
+function titleTokens(title: string): string[] {
+  return title
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .map(token => token.replace(/'s$/, ""))
+    .filter(token => token.length >= 4 && !TARGET_STOPWORDS.has(token));
+}
+
+/**
+ * Which recent commit a deferral means. A name from one commit's title in the
+ * operator's words ("the Dana email") picks that commit; otherwise the deferral
+ * means the one Claire placed most recently. Never every recent commit: three
+ * unrelated rows placed in the same half hour are three decisions, not one.
+ */
+export function deferralTarget(
+  commits: readonly RecentDayLineCommit[],
+  utterance: string
+): RecentDayLineCommit | null {
+  if (!commits.length) return null;
+  const words = new Set(
+    utterance
+      .toLowerCase()
+      .split(/[^a-z0-9']+/)
+      .map(token => token.replace(/'s$/, ""))
+      .filter(Boolean)
+  );
+  const named = commits.filter(commit =>
+    titleTokens(commit.title).some(token => words.has(token))
+  );
+  const pool = named.length ? named : commits;
+  return pool.reduce((latest, commit) =>
+    commit.atMs >= latest.atMs ? commit : latest
+  );
+}
+
 export function rememberDayLineCommit(
   commits: readonly RecentDayLineCommit[] | undefined,
   commit: RecentDayLineCommit
