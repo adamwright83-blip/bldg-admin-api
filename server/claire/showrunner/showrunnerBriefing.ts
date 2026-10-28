@@ -90,6 +90,12 @@ export type ShowrunnerBriefing = {
    * question. At most the first is asked on a call. Empty on a weekend for sales follow-ups unless asked.
    */
   carriedOpen?: CarriedOpenItem[];
+  /**
+   * Set by the dialer from the opening it actually spoke: false when the opening shed the carried
+   * item's question to fit the spoken budget. The reply reader then never binds a bare "yes" to an
+   * item that was not asked about. Unset means "derive it from the briefing".
+   */
+  openingAskedCarried?: boolean;
   /** The game master view: every Kingdom, Day 1 outcomes, progression, companions, chapters. Read only. */
   gameState?: ShowrunnerGameState | null;
   /**
@@ -619,10 +625,13 @@ function preparedVisitsLine(b: ShowrunnerBriefing): string | null {
  * The carried open item the opening ASKS about on this call, or null. Shared by the opening and the
  * call's reply reader so a reply is only read as that item's answer when its question was asked.
  */
-export function carriedItemAsked(b: Pick<ShowrunnerBriefing, "carriedOpen" | "standing" | "preparedItems">) {
+export function carriedItemAsked(b: ShowrunnerBriefing) {
   if (preparedItemSpoken(b)) return null;
   const held = b.standing?.heldTopics ?? [];
-  return b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  const carried = b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  if (!carried) return null;
+  const asked = b.openingAskedCarried ?? composeShowrunnerOpening(b).askedCarried;
+  return asked ? carried : null;
 }
 
 /**
@@ -673,6 +682,24 @@ export function fitOpeningToBudget(
 
 /** The spoken opening, built only from briefing facts. Goal first, then the one move. */
 export function showrunnerOpening(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions = {}): string {
+  return composeShowrunnerOpening(b, options).text;
+}
+
+/**
+ * The opening and whether it kept the carried item's yes/no question. The dialer records
+ * `askedCarried` on the briefing so the reply reader binds "yes" only to a question that was asked.
+ */
+export function composeShowrunnerOpening(
+  b: ShowrunnerBriefing,
+  options: ShowrunnerOpeningOptions = {}
+): { text: string; askedCarried: boolean } {
+  const text = composeOpeningText(b, options);
+  const held = b.standing?.heldTopics ?? [];
+  const carried = preparedItemSpoken(b) ? null : b.carriedOpen?.find(item => !isHeldTopicItem({ title: item.title }, held)) ?? null;
+  return { text, askedCarried: Boolean(carried && text.includes(carried.question)) };
+}
+
+function composeOpeningText(b: ShowrunnerBriefing, options: ShowrunnerOpeningOptions): string {
   const tone = options.tone ?? null;
   if (b.purpose === "morning_readiness" || b.purpose === "evening_debrief") {
     const held = b.standing?.heldTopics ?? [];

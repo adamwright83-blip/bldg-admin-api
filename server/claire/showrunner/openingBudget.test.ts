@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   OPENING_SPOKEN_BUDGET_CHARS,
+  carriedItemAsked,
+  composeShowrunnerOpening,
   fitOpeningToBudget,
   showrunnerOpening,
   type ShowrunnerBriefing,
@@ -110,5 +112,29 @@ describe("opening budget", () => {
     const opening = showrunnerOpening(brief);
     expect(opening.length).toBeLessThanOrEqual(OPENING_SPOKEN_BUDGET_CHARS);
     expect(opening).toMatch(/Did Stella's dresses get hung\?$/);
+  });
+
+  it("the reply reader binds 'yes' only to a carried question the opening kept", () => {
+    const long = longEvening();
+    const dropped = composeShowrunnerOpening(long);
+    expect(dropped.askedCarried).toBe(false);
+    // Derived when the dialer did not record it, and honoured when it did.
+    expect(carriedItemAsked(long)).toBeNull();
+    expect(
+      carriedItemAsked({ ...long, openingAskedCarried: false })
+    ).toBeNull();
+
+    const short = {
+      ...long,
+      driverDayLine: null,
+      goal: null,
+      objective: null,
+    } as ShowrunnerBriefing;
+    const kept = composeShowrunnerOpening(short);
+    expect(kept.askedCarried).toBe(true);
+    expect(carriedItemAsked(short)?.title).toBe("Hang Stella's dresses");
+    expect(
+      carriedItemAsked({ ...short, openingAskedCarried: true })?.title
+    ).toBe("Hang Stella's dresses");
   });
 });

@@ -205,5 +205,5 @@ export function rememberDayLineCommit(
   commits: readonly RecentDayLineCommit[] | undefined,
   commit: RecentDayLineCommit
 ): RecentDayLineCommit[] {
-  return [...(commits ?? []), commit].slice(-6);
+  return [...(commits ?? []), commit].slice(-12);
 }

@@ -185,4 +185,30 @@ describe("draft-and-text-me request (2026-10-27 evening call)", () => {
     );
     expect(outcome).toBeNull();
   });
+
+  it("keeps the draft after a successful send so 'text me that' resends the draft", async () => {
+    const outcome = await executeDraftAndTextMeRequest(
+      {
+        tenantId: "t",
+        operatorUserId: "o",
+        utterance: "Draft the Dana email and text it to me.",
+        history,
+      },
+      {
+        applyDecision: vi.fn(async () => accepted()),
+        compose: async () => "Hi Dana, quick follow-up on The Louise.",
+        composerAvailable: () => true,
+      }
+    );
+    expect(outcome!.providerAccepted).toBe(true);
+    const next = appendOperatorDraftVoiceHistory(history, {
+      operatorText: "Draft the Dana email and text it to me.",
+      outcome: outcome!,
+      at: 3,
+    });
+    expect(next.at(-1)?.text).toBe(OPERATOR_DRAFT_SENT_SPEAK);
+    expect(latestClaireArtifactText(next)).toBe(
+      "Hi Dana, quick follow-up on The Louise."
+    );
+  });
 });

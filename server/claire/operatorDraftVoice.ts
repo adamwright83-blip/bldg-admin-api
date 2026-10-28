@@ -235,9 +235,9 @@ export async function executeDraftAndTextMeRequest(
 }
 
 /**
- * History after a draft turn. On a failed send the draft is kept as a Claire
- * line ahead of the status line so a later "text me that" resends the draft,
- * not the words "I couldn't text it".
+ * History after a draft turn. The draft is kept as a Claire line ahead of the
+ * status line, sent or not, so a later "text me that" resends the draft, not
+ * the status words or an older line.
  */
 export function appendOperatorDraftVoiceHistory(
   history: readonly ClaireTurnHistoryEntry[],
@@ -255,7 +255,9 @@ export function appendOperatorDraftVoiceHistory(
       at: input.at,
     });
   }
-  if (input.outcome.draft && !input.outcome.providerAccepted) {
+  // The draft is kept whether or not the text went out, so "text me that" resends the draft and a
+  // follow-up revision can see what was written; status lines are skipped by the resend lane.
+  if (input.outcome.draft) {
     additions.push({
       speaker: "claire",
       text: input.outcome.draft.slice(0, 1_200),

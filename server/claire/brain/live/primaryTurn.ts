@@ -1081,19 +1081,20 @@ export async function runClaireV2PrimaryTurn(
     if (executed && !leadPlanned) {
       if (state.showrunner) state.showrunner.turns += 1;
       if (executed.kind === "briefing_saved" && executed.actionIds?.length) {
-        // Remember what landed and on which day, so "I'll do it tomorrow" a turn later can move it.
+        // Remember what landed and on which day, one entry per saved row, so "I'll do the Dana email
+        // tomorrow" a turn later moves only Dana's row even when one briefing saved several tasks.
         const committedGrant = decision.actionGrants.find(grant => grant.actionClass === "commit_day_line" || grant.actionClass === "propose_day_line");
-        const title =
-          executed.mutationReceipts?.map(receipt => receipt.statement).filter(Boolean).join(", ") ||
-          committedGrant?.scope.titles?.join(", ") ||
-          "that";
-        const saidTomorrow = /\btomorrow\b/i.test(utterance);
-        state.recentDayLineCommits = rememberDayLineCommit(state.recentDayLineCommits, {
-          ids: executed.actionIds,
-          title,
-          businessDate: saidTomorrow ? addDaysYmd(input.businessDate, 1) : input.businessDate,
-          atMs: nowMs,
-        });
+        const scopeTitles = committedGrant?.scope.titles ?? [];
+        const ids = [...new Set(executed.actionIds)];
+        const businessDate = /\btomorrow\b/i.test(utterance) ? addDaysYmd(input.businessDate, 1) : input.businessDate;
+        for (const [index, id] of ids.entries()) {
+          const title =
+            executed.mutationReceipts?.find(receipt => receipt.entityId === id)?.statement?.trim() ||
+            (scopeTitles.length === ids.length ? scopeTitles[index] : null) ||
+            (ids.length === 1 ? scopeTitles.join(", ") || null : null) ||
+            "that";
+          state.recentDayLineCommits = rememberDayLineCommit(state.recentDayLineCommits, { ids: [id], title, businessDate, atMs: nowMs });
+        }
       }
       return finish(
         { ...executed, endCall: executed.endCall || turn.candidateEndCall || undefined },
