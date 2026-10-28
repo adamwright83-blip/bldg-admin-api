@@ -51,3 +51,43 @@ belongs only to an unreleased season. It holds salted hashes, not words. CI runs
 pnpm exec vitest run server/story shared/story.test.ts
 DATABASE_URL=mysql://root:root@127.0.0.1:3407/story_test pnpm exec vitest run --config vitest.integration.config.ts server/story
 ```
+
+## Home presentation metadata (cinematic home)
+
+Keep location in the existing chapter `config` JSON. For the real Chapter 1, Claude should add
+`"location": "century_park_east"` to that chapter's `config` in the private season file and reseed it.
+For Chapter 1’s floating illuminated floor, also add `"anomaly": "lit_floor"` in `config`.
+This optional validated presentation cue is projected by `tonight`; without it no fictional floor is rendered.
+Reseed only after this PR’s spoiler-safe server changes have merged and deployed.
+
+The validated values currently correspond to existing landmark ids: `century_park_east` and `opus_la`.
+No schema migration is needed. Season 0 includes both values for visual verification.
+
+`system.story.tonight` projects only the reached chapter's validated location, so Home can frame it
+before Play. It does not expose the rest of the game config. Existing seasons without a location
+retain the broad city framing. `system.story.start` continues delivering game config through the
+existing story client.
+
+Optional authored closing content also lives in `config`:
+
+```json
+{
+  "location": "century_park_east",
+  "anomaly": "lit_floor",
+  "closing": {
+    "responses": { "left": "Placeholder response to left.", "right": "Placeholder response to right." },
+    "keepsake": { "title": "Placeholder keepsake", "text": "Placeholder keepsake description." },
+    "tomorrow": "Placeholder invitation for tomorrow."
+  }
+}
+```
+
+Response keys must match the chapter's answer option keys. Author real text in the private season;
+never copy it into components or public fixtures. Closing metadata is removed from `start` game
+config. Only after a win and a saved answer (or a win for chapters without questions), `tonight`
+returns the selected response, keepsake and teaser. Other responses stay server-side. Home can
+revisit the current earned ending without starting a second game. This does not create business
+progress or an inventory spanning earlier nights.
+
+The story registry currently contains only `fixture.button`. Customer release still needs the
+approved real game and authored presentation content; the new shell does not replace either.

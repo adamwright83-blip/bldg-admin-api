@@ -108,6 +108,36 @@ describe("story service: feature flag", () => {
 });
 
 describe("story service: a full night", () => {
+  it("projects only the reached location and withholds all closing content until answered", async () => {
+    const h = harness();
+    const first = await h.service.tonight(ADAM);
+    expect(first).toMatchObject({ chapter: { location: "century_park_east", anomaly: "lit_floor" } });
+    expect(JSON.stringify(first)).not.toContain("keepsake");
+    const opened = await h.service.start(ADAM, 1);
+    expect(opened.config.location).toBe("century_park_east");
+    expect(opened.config).not.toHaveProperty("closing");
+    await h.service.finish(ADAM, { chapterNumber: 1, outcome: "win" });
+    expect(JSON.stringify(await h.service.tonight(ADAM))).not.toContain(
+      "keepsake"
+    );
+    await h.service.answer(ADAM, {
+      questionKey: "s0.first",
+      optionKey: "left",
+    });
+    const ended = await h.service.tonight(ADAM);
+    expect(ended).toMatchObject({
+      chapter: {
+        closing: {
+          response: "Placeholder response to left.",
+          keepsake: { title: "Placeholder keepsake" },
+        },
+      },
+    });
+    expect(JSON.stringify(ended)).not.toContain("response to right");
+    expect(JSON.stringify(await h.service.tonight(OTHER))).not.toContain(
+      "keepsake"
+    );
+  });
   it("shows chapter 1 without its ending, then the ending and question after a win", async () => {
     const h = harness();
     const first = await h.service.tonight(ADAM);

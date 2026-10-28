@@ -137,11 +137,12 @@ export function claimDailyIntro(
   env: { now?: Date; reducedMotion?: boolean; search?: string; storage?: Pick<Storage, "getItem" | "setItem"> | null } = {}
 ): boolean {
   const search = env.search ?? (typeof window !== "undefined" ? window.location.search : "");
-  if (new URLSearchParams(search).get("intro") === "1") return true;
+
   const reduced =
     env.reducedMotion ??
     (typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   if (reduced) return false;
+  if (new URLSearchParams(search).get("intro") === "1") return true;
   const today = localDay(env.now ?? new Date());
   let storage = env.storage;
   if (storage === undefined) {

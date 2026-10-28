@@ -114,9 +114,9 @@ describe("claimDailyIntro", () => {
     expect(claimDailyIntro({ now: nextMorning, reducedMotion: false, search: "", storage })).toBe(true);
   });
 
-  it("never plays with reduced motion, unless forced with ?intro=1", () => {
+  it("never plays with reduced motion, including a forced intro", () => {
     expect(claimDailyIntro({ now: evening, reducedMotion: true, search: "", storage: memory() })).toBe(false);
-    expect(claimDailyIntro({ now: evening, reducedMotion: true, search: "?intro=1", storage: memory() })).toBe(true);
+    expect(claimDailyIntro({ now: evening, reducedMotion: true, search: "?intro=1", storage: memory() })).toBe(false);
   });
 
   it("plays when storage is unavailable rather than failing", () => {

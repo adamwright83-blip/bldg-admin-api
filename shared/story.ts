@@ -45,6 +45,37 @@ export const storyLineSchema = z
   .strict();
 export type StoryLineInput = z.infer<typeof storyLineSchema>;
 
+export const storyAnomalySchema = z.enum(["lit_floor"]);
+export type StoryAnomaly = z.infer<typeof storyAnomalySchema>;
+export const storyLocationSchema = z.enum(["century_park_east", "opus_la"]);
+export type StoryLocation = z.infer<typeof storyLocationSchema>;
+/** Presentation metadata stays in the existing chapter config; arbitrary game settings remain supported. */
+export const storyClosingSchema = z
+  .object({
+    responses: z.record(key, z.string().trim().min(1).max(1000)).optional(),
+    keepsake: z
+      .object({
+        title: z.string().trim().min(1).max(100),
+        text: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .optional(),
+    tomorrow: z.string().trim().min(1).max(300).optional(),
+  })
+  .strict();
+export type StoryClosing = {
+  response?: string;
+  keepsake?: { title: string; text: string };
+  tomorrow?: string;
+};
+export const storyConfigSchema = z
+  .object({
+    location: storyLocationSchema.optional(),
+    anomaly: storyAnomalySchema.optional(),
+    closing: storyClosingSchema.optional(),
+  })
+  .passthrough();
+
 export const storyChapterSchema = z
   .object({
     number: z.number().int().min(1).max(99),
@@ -53,7 +84,7 @@ export const storyChapterSchema = z
     title: z.string().trim().min(1).max(200),
     /** The question asked after a win, if any. Its text is the `question` line; its choices are `option` lines. */
     questionKey: key.optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
+    config: storyConfigSchema.optional(),
     lines: z.array(storyLineSchema).min(1),
   })
   .strict()
@@ -107,6 +138,10 @@ export type StoryTonight =
         title: string;
         gameKey: string;
         before: StoryResolvedLine[];
+        location?: StoryLocation;
+        anomaly?: StoryAnomaly;
+        /** Earned closing content only, with the selected response resolved server-side. */
+        closing?: StoryClosing;
         /** Present once tonight's chapter is won, so a reload after the win still shows the ending and the question. */
         after?: StoryResolvedLine[];
         question?: StoryQuestion;

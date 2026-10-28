@@ -1,3 +1,4 @@
+import { storyLocationSchema, storyClosingSchema, storyAnomalySchema } from "../../shared/story";
 import type { StoryOutcome, StoryQuestion, StoryResolvedLine, StoryTonight } from "../../shared/story";
 import {
   answerDecision,
@@ -97,10 +98,23 @@ export function createStoryService(deps: StoryServiceDeps) {
         title: chapter.title,
         gameKey: chapter.gameKey,
         before: resolveSlot(rows, "before", context),
+        location: storyLocationSchema.safeParse(chapter.config?.location).data,
+        anomaly: storyAnomalySchema.safeParse(chapter.config?.anomaly).data,
       };
       if (availability.state === "won_tonight") {
         view.after = resolveSlot(rows, "after", context);
         view.question = questionFor(chapter, rows, context);
+        const closing = storyClosingSchema.safeParse(chapter.config?.closing);
+        if (
+          closing.success &&
+          (!chapter.questionKey || view.question?.answered)
+        ) {
+          view.closing = {
+            response: closing.data.responses?.[view.question?.answered ?? ""],
+            keepsake: closing.data.keepsake,
+            tomorrow: closing.data.tomorrow,
+          };
+        }
       }
       return { ...base, state: availability.state, chapter: view };
     },
@@ -113,7 +127,9 @@ export function createStoryService(deps: StoryServiceDeps) {
       if (!chapter) throw new StoryAccessError("chapter_locked");
       // Touches only the last-played fields, and only once a night, so it cannot undo a win that lands meanwhile.
       if (progress.lastPlayedOn !== today) await deps.store.markPlayed(scope, today, daysAwayOf(progress, today));
-      return { chapterNumber, gameKey: chapter.gameKey, config: chapter.config ?? {} };
+      // The game gets its settings, never the earned ending metadata.
+      const { closing: _closing, ...config } = chapter.config ?? {};
+      return { chapterNumber, gameKey: chapter.gameKey, config };
     },
 
     async finish(

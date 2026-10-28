@@ -44,6 +44,14 @@ const day = (iso?: string) => {
  * Islands open only on real customers from the geographic-truth atlas; a customer's home burns
  * gold; islands with none yet sit under cloud. OPUS LA and Century Park East open floor by floor.
  */
+/** What the account home may ask of the camera. Both are safe to call before the board is ready. */
+export type LanternStage = {
+  /** A short approach to tonight's destination; resolves at once with reduced motion or no destination. */
+  focusDestination(): Promise<void>;
+  /** Back to the home framing. */
+  returnHome(): void;
+};
+
 export default function LanternCityIslands({
   onOpenCustomer,
   onNavigate,
@@ -56,7 +64,10 @@ export default function LanternCityIslands({
   homeChrome = false,
   insetLeft = 0,
   skyBoard = false,
+  storyLocation,
+  storyAnomaly,
   onEmbeddedChange,
+  onStage,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -78,8 +89,12 @@ export default function LanternCityIslands({
   insetLeft?: number;
   /** The account home: the glass game board loops over the city and the camera sits lower, showing the sky. Read once, at mount. */
   skyBoard?: boolean;
+  storyLocation?: import("@shared/story").StoryLocation;
+  storyAnomaly?: import("@shared/story").StoryAnomaly;
   /** A full-screen view opened from the board (a tower's floors, Small Comforts) opened or closed. */
   onEmbeddedChange?: (open: boolean) => void;
+  /** The account home's handle on the camera for entering tonight's chapter and coming back; null once the board is gone. */
+  onStage?: (stage: LanternStage | null) => void;
 }) {
   const { user } = useAuth();
   const host = useRef<HTMLDivElement>(null);
@@ -109,6 +124,10 @@ export default function LanternCityIslands({
   introPhaseRef.current = onIntroPhase;
   const introAtMount = useRef(intro);
   const skyBoardAtMount = useRef(skyBoard);
+  const storyLocationRef = useRef(storyLocation);
+  storyLocationRef.current = storyLocation;
+  const stageRef = useRef(onStage);
+  stageRef.current = onStage;
   const insetAtMount = useRef(insetLeft);
   insetAtMount.current = insetLeft;
 
@@ -174,7 +193,7 @@ export default function LanternCityIslands({
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
-      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current });
+      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current, storyAnomaly });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
       console.warn("Lantern City needs WebGL", e);
@@ -183,6 +202,7 @@ export default function LanternCityIslands({
     }
     board.current = b;
     b.setInsetLeft(insetAtMount.current);
+    stageRef.current?.({ focusDestination: () => b.focusDestination(), returnHome: () => b.board() });
     // read-only screen lookups so browser tests can click an island the way a person does
     const probe = {
       islandScreen: (name: string) => b.islandScreen(name),
@@ -195,6 +215,7 @@ export default function LanternCityIslands({
     };
     (window as unknown as { __lanternIslands?: typeof probe }).__lanternIslands = probe;
     return () => {
+      stageRef.current?.(null);
       b.dispose();
       board.current = null;
       const w = window as unknown as { __lanternIslands?: typeof probe };
@@ -223,6 +244,7 @@ export default function LanternCityIslands({
   embeddedRef.current = onEmbeddedChange;
   useEffect(() => { embeddedRef.current?.(tower !== null || inSuitcase); }, [tower, inSuitcase]);
   useEffect(() => { board.current?.setInsetLeft(insetLeft); }, [insetLeft]);
+  useEffect(() => { board.current?.setStoryLocation(storyLocation); }, [storyLocation]);
   useEffect(() => {
     if (mode !== "report" || !territoryReport.data) return;
     if (selectedTerritoryId && territoryReport.data.territories.some(territory => territory.id === selectedTerritoryId)) return;
@@ -361,7 +383,7 @@ export default function LanternCityIslands({
         <TowerFloors buildingId={tower} customers={allCustomers} onClose={() => setTower(null)} onOpenCustomer={phone => onOpenCustomer(phone)} />
       ) : null}
 
-      {usingSample ? <div className={styles.sample}>Sample customers · dev build, no database</div> : null}
+      {usingSample ? <div className={styles.sample} data-lantern-state="sample">Sample customers · dev build, no database</div> : null}
       {showUtilityDock && mode === "explore" && !inSuitcase ? (
         <nav className={styles.dock} aria-label="Actions">
           <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>New order</button>
