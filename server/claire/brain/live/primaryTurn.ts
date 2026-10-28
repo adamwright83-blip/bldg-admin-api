@@ -860,7 +860,16 @@ export async function runClaireV2PrimaryTurn(
     // The adapter dates a row from the turn that created it, so a deferral spoken one turn later
     // used to leave the row on today and Claire's "it's on today's Day Line" standing. (2026-10-27)
     const recentCommits = recentDayLineCommits(state.recentDayLineCommits, { nowMs, today: input.businessDate });
-    const target = recentCommits.length && deferralToTomorrow(utterance) ? deferralTarget(recentCommits, utterance) : null;
+    const selection = recentCommits.length && deferralToTomorrow(utterance) ? deferralTarget(recentCommits, utterance) : null;
+    if (selection?.kind === "unmatched") {
+      // The operator named something Claire did not place on this call. Nothing moves.
+      return finish(
+        { speak: "I didn't put that on today's line on this call, so I left the line as it is.", kind: "answered", actionIds: [] },
+        "deterministic",
+        null
+      );
+    }
+    const target = selection?.kind === "target" ? selection.commit : null;
     if (target) {
       const toBusinessDate = addDaysYmd(input.businessDate, 1);
       const requested = [...new Set(target.ids)];

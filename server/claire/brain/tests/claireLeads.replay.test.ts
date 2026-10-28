@@ -644,6 +644,18 @@ describe("2026-10-27 — relief and deferral on the evening call", () => {
     expect(none.speak).toBe("I couldn't move that to tomorrow just now.");
   });
 
+  it("deferral naming a task Claire did not place moves nothing", async () => {
+    const h = harness();
+    const move = vi.fn(async ({ commitmentIds }: { commitmentIds: string[] }) => commitmentIds);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-opus"], title: "Pickup at OPUS", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do the Louise email tomorrow."), h.deps);
+    expect(move).not.toHaveBeenCalled();
+    expect(result.speak).toBe("I didn't put that on today's line on this call, so I left the line as it is.");
+    expect(state.recentDayLineCommits[0]?.businessDate).toBe(TODAY);
+  });
+
   it("deferral without a mover never claims the move", async () => {
     const h = harness();
     const state = scheduledState(showrunnerOpening(briefing()));

@@ -81,15 +81,31 @@ describe("deferral to tomorrow (2026-10-27 evening call)", () => {
         atMs: 3,
       },
     ];
-    expect(
-      deferralTarget(commits, "I'll send the Dana email tomorrow.")?.ids
-    ).toEqual(["c-dana"]);
-    expect(
-      deferralTarget(commits, "Let's do the Opus pickup in the morning.")?.ids
-    ).toEqual(["c-opus"]);
-    expect(deferralTarget(commits, "I'll do it tomorrow.")?.ids).toEqual([
+    const ids = (utterance: string) => {
+      const t = deferralTarget(commits, utterance);
+      return t.kind === "target" ? t.commit.ids : t.kind;
+    };
+    expect(ids("I'll send the Dana email tomorrow.")).toEqual(["c-dana"]);
+    expect(ids("Let's do the Opus pickup in the morning.")).toEqual(["c-opus"]);
+    expect(ids("I'll do it tomorrow.")).toEqual(["c-ad"]);
+    expect(ids("Yeah, I'm gonna handle that tomorrow morning.")).toEqual([
       "c-ad",
     ]);
-    expect(deferralTarget([], "Tomorrow.")).toBeNull();
+    expect(ids("Push it to tomorrow.")).toEqual(["c-ad"]);
+    expect(deferralTarget([], "Tomorrow.").kind).toBe("none");
+  });
+
+  it("a named task that matches nothing placed on this call moves nothing", () => {
+    const commits = [
+      {
+        ids: ["c-opus"],
+        title: "Pickup at OPUS",
+        businessDate: "2026-10-27",
+        atMs: 2,
+      },
+    ];
+    expect(
+      deferralTarget(commits, "I'll do the Louise email tomorrow.")
+    ).toEqual({ kind: "unmatched", named: ["louise"] });
   });
 });

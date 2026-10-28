@@ -95,30 +95,110 @@ function titleTokens(title: string): string[] {
 }
 
 /**
- * Which recent commit a deferral means. A name from one commit's title in the
- * operator's words ("the Dana email") picks that commit; otherwise the deferral
- * means the one Claire placed most recently. Never every recent commit: three
- * unrelated rows placed in the same half hour are three decisions, not one.
+ * Words a deferral uses that name no task: fillers, pronouns, time words and
+ * the deferral verbs themselves. Any other content word in the utterance is
+ * read as the operator naming a task.
+ */
+const DEFERRAL_FILLER = new Set([
+  ...TARGET_STOPWORDS,
+  "i'll",
+  "i'm",
+  "i've",
+  "we'll",
+  "let's",
+  "yeah",
+  "yep",
+  "okay",
+  "sure",
+  "fine",
+  "alright",
+  "gonna",
+  "going",
+  "probably",
+  "maybe",
+  "actually",
+  "honestly",
+  "think",
+  "guess",
+  "really",
+  "handle",
+  "deal",
+  "take",
+  "care",
+  "knock",
+  "tackle",
+  "finish",
+  "write",
+  "draft",
+  "push",
+  "move",
+  "bump",
+  "save",
+  "leave",
+  "until",
+  "till",
+  "first",
+  "thing",
+  "instead",
+  "works",
+  "better",
+  "tonight",
+  "today",
+  "right",
+  "now",
+  "later",
+  "there",
+  "it's",
+  "that's",
+  "those",
+  "these",
+]);
+
+export type DeferralTarget =
+  | { kind: "target"; commit: RecentDayLineCommit }
+  /** The operator named a task, and nothing Claire placed on this call matches it. */
+  | { kind: "unmatched"; named: string[] }
+  | { kind: "none" };
+
+function utteranceTokens(utterance: string): string[] {
+  return utterance
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .split(/[^a-z0-9']+/)
+    .map(token => token.replace(/'s$/, ""))
+    .filter(Boolean);
+}
+
+/**
+ * Which recent commit a deferral means.
+ * - A name from one commit's title in the operator's words ("the Dana email")
+ *   picks that commit, the most recent if several match.
+ * - No task named ("I'll do it tomorrow") means the one Claire placed most recently.
+ * - A task named that matches nothing placed on this call ("the Louise email"
+ *   when only an OPUS pickup was placed) moves nothing: it is never quietly read
+ *   as the latest item.
+ * Never every recent commit: three unrelated rows are three decisions, not one.
  */
 export function deferralTarget(
   commits: readonly RecentDayLineCommit[],
   utterance: string
-): RecentDayLineCommit | null {
-  if (!commits.length) return null;
-  const words = new Set(
-    utterance
-      .toLowerCase()
-      .split(/[^a-z0-9']+/)
-      .map(token => token.replace(/'s$/, ""))
-      .filter(Boolean)
-  );
-  const named = commits.filter(commit =>
+): DeferralTarget {
+  if (!commits.length) return { kind: "none" };
+  const tokens = utteranceTokens(utterance);
+  const words = new Set(tokens);
+  const latest = (pool: readonly RecentDayLineCommit[]) =>
+    pool.reduce((best, commit) => (commit.atMs >= best.atMs ? commit : best));
+  const matched = commits.filter(commit =>
     titleTokens(commit.title).some(token => words.has(token))
   );
-  const pool = named.length ? named : commits;
-  return pool.reduce((latest, commit) =>
-    commit.atMs >= latest.atMs ? commit : latest
-  );
+  if (matched.length) return { kind: "target", commit: latest(matched) };
+  const named = [
+    ...new Set(
+      tokens.filter(token => token.length >= 4 && !DEFERRAL_FILLER.has(token))
+    ),
+  ];
+  if (named.length) return { kind: "unmatched", named };
+  return { kind: "target", commit: latest(commits) };
 }
 
 export function rememberDayLineCommit(
