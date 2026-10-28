@@ -429,7 +429,8 @@ export function createDesk(settings: DeskSettings, opts: { rehearsed: boolean; s
       if (framing.cam === LOBBY && fig.visible && figBox && seen(figBox)) {
         if (!inside(figBox)) better("cropped");
         else if (size(figBox) < MIN_SIZE.figure) better("too_wide");
-        else if (!framing.indicator || !inside(framing.indicator, 0)) better("no_indicator");
+        // clear of the tube's curved edge, where the picture bends away
+        else if (!framing.indicator || !inside(framing.indicator, 0.05)) better("no_indicator");
         else {
           wonAt = t;
           return "figure";

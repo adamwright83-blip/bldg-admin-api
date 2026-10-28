@@ -227,12 +227,13 @@ export async function createDeskScene(
   // the indicator over the lobby doors, repainted when it changes
   const indCanvas = document.createElement("canvas");
   indCanvas.width = 256;
-  indCanvas.height = 64;
+  indCanvas.height = 72;
   const indTex = new THREE.CanvasTexture(indCanvas);
   indTex.colorSpace = THREE.SRGBColorSpace;
   const indMat = new THREE.MeshBasicMaterial({ map: indTex });
-  const indicator = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.34), indMat);
-  indicator.position.set(DOOR_X, fy(0) + 3.1, BACK + 0.38);
+  // larger than life, so a lit number reads through the tube on a thumbnail
+  const indicator = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.5), indMat);
+  indicator.position.set(DOOR_X, fy(0) + 3.24, BACK + 0.38);
   world.add(indicator);
   let indShown = "";
   const paintIndicator = (text: string, lit: boolean) => {
@@ -241,22 +242,23 @@ export async function createDeskScene(
     indShown = key;
     const g = indCanvas.getContext("2d")!;
     g.shadowBlur = 0;
-    g.fillStyle = lit ? "#3a2608" : "#15111d";
-    g.fillRect(0, 0, 256, 64);
-    g.font = "700 52px ui-monospace, Menlo, monospace";
+    g.fillStyle = "#050407";
+    g.fillRect(0, 0, 256, 72);
+    g.strokeStyle = "#6b5a3a";
+    g.lineWidth = 4;
+    g.strokeRect(2, 2, 252, 68);
+    g.font = "800 60px ui-monospace, Menlo, monospace";
     g.textAlign = "center";
     g.textBaseline = "middle";
     if (lit) {
       // lit: the numerals burn, and bloom a little into the panel around them
-      g.shadowColor = "#ffd88a";
-      g.shadowBlur = 22;
-      g.fillStyle = "#ffffff";
-      g.fillText(text, 128, 35);
+      g.shadowColor = "#ffb547";
+      g.shadowBlur = 6;
     }
-    g.fillStyle = lit ? "#ffffff" : "#d9a548";
-    g.fillText(text, 128, 35);
+    g.fillStyle = lit ? "#ffe2a8" : "#a87a30";
+    g.fillText(text, 128, 39);
     indTex.needsUpdate = true;
-    indMat.color.setScalar(lit ? 5 : 1.2);
+    indMat.color.setScalar(lit ? 1.7 : 0.8);
   };
   disposers.push(() => {
     cabTex.dispose();
@@ -392,7 +394,7 @@ export async function createDeskScene(
     c.cam.aspect = aspect;
     c.cam.updateProjectionMatrix();
     c.cam.position.copy(c.mount);
-    c.cam.lookAt(c.aim, fy(CAMS[i].floor) + 1.3, -2.9);
+    c.cam.lookAt(c.aim, fy(CAMS[i].floor) + 1.55, -2.9);
     // a security camera is never quite level
     c.cam.rotateZ(-0.012);
     c.cam.updateMatrixWorld();
@@ -555,7 +557,7 @@ export async function createDeskScene(
     let ind: FrameBox | null = null;
     if (sel === LOBBY) {
       const p = indicator.position;
-      ind = boxOf([new THREE.Vector3(p.x - 0.65, p.y - 0.17, p.z), new THREE.Vector3(p.x + 0.65, p.y + 0.17, p.z)], camera);
+      ind = boxOf([new THREE.Vector3(p.x - 0.9, p.y - 0.25, p.z), new THREE.Vector3(p.x + 0.9, p.y + 0.25, p.z)], camera);
     }
     return { cam: sel, boxes, indicator: ind };
   };
