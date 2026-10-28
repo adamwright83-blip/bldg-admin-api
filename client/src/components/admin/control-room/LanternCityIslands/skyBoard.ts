@@ -51,16 +51,15 @@ const GLASS_F = /* glsl */ `
     float d = fract(uTime * .065 - uPhase);
     float pulse = exp(-d * d * 90.) + exp(-(1. - d) * (1. - d) * 600.);
     // saturated glass: deep blue-violet in the walls, a clearer lilac-blue on top; gold on tonight's tile
-    vec3 wall = mix(vec3(.16, .28, .34), vec3(.95, .55, .14), uGold);
-    vec3 top = mix(vec3(.35, .5, .53), vec3(1.15, .86, .42), uGold);
+    vec3 wall = mix(vec3(.12, .23, .27), vec3(.48, .31, .15), uGold);
+    vec3 top = mix(vec3(.27, .39, .42), vec3(.96, .68, .3), uGold);
     vec3 col = mix(wall, top, up);
     // the bevels catch the light: an iridescent edge, pink to cyan with the angle, bright enough to bloom
     float edge = smoothstep(.3, .9, fres);
-    vec3 irid = .5 + .5 * cos(6.2832 * (fres * .8 + vec3(.0, .33, .67)) + .8);
-    vec3 edgeCol = mix(mix(vec3(1.), irid, .65), vec3(1.25, .95, .55), uGold);
-    col += edgeCol * edge * .45;
-    col += vec3(1., .85, .6) * pulse * (.08 + uGold * .12);
-    float a = (.26 + side * .22 + edge * .55 + pulse * .15 + uGold * .22) * uAlpha;
+    vec3 edgeCol = mix(vec3(.52, .71, .69), vec3(1.15, .82, .43), uGold);
+    col += edgeCol * edge * .18;
+    col += vec3(1., .85, .6) * pulse * (.015 + uGold * .035);
+    float a = (.22 + side * .16 + edge * .22 + pulse * .04 + uGold * .32) * uAlpha;
     gl_FragColor = vec4(col, clamp(a, 0., 1.));
     #include <fog_fragment>
   }`;
@@ -72,7 +71,7 @@ const GLOW_F = /* glsl */ `
   void main() {
     float d = fract(uTime * .065 - uPhase);
     float pulse = exp(-d * d * 90.) + exp(-(1. - d) * (1. - d) * 600.);
-    gl_FragColor = vec4(uColor * (1. + pulse * .2), uAlpha);
+    gl_FragColor = vec4(uColor * (1. + pulse * .05), uAlpha * .55);
     #include <fog_fragment>
   }`;
 
@@ -86,8 +85,8 @@ export function createSkyBoard(opts: SkyBoardOptions) {
   root.rotation.y = opts.yaw ?? 0;
   opts.parent.add(root);
   // the adventurer is the only lit material here: warm golden-hour sun and sky light, scoped to this group's use
-  const hemi = new THREE.HemisphereLight(0xffe6c8, 0x6f86c8, 1.3);
-  const sun = new THREE.DirectionalLight(0xffd2a0, 2.0);
+  const hemi = new THREE.HemisphereLight(0xd4e4df, 0x405660, 1.15);
+  const sun = new THREE.DirectionalLight(0xf0ca8b, 1.35);
   sun.position.set(-0.78, 0.5, 0.38);
   root.add(hemi, sun);
 
@@ -225,13 +224,13 @@ export function createSkyBoard(opts: SkyBoardOptions) {
         const near = Math.min(...ds), far = Math.max(...ds);
         tiles.forEach((t, i) => {
           const k = far > near ? (ds[i] - near) / (far - near) : 0;
-          const a = 1 - 0.78 * k * k;
+          const a = 1 - 0.86 * k * k;
           for (const u of t.alphas) u.value = a;
         });
       }
       time.value += dt;
       mixer?.update(dt);
-      for (const c of crystals) c.rotation.z += dt * 0.6;
+      for (const c of crystals) c.rotation.z += dt * 0.12;
       const now = time.value;
       for (const t of tiles) {
         // a gentle hover, out of step tile to tile

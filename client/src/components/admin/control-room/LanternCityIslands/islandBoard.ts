@@ -89,11 +89,12 @@ const COMMON = /* glsl */ `
     float sh = sunShadow(w, n);
     float lit = smoothstep(.02, .09, ndl) * sh;
     float hot = smoothstep(.55, .6, ndl) * sh;
-    vec3 sunC = vec3(1., .9, .76);
+    vec3 sunC = mix(vec3(1., .9, .76), vec3(.62, .72, .76), uHome);
     vec3 sky = mix(vec3(.36, .38, .58), vec3(.58, .67, .88), .5 + .5 * n.y);
+    sky = mix(sky, mix(vec3(.29, .41, .47), vec3(.46, .57, .58), .5 + .5 * n.y), uHome);
     float grey = dot(alb, vec3(.299,.587,.114));
-    alb = mix(alb, mix(vec3(grey), alb, .62), uHome);
-    return alb * (sky * .62 * ao + sunC * (lit * .86 + hot * .2));
+    alb = mix(alb, mix(vec3(grey), alb, .38) * vec3(.78, .89, .91), uHome);
+    return alb * (sky * mix(.62, .72, uHome) * ao + sunC * (lit * mix(.86, .34, uHome) + hot * mix(.2, .03, uHome)));
   }
 `;
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
@@ -102,7 +103,7 @@ const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean; storyLocation?: string; storyAnomaly?: string } = {}) {
   let storyLocation = opts.storyLocation;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const homeHaze = opts.skyBoard ? new THREE.Color("#809ca4") : HAZE;
+  const homeHaze = opts.skyBoard ? new THREE.Color("#3c6570") : HAZE;
   const ASSETS = opts.assetBase ?? DEFAULT_BASE;
   let disposed = false;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: !!opts.capture });
@@ -118,7 +119,13 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     c.width = 4; c.height = 256;
     const g = c.getContext("2d")!;
     const gr = g.createLinearGradient(0, 0, 0, 256);
-    gr.addColorStop(0, "#7fa6d6"); gr.addColorStop(0.5, "#b9c9e0"); gr.addColorStop(0.8, "#f1d4b2"); gr.addColorStop(1, "#f6c99a");
+    if (opts.skyBoard) {
+      gr.addColorStop(0, "#142631"); gr.addColorStop(0.55, "#284953");
+      gr.addColorStop(0.82, "#547379"); gr.addColorStop(1, "#b38a71");
+    } else {
+      gr.addColorStop(0, "#7fa6d6"); gr.addColorStop(0.5, "#b9c9e0");
+      gr.addColorStop(0.8, "#f1d4b2"); gr.addColorStop(1, "#f6c99a");
+    }
     g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -571,18 +578,42 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
         if (opts.skyBoard && L.id === storyLocation) {
           const height = L.h! * VS * S;
           if (opts.storyAnomaly === "lit_floor") {
-            // Authored fiction overlay only: the actual landmark and customer projection are unchanged.
-            const floor = new THREE.Mesh(new THREE.BoxGeometry(30*S, 14, 34*S), new THREE.MeshBasicMaterial({color: new THREE.Color(2.2, 1.45, .48), toneMapped:false}));
-            floor.position.set(x, H(x,z) + height + 26, z); floor.layers.set(INK_SKIP); world.add(floor);
-            const frame = new THREE.LineSegments(new THREE.EdgesGeometry(floor.geometry),new THREE.LineBasicMaterial({color:0xffefbf}));
-            floor.add(frame);
+            // A fictional room suspended above the real roof. This never changes customer lighting.
+            const room = new THREE.Group();
+            room.position.set(x, H(x, z) + height + 44, z);
+            room.layers.set(INK_SKIP);
+            const brass = new THREE.MeshBasicMaterial({ color: 0xb78343 });
+            const glass = new THREE.MeshBasicMaterial({ color: 0x65492d, transparent: true, opacity: .86 });
+            const light = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.08, .43), toneMapped: false });
+            const piece = (w: number, h: number, d: number, px: number, py: number, pz: number, material: THREE.Material) => {
+              const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+              mesh.position.set(px, py, pz);
+              mesh.layers.set(INK_SKIP);
+              room.add(mesh);
+            };
+            piece(30*S, 5, 34*S, 0, -15, 0, brass);
+            piece(27*S, 23, 31*S, 0, 0, 0, glass);
+            piece(30*S, 5, 34*S, 0, 15, 0, brass);
+            for (const side of [-1, 1]) for (const n of [-1, 0, 1]) {
+              piece(2, 25, 2, n * 30*S/3, 0, side * 34*S/2, brass);
+              piece(2, 25, 2, side * 30*S/2, 0, n * 34*S/3, brass);
+            }
+            const panes = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.45, .87, .34), toneMapped: false });
+            for (const side of [-1, 1]) for (const n of [-1, 0, 1]) {
+              piece(30*S/3 - 5, 15, 1, (n + .5) * 30*S/3 - 30*S/6, -1, side * (34*S/2 + 1), panes);
+              piece(1, 15, 34*S/3 - 5, side * (30*S/2 + 1), -1, (n + .5) * 34*S/3 - 34*S/6, panes);
+            }
+            piece(27*S, 4, 31*S, 0, -7, 0, light);
+            const halo = new THREE.Mesh(new THREE.RingGeometry(36*S, 43*S, 64), new THREE.MeshBasicMaterial({ color: 0xe0ad62, transparent: true, opacity: .26, side: THREE.DoubleSide, depthWrite: false }));
+            halo.rotation.x = -Math.PI / 2; halo.position.y = -31; halo.layers.set(INK_SKIP); room.add(halo);
+            world.add(room);
           }
           const cv = document.createElement("canvas"); cv.width=640; cv.height=128;
           const g=cv.getContext("2d")!;g.fillStyle="rgba(20,35,45,.94)";g.beginPath();g.roundRect(0,0,640,128,18);g.fill();
           g.strokeStyle="#d8ac59";g.lineWidth=3;g.stroke();g.fillStyle="#f3ebdd";g.textAlign="center";g.font='500 54px "DM Sans",sans-serif';g.fillText(L.name,320,83);
           const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
           storyLabel=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,sizeAttenuation:false}));
-          storyLabel.position.set(x,H(x,z)+height+180,z);storyLabel.renderOrder=20;labelScene.add(storyLabel);
+          storyLabel.position.set(x,H(x,z)+height+290,z);storyLabel.renderOrder=20;labelScene.add(storyLabel);
         }
         ourTowers.push({ id: L.id!, planId: id, x, z, h: L.h! * VS * S });
         isl.plans.push({ i: id, cx: id, cz: 0, h: L.h!, u: 0, type: "office", hood: isl.name, x: x / S, z: z / S, fx: 0, fz: 1, W: 30, D: 34, fill: 1 });
@@ -1199,7 +1230,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
           float glit = step(.6, vn(vW.xz * .12 + t * .6)) * sp * 8.;
           col += vec3(1., .8, .52) * min(sp * 1.5 + glit, 1.4) * mix(1.,.08,uHome);
           #if HOME_WATER == 1
-          col = mix(col, vec3(.08, .21, .26), .6);
+          col = mix(col, vec3(.035, .12, .17), .78);
           #endif
           // island shadows fall on the water
           float sh = sunShadow(vW, vec3(0., 1., 0.));
@@ -1346,9 +1377,10 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
             // golden-hour glass: the sky and the sunset reflected, a few rooms already lit
             vec3 sky = mix(vec3(.3, .38, .58), mix(vec3(1., .78, .56), vec3(.32, .48, .53), uHome), fres * .8 + .15);
             vec3 g = k == ${k(K.CURTAIN)} ? mix(alb * .6, sky, .6) : vec3(.12, .15, .24) + sky * .45;
+            g = mix(g, vec3(.07, .13, .16) + sky * .22, uHome);
             g *= .75 + .25 * sunShadow(vW, n);
             float lit = step(.8, cell);
-            g = mix(g, vec3(1., .78, .45) * 1.1, lit);
+            g = mix(g, vec3(1., .78, .45) * mix(1.1, 1.35, uHome), lit);
             col = mix(col, g, gm);
           }
           if (k == ${k(K.POOL)}) { float c = sin(lp.x * 1.7 + uTime * 1.3) * sin(lp.y * 1.9 - uTime * 1.1); col = vec3(.2, .82, .94) * (1. + .15 * c); }
@@ -1874,7 +1906,7 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     for (const L of order) {
       const open = (islandCounts.get(L.island) ?? 0) > 0;
       // the home names only the places with customers, and quieter, so the page has one focal point
-      if (opts.skyBoard && !open) { L.sprite.visible = false; labelRects.set(L.island, null); continue; }
+      if (opts.skyBoard && (!open || islands[L.island].name === "Century City" && storyLocation === "century_park_east")) { L.sprite.visible = false; labelRects.set(L.island, null); continue; }
       const px = opts.skyBoard ? 46 : open ? 72 : 54;       // label height on screen
       const s = (px * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h;
       L.sprite.scale.set(s * (640 / 190), s, 1);
@@ -2160,6 +2192,15 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     setStoryLocation(location?: string) {
       storyLocation = location;
       if (ready && opts.skyBoard) frameBoard();
+    },
+    /** A short, optional approach to the authored destination before entering the chapter. */
+    focusDestination(): Promise<void> {
+      const destination = ourTowers.find(t => t.id === storyLocation);
+      if (!opts.skyBoard || !ready || !destination || reducedMotion || disposed) return Promise.resolve();
+      return new Promise(resolve => {
+        const distance = Math.max(1750, camera.position.distanceTo(controls.target) * .68);
+        flyTo(destination.x, destination.z, distance, resolve);
+      });
     },
     enterSmallComforts,
     board() { activeIslandName = null; frameBoard(); },
