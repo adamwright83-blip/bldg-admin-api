@@ -178,9 +178,11 @@ function GlassStats() {
       {cards.map(card => (
         <div key={card.key} className="sh-glass-card">
           <span className="sh-glass-label">{card.label}</span>
-          <span className={card.view.wired ? "sh-glass-value" : "sh-glass-value is-not-wired"}>
+          <span
+            className={card.view.wired ? "sh-glass-value" : "sh-glass-value is-not-wired"}
+            title={card.view.recorded ? "What the books hold so far; not every source is confirmed for this stretch." : undefined}
+          >
             {card.view.text}
-            {card.view.recorded ? <span className="sh-metric-recorded" title="What the books hold so far; not every source is confirmed for this stretch.">recorded</span> : null}
           </span>
           {card.view.change ? (
             <span className={`sh-metric-change is-${card.view.change.direction}`} title={card.against ? `Against ${card.against}` : undefined}>
