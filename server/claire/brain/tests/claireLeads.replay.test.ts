@@ -551,3 +551,58 @@ describe("W1 — call hygiene units", () => {
     expect(spoken).toBe("Still open: Los Feliz Towers follow-up, The Louise and Visit sageLA.");
   });
 });
+
+/**
+ * 2026-10-27 evening call, replayed on the same harness. Adam: "I'm, like,
+ * overwhelmed right now. And I feel, like, mentally drained. So my hope is that
+ * you will tell me what to do." Prod answered with 459 characters, two
+ * suggestions and two questions, then put the follow-up on TODAY's line and kept
+ * it there after "I'll do it tomorrow."
+ */
+describe("2026-10-27 — relief and deferral on the evening call", () => {
+  it("relief: one move in one breath, no question back, no Day Line offer", async () => {
+    const h = harness();
+    const state = scheduledState(showrunnerOpening(briefing()));
+    const result = await runClaireV2PrimaryTurn(
+      turn(state, "I'm, like, overwhelmed right now. And I feel, like, mentally drained. So my hope is that you will tell me what to do tomorrow."),
+      h.deps
+    );
+    expect(result.brainV2.businessIntent).toBe("broad_briefing");
+    expect(result.speak).toBe("One thing tomorrow: follow up with The Louise. That's it; the rest can wait.");
+    expect(result.speak).not.toMatch(/\?/);
+    expect(result.speak).not.toMatch(/After that|Colosseum|50 active customers/);
+    expect(h.grants).toHaveLength(0);
+    expect(state.pendingBriefing ?? null).toBeNull();
+  });
+
+  it("a composed relief reply is capped to two sentences and zero questions in code", async () => {
+    const h = harness();
+    // A speaking organ that ignores the brevity instruction, as the 10-27 model did.
+    (h.deps as { speak: unknown }).speak = async () =>
+      "One thing tomorrow: follow up with The Louise. Dana has been overdue since August. Tomorrow, pitch Wilshire Vermont in person. Want me to draft the email? Want me to put that on tomorrow's Day Line?";
+    const state = scheduledState(showrunnerOpening(briefing()));
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'm overwhelmed. Just tell me what to do tomorrow."), h.deps);
+    expect(result.speak).toBe("One thing tomorrow: follow up with The Louise. Dana has been overdue since August.");
+  });
+
+  it("deferral: 'I'll do it tomorrow' moves what Claire just placed, with a receipt", async () => {
+    const h = harness();
+    const move = vi.fn(async () => 1);
+    h.deps.moveDayLineCommitments = move;
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "Yeah. I'll do it tomorrow."), h.deps);
+    expect(move).toHaveBeenCalledWith({ commitmentIds: ["c-dana"], toBusinessDate: TOMORROW });
+    expect(result.speak).toBe("Moved to tomorrow: Follow up with Dana.");
+    expect(state.recentDayLineCommits?.[0]?.businessDate).toBe(TOMORROW);
+    expect(h.grants).toHaveLength(0);
+  });
+
+  it("deferral without a mover never claims the move", async () => {
+    const h = harness();
+    const state = scheduledState(showrunnerOpening(briefing()));
+    state.recentDayLineCommits = [{ ids: ["c-dana"], title: "Follow up with Dana", businessDate: TODAY, atMs: START_MS - 30_000 }];
+    const result = await runClaireV2PrimaryTurn(turn(state, "I'll do it tomorrow."), h.deps);
+    expect(result.speak).toBe("I couldn't move that to tomorrow just now.");
+  });
+});

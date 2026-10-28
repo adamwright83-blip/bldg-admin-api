@@ -150,7 +150,7 @@ export type PerceivedTurn = {
    * tomorrow? What do you want me to do?"). Descriptive: Executive Function
    * decides whether a plan is composed. `horizon` is the day asked about.
    */
-  leadRequest: { horizon: "today" | "tomorrow" | null } | null;
+  leadRequest: { horizon: "today" | "tomorrow" | null; relief?: boolean } | null;
   /** Feedback about Claire's role rather than the operator's work. Never authority. */
   claireRoleFeedback: ClaireRoleFeedbackKind;
 };

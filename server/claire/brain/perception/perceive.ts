@@ -24,6 +24,7 @@ import {
   leadHorizon,
   leadRequest,
   type LeadRequest,
+  reliefRequest,
 } from "./leadRequest";
 
 export type PerceiveInput = {
@@ -214,7 +215,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   const lead: LeadRequest | null =
     explicitLead ??
     (roleFeedback !== "none" && !turn.hasBusinessQuestion && !turn.correctnessChallenge && !turn.provenanceQuestion
-      ? { horizon: leadHorizon(assembledText) }
+      ? { horizon: leadHorizon(assembledText), relief: reliefRequest(assembledText) }
       : null);
   let businessIntent = intentFromAssembled(assembledText, turn, lead, roleFeedback);
   const leadBriefing = businessIntent === "broad_briefing" && lead !== null;
