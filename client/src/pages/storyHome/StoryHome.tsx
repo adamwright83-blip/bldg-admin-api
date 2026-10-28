@@ -1,12 +1,15 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
+  useRef,
   useState,
   type ComponentType,
   type SVGProps,
 } from "react";
 import type { IslandIntroPhase } from "@/components/admin/control-room/LanternCityIslands/islandBoard";
+import type { LanternStage } from "@/components/admin/control-room/LanternCityIslands/LanternCityIslands";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -20,6 +23,7 @@ import {
 import { PRODUCT_NAME } from "@shared/productIdentity";
 import { trpc } from "@/lib/trpc";
 import { ChapterHost } from "@/story/ChapterHost";
+import { Keepsake } from "@/story/Keepsake";
 import { storyClient } from "@/story/storyClient";
 import { useRefreshStoryTonight } from "@/story/useStoryTonight";
 import {
@@ -76,6 +80,12 @@ export default function StoryHome({
   onNavigate?: (path: string) => void;
 }) {
   const [playing, setPlaying] = useState(false);
+  // "returning": the chapter just closed and the invitation settles back over the city
+  const [returning, setReturning] = useState(false);
+  const stage = useRef<LanternStage | null>(null);
+  const onStage = useCallback((next: LanternStage | null) => {
+    stage.current = next;
+  }, []);
   // The opening sequence plays on the first open of the day (never with reduced motion); every later open lands lit.
   const [playIntro] = useState(claimDailyIntro);
   const [intro, setIntro] = useState<IntroState>(
@@ -86,6 +96,35 @@ export default function StoryHome({
   const insetLeft = useChapterCardInset();
   // a tower's floors or Small Comforts opened from the board: the home's own cards step aside
   const [embedded, setEmbedded] = useState(false);
+  useChromeHeight();
+
+  // Play: the camera approaches tonight's destination while the chapter opens. The approach never holds the chapter
+  // back for long, and with reduced motion (or no destination) there is no approach at all.
+  const [arrival, setArrival] = useState<Promise<void> | null>(null);
+  const play = () => {
+    if (playing) return;
+    window.scrollTo({ top: 0 });
+    const approach = stage.current?.focusDestination() ?? Promise.resolve();
+    setArrival(
+      Promise.race([
+        approach.catch(() => undefined),
+        new Promise<void>(resolve => window.setTimeout(resolve, 1100)),
+      ])
+    );
+    setPlaying(true);
+  };
+  const leave = () => {
+    stage.current?.returnHome();
+    setPlaying(false);
+    setArrival(null);
+    setReturning(true);
+    void refreshTonight();
+  };
+  useEffect(() => {
+    if (!returning) return;
+    const t = window.setTimeout(() => setReturning(false), 900);
+    return () => window.clearTimeout(t);
+  }, [returning]);
 
   return (
     <div
@@ -93,6 +132,7 @@ export default function StoryHome({
       data-testid="story-home"
       data-intro={intro}
       data-playing={playing}
+      data-returning={returning || undefined}
       data-finished={tonight.state === "won_tonight"}
     >
       <section className="sh-world" aria-label="Lantern City">
@@ -118,6 +158,7 @@ export default function StoryHome({
               storyLocation={chapter?.location}
               storyAnomaly={chapter?.anomaly}
               onEmbeddedChange={setEmbedded}
+              onStage={onStage}
             />
           </Suspense>
         </div>
@@ -126,7 +167,8 @@ export default function StoryHome({
           <GlassStats />
           <ChapterCard
             tonight={tonight}
-            onPlay={() => setPlaying(true)}
+            playing={playing}
+            onPlay={play}
             onAnswered={() => void refreshTonight()}
           />
         </div>
@@ -137,10 +179,8 @@ export default function StoryHome({
           client={storyClient()}
           chapterNumber={chapter.number}
           title={chapter.title}
-          onClose={() => {
-            setPlaying(false);
-            void refreshTonight();
-          }}
+          arrival={arrival}
+          onClose={leave}
         />
       ) : null}
     </div>
@@ -178,6 +218,32 @@ function useChapterCardInset(): number {
     };
   }, []);
   return inset;
+}
+
+/**
+ * Where the business summary ends, as `--sh-chrome` on the page: the chapter stage opens below it so the real numbers
+ * stay readable while a chapter plays.
+ */
+function useChromeHeight() {
+  useEffect(() => {
+    const page = document.querySelector<HTMLElement>(".sh-page");
+    const stats = document.querySelector<HTMLElement>(".sh-glass-stats");
+    if (!page || !stats) return;
+    const measure = () =>
+      page.style.setProperty(
+        "--sh-chrome",
+        `${Math.round(stats.getBoundingClientRect().bottom + window.scrollY)}px`
+      );
+    measure();
+    const ro =
+      typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    ro?.observe(stats);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 }
 
 function TopBar({ operatorName }: { operatorName: string }) {
@@ -332,13 +398,15 @@ function ClairePortrait() {
   );
 }
 
-/** Tonight's chapter, on a glass card over the sky. Story words come only from `system.story.tonight`. */
+/** Tonight's chapter over the city. Story words come only from `system.story.tonight`. */
 function ChapterCard({
   tonight,
+  playing,
   onPlay,
   onAnswered,
 }: {
   tonight: StoryEnabled;
+  playing: boolean;
   onPlay: () => void;
   onAnswered: () => void;
 }) {
@@ -351,15 +419,15 @@ function ChapterCard({
     >
       <div className="sh-chapter-copy">
         {tonight.state === "season_complete" || !chapter ? (
-          <>
+          <div className="sh-settled">
             <p className="sh-eyebrow">SEASON COMPLETE</p>
-            <h1 className="sh-title">{tonight.seasonTitle}</h1>
+            <h1 className="sh-title is-settled">{tonight.seasonTitle}</h1>
             <p className="sh-hook">Every chapter of this season is played.</p>
-          </>
+          </div>
         ) : tonight.state === "won_tonight" ? (
           <WonTonight chapter={chapter} onAnswered={onAnswered} />
         ) : (
-          <Available chapter={chapter} onPlay={onPlay} />
+          <Available chapter={chapter} playing={playing} onPlay={onPlay} />
         )}
       </div>
     </section>
@@ -370,37 +438,53 @@ type TonightChapter = NonNullable<StoryEnabled["chapter"]>;
 
 function Available({
   chapter,
+  playing,
   onPlay,
 }: {
   chapter: TonightChapter;
+  playing: boolean;
   onPlay: () => void;
 }) {
   const { hook, note } = heroLines(chapter.before);
   return (
     <>
-      <p className="sh-eyebrow">{chapterEyebrow(chapter.number)}</p>
+      <p className="sh-eyebrow">
+        {chapterEyebrow(chapter.number)} <span>· TONIGHT</span>
+      </p>
       <h1 className="sh-title">{chapter.title}</h1>
       <div className="sh-hook">
         {hook.map(line => (
           <p key={line.key}>{line.text}</p>
         ))}
       </div>
-      <button
-        type="button"
-        className="sh-play"
-        onClick={onPlay}
-        data-testid="story-home-play"
-      >
-        Play tonight’s chapter <ArrowRight size={18} aria-hidden="true" />
-      </button>
-      <p className="sh-facts">About 5 minutes · A new clue</p>
-      {note ? (
-        <div className="sh-claire">
-          <ClairePortrait />
-          <p className="sh-claire-note">{note.text}</p>
-        </div>
-      ) : null}
+      <div className="sh-play-row">
+        <button
+          type="button"
+          className="sh-play"
+          onClick={onPlay}
+          disabled={playing}
+          data-testid="story-home-play"
+        >
+          <span>Play tonight’s chapter</span>
+          <ArrowRight size={18} aria-hidden="true" />
+        </button>
+        <p className="sh-facts">About 5 minutes</p>
+      </div>
+      {note ? <ClaireNote text={note.text} /> : null}
     </>
+  );
+}
+
+/** Claire's line under the invitation: a note left for the operator, signed. */
+function ClaireNote({ text }: { text: string }) {
+  return (
+    <figure className="sh-claire">
+      <ClairePortrait />
+      <blockquote className="sh-claire-note">
+        <p>{text}</p>
+        <figcaption className="sh-claire-sign">Claire</figcaption>
+      </blockquote>
+    </figure>
   );
 }
 
@@ -413,41 +497,76 @@ function WonTonight({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const question = chapter.question;
   const [revisit, setRevisit] = useState(false);
-  if ((!question || question.answered) && !revisit)
+  const question = chapter.question;
+  const chosen = question?.options.find(o => o.key === question.answered);
+
+  if (revisit)
     return (
-      <div className="sh-night-finished">
-        <span className="sh-seal" aria-hidden="true">
-          ✧
-        </span>
-        <p className="sh-eyebrow">TONIGHT, REMEMBERED</p>
-        <h1 className="sh-title">{chapter.title}</h1>
-        <p className="sh-answer-saved">
-          {question ? "Your choice:" : "Tonight’s chapter is complete."}{" "}
-          {question?.options.find(o => o.key === question.answered)?.text}
+      <div className="sh-revisit-story" data-testid="story-home-revisit">
+        <p className="sh-eyebrow">
+          {chapterEyebrow(chapter.number)} <span>· TONIGHT’S STORY</span>
         </p>
-        {chapter.closing?.response ? (
-          <p className="sh-hook">{chapter.closing.response}</p>
+        <h1 className="sh-title is-settled">{chapter.title}</h1>
+        <div className="sh-story-lines">
+          {chapter.before.map(line => (
+            <p key={`b-${line.key}`}>{line.text}</p>
+          ))}
+          <hr aria-hidden="true" />
+          {(chapter.after ?? []).map(line => (
+            <p key={`a-${line.key}`}>{line.text}</p>
+          ))}
+        </div>
+        {question && chosen ? (
+          <p className="sh-your-answer">
+            <span>{question.text}</span> {chosen.text}
+          </p>
         ) : null}
-        {chapter.closing?.keepsake ? (
-          <div className="sh-keepsake">
-            <span>KEPT FROM TONIGHT</span>
-            <h2>{chapter.closing.keepsake.title}</h2>
-            <p>{chapter.closing.keepsake.text}</p>
-          </div>
-        ) : null}
-        <p className="sh-hook">
-          {chapter.closing?.tomorrow ??
-            "The next chapter opens tomorrow night."}
-        </p>
-        <button className="sh-revisit" onClick={() => setRevisit(true)}>
-          Revisit tonight’s story <ArrowRight size={16} aria-hidden="true" />
+        <button
+          type="button"
+          className="sh-quiet-link"
+          onClick={() => setRevisit(false)}
+        >
+          Close the story
         </button>
       </div>
     );
+
+  if (!question || question.answered)
+    return (
+      <div className="sh-settled" data-testid="story-home-finished">
+        <p className="sh-eyebrow">
+          {chapterEyebrow(chapter.number)} <span>· REMEMBERED</span>
+        </p>
+        <h1 className="sh-title is-settled">{chapter.title}</h1>
+        {chapter.closing?.response ? (
+          <p className="sh-response">{chapter.closing.response}</p>
+        ) : chosen ? (
+          <p className="sh-response">{chosen.text}.</p>
+        ) : null}
+        {chapter.closing?.keepsake ? (
+          <Keepsake
+            chapterNumber={chapter.number}
+            title={chapter.closing.keepsake.title}
+            text={chapter.closing.keepsake.text}
+          />
+        ) : null}
+        <p className="sh-tomorrow">
+          {chapter.closing?.tomorrow ?? "The next chapter opens tomorrow night."}
+        </p>
+        <button
+          type="button"
+          className="sh-quiet-link"
+          onClick={() => setRevisit(true)}
+          data-testid="story-home-revisit-open"
+        >
+          Revisit tonight’s story <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+    );
+
   const answer = async (optionKey: string) => {
-    if (!question || busy) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -463,43 +582,36 @@ function WonTonight({
   };
   return (
     <>
-      <p className="sh-eyebrow">{chapterEyebrow(chapter.number)}</p>
-      <h1 className="sh-title">{chapter.title}</h1>
-      <div className="sh-hook sh-ending">
+      <p className="sh-eyebrow">
+        {chapterEyebrow(chapter.number)} <span>· ONE QUESTION LEFT</span>
+      </p>
+      <h1 className="sh-title is-settled">{chapter.title}</h1>
+      <div className="sh-story-lines">
         {(chapter.after ?? []).map(line => (
           <p key={line.key}>{line.text}</p>
         ))}
       </div>
-      {question ? (
-        <div className="sh-question">
-          <p className="sh-question-text">{question.text}</p>
-          <div className="sh-options">
-            {question.options.map(option => (
-              <button
-                key={option.key}
-                type="button"
-                className={`sh-option${question.answered === option.key ? " is-chosen" : ""}`}
-                disabled={Boolean(question.answered) || busy}
-                aria-pressed={question.answered === option.key}
-                onClick={() => void answer(option.key)}
-              >
-                {option.text}
-              </button>
-            ))}
-          </div>
-          {error ? (
-            <p className="sh-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+      <div className="sh-question">
+        <p className="sh-question-text">{question.text}</p>
+        <div className="sh-options">
+          {question.options.map(option => (
+            <button
+              key={option.key}
+              type="button"
+              className="sh-option"
+              disabled={busy}
+              onClick={() => void answer(option.key)}
+            >
+              {option.text}
+            </button>
+          ))}
         </div>
-      ) : null}
-      {revisit ? (
-        <button className="sh-revisit" onClick={() => setRevisit(false)}>
-          Close the story
-        </button>
-      ) : null}
-      <p className="sh-facts">The next chapter opens tomorrow night.</p>
+        {error ? (
+          <p className="sh-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </>
   );
 }
