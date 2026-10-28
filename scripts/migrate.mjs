@@ -5771,5 +5771,17 @@ await ensureRequiredColumn(
   await assertRequiredColumns("tower_desk_contract_payments", ["id", "tenant_id", "building_id", "amount_cents", "paid_on", "note", "created_by", "created_at"]);
 }
 
+// 0150: story seasons (nightly chapter on the main account page). Additive: six new tables, nothing existing altered.
+{
+  const statements = await readSqlStatements("../drizzle/0150_story_tables.sql");
+  for (const statement of statements) await runRequired(statement, "Story tables");
+  await assertRequiredColumns("story_seasons", ["id", "slug", "title", "status", "created_at", "updated_at"]);
+  await assertRequiredColumns("story_chapters", ["id", "season_id", "chapter_number", "game_key", "title", "question_key", "config_json"]);
+  await assertRequiredColumns("story_lines", ["id", "chapter_id", "slot", "line_key", "variant_key", "sort_order", "condition_json", "text", "still_id"]);
+  await assertRequiredColumns("story_progress", ["id", "tenant_id", "operator_id", "season_id", "highest_chapter_won", "last_won_on", "last_played_on", "updated_at"]);
+  await assertRequiredColumns("story_answers", ["id", "tenant_id", "operator_id", "season_id", "question_key", "option_key", "answered_at"]);
+  await assertRequiredColumns("story_attempts", ["id", "tenant_id", "operator_id", "season_id", "chapter_number", "outcome", "duration_ms", "local_date", "created_at"]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

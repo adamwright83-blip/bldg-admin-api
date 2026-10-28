@@ -1,0 +1,72 @@
+name: Story infrastructure
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  spoiler-guard:
+    name: story spoiler guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Runs on every pull request, whatever it touches: an unreleased season's words must never enter the repository.
+      - name: No unreleased story words in tracked files
+        run: node scripts/story/spoiler-guard.mjs
+
+  story-mysql:
+    name: story tables on real MySQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: story_test
+        ports:
+          - 3407:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      TZ: UTC
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Story unit tests (engine, service, isolation, format, guard)
+        run: pnpm exec vitest run server/story shared/story.test.ts
+      - name: Full migration applies on an empty database, twice
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3407/story_test
+        run: |
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs
+      - name: Story tables, seed, a played season, and the rollback on real MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3407/story_test
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/story
