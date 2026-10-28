@@ -41,6 +41,7 @@ import { towerWarsRouter } from "../experience/goldline/modes/towerWars/towerWar
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 import { towerDeskRouter } from "../analytics/towerDeskRouter";
 import { storyRouter } from "../story/storyRouter";
+import { accountSnapshotRouter } from "../analytics/accountSnapshotRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../composition/goldlineWorldRouter";
@@ -115,6 +116,7 @@ export const systemRouter = router({
   geographicTruth: geographicTruthRouter,
   towerDesk: towerDeskRouter,
   story: storyRouter,
+  accountSnapshot: accountSnapshotRouter,
   canonicalBuilding: canonicalBuildingRouter,
   google: googleRouter,
   goldlineWorld: goldlineWorldRouter,
