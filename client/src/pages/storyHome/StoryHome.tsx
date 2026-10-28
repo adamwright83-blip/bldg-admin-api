@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type ReactNode,
   type SVGProps,
 } from "react";
 import type { IslandIntroPhase } from "@/components/admin/control-room/LanternCityIslands/islandBoard";
@@ -23,6 +24,7 @@ import {
 import { PRODUCT_NAME } from "@shared/productIdentity";
 import { trpc } from "@/lib/trpc";
 import { ChapterHost } from "@/story/ChapterHost";
+import { storyGameFor } from "@/story/games/registry";
 import { Keepsake } from "@/story/Keepsake";
 import { storyClient } from "@/story/storyClient";
 import { useRefreshStoryTonight } from "@/story/useStoryTonight";
@@ -159,6 +161,7 @@ export default function StoryHome({
               storyAnomaly={chapter?.anomaly}
               onEmbeddedChange={setEmbedded}
               onStage={onStage}
+              onDestination={tonight.state === "available" && chapter && !playing ? play : undefined}
             />
           </Suspense>
         </div>
@@ -446,6 +449,7 @@ function Available({
   onPlay: () => void;
 }) {
   const { hook, note } = heroLines(chapter.before);
+  const poster = storyGameFor(chapter.gameKey)?.poster;
   return (
     <>
       <p className="sh-eyebrow">
@@ -470,19 +474,31 @@ function Available({
         </button>
         <p className="sh-facts">About 5 minutes</p>
       </div>
-      {note ? <ClaireNote text={note.text} /> : null}
+      {note ? (
+        <ClaireNote text={note.text}>
+          {poster ? (
+            <button type="button" className="sh-feed" onClick={onPlay} disabled={playing} data-testid="story-home-feed">
+              <img src={poster.src} alt={poster.alt} width={720} height={496} decoding="async" />
+              <span className="sh-feed-cue">
+                Pull it up <ArrowRight size={14} aria-hidden="true" />
+              </span>
+            </button>
+          ) : null}
+        </ClaireNote>
+      ) : null}
     </>
   );
 }
 
 /** Claire's line under the invitation: a note left for the operator, signed. */
-function ClaireNote({ text }: { text: string }) {
+function ClaireNote({ text, children }: { text: string; children?: ReactNode }) {
   return (
     <figure className="sh-claire">
       <ClairePortrait />
       <blockquote className="sh-claire-note">
         <p>{text}</p>
         <figcaption className="sh-claire-sign">Claire</figcaption>
+        {children}
       </blockquote>
     </figure>
   );

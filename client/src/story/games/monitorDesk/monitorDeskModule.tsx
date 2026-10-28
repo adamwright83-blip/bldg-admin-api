@@ -19,4 +19,9 @@ function MonitorDesk(props: StoryGameProps) {
 }
 
 /** Century Park East's camera wall, played from the desk. */
-export const monitorDeskGame: StoryGameModule = { keys: ["cpe.monitor-desk"], Game: MonitorDesk };
+export const monitorDeskGame: StoryGameModule = {
+  keys: ["cpe.monitor-desk"],
+  Game: MonitorDesk,
+  // the lobby feed half a minute before the window: an empty lobby, the indicator at L
+  poster: { src: "/assets/story/monitor-desk/lobby-before.webp", alt: "The lobby camera's night feed: an empty lobby, the lift indicator at L." },
+};

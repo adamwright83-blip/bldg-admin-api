@@ -13,4 +13,9 @@ export type StoryGameModule = {
   /** The gameKeys this game answers to (a chapter's `gameKey`). */
   keys: readonly string[];
   Game: ComponentType<StoryGameProps>;
+  /**
+   * A frame from the game itself, shown on the home under tonight's invitation so the operator sees what they will be
+   * doing. It must be taken before anything the chapter reveals.
+   */
+  poster?: { src: string; alt: string };
 };
