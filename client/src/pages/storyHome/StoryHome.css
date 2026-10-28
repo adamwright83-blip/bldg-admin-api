@@ -678,6 +678,10 @@
   position: relative;
   z-index: 1002;
 }
+/* the chapter covers the map, which never sees the pointer leave: its tooltips go with it */
+.sh-page[data-playing="true"] [data-lantern-tip] {
+  display: none;
+}
 .sh-page[data-playing="true"] .sh-chapter {
   opacity: 0;
   transform: translateX(-12px);

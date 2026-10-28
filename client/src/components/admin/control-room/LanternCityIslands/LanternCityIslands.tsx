@@ -330,7 +330,7 @@ export default function LanternCityIslands({
       ) : null}
 
       {hover && (hovered.length || hover.tower) ? (
-        <div className={styles.tip} style={{ left: Math.min(hover.x + 16, window.innerWidth - 280), top: Math.max(hover.y - 80, 8) }}>
+        <div className={styles.tip} data-lantern-tip style={{ left: Math.min(hover.x + 16, window.innerWidth - 280), top: Math.max(hover.y - 80, 8) }}>
           {hovered.slice(0, 4).map(c => (
             <div key={c.identityKey} className={styles.tipRow}>
               <b>{c.displayName}</b>
@@ -344,13 +344,13 @@ export default function LanternCityIslands({
       ) : null}
 
       {operationsHubTip ? (
-        <div className={styles.tip} style={{ left: Math.min(operationsHubTip.x + 16, window.innerWidth - 300), top: Math.max(operationsHubTip.y - 60, 8) }}>
+        <div className={styles.tip} data-lantern-tip style={{ left: Math.min(operationsHubTip.x + 16, window.innerWidth - 300), top: Math.max(operationsHubTip.y - 60, 8) }}>
           <b>Laundry Farm · Operations Hub</b>
           <span className={styles.tipHint}>Click to enter Operations Command</span>
         </div>
       ) : null}
       {suitcaseTip ? (
-        <div className={styles.tip} style={{ left: Math.min(suitcaseTip.x + 16, window.innerWidth - 280), top: Math.max(suitcaseTip.y - 60, 8) }}>
+        <div className={styles.tip} data-lantern-tip style={{ left: Math.min(suitcaseTip.x + 16, window.innerWidth - 280), top: Math.max(suitcaseTip.y - 60, 8) }}>
           <b>Tin Can House · Small Comforts</b>
           <span className={styles.tipHint}>Click to enter</span>
         </div>
