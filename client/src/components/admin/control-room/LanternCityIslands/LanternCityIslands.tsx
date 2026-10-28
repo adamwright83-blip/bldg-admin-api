@@ -56,6 +56,7 @@ export default function LanternCityIslands({
   homeChrome = false,
   insetLeft = 0,
   skyBoard = false,
+  storyLocation,
   onEmbeddedChange,
 }: {
   onOpenCustomer: (phone: string) => void;
@@ -78,6 +79,7 @@ export default function LanternCityIslands({
   insetLeft?: number;
   /** The account home: the glass game board loops over the city and the camera sits lower, showing the sky. Read once, at mount. */
   skyBoard?: boolean;
+  storyLocation?: import("@shared/story").StoryLocation;
   /** A full-screen view opened from the board (a tower's floors, Small Comforts) opened or closed. */
   onEmbeddedChange?: (open: boolean) => void;
 }) {
@@ -109,6 +111,8 @@ export default function LanternCityIslands({
   introPhaseRef.current = onIntroPhase;
   const introAtMount = useRef(intro);
   const skyBoardAtMount = useRef(skyBoard);
+  const storyLocationRef = useRef(storyLocation);
+  storyLocationRef.current = storyLocation;
   const insetAtMount = useRef(insetLeft);
   insetAtMount.current = insetLeft;
 
@@ -174,7 +178,7 @@ export default function LanternCityIslands({
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
-      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current });
+      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
       console.warn("Lantern City needs WebGL", e);
@@ -223,6 +227,7 @@ export default function LanternCityIslands({
   embeddedRef.current = onEmbeddedChange;
   useEffect(() => { embeddedRef.current?.(tower !== null || inSuitcase); }, [tower, inSuitcase]);
   useEffect(() => { board.current?.setInsetLeft(insetLeft); }, [insetLeft]);
+  useEffect(() => { board.current?.setStoryLocation(storyLocation); }, [storyLocation]);
   useEffect(() => {
     if (mode !== "report" || !territoryReport.data) return;
     if (selectedTerritoryId && territoryReport.data.territories.some(territory => territory.id === selectedTerritoryId)) return;

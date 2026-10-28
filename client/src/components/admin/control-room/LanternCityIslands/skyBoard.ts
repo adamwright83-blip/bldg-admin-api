@@ -51,15 +51,15 @@ const GLASS_F = /* glsl */ `
     float d = fract(uTime * .065 - uPhase);
     float pulse = exp(-d * d * 90.) + exp(-(1. - d) * (1. - d) * 600.);
     // saturated glass: deep blue-violet in the walls, a clearer lilac-blue on top; gold on tonight's tile
-    vec3 wall = mix(vec3(.22, .26, .92), vec3(.95, .55, .14), uGold);
-    vec3 top = mix(vec3(.5, .62, 1.05), vec3(1.15, .86, .42), uGold);
+    vec3 wall = mix(vec3(.16, .28, .34), vec3(.95, .55, .14), uGold);
+    vec3 top = mix(vec3(.35, .5, .53), vec3(1.15, .86, .42), uGold);
     vec3 col = mix(wall, top, up);
     // the bevels catch the light: an iridescent edge, pink to cyan with the angle, bright enough to bloom
     float edge = smoothstep(.3, .9, fres);
     vec3 irid = .5 + .5 * cos(6.2832 * (fres * .8 + vec3(.0, .33, .67)) + .8);
     vec3 edgeCol = mix(mix(vec3(1.), irid, .65), vec3(1.25, .95, .55), uGold);
-    col += edgeCol * edge * 2.1;
-    col += vec3(1., .85, .6) * pulse * (.6 + uGold * .4);
+    col += edgeCol * edge * .45;
+    col += vec3(1., .85, .6) * pulse * (.08 + uGold * .12);
     float a = (.26 + side * .22 + edge * .55 + pulse * .15 + uGold * .22) * uAlpha;
     gl_FragColor = vec4(col, clamp(a, 0., 1.));
     #include <fog_fragment>
@@ -72,7 +72,7 @@ const GLOW_F = /* glsl */ `
   void main() {
     float d = fract(uTime * .065 - uPhase);
     float pulse = exp(-d * d * 90.) + exp(-(1. - d) * (1. - d) * 600.);
-    gl_FragColor = vec4(uColor * (1. + pulse * 1.6), uAlpha);
+    gl_FragColor = vec4(uColor * (1. + pulse * .2), uAlpha);
     #include <fog_fragment>
   }`;
 
@@ -163,6 +163,7 @@ export function createSkyBoard(opts: SkyBoardOptions) {
           crystals.push(mesh);
         }
       });
+      g.scale.y *= .45;
       root.add(g);
       tiles.push({ group: g, home: g.position.clone(), delay: i * 0.11, t: 1, alphas });
     });

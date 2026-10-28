@@ -24,11 +24,13 @@ const chapterOne = {
   number: 1,
   title: "Placeholder chapter one",
   gameKey: "fixture.button",
+  location: "century_park_east",
   before: [
     { key: "b1", text: "Placeholder before-line one. Lorem ipsum dolor sit amet.", still: null },
     { key: "b2", text: "Placeholder before-line two. Consectetur adipiscing elit.", still: null },
   ],
 };
+const closing = { response: "Placeholder response to left.", keepsake: {title:"Placeholder keepsake", text:"Placeholder keepsake description."}, tomorrow:"Placeholder invitation for tomorrow." };
 const after = [{ key: "a1", text: "Placeholder after-line. Sed do eiusmod tempor.", still: null }];
 const question = (answered) => ({
   key: "s0.first",
@@ -106,14 +108,14 @@ function tonight() {
   const base = { enabled: true, seasonTitle: "Season 0 (placeholder)", chapterCount: 3, daysAway: 0 };
   if (story === "complete") return { ...base, state: "season_complete", chapter: null };
   if (story === "available") return { ...base, state: "available", chapter: chapterOne };
-  return { ...base, state: "won_tonight", chapter: { ...chapterOne, after, question: question(story === "answered" ? "left" : null) } };
+  return { ...base, state: "won_tonight", chapter: { ...chapterOne, after, closing: story === "answered" ? closing : undefined, question: question(story === "answered" ? "left" : null) } };
 }
 
 function respond(procedure, input) {
   switch (procedure) {
     case "auth.me": return { openId: "visual-test", name: "Admin Preview", email: null, role: "admin" };
     case "system.story.tonight": return tonight();
-    case "system.story.start": return { chapterNumber: input?.chapterNumber ?? 1, gameKey: "fixture.button", config: { fixture: true } };
+    case "system.story.start": return { chapterNumber: input?.chapterNumber ?? 1, gameKey: "fixture.button", config: { fixture: true, location: "century_park_east" } };
     case "system.story.finish":
       if (input?.outcome !== "win") return { advanced: false, after: null, question: null };
       if (story === "available") story = "won";
@@ -147,7 +149,7 @@ async function mockTrpc(page) {
     let inputs = {};
     if (request.method() === "POST") inputs = JSON.parse(request.postData() || "{}");
     else if (url.searchParams.get("input")) inputs = JSON.parse(url.searchParams.get("input"));
-    const payload = procedures.map((procedure, i) => ({ result: { data: { json: respond(procedure, inputs[String(i)]?.json) } } }));
+    const payload = procedures.map((procedure, i) => procedure === "system.geographicTruth.myAtlas" ? { error: { json: { message: "Development atlas fixture", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 } } } } : ({ result: { data: { json: respond(procedure, inputs[String(i)]?.json) } } }));
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
   });
 }
@@ -155,14 +157,15 @@ async function mockTrpc(page) {
 async function settle(page) {
   // The home's live 3D board refreshes its map data on a timer, so the network is never idle: wait for load instead.
   await page.waitForLoadState("load");
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(Number(process.env.STORY_HOME_CAPTURE_WAIT_MS || 10000));
 }
 
 await fs.mkdir(outputDir, { recursive: true });
 // PLAYWRIGHT_CHROMIUM_EXECUTABLE points at a preinstalled Chromium when the pinned Playwright has no browser of its own.
-const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {});
+const browser = await chromium.launch({ args: ["--use-angle=metal"], ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
 const shots = [];
 const errors = [];
+const frames = [];
 
 async function session(name, viewport, run) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1, isMobile: viewport.width < 500, hasTouch: viewport.width < 500 });
@@ -171,6 +174,8 @@ async function session(name, viewport, run) {
   await mockTrpc(page);
   const shot = async (file, fullPage = true) => {
     await settle(page);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    if(overflow) violations.push(`${file}: horizontal page overflow`);
     await page.screenshot({ path: path.join(outputDir, file), fullPage });
     shots.push(file);
   };
@@ -180,12 +185,30 @@ async function session(name, viewport, run) {
 
 const desktop = { width: 1440, height: 900 };
 const phone = { width: 390, height: 844 };
+for (const viewport of [{width:1280,height:800}, {width:360,height:740}]) {
+  await session(`size-${viewport.width}`, viewport, async(page,shot) => {
+    await page.goto(`${origin}/home`);
+    await page.getByTestId("story-home-hero").waitFor();
+    await shot(`available-${viewport.width}.png`,false);
+  });
+}
 
 story = "available";
 await session("desktop", desktop, async (page, shot) => {
   await page.goto(`${origin}/home`);
   await page.getByTestId("story-home-hero").waitFor();
   await shot("desktop-available.png");
+  frames.push(await page.evaluate(() => new Promise(resolve => {
+    const samples = []; let last = performance.now();
+    function frame(now) { samples.push(now-last);last=now;
+      if(samples.length<120) requestAnimationFrame(frame);
+      else { samples.sort((a,b)=>a-b);resolve({viewport:"1440x900", samples:120, medianMs:samples[60], p95Ms:samples[114], medianFps:1000/samples[60]}); }
+    } requestAnimationFrame(frame);
+  })));
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto(`${origin}/home?intro=1`);
+  await shot("desktop-reduced-motion.png",false);
+  await page.emulateMedia({reducedMotion:"no-preference"});
   await page.getByTestId("story-home-play").click();
   await page.getByTestId("story-fixture-game").waitFor();
   await shot("desktop-host-playing.png", false);
@@ -197,6 +220,7 @@ await session("desktop", desktop, async (page, shot) => {
   await page.getByTestId("story-host-ended").waitFor();
   await shot("desktop-host-ending.png", false);
   await page.getByTestId("story-host-option-left").click();
+  await shot("desktop-host-answered.png", false);
   await page.getByTestId("story-host-done").click();
   await page.locator('[data-testid="story-home-hero"][data-state="won_tonight"]').waitFor();
   await shot("desktop-won-tonight.png");
@@ -207,6 +231,9 @@ await session("phone", phone, async (page, shot) => {
   await page.goto(`${origin}/home`);
   await page.getByTestId("story-home-hero").waitFor();
   await shot("phone-available.png");
+  await page.getByTestId("story-home-play").click();
+  await page.getByTestId("story-fixture-game").waitFor();
+  await shot("phone-host-playing.png", false);
 });
 
 story = "answered";
@@ -232,8 +259,26 @@ await session("gate-off", desktop, async (page, shot) => {
   await shot("desktop-gate-off.png", false);
 });
 
+story = "available";
+const originalTitle = chapterOne.title;
+const originalHook = chapterOne.before[0].text;
+chapterOne.title = "Placeholder chapter with an unusually long title for layout verification";
+chapterOne.before[0].text = "Placeholder opening text. ".repeat(12);
+await session("long-content", phone, async(page,shot) => {
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto(`${origin}/home?intro=1`);
+  await page.getByTestId("story-home-hero").waitFor();
+  await shot("phone-long-content.png");
+  await page.getByTestId("story-home-play").scrollIntoViewIfNeeded();
+  await page.getByTestId("story-home-play").click();
+  await page.getByTestId("story-fixture-game").waitFor();
+  await page.keyboard.press("Escape");
+  if(await page.getByTestId("story-chapter-host").count()) violations.push("Escape did not close the chapter");
+});
+chapterOne.title = originalTitle;
+chapterOne.before[0].text = originalHook;
 await browser.close();
 
-const report = { outputDir, shots, storyCalls, violations, pageErrors: errors, gateOffRendersStoryHome };
+const report = { outputDir, shots, storyCalls, frames, violations, pageErrors: errors, gateOffRendersStoryHome };
 console.log(JSON.stringify(report, null, 2));
 if (violations.length || gateOffRendersStoryHome) process.exit(1);

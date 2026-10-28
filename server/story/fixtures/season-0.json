@@ -8,7 +8,19 @@
       "title": "Placeholder chapter one",
       "questionKey": "s0.first",
       "config": {
-        "fixture": true
+        "fixture": true,
+        "location": "century_park_east",
+        "closing": {
+          "responses": {
+            "left": "Placeholder response to left.",
+            "right": "Placeholder response to right."
+          },
+          "keepsake": {
+            "title": "Placeholder keepsake",
+            "text": "Placeholder keepsake description."
+          },
+          "tomorrow": "Placeholder invitation for tomorrow."
+        }
       },
       "lines": [
         {
@@ -109,7 +121,10 @@
           },
           "text": "Placeholder ending line shown only after two or more nights away."
         }
-      ]
+      ],
+      "config": {
+        "location": "opus_la"
+      }
     },
     {
       "number": 3,
@@ -128,7 +143,10 @@
           "order": 0,
           "text": "Placeholder season ending."
         }
-      ]
+      ],
+      "config": {
+        "location": "century_park_east"
+      }
     }
   ]
 }

@@ -12,6 +12,20 @@ describe("story season file format", () => {
     expect(parsed.chapters).toHaveLength(3);
   });
 
+  it("validates authored locations and closing metadata while preserving game config", () => {
+    const s = clone();
+    s.chapters[0].config.location = "unknown_landmark";
+    expect(storySeasonSchema.safeParse(s).success).toBe(false);
+    s.chapters[0].config.location = "century_park_east";
+    s.chapters[0].config.closing.tomorrow = 42;
+    expect(storySeasonSchema.safeParse(s).success).toBe(false);
+    delete s.chapters[0].config.closing;
+    s.chapters[0].config.customGameSetting = 42;
+    expect(
+      storySeasonSchema.parse(s).chapters[0].config?.customGameSetting
+    ).toBe(42);
+  });
+
   it("Season 0 is placeholder text only", () => {
     for (const chapter of season0.chapters) {
       for (const line of chapter.lines) expect(line.text).toMatch(/^(Placeholder|Left$|Right$)/);
