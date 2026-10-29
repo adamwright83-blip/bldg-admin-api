@@ -1241,7 +1241,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             <i>•</i>
             <span className={plan.cleanCloudCount ? "is-synced" : "is-needed"}>
               {plan.cleanCloudCount
-                ? `${plan.cleanCloudCount} CLEANCloud SYNCED`
+                ? `${plan.cleanCloudCount} FROM CLEANCLOUD`
                 : "IMPORT NEEDED"}
             </span>
           </div>
@@ -1254,7 +1254,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             <span>
               <strong>{plan.cleanCloudCount ? "CLEANCloud" : "IMPORT"}</strong>
               {plan.cleanCloudCount
-                ? `${plan.cleanCloudCount} STOPS SYNCED`
+                ? `${plan.cleanCloudCount} STOPS`
                 : "TODAY'S ROUTE"}
             </span>
           </button>

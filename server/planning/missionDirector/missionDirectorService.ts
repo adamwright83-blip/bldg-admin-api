@@ -498,7 +498,16 @@ export async function computeMissionPlan(input: {
       durationMinutes: occupancy.durationMinutes,
     })),
   ];
-  const rawPockets = detectTimePockets({ timeline });
+  // A pocket is only as good as the schedule it sits in: an unverified CleanCloud day
+  // (stale pickups, no delivery feed) may hide a stop inside any gap.
+  const { loadScheduleFreshness } = await import("../../integrations/cleancloud/pickups/scheduleFreshness");
+  const freshness = await loadScheduleFreshness({ tenantId: input.tenantId, timeZone });
+  const rawPockets = detectTimePockets({
+    timeline,
+    scheduleCoverage: freshness.applicable
+      ? { complete: freshness.complete, reason: freshness.label || null }
+      : undefined,
+  });
   const pockets = applyCommandProtection(
     rawPockets,
     Boolean(command?.constraints.protectDiscretionary)

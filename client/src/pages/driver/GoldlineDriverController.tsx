@@ -1,4 +1,5 @@
 import type { PickupCounts } from "@shared/cleancloudPickup";
+import type { ScheduleFreshness } from "@shared/cleancloudScheduleFreshness";
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -366,6 +367,11 @@ function LiveGoldlineDriverController({
     { scheduledDate: selectedDate },
     { refetchInterval: 20_000, retry: false }
   );
+  /** Connected / current / complete, separately: an incomplete CleanCloud day never looks whole. */
+  const scheduleFreshness = trpc.system.externalOrders.scheduleFreshness.useQuery(undefined, {
+    refetchInterval: 60_000,
+    retry: false,
+  });
   const dayDirectorState = trpc.system.dayDirector.state.useQuery(
     { businessDate: selectedDate },
     { refetchInterval: 60_000, retry: false }
@@ -1547,6 +1553,10 @@ function LiveGoldlineDriverController({
   // One authoritative day projection, available before and after exploration.
   const dayBriefing = (
     <div className="driver-day-home" data-testid="driver-day-home">
+      <ScheduleFreshnessBanner
+        freshness={scheduleFreshness.data ?? null}
+        unreadable={scheduleFreshness.isError}
+      />
       <GoldlineDayPlan
         onOpenFirstMission={onOpenFirstMission}
         firstMissionEvidence={firstMissionEvidence}
@@ -2271,6 +2281,45 @@ function LiveGoldlineDriverController({
           ]).catch(() => undefined);
         }}
       />
+    </div>
+  );
+}
+
+function ScheduleFreshnessBanner(props: {
+  freshness: ScheduleFreshness | null;
+  unreadable: boolean;
+}) {
+  const label = props.unreadable
+    ? "Couldn't check the CleanCloud schedule. This route may be missing jobs."
+    : props.freshness?.applicable
+      ? props.freshness.label
+      : "";
+  if (!label) return null;
+  const tone = props.unreadable ? "alert" : (props.freshness?.tone ?? "alert");
+  const palette =
+    tone === "ok"
+      ? { background: "#e7f6ec", border: "#2f8a4c", color: "#14532d" }
+      : tone === "warn"
+        ? { background: "#fff6dd", border: "#c98a14", color: "#5c3d00" }
+        : { background: "#fde8e8", border: "#c0392b", color: "#7a1c12" };
+  return (
+    <div
+      role={tone === "alert" ? "alert" : "status"}
+      data-testid="schedule-freshness"
+      data-schedule-current={String(Boolean(props.freshness?.current))}
+      data-schedule-complete={String(Boolean(props.freshness?.complete))}
+      style={{
+        margin: "8px 12px",
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: `1px solid ${palette.border}`,
+        background: palette.background,
+        color: palette.color,
+        fontSize: 14,
+        lineHeight: 1.35,
+      }}
+    >
+      {label}
     </div>
   );
 }

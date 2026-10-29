@@ -19,6 +19,7 @@ export function CleancloudIntakePanel() {
   });
   const gmailConnect = trpc.system.gumball.gmailConnectUrl.useMutation();
   const directSync = trpc.system.gumball.directSync.useMutation();
+  const scheduleProbe = trpc.system.gumball.scheduleProbe.useMutation();
   const [syncNote, setSyncNote] = useState("");
   const [syncAlert, setSyncAlert] = useState("");
   const [selected, setSelected] = useState<string | null>(null),
@@ -152,6 +153,53 @@ export function CleancloudIntakePanel() {
               : "Sync CleanCloud now"}
           </button>
           {syncNote ? <span role="status">{syncNote}</span> : null}
+        </div>
+      ) : null}
+      {directStatus.data?.configured ? (
+        <div className="my-2 grid gap-2 text-sm" data-testid="cleancloud-schedule-probe">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={button}
+              disabled={scheduleProbe.isPending}
+              onClick={() => {
+                setError("");
+                scheduleProbe.mutate();
+              }}
+            >
+              {scheduleProbe.isPending
+                ? "Testing… (up to 2 min)"
+                : "Test CleanCloud schedule read (read-only)"}
+            </button>
+            <span>
+              Signs in once and reads CleanCloud's store page once. Writes
+              nothing.
+            </span>
+          </div>
+          {scheduleProbe.error ? (
+            <p role="alert">{scheduleProbe.error.message}</p>
+          ) : null}
+          {scheduleProbe.data ? (
+            <div role="status" className="rounded-lg border bg-white p-3">
+              <p>
+                <strong>{scheduleProbe.data.outcome}</strong>:{" "}
+                {scheduleProbe.data.message}
+              </p>
+              {scheduleProbe.data.findings.length ? (
+                <ul className="list-disc pl-5">
+                  {scheduleProbe.data.findings.map(line => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <details>
+                <summary>Full report</summary>
+                <pre className="overflow-x-auto text-xs">
+                  {JSON.stringify(scheduleProbe.data, null, 2)}
+                </pre>
+              </details>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <p className="my-2 text-sm">

@@ -92,6 +92,20 @@ async function loadConnection(tenantId: string) {
   return rows<{ tenantId: string; encryptedRefreshToken: string; connectedEmail: string | null }>(result)[0] ?? null;
 }
 
+/** When the tenant's Gmail connection was last (re)authorized, or null when there is none. */
+export async function getJawbreakerGmailConnectedAt(tenantId: string): Promise<Date | null> {
+  if (!isJawbreakerGmailConfigured()) return null;
+  await ensureTable();
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.execute(sql`
+    SELECT updatedAt FROM jawbreaker_gmail_connections WHERE tenantId = ${tenantId} LIMIT 1`);
+  const value = rows<{ updatedAt: Date | string | null }>(result)[0]?.updatedAt ?? null;
+  if (!value) return null;
+  const at = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(at.getTime()) ? at : null;
+}
+
 export async function getJawbreakerGmailStatus(tenantId: string) {
   if (!isJawbreakerGmailConfigured()) return { configured: false, connected: false, connectedEmail: null };
   const row = await loadConnection(tenantId);

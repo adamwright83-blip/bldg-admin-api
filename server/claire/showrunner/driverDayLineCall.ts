@@ -31,6 +31,11 @@ import type { OpenChannelMission } from "../../openChannel/openChannelTypes";
 import { dedupeStopsByBuilding } from "../dayLine/buildingDedupe";
 import { isTestFixtureTitle } from "../dayLine/testDataGuard";
 import { mayRaiseOverdueSalesFollowUp } from "../dayLine/weekendQuietRule";
+import {
+  scheduleOmissions,
+  unreadableScheduleFreshness,
+  type ScheduleFreshness,
+} from "../../../shared/cleancloudScheduleFreshness";
 
 const APPROVAL_STATUSES = new Set([
   "draft",
@@ -40,6 +45,9 @@ const APPROVAL_STATUSES = new Set([
 ]);
 
 const OMISSION_LABELS: Record<string, string> = {
+  cleancloud_schedule: "the CleanCloud schedule",
+  cleancloud_pickups: "current CleanCloud pickups",
+  cleancloud_deliveries: "CleanCloud deliveries",
   orders: "pickup and delivery orders",
   external_orders: "external jobs",
   sales_missions: "sales missions",
@@ -282,6 +290,8 @@ export async function loadDriverDayLineForCall(input: {
   getPlan?: typeof getLatestPlan;
   listSales?: typeof listDriverBuiltMissions;
   readOpenChannel?: typeof readCurrentOpenChannelMission;
+  /** The CleanCloud schedule's freshness; an incomplete source is named, never read as a whole day. */
+  readScheduleFreshness?: (input: { tenantId: string; now: Date; timeZone: string }) => Promise<ScheduleFreshness>;
 }): Promise<DriverDayLineCallFacts> {
   const getField = input.getField ?? getFieldToday;
   let field: FieldTodayProjection;
@@ -367,6 +377,18 @@ export async function loadDriverDayLineForCall(input: {
       true
     ),
   ]);
+  // The route is only as whole as its CleanCloud source. Stale pickups or the missing
+  // delivery feed are named the same way any other unread source is.
+  const readFreshness =
+    input.readScheduleFreshness ??
+    (async (args: { tenantId: string; now: Date; timeZone: string }) => {
+      const { loadScheduleFreshness } = await import("../../integrations/cleancloud/pickups/scheduleFreshness");
+      return loadScheduleFreshness(args);
+    });
+  const freshness = await readFreshness({ tenantId: input.caller.tenantId, now: input.now, timeZone: input.timeZone }).catch(
+    () => unreadableScheduleFreshness()
+  );
+  for (const label of scheduleOmissions(freshness)) if (!omissions.includes(label)) omissions.push(label);
   return projectDriverDayLineForCall({
     businessDate: input.businessDate,
     now: input.now,

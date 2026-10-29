@@ -83,6 +83,17 @@ export const externalOrderRouter = router({
     ),
 
   /**
+   * Whether the CleanCloud schedule behind this route is connected, current
+   * and complete. The Driver shows it so an incomplete day never looks whole.
+   */
+  scheduleFreshness: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+    const { loadScheduleFreshness } = await import(
+      "../integrations/cleancloud/pickups/scheduleFreshness"
+    );
+    return loadScheduleFreshness({ tenantId: ctx.tenantId });
+  }),
+
+  /**
    * The physical work happened. Leaves reconciliation at `update_required`,
    * for manually imported jobs. Connected browser pickups use gumball.pickups.collected.
    */

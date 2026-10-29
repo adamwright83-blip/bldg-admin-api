@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../../db";
 import { externalOperationalOrders } from "../../../../drizzle/schema";
@@ -215,12 +215,52 @@ export async function capturePickups(
       }
       imported++;
     }
+    // The snapshot is CleanCloud's complete awaiting-pickup list (the bridge checks its
+    // row count against CleanCloud's own counter). An uncollected pickup that is no
+    // longer in it was cancelled, rescheduled out, or collected elsewhere, so it leaves
+    // the Driver instead of lingering as a stop that does not exist.
+    const present = new Set(ids);
+    const open = await tx
+      .select({
+        id: driverPickups.id,
+        externalOrderId: driverPickups.externalOrderId,
+        externalOperationalOrderId: driverPickups.externalOperationalOrderId,
+        state: driverPickups.state,
+      })
+      .from(driverPickups)
+      .where(
+        and(
+          eq(driverPickups.tenantId, actor.tenantId),
+          eq(driverPickups.bindingId, snapshot.bindingId),
+          isNull(driverPickups.collectedAt)
+        )
+      )
+      .for("update");
+    const vanished = open.filter(
+      row => !present.has(row.externalOrderId) && row.state !== "held"
+    );
+    for (const row of vanished) {
+      await tx
+        .update(driverPickups)
+        .set({ state: "held", lastError: "No longer in CleanCloud's pickup list." })
+        .where(eq(driverPickups.id, row.id));
+      await tx
+        .update(externalOperationalOrders)
+        .set({ reviewState: "discarded" })
+        .where(
+          and(
+            eq(externalOperationalOrders.id, row.externalOperationalOrderId),
+            eq(externalOperationalOrders.tenantId, actor.tenantId)
+          )
+        );
+    }
     await tx
       .update(pickupConnections)
       .set({ capturedAt: observedAt, lastError: null })
       .where(eq(pickupConnections.tenantId, actor.tenantId));
     return {
       imported,
+      removed: vanished.length,
       excluded: snapshot.rows.filter(row => excluded.has(row.externalOrderId))
         .length,
       capturedAt: observedAt.toISOString(),

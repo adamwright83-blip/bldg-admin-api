@@ -30,6 +30,29 @@ export function detectTimePockets(input: {
   timeline: readonly ScheduledItem[];
   travelReserveMinutes?: number;
   unknownStopWorkReserveMinutes?: number;
+  /**
+   * Whether the operational schedule the timeline came from is verified
+   * complete (CleanCloud pickups AND deliveries current). When it is not, a
+   * gap between known stops may hide an unknown stop, so no pocket is claimed
+   * with high confidence and the reason is carried as a warning.
+   */
+  scheduleCoverage?: { complete: boolean; reason: string | null };
+}): TimePocket[] {
+  const pockets = detectPocketsFromTimeline(input);
+  const coverage = input.scheduleCoverage;
+  if (!coverage || coverage.complete) return pockets;
+  const warning = `Schedule not verified complete: ${coverage.reason ?? "operational source unverified"}. No time window is claimed.`;
+  return pockets.map(pocket => ({
+    ...pocket,
+    confidence: "low",
+    warnings: [...pocket.warnings, warning],
+  }));
+}
+
+function detectPocketsFromTimeline(input: {
+  timeline: readonly ScheduledItem[];
+  travelReserveMinutes?: number;
+  unknownStopWorkReserveMinutes?: number;
 }): TimePocket[] {
   const travelReserveMinutes =
     input.travelReserveMinutes ?? DEFAULT_TRAVEL_RESERVE_MINUTES;

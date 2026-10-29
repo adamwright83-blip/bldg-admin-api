@@ -225,5 +225,25 @@ describe.skipIf(!allowed)(
       );
       expect(Number(orders[0].n)).toBe(0);
     });
+    it("an uncollected pickup that leaves CleanCloud's list leaves the Driver, and comes back if it returns", async () => {
+      const before = await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" });
+      const gone = before.find(job => job.pickupBridge?.state === "ready");
+      expect(gone).toBeTruthy();
+      const collected = before.filter(job => job.pickupBridge?.state !== "ready");
+      const full = snapshot();
+      const result = await capturePickups(actor, {
+        ...full,
+        rows: full.rows.filter(row => row.externalOrderId !== gone!.externalOrderId),
+      });
+      expect(result.removed).toBe(1);
+      const after = await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" });
+      expect(after.map(job => job.id)).not.toContain(gone!.id);
+      // Collected work is never removed by a later snapshot.
+      for (const job of collected) expect(after.map(j => j.id)).toContain(job.id);
+      await capturePickups(actor, snapshot());
+      expect(
+        (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id)
+      ).toContain(gone!.id);
+    });
   }
 );
