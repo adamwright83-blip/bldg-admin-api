@@ -176,7 +176,10 @@ export function assembleSpeech(rounds: readonly (readonly string[])[]): string {
   if (finalText && !CLOSING_ONLY.test(finalText)) return finalText;
   const earlier = rounds.slice(0, -1).flat().filter(Boolean);
   const unique = earlier.filter((line, index) => earlier.indexOf(line) === index);
-  return [...unique, ...final].join(" ").trim();
+  // A sign-off already present in the earlier text is not repeated ("Bye, Adam. … Bye, Adam.").
+  const said = new Set(unique.flatMap(line => line.split(/(?<=[.!?])\s+/)).map(sentence => sentence.trim().toLowerCase()));
+  const closing = final.flatMap(line => line.split(/(?<=[.!?])\s+/)).map(sentence => sentence.trim()).filter(sentence => sentence && !said.has(sentence.toLowerCase()));
+  return [...unique, ...closing].join(" ").trim();
 }
 
 export function newConversationId(): string {

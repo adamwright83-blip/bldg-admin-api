@@ -20,6 +20,10 @@ describe("assembleSpeech", () => {
     expect(assembleSpeech([])).toBe("");
   });
 
+  it("does not repeat a sign-off already spoken before end_call (run 18)", () => {
+    expect(assembleSpeech([["Bye, Adam. Good luck with the landing page tomorrow."], ["Bye, Adam."]])).toBe("Bye, Adam. Good luck with the landing page tomorrow.");
+  });
+
   it("a plain final answer with no tools is spoken as is", () => {
     expect(assembleSpeech([["Tomorrow has two things: the pack walk and the husky meet-and-greet."]])).toBe("Tomorrow has two things: the pack walk and the husky meet-and-greet.");
   });
