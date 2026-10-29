@@ -392,6 +392,63 @@ export async function cancelDayLineItem(input: {
   };
 }
 
+/**
+ * Take one Day Director row off ONE day's line without abandoning the work behind it.
+ *
+ * "Remove the sales stops from tomorrow" is not "I'm not pursuing Greystar": cancelDayLineItem sets
+ * notPursuing and cancels a mission's follow-ups, which is too strong (2026-10-28 call, cb980810).
+ * This writes `removedFromDay` only, then reads the day back: an id is returned only when the row
+ * is no longer on that day's line.
+ */
+export async function removeDayDirectorCommitmentsFromDay(input: {
+  tenantId: string;
+  actorId: string;
+  actorIds?: string[];
+  businessDate: string;
+  commitmentIds: string[];
+  removedBy: string;
+  reason?: string | null;
+}): Promise<string[]> {
+  const nowIso = new Date().toISOString();
+  const reason = input.reason?.trim().slice(0, 500) || null;
+  const before = await getDayDirectorState({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    actorIds: input.actorIds,
+    businessDate: input.businessDate,
+  });
+  const onDay = new Map(before.commitments.map(row => [row.id, row]));
+  const attempted: string[] = [];
+  for (const id of [...new Set(input.commitmentIds)]) {
+    const row = onDay.get(id);
+    // Completed history is never rewritten, and a row not on this day is not this call's to move.
+    if (!row || row.status === "completed") continue;
+    for (const actorId of [...new Set([input.actorId, ...(input.actorIds ?? [])])]) {
+      const written = await writeCommitmentOverlay({
+        tenantId: input.tenantId,
+        actorId,
+        commitmentId: id,
+        overlay: {
+          removedFromDay: { businessDate: input.businessDate, removedAt: nowIso, removedBy: input.removedBy, reason },
+        },
+      }).then(() => true, () => false);
+      if (written) {
+        attempted.push(id);
+        break;
+      }
+    }
+  }
+  if (!attempted.length) return [];
+  const after = await getDayDirectorState({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    actorIds: input.actorIds,
+    businessDate: input.businessDate,
+  });
+  const stillOn = new Set(after.commitments.map(row => row.id));
+  return attempted.filter(id => !stillOn.has(id));
+}
+
 export function speakEditResult(displayTitle: string): string {
   return `Changed it to ‘${displayTitle}.’`;
 }

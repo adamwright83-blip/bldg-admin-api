@@ -22,6 +22,12 @@ export type GoldlineDayLineOverlay = {
   cancelledBy?: string | null;
   cancelledReason?: string | null;
   notPursuing?: boolean;
+  /**
+   * Taken off one day's line by the operator ("remove the sales stops from tomorrow").
+   * The row stops showing on the Day Line; the opportunity behind it is NOT abandoned:
+   * notPursuing stays false and no follow-up is cancelled. (2026-10-28 call)
+   */
+  removedFromDay?: DayLineRemovedFromDay | null;
   /** Overdue and still open. Evidence of unresolved work, never proof of a skip. */
   unresolved?: DayLineUnresolvedWork | null;
 };
@@ -31,6 +37,13 @@ export type DayLineUnresolvedWork = {
   observationId: string;
   status: "awaiting_explanation" | "explained";
   explanationObservationId?: string | null;
+  reason?: string | null;
+};
+
+export type DayLineRemovedFromDay = {
+  businessDate: string;
+  removedAt: string;
+  removedBy: string;
   reason?: string | null;
 };
 
@@ -67,7 +80,19 @@ export function readDayLineOverlay(source: unknown): GoldlineDayLineOverlay {
     cancelledReason:
       typeof nested.cancelledReason === "string" ? nested.cancelledReason : null,
     notPursuing: nested.notPursuing === true,
+    removedFromDay: readRemovedFromDay(nested.removedFromDay),
     unresolved: readUnresolved(nested.unresolved),
+  };
+}
+
+function readRemovedFromDay(value: unknown): DayLineRemovedFromDay | null {
+  const v = asRecord(value);
+  if (typeof v.businessDate !== "string" || typeof v.removedAt !== "string" || typeof v.removedBy !== "string") return null;
+  return {
+    businessDate: v.businessDate,
+    removedAt: v.removedAt,
+    removedBy: v.removedBy,
+    reason: typeof v.reason === "string" ? v.reason : null,
   };
 }
 
@@ -111,6 +136,17 @@ export function isDayLineCancelled(
   overlay: GoldlineDayLineOverlay | null | undefined
 ): boolean {
   return Boolean(overlay?.notPursuing || overlay?.cancelledAt);
+}
+
+/**
+ * Off the Day Line for any reason: abandoned (notPursuing / cancelled) or only taken off its day.
+ * Readers that decide what the line SHOWS use this; readers that ask whether the operator
+ * gave up on the work use isDayLineCancelled.
+ */
+export function isHiddenFromDayLine(
+  overlay: GoldlineDayLineOverlay | null | undefined
+): boolean {
+  return isDayLineCancelled(overlay) || Boolean(overlay?.removedFromDay);
 }
 
 export function matchDayLineItem(item: DayLineItemRef, utterance: string): boolean {

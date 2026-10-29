@@ -628,6 +628,13 @@ async function defaultListToday(input: {
   }));
 }
 
+function parsedExtractedTitle(utterance: string, extractedTitle: string | null | undefined): ParsedOperatorMissionCommand | null {
+  const evidenceQuote = normalizeMissionUtterance(utterance);
+  const title = extractedTitle ? normalizeMissionClause(extractedTitle) : null;
+  if (!evidenceQuote || !title) return null;
+  return { evidenceQuote, title, completionCondition: completionConditionForMission(title) };
+}
+
 function parsedReferentialCommand(
   utterance: string,
   resolvedMissionClause: string | null | undefined
@@ -657,6 +664,13 @@ export async function executeOperatorMissionCommand(
     sourceCommandRef: string;
     /** Work statement resolved from this live turn. Ignored unless the utterance is referential. */
     resolvedMissionClause?: string | null;
+    /**
+     * A title Claire's day-plan reader took from the operator's own words when the utterance is
+     * not one of the fixed command frames ("that should be tomorrow's marketing challenge,
+     * launching the landing page"). Used only when neither parser matches; the evidence quote
+     * stays the operator's utterance.
+     */
+    extractedTitle?: string | null;
   },
   deps: OperatorMissionCommandDeps = {}
 ): Promise<OperatorMissionCommandResult> {
@@ -671,7 +685,8 @@ export async function executeOperatorMissionCommand(
     if (!sourceCommandRef) return failure();
     const parsed =
       parseExplicitOperatorMissionCommand(input.utterance) ??
-      parsedReferentialCommand(input.utterance, input.resolvedMissionClause);
+      parsedReferentialCommand(input.utterance, input.resolvedMissionClause) ??
+      parsedExtractedTitle(input.utterance, input.extractedTitle);
     if (!parsed) return failure();
 
     const now = deps.now?.() ?? new Date();

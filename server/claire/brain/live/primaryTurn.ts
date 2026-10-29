@@ -111,6 +111,14 @@ export type ClaireV2PrimaryState = ClaireTurnState & {
   showrunner?: ShowrunnerCallState | null;
   /** Day Line rows Claire placed on this call, so a later "I'll do it tomorrow" can move them. */
   recentDayLineCommits?: RecentDayLineCommit[];
+  /** A day-plan change the operator stated as a preference, offered once by name. */
+  pendingDayPlanEdit?: DayPlanEditPending | null;
+  /**
+   * The Claire turn that last SPOKE the approval ask for the held pending briefing. A plain yes
+   * commits it only when that ask was the immediately previous Claire turn (2026-10-28: a yes to
+   * Claire's own "put both on the Day Line?" saved a different, older held offer).
+   */
+  pendingBriefingAskedAtTurn?: number | null;
 };
 
 export type ClaireV2Composition =
@@ -180,6 +188,19 @@ import {
   rememberDayLineCommit,
   type RecentDayLineCommit,
 } from "./dayLineDeferral";
+import {
+  applyDayPlanEdit,
+  bareConfirmation,
+  businessDateFor,
+  dayPlanOfferSpeech,
+  isDayPlanEditEnabled,
+  mayBeDayPlanEdit,
+  titleGroundedInOperatorWords,
+  type DayPlanEditDeps,
+  type DayPlanEditPending,
+  type DayPlanEditReading,
+} from "./dayPlanEdit";
+import { repeatSpeech, stripInternalAnnotations } from "../../speech/internalAnnotations";
 
 type SpeakingOrgan = typeof answerClairePreDriveFollowUp;
 
@@ -211,6 +232,14 @@ export type ClaireV2PrimaryDeps = {
    * deferral is answered honestly as not moved.
    */
   moveDayLineCommitments?: (input: { commitmentIds: string[]; toBusinessDate: string }) => Promise<string[]>;
+  /**
+   * The operator decides what a day's line holds ("remove the sales stops and put the marketing
+   * challenge"). Optional: without it the turn is answered as conversation, as before.
+   */
+  dayPlanEdit?: {
+    read: (input: { utterance: string; recentTurns: Array<{ speaker: "operator" | "claire"; text: string }>; evening: boolean }) => Promise<DayPlanEditReading | null>;
+    deps: DayPlanEditDeps;
+  };
   commitPendingDisclosures: () => Promise<void>;
   /**
    * The scheduled-call conductor (morning readiness, evening debrief). V2 runs
@@ -634,6 +663,15 @@ function businessReceipt(input: {
   });
 }
 
+/** "Just so I save the right thing": the held items by name, for a yes that came too late to bind. */
+export function heldBriefingClarifier(items: Array<{ title: string; businessDate: string }>, today: string): string {
+  const titles = items.map(item => item.title.trim().replace(/[.!?]+$/, "")).filter(Boolean);
+  const named = titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : titles[0] ?? "that";
+  const dates = [...new Set(items.map(item => item.businessDate))];
+  const day = dates.length === 1 ? (dates[0] === today ? "today's" : dates[0] === addDaysYmd(today, 1) ? "tomorrow's" : `the ${dates[0]}`) : "the";
+  return `Just so I save the right thing: put ${named} on ${day} Day Line?`;
+}
+
 /**
  * One complete V2 turn. Never calls legacy Claire, and never throws for an
  * ordinary failure: a failure is V2's own recovery line.
@@ -723,6 +761,8 @@ export async function runClaireV2PrimaryTurn(
 
   remember(state, "operator", utterance, nowMs);
 
+  /** Set by a composition that SPEAKS the held briefing's approval ask this turn. */
+  let spokenHeldAsk: string | null = null;
   const finish = (
     result: ClaireTurnResult,
     composition: ClaireV2Composition,
@@ -734,7 +774,7 @@ export async function runClaireV2PrimaryTurn(
     // is never also linted as conversation (that produced "I won't claim that
     // happened… Done." when the adapter returned the confirmation as its speech).
     const commit = result.receiptBackedCommit?.trim();
-    let conversational = result.speak.trim();
+    let conversational = stripInternalAnnotations(result.speak.trim());
     if (commit && conversational.endsWith(commit)) conversational = conversational.slice(0, -commit.length).trim();
     const inventory = inventoryPlusReceipts(buildClaireVerifiedFactInventory(input.context ?? null), result.mutationReceipts);
     const speak = assembleGuardedClaireSpeak({
@@ -746,6 +786,9 @@ export async function runClaireV2PrimaryTurn(
     });
     remember(state, "claire", speak, nowMs, input.surface === "voice" ? "generated" : "queued");
     state.claireTurnCount = ordinal;
+    // A plain yes may commit the held briefing only right after Claire asked for exactly it.
+    if (!state.pendingBriefing) state.pendingBriefingAskedAtTurn = null;
+    else if (result.kind === "briefing_proposed" || (spokenHeldAsk && speak.includes(spokenHeldAsk))) state.pendingBriefingAskedAtTurn = ordinal;
     if (receipt && speak) {
       state.claimReceipts = appendClaimReceipt(state.claimReceipts, { ...receipt, answerText: speak });
     }
@@ -908,6 +951,85 @@ export async function runClaireV2PrimaryTurn(
       return finish({ speak: "I couldn't move that to tomorrow just now.", kind: "answered", actionIds: [] }, "deterministic", null);
     }
 
+    // ── The operator decides what a day holds: a yes to Claire's named offer, or a new decision ──
+    if (deps.dayPlanEdit && isDayPlanEditEnabled()) {
+      const lane = deps.dayPlanEdit;
+      const finishDayPlan = (outcome: Awaited<ReturnType<typeof applyDayPlanEdit>>) => {
+        // The operator chose the day: Claire's own held offer for it is superseded, never left for a later yes.
+        if (outcome.missionSet) {
+          state.pendingBriefing = null;
+          state.heldBriefingItems = [];
+          state.pendingBriefingAskedAtTurn = null;
+        }
+        if (outcome.changed || outcome.missionSet) {
+          return finish(
+            { speak: "", receiptBackedCommit: outcome.speak, mutationReceipts: outcome.mutationReceipts, kind: "briefing_saved", actionIds: outcome.actionIds },
+            "action",
+            null,
+            ["day_plan_edit"]
+          );
+        }
+        return finish({ speak: outcome.speak || "I left the line as it is.", kind: "answered", actionIds: [] }, "action", null, ["day_plan_edit"]);
+      };
+      const held = state.pendingDayPlanEdit ?? null;
+      if (held) {
+        state.pendingDayPlanEdit = null;
+        const answer = bareConfirmation(utterance);
+        if (held.askedAtTurn === (state.claireTurnCount ?? 0) && answer === "no") {
+          return finish({ speak: "Okay. I left the line as it is.", kind: "answered", actionIds: [] }, "action", null, ["day_plan_edit"]);
+        }
+        if (held.askedAtTurn === (state.claireTurnCount ?? 0) && answer === "yes") {
+          return finishDayPlan(
+            await applyDayPlanEdit({
+              reading: held.reading,
+              utterance: held.sourceUtterance,
+              today: input.businessDate,
+              sourceCommandRef: `${turnId}:day-plan`,
+              deps: lane.deps,
+            })
+          );
+        }
+      }
+      if (mayBeDayPlanEdit(utterance)) {
+        const reading = await lane
+          .read({
+            utterance,
+            recentTurns: recentForModel.map(entry => ({ speaker: entry.speaker, text: entry.text })),
+            evening: state.showrunner?.purpose === "evening_debrief" || state.sessionKind === "evening_debrief",
+          })
+          .catch(error => {
+            console.warn("[ClaireDayPlanEdit] reader failed", { conversationKey: input.conversationKey, reason: error instanceof Error ? error.message : "unknown" });
+            return null;
+          });
+        const operatorWords = (state.history ?? [])
+          .filter(entry => entry.speaker === "operator")
+          .slice(-10)
+          .map(entry => entry.text)
+          .join(" ");
+        const title = reading?.primaryTitle && titleGroundedInOperatorWords(reading.primaryTitle, operatorWords) ? reading.primaryTitle : null;
+        const edit = reading ? { ...reading, primaryTitle: title } : null;
+        console.info("[ClaireDayPlanEdit]", JSON.stringify({
+          event: "claire_day_plan_edit_read",
+          conversationKey: input.conversationKey,
+          applies: reading?.applies ?? null,
+          explicit: reading?.explicit ?? null,
+          day: reading?.day ?? null,
+          titleGrounded: reading?.primaryTitle ? Boolean(title) : null,
+          removeSales: reading?.removeSales ?? null,
+          removeTitles: reading?.removeTitles.length ?? 0,
+        }));
+        if (edit?.applies && (edit.primaryTitle || edit.removeSales || edit.removeTitles.length)) {
+          if (edit.explicit) {
+            return finishDayPlan(
+              await applyDayPlanEdit({ reading: edit, utterance, today: input.businessDate, sourceCommandRef: `${turnId}:day-plan`, deps: lane.deps })
+            );
+          }
+          state.pendingDayPlanEdit = { reading: edit, sourceUtterance: utterance, askedAtTurn: ordinal, businessDate: businessDateFor(edit.day, input.businessDate) };
+          return finish({ speak: dayPlanOfferSpeech(edit), kind: "answered", actionIds: [] }, "action", null, ["propose_day_plan_edit"]);
+        }
+      }
+    }
+
     // ── Perception → Executive Function, with live read-only retrieval ──
     let adapterResult: ClaireTurnResult | null = null;
     let adapterPromise: Promise<ClaireTurnResult> | null = null;
@@ -917,6 +1039,12 @@ export async function runClaireV2PrimaryTurn(
     const execute = async (grant: ExecutiveActionGrant): Promise<ClaireTurnResult> => {
       if (isClaireRoleFeedback(grant.sourceTurnAssembledText)) {
         throw new Error("Claire role feedback cannot authorize Day Line mutation");
+      }
+      // A yes approves what Claire just asked, nothing older. When the held briefing's ask was not
+      // the previous Claire turn, name the held item and ask again instead of writing.
+      if (grant.actionClass === "commit_briefing" && state.pendingBriefing && state.pendingBriefingAskedAtTurn !== (state.claireTurnCount ?? 0)) {
+        adapterResult = { speak: heldBriefingClarifier(state.pendingBriefing.parsed.items, input.businessDate), kind: "briefing_proposed", actionIds: [] };
+        return adapterResult;
       }
       if (grant.authorityBasis === "standing_goal_policy") {
         // Claire's own offer. A failure to hold it pending must not turn the plan
@@ -1052,7 +1180,7 @@ export async function runClaireV2PrimaryTurn(
     if (decision.perceivedTurn.dialogueActs.includes("repeat_request")) {
       const previous = state.history?.filter(entry => entry.speaker === "claire").at(-1)?.text?.trim();
       return finish(
-        { speak: previous || V2_NOTHING_TO_REPEAT_SPEECH, kind: "answered", actionIds: [] },
+        { speak: (previous && repeatSpeech(previous)) || V2_NOTHING_TO_REPEAT_SPEECH, kind: "answered", actionIds: [] },
         "repeat",
         decision,
         []
@@ -1391,6 +1519,7 @@ export async function runClaireV2PrimaryTurn(
       if (leadAsk && leadOfferHeld && !speech.includes(leadAsk) && !said.some(text => text.includes(leadAsk))) {
         speech = `${speech.trim()} ${leadAsk}`.trim();
       }
+      if (leadAsk && leadOfferHeld) spokenHeldAsk = leadAsk;
       // Enforced, not requested: a plan asks at most one question, and a plan given to an
       // operator who asked for relief is one move in two sentences with no question at all.
       // (2026-10-27: 459 characters, two suggestions, two questions, to "I'm overwhelmed.")
@@ -1464,6 +1593,52 @@ export function productionClaireV2PrimaryDeps(input: {
         commitmentIds,
         toBusinessDate,
       });
+    },
+    dayPlanEdit: {
+      read: async ({ utterance, recentTurns, evening }) => {
+        const { readDayPlanEdit } = await import("./dayPlanEdit");
+        return readDayPlanEdit({ tenantId: input.tenantId, utterance, recentTurns, evening });
+      },
+      deps: {
+        readDay: async businessDate => {
+          const { getDayDirectorState } = await import("../../../planning/dayDirector/dayDirectorService");
+          const state = await getDayDirectorState({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate });
+          return state.commitments.map(row => ({
+            id: row.id,
+            title: row.title,
+            kind: row.kind,
+            status: row.status === "completed" ? ("completed" as const) : ("open" as const),
+            operatorPrimary: row.command?.role === "primary" && Boolean(row.operatorMission),
+          }));
+        },
+        removeFromDay: async ({ businessDate, commitmentIds, reason }) => {
+          const { removeDayDirectorCommitmentsFromDay } = await import("../../../planning/dayline/dayLineMutationService");
+          return removeDayDirectorCommitmentsFromDay({
+            tenantId: input.tenantId,
+            actorId: input.dayDirectorActorId,
+            businessDate,
+            commitmentIds,
+            removedBy: input.operatorUserId,
+            reason,
+          });
+        },
+        designateMission: async ({ businessDate, title, utterance, sourceCommandRef }) => {
+          const { executeOperatorMissionCommand } = await import("../../operatorMissionCommand");
+          const result = await executeOperatorMissionCommand({
+            tenantId: input.tenantId,
+            operatorUserId: input.operatorUserId,
+            dayDirectorActorId: input.dayDirectorActorId,
+            weeklyIntentOperatorId: input.operatorUserId,
+            businessDate,
+            utterance,
+            sourceCommandRef,
+            extractedTitle: title,
+          });
+          return result.ok
+            ? { ok: true as const, title: result.title, completionCondition: result.completionCondition, commitmentId: result.dayDirectorCommitmentId, outcome: result.outcome }
+            : { ok: false as const };
+        },
+      },
     },
     routeWeekly: async ({ utterance, intent, state }) => {
       const { routeActiveWeeklySession } = await import("../../weeklyMission/route");

@@ -346,6 +346,8 @@ describe("D15 — the execution-failure line is only for a write that was attemp
         parsed: { items: [{ kind: "new_work", title: "Visit competitor laundromats in Huntington Park" }] } as never,
         createdAt: Date.now(),
       },
+      // Claire's previous turn asked for exactly this item.
+      pendingBriefingAskedAtTurn: 0,
     };
     const result = await runClaireV2PrimaryTurn(turnInput(state, "Yes."), h.deps);
     expect(h.executeGrant).toHaveBeenCalledTimes(1);

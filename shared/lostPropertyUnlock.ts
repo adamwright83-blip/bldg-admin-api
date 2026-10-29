@@ -6,7 +6,7 @@
  * Chapter 2. Chapter 4 does not open. Stored chapters stay open. This module writes nothing.
  */
 import { OBJECTIVE_EXECUTION_TYPES } from "./objectiveExecution";
-import { isDayLineCancelled, readDayLineOverlay } from "./goldlineDayLine";
+import { isHiddenFromDayLine, readDayLineOverlay } from "./goldlineDayLine";
 import { readOperatorMissionMetadata } from "./claireWorkdayCommand";
 import { classifyTerritory } from "./lanternTerritories";
 
@@ -285,7 +285,7 @@ function commitmentCounts(
   const metadata =
     row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : null;
   if (metadata?.hiddenFromDayPlan === true) return false;
-  if (isDayLineCancelled(readDayLineOverlay(row.metadata))) return false;
+  if (isHiddenFromDayLine(readDayLineOverlay(row.metadata))) return false;
   return readOperatorMissionMetadata(row.metadata) !== null;
 }
 
