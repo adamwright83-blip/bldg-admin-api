@@ -222,6 +222,51 @@ describeMysql("prototype Day Line tools", () => {
     expect(plumberRows).toHaveLength(0);
   }, 60_000);
 
+  it("finds existing work across days, never duplicates it silently, and allows a confirmed recurring job", async () => {
+    const { applyDayLineChanges, executeTool, findDayLineItems } = await import("./tools");
+    const { businessDateToday, addDaysYmd } = await import("./spokenDate");
+    const { acceptProposalWithReceipt } = await import("../../planning/dayDirector/dayDirectorService");
+    const { operatorInstructionAdmission } = await import("../../planning/dayDirector/dayLineAdmission");
+    const today = businessDateToday(new Date(), ZONE);
+    const seed = async (title: string, businessDate: string) => {
+      const result = await acceptProposalWithReceipt({
+        tenantId: TENANT, actorId: ctx.dayDirectorActorId, businessDate,
+        proposal: { promptKey: `seed:${randomUUID()}`, title, kind: "operations", quantity: null, sourceText: title, prerequisites: [], question: null, intelligence: "manual_fallback", detailState: "COMPLETE", missingDetails: [], detailNote: null, references: [], targetBusinessDate: businessDate },
+        admission: operatorInstructionAdmission({ operatorUserId: OPEN_ID, surface: "day_line_ui", sourceRef: `seed:${randomUUID()}` }),
+      });
+      return String((result as { stored?: { id?: string } }).stored?.id ?? "");
+    };
+    const dubois = await seed("Regulate the action on Mr. Dubois's upright", addDaysYmd(today, 2));
+    const kessler = await seed("Mow and edge at the Kessler residence", addDaysYmd(today, 5));
+
+    // Found by what the operator calls it, wherever it is.
+    const found = await findDayLineItems(ctx, "the Dubois regulation");
+    expect(found.candidates.map(row => row.id)).toContain(dubois);
+    const viaTool = await executeTool(ctx, "find_day_line_item", { query: "Medeco cylinder order" });
+    expect((viaTool.output as { candidates: unknown[] }).candidates).toHaveLength(0);
+
+    // Run 20: "put it back on the day after tomorrow" as an ADD must not create a second Dubois row.
+    operatorTurns.push("Put the Dubois regulation back on the day after tomorrow.");
+    const sameDay = await applyDayLineChanges(ctx, [{ op: "add", title: "Dubois regulation", day: "the day after tomorrow" }], "Put the Dubois regulation back on the day after tomorrow.");
+    expect(sameDay.receipts[0]).toMatchObject({ status: "already_present", id: dubois });
+    // The same work on ANOTHER day is neither merged nor duplicated silently: resolution is requested.
+    operatorTurns.push("Add the Dubois regulation for tomorrow.");
+    const otherDay = await applyDayLineChanges(ctx, [{ op: "add", title: "Dubois regulation", day: "tomorrow" }], "Add the Dubois regulation for tomorrow.");
+    expect(otherDay.wrote).toBe(false);
+    expect(otherDay.receipts[0]).toMatchObject({ status: "needs_resolution" });
+    expect(otherDay.receipts[0]!.reason).toContain(dubois);
+    // A confirmed recurring job is allowed: same title, a different day, confirm_new.
+    operatorTurns.push("Put the Kessler mow on tomorrow too, it's every week, separate visit.");
+    const recurring = await applyDayLineChanges(ctx, [{ op: "add", title: "Mow and edge at the Kessler residence", day: "tomorrow", confirm_new: true }], "Put the Kessler mow on tomorrow too, it's every week, separate visit.");
+    expect(recurring.receipts[0]).toMatchObject({ status: "applied" });
+    const [kesslerRows] = await sql.query<mysql.RowDataPacket[]>("SELECT id, businessDate FROM day_director_commitments WHERE tenantId = ? AND actorId IN (?) AND title LIKE '%Kessler%'", [TENANT, actorIds]);
+    expect(kesslerRows).toHaveLength(2);
+    expect(kesslerRows.map(row => String(row.id))).toContain(kessler);
+    // And the original is still exactly where it was.
+    const [duboisRows] = await sql.query<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ? AND actorId IN (?) AND title LIKE '%Dubois%'", [TENANT, actorIds]);
+    expect(duboisRows).toHaveLength(1);
+  }, 60_000);
+
   it("saves a standing instruction and reports it active; numbers come back from the ledger without invention", async () => {
     const { executeTool } = await import("./tools");
     const saved = await executeTool(ctx, "save_standing_instruction", { rule: "Do not bring up The Louise unless the operator asks", operator_words: "Stop bringing up the Louise." });

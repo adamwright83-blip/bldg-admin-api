@@ -20,6 +20,7 @@ import {
   acceptProposalWithReceipt,
   completeDayDirectorCommitment,
   getDayDirectorState,
+  listOpenDayDirectorCommitmentsBetween,
   moveDayDirectorCommitment,
   updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
@@ -27,7 +28,8 @@ import { DayLineAdmissionRefusedError, operatorInstructionAdmission } from "../.
 import { removeDayDirectorCommitmentsFromDay } from "../../planning/dayline/dayLineMutationService";
 import { authorizeExistingRowChange, changesOutsideOffer, offerText, verifyOperatorAuthorization } from "./authorization";
 import { drizzleStandingInstructionStore, type StandingInstructionStore } from "../../agents/daphne/standingInstructions";
-import { businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
+import { addDaysYmd, businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
+import { matchWork, plausibleSameWork } from "./workMatch";
 
 export type ToolContext = {
   tenantId: string;
@@ -54,7 +56,7 @@ export type ChangeReceipt = {
   index: number;
   op: "add" | "move" | "remove" | "complete";
   title: string;
-  status: "applied" | "already_present" | "refused" | "not_found" | "ambiguous" | "failed";
+  status: "applied" | "already_present" | "needs_resolution" | "refused" | "not_found" | "ambiguous" | "failed";
   id: string | null;
   businessDate: string | null;
   day: string | null;
@@ -88,6 +90,21 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "find_day_line_item",
+    description:
+      "Find existing work on the Day Line by what the operator calls it, across days (two weeks back to six weeks ahead by default). Returns candidate rows with id, title, date and status. Use it BEFORE moving, finishing, removing or re-adding anything the operator refers to as already existing ('move the Dubois job', 'put it back', 'the Medeco order'), when you do not already know its day. Never add a new row for work that is already on the Day Line; find it and change it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The work as the operator described it, e.g. 'the Dubois regulation' or 'Medeco cylinder order'." },
+        days_back: { type: "integer", minimum: 0, maximum: 60, description: "How many days before today to search (default 14)." },
+        days_ahead: { type: "integer", minimum: 0, maximum: 120, description: "How many days after today to search (default 42)." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "apply_day_line_changes",
     description:
       "Write the operator's authorized Day Line changes in one batch: add new work, move a row to another day, mark a row completed, or take a row off a day. Call it once with every item the operator has authorized, in the order they belong. You must quote the operator's authorizing words in operator_words; the server checks they were actually said on this call, and a bare 'yes' only counts right after you asked a question. Work the operator merely mentioned ('I might…', 'at some point I should…') is not authorized until they tell you to put it on or say yes to your offer. Rows that were on the Day Line before this call are changed (move/complete/remove) only when the operator names that item and says what to do with it; 'I didn't say anything about X' is not 'take X off', and the server will refuse: ask them. Each change gets its own receipt: 'applied' means it is on the Day Line now; 'already_present' means an equivalent open row was already there and nothing was duplicated; 'refused' means the day was ambiguous or the write was not allowed; 'not_found'/'ambiguous' mean the row to move/complete/remove could not be identified (read the day and retry with the id). Only say something is saved when its receipt says applied or already_present.",
@@ -115,6 +132,10 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
               operator_words: {
                 type: "string",
                 description: "Optional, for a move/complete/remove of work that predates this call: the operator's exact words naming this item and the action ('take the Pham session off tomorrow'). Defaults to the batch's operator_words.",
+              },
+              confirm_new: {
+                type: "boolean",
+                description: "add only: set true when the operator confirmed this is a separate job even though similar work exists on another day (a recurring job, a second visit). Without it, an add that looks like existing work on another day is returned as needs_resolution instead of creating a duplicate.",
               },
             },
             required: ["op", "title", "day"],
@@ -212,7 +233,24 @@ function findRow(rows: DayLineRow[], key: string): { kind: "one"; row: DayLineRo
   return { kind: "many", rows: matches };
 }
 
-type Change = { op: ChangeReceipt["op"]; title: string; day: string; to_day?: string; detail?: string; operator_words?: string };
+type Change = { op: ChangeReceipt["op"]; title: string; day: string; to_day?: string; detail?: string; operator_words?: string; confirm_new?: boolean };
+
+export type FoundRow = DayLineRow & { match: { sharedNames: string[]; sharedWords: string[] } };
+
+/** Existing open work that plausibly matches `query`, across a bounded window, best matches first. */
+export async function findDayLineItems(ctx: ToolContext, query: string, window: { daysBack?: number; daysAhead?: number } = {}): Promise<{ from: string; through: string; candidates: FoundRow[] }> {
+  const today = businessDateToday(ctx.now(), ctx.timeZone);
+  const from = addDaysYmd(today, -(window.daysBack ?? 14));
+  const through = addDaysYmd(today, window.daysAhead ?? 42);
+  const rows = await listOpenDayDirectorCommitmentsBetween({ tenantId: ctx.tenantId, actorIds: [ctx.dayDirectorActorId], fromBusinessDate: from, throughBusinessDate: through });
+  const candidates = rows
+    .map(row => ({ row, match: matchWork(query, row.title) }))
+    .filter(item => item.match.candidate)
+    .sort((a, b) => b.match.sharedProper.length + b.match.sharedStems.length - (a.match.sharedProper.length + a.match.sharedStems.length) || a.row.businessDate.localeCompare(b.row.businessDate))
+    .slice(0, 8)
+    .map(item => ({ id: item.row.id, title: item.row.title, status: "open" as const, businessDate: item.row.businessDate, detail: null, match: { sharedNames: item.match.sharedProper, sharedWords: item.match.sharedStems } }));
+  return { from, through, candidates };
+}
 
 export async function applyDayLineChanges(
   ctx: ToolContext,
@@ -251,10 +289,26 @@ export async function applyDayLineChanges(
           continue;
         }
         const existing = (await readDayLineRows(ctx, businessDate)).filter(row => row.status === "open");
-        const duplicate = existing.find(row => sameWork(row.title, change.title));
+        const duplicate = existing.find(row => sameWork(row.title, change.title) || plausibleSameWork(row.title, change.title));
         if (duplicate) {
           receipts.push({ ...base, status: "already_present", id: duplicate.id, businessDate, day, reason: `an open row "${duplicate.title}" is already on ${day}` });
           continue;
+        }
+        // Plausibly the same work on ANOTHER day: never merge silently, never duplicate silently.
+        // The model resolves it (move the existing row, or confirm it is a separate job) unless the
+        // operator already confirmed a separate job (confirm_new).
+        if (!change.confirm_new) {
+          const elsewhere = (await findDayLineItems(ctx, change.title)).candidates.filter(row => row.businessDate !== businessDate && !ctx.callRowIds.has(row.id) && plausibleSameWork(row.title, change.title));
+          if (elsewhere.length) {
+            receipts.push({
+              ...base,
+              status: "needs_resolution",
+              businessDate,
+              day,
+              reason: `work like this is already on the Day Line: ${elsewhere.map(row => `"${row.title}" on ${spokenDay(row.businessDate, today)} [${row.id}]`).join("; ")}. If the operator means that item, move it (op "move" with its id). If it is a separate job (recurring, a second visit), confirm with them and re-send with confirm_new: true.`,
+            });
+            continue;
+          }
         }
         const title = change.title.trim().replace(/\s+/g, " ").slice(0, 255);
         const detail = change.detail?.trim().slice(0, 500) || null;
@@ -438,6 +492,10 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
       if (resolved.kind !== "resolved") return { output: { status: "refused", reason: resolved.reason }, wrote: false };
       const rows = await readDayLineRows(ctx, resolved.businessDate);
       return { output: { businessDate: resolved.businessDate, day: spokenDay(resolved.businessDate, today), rows }, wrote: false };
+    }
+    case "find_day_line_item": {
+      const found = await findDayLineItems(ctx, String(input.query ?? ""), { daysBack: typeof input.days_back === "number" ? input.days_back : undefined, daysAhead: typeof input.days_ahead === "number" ? input.days_ahead : undefined });
+      return { output: { query: input.query, searched: { from: found.from, through: found.through }, candidates: found.candidates.map(row => ({ id: row.id, title: row.title, day: spokenDay(row.businessDate, today), businessDate: row.businessDate, status: row.status, match: row.match })), note: found.candidates.length ? "Change the existing row by id; do not add a new one for the same work." : "Nothing like this is on the Day Line in that window." }, wrote: false };
     }
     case "apply_day_line_changes": {
       const changes = Array.isArray(input.changes) ? (input.changes as Change[]) : [];

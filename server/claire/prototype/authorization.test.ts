@@ -114,6 +114,14 @@ describe("authorizeExistingRowChange: conservative about work that predates the 
     expect(changesOutsideOffer(line, ["Session with the Pham sisters"])).toEqual([]);
   });
 
+  it("'it' refers to the item the operator named in their own earlier sentence (run 20, locksmith)", () => {
+    const lindqvist = { rowId: "r-l", rowTitle: "Master key system quote for the Lindqvist building" };
+    expect(authorizeExistingRowChange({ op: "remove", ...lindqvist, quote: "Lindqvist master key quote tomorrow. The property manager cancelled. Take it off tomorrow entirely.", lastClaireText: "What's the second change?" })).toEqual({ ok: true });
+    // The referent still does not reach an item named only in a LATER clause, nor one never named.
+    const panic = { rowId: "r-p", rowTitle: "Install the panic bar at St. Brendan's parish hall" };
+    expect(authorizeExistingRowChange({ op: "remove", ...panic, quote: "Lindqvist master key quote tomorrow. The property manager cancelled. Take it off tomorrow entirely.", lastClaireText: "What's the second change?" }).ok).toBe(false);
+  });
+
   it("a question about an existing item is not an instruction to change it", () => {
     expect(authorizeExistingRowChange({ op: "remove", rowId: "r-l", rowTitle: "Interview with the Whole Dog magazine writer", quote: "What's the deal with the magazine interview?", lastClaireText: null }).ok).toBe(false);
   });

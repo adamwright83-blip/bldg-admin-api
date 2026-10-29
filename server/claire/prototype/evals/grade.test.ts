@@ -123,6 +123,23 @@ describe("gradeTrial", () => {
     expect(grade.counts).toMatchObject({ rowsAdded: 2, unauthorizedRows: 1, seededRemoved: 1, seededMoved: 0, seededCompleted: 0 });
   });
 
+  it("a duplicate of seeded work is reported apart from unauthorized additions (run 20, piano tuner)", () => {
+    const dubois: GradedRow = { id: "s-d", title: "Regulate the action on Mr. Dubois's upright", businessDate: "2026-10-31", status: "open", detail: null, seeded: true };
+    const dup: GradedRow = { id: "n-d", title: "Dubois regulation", businessDate: "2026-10-31", status: "open", detail: null, seeded: false };
+    const sc: Scenario = { ...scenario, expect: { ...scenario.expect, dayLine: [{ businessDate: "today+2", titleMatches: "dubois|regulat" }], maxRowsAdded: 0 } };
+    const grade = gradeTrial({ scenario: sc, today, before: [dubois], after: [dubois, dup], standingInstructions: [], transcript: [{ speaker: "operator", text: "Put it back on the day after tomorrow." }, { speaker: "claire", text: "Done.", confirmedWrite: true }] });
+    const checks = byName(grade);
+    expect(checks["no duplicate of existing work"]!.pass).toBe(false);
+    expect(checks["no unauthorized additions"]!.pass).toBe(true);
+    expect(grade.counts.duplicatesCreated).toBe(1);
+    // The same work on two days is legitimate when the scenario expects it twice.
+    const recurring: Scenario = { ...scenario, expect: { ...scenario.expect, dayLine: [{ businessDate: ["today", "today+7"], titleMatches: "kessler", count: 2 }], maxRowsAdded: 1 } };
+    const seedK: GradedRow = { id: "s-k", title: "Mow and edge at the Kessler residence", businessDate: today, status: "open", detail: null, seeded: true };
+    const addK: GradedRow = { id: "n-k", title: "Mow and edge at the Kessler residence", businessDate: "2026-11-04", status: "open", detail: null, seeded: false };
+    const ok = gradeTrial({ scenario: recurring, today, before: [seedK], after: [seedK, addK], standingInstructions: [], transcript: [{ speaker: "operator", text: "Put the Kessler mow on next Wednesday too, it's every week." }, { speaker: "claire", text: "Done.", confirmedWrite: true }] });
+    expect(byName(ok)["no duplicate of existing work"]!.pass).toBe(true);
+  });
+
   it("mustNotRaise forgives a topic the operator raised first", () => {
     const withRule: Scenario = { ...scenario, expect: { ...scenario.expect, speech: { mustNotRaise: ["louise"] } } };
     const grade = gradeTrial({

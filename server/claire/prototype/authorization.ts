@@ -57,7 +57,7 @@ export function distinctiveTokens(text: string): string[] {
 }
 
 /** Verbs and generic nouns that describe the kind of work, not which work. */
-const GENERIC_WORK = new Set(["pitch", "person", "follow", "followup", "visit", "call", "email", "text", "deliver", "delivery", "pickup", "pick", "drop", "dropoff", "clean", "cleaning", "session", "meeting", "appointment", "check", "order", "renew", "quote", "replace", "install", "walk", "interview", "write", "finish", "complete", "grade", "review", "prep", "setup", "repair", "trim", "mow", "wash", "drive", "stop", "swing", "signing", "count", "audit", "invoice", "invoices", "with", "house", "place", "office", "store", "shop", "school", "family", "sisters", "brothers", "morning", "afternoon", "tonight", "tomorrow", "today"]);
+export const GENERIC_WORK_WORDS = new Set(["pitch", "person", "follow", "followup", "visit", "call", "email", "text", "deliver", "delivery", "pickup", "pick", "drop", "dropoff", "clean", "cleaning", "session", "meeting", "appointment", "check", "order", "renew", "quote", "replace", "install", "walk", "interview", "write", "finish", "complete", "grade", "review", "prep", "setup", "repair", "trim", "mow", "wash", "drive", "stop", "swing", "signing", "count", "audit", "invoice", "invoices", "with", "house", "place", "office", "store", "shop", "school", "family", "sisters", "brothers", "morning", "afternoon", "tonight", "tomorrow", "today"]);
 
 /**
  * The words that say WHICH piece of work: proper names in the title (any
@@ -76,7 +76,7 @@ export function identifyingTokens(title: string): string[] {
     ),
   ];
   if (proper.length) return proper;
-  return distinctiveTokens(title).filter(token => !GENERIC_WORK.has(token));
+  return distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token));
 }
 
 /** Whether `text` names the work `title` describes: shares one of its identifying words. */
@@ -210,9 +210,13 @@ export function authorizeExistingRowChange(input: {
   const action = input.op === "remove" ? REMOVE_ACTION : input.op === "complete" ? COMPLETE_ACTION : MOVE_ACTION;
   const toDayWords = input.op === "move" && input.toDay ? normalizeWords(input.toDay) : null;
   let namedSomewhere = false;
-  for (const clause of clausesOf(quote)) {
+  const clauses = clausesOf(quote);
+  for (const [index, clause] of clauses.entries()) {
     const named = clause.includes(input.rowId) || namesWork(clause, input.rowTitle);
-    const referred = !named && REFERENT.test(clause) && Boolean(input.lastClaireText && namesWork(input.lastClaireText, input.rowTitle));
+    // "Lindqvist master key quote tomorrow. The property manager cancelled. Take it off." — "it" is
+    // the item the operator named in their own earlier clause; failing that, the one Claire just named.
+    const previousClausesNameIt = clauses.slice(0, index).some(earlier => earlier.includes(input.rowId) || namesWork(earlier, input.rowTitle));
+    const referred = !named && REFERENT.test(clause) && (previousClausesNameIt || Boolean(input.lastClaireText && namesWork(input.lastClaireText, input.rowTitle)));
     if (!named && !referred) continue;
     namedSomewhere = true;
     const actionHere = action.test(clause) || Boolean(toDayWords && normalizeWords(clause).includes(toDayWords));

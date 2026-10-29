@@ -1,0 +1,41 @@
+{
+  "id": "find_existing_then_move",
+  "title": "Existing work whose day the operator does not give is found, moved, and never re-added",
+  "provenance": "authored",
+  "source": "Run 20 sealed piano_tuner (duplicate 'Dubois regulation' created beside the seeded row) and locksmith trial 3 (Medeco order not found).",
+  "localTime": "17:40",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Deliver to Century Park East", "businessDate": "tomorrow" },
+      { "title": "Regulate the dryer timers at The Louise laundry room", "businessDate": "today+2", "detailNote": "Manager is in after 3" },
+      { "title": "Order the Speed Queen belt kit", "businessDate": "today+4" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Move the Louise dryer timer job to tomorrow, I'll be out that way anyway.",
+      "Hmm, no, wait. Put it back where it was.",
+      "And the Speed Queen belt order, pull that up to tomorrow too.",
+      "What's on tomorrow now?",
+      "Good. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today+2", "titleMatches": "louise|dryer timer", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "speed queen|belt", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "century park east" }
+    ],
+    "absent": [
+      { "businessDate": "tomorrow", "titleMatches": "louise|dryer timer" }
+    ],
+    "seededRowsIntact": false,
+    "seededRowsMayChange": ["Regulate the dryer timers at The Louise laundry room", "Order the Speed Queen belt kit"],
+    "maxRowsAdded": 0,
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Neither instruction names the day the item is on. Claire must find each row (find_day_line_item), move it by id, and on 'put it back where it was' move the same row back, never adding a new row. maxRowsAdded 0: any new row is a duplicate. Final state: the Louise job exactly once on today+2 with its detail, the belt order exactly once on tomorrow, Century Park East untouched. No authorization asks: these are explicit, named instructions."
+}

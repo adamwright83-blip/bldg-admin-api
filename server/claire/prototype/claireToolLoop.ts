@@ -15,6 +15,7 @@ import { ENV } from "../../_core/env";
 import { modelRequestShape } from "../../_core/modelCapabilities";
 import { buildStandingInstructionsView, drizzleStandingInstructionStore } from "../../agents/daphne/standingInstructions";
 import { CLAIRE_PROTOTYPE_TOOLS, executeTool, readDayLineRows, type ToolContext, type ToolEvent } from "./tools";
+import { checkSpeech, heldTopicsFrom, restateInstruction, withoutOffendingSentences, type HeldTopic } from "./speechGuard";
 import { addDaysYmd, businessDateToday } from "./spokenDate";
 
 export const CLAIRE_PROTOTYPE_MODEL = process.env.ANTHROPIC_MODEL_CLAIRE_PROTOTYPE?.trim() || "claude-sonnet-5-5";
@@ -56,6 +57,10 @@ async function dayLineSnapshot(ctx: ToolContext, today: string): Promise<string>
 }
 
 export async function buildSystemPrompt(ctx: ToolContext, input: { operatorName: string; businessName: string }): Promise<string> {
+  return (await buildSystemPromptWithRules(ctx, input)).prompt;
+}
+
+export async function buildSystemPromptWithRules(ctx: ToolContext, input: { operatorName: string; businessName: string }): Promise<{ prompt: string; heldTopics: HeldTopic[] }> {
   const now = ctx.now();
   const today = businessDateToday(now, ctx.timeZone);
   const clock = new Intl.DateTimeFormat("en-US", { timeZone: ctx.timeZone, hour: "numeric", minute: "2-digit" }).format(now);
@@ -63,8 +68,9 @@ export async function buildSystemPrompt(ctx: ToolContext, input: { operatorName:
   const instructions = await store.listActive({ tenantId: ctx.tenantId, canonicalOperatorId: ctx.canonicalOperatorId }).catch(() => []);
   const view = buildStandingInstructionsView(instructions, { now, timeZone: ctx.timeZone });
   const snapshot = await dayLineSnapshot(ctx, today);
+  const heldTopics = heldTopicsFrom(instructions);
 
-  return [
+  const prompt = [
     `You are Claire, chief of staff to ${input.operatorName}, who runs ${input.businessName}. You are on a phone call with them. Everything you write is spoken aloud, so keep it short: one to three sentences, plain words, at most one question, and never a list read out loud. Do not repeat a sentence you already said; if they say you are repeating yourself, say something new or stop.`,
     `Calendar: it is ${weekdayName(today)} ${today}, ${clock} in ${ctx.timeZone}. Pass days to tools in the operator's own words ("tomorrow", "Friday", "the day after tomorrow"); the server turns them into dates. If a tool says a day is ambiguous, ask which day. Never pick a date the operator did not give.`,
     `The Day Line is the operator's list of committed work per day. Snapshot at the start of this call:\n${snapshot}\nAfter you change it, trust your receipts over this snapshot; read a day again when you need the current state.`,
@@ -82,8 +88,11 @@ Work described across the call belongs to one batch: when the authorization come
     `What you can do, if asked: read and change the Day Line (add, move, finish, remove work on any day), read the business numbers from the ledger, and keep standing rules about how you work. What you cannot do: send texts or emails, make calls, book or buy anything, or act outside this call. Answer a capabilities question plainly in those terms.`,
     `Standing rules: when the operator gives you a durable rule about how you behave on calls, save it with save_standing_instruction and follow it from that moment. Rules already in force:`,
     view.section ?? "none.",
+    `Existing work: when the operator refers to work as already on the list ("move the Dubois job", "put it back", "the Medeco order") and you do not know its day, call find_day_line_item first, then change that row by id. Never add a new row for work that already exists. If an add comes back needs_resolution, the same work is on another day: ask whether they mean that one (then move it) or a separate job (then re-send with confirm_new true). The same job on two days is legitimate when they say so.`,
+    `"Next Friday", "Thursday", "the 3rd" are dates: pass them to the tool as said, the server resolves them, you read the date back. Ask only when a day is genuinely vague.`,
     `When the operator is done, call end_call and say a short goodbye.`,
   ].join("\n\n");
+  return { prompt, heldTopics };
 }
 
 export async function openClaireSession(
@@ -97,7 +106,7 @@ export async function openClaireSession(
   const operatorTurns: string[] = [];
   let lastClaireText: string | null = null;
   const ctx: ToolContext = { ...baseCtx, operatorTurns: () => operatorTurns, lastClaireText: () => lastClaireText, callRowIds: new Set<string>() };
-  const systemPrompt = await buildSystemPrompt(ctx, input);
+  const { prompt: systemPrompt, heldTopics } = await buildSystemPromptWithRules(ctx, input);
   const messages: Anthropic.MessageParam[] = [];
   const shape = modelRequestShape(model, {});
 
@@ -154,7 +163,28 @@ export async function openClaireSession(
       }
       messages.push({ role: "user", content: results });
     }
-    const speak = assembleSpeech(rounds);
+    let speak = assembleSpeech(rounds);
+    // Held topics in speech: ask the model once to restate; strip only if it still breaks the rule.
+    const problems = checkSpeech(speak, { heldTopics, operatorTurns });
+    if (problems.length) {
+      const guardStarted = Date.now();
+      messages.push({ role: "user", content: `[speech check] ${restateInstruction(problems)}` });
+      let restated = speak;
+      try {
+        const response = await client.messages.create({ model, max_tokens: 400, ...(shape as Record<string, unknown>), system: systemPrompt, messages });
+        modelCalls += 1;
+        inputTokens += response.usage.input_tokens;
+        outputTokens += response.usage.output_tokens;
+        messages.push({ role: "assistant", content: response.content });
+        restated = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text.trim()).filter(Boolean).join(" ") || speak;
+      } catch (error) {
+        toolEvents.push({ name: "speech_check", input: { problems }, output: { status: "restate_failed", reason: error instanceof Error ? error.message : String(error) }, wrote: false, latencyMs: Date.now() - guardStarted });
+      }
+      const remaining = checkSpeech(restated, { heldTopics, operatorTurns });
+      const finalSpeech = remaining.length ? withoutOffendingSentences(restated, remaining) : restated;
+      toolEvents.push({ name: "speech_check", input: { problems: problems.map(p => p.kind), original: speak }, output: { restated, status: remaining.length ? "stripped_after_restate" : "restated" }, wrote: false, latencyMs: Date.now() - guardStarted });
+      speak = finalSpeech;
+    }
     lastClaireText = speak || lastClaireText;
     return { speak, endCall, toolEvents, modelCalls, latencyMs: Date.now() - startedAt, inputTokens, outputTokens, stopReason };
   }

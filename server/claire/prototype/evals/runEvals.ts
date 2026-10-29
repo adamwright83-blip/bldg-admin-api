@@ -215,7 +215,7 @@ async function main() {
         const today = businessDateToday(realNow, ZONE);
         const now = scenario.localTime ? () => fromZonedTime(`${today}T${scenario.localTime}:00`, ZONE) : () => new Date();
         const record: TrialRecord = {
-          system, scenarioId: scenario.id, trial, today, startedAt: realNow.toISOString(), grade: { pass: false, checks: [], counts: { rowsAdded: 0, unauthorizedRows: 0, seededMoved: 0, seededRemoved: 0, seededCompleted: 0, authorizationAsks: 0, falseClaims: 0, deniedSaves: 0, unansweredQuestions: 0 } },
+          system, scenarioId: scenario.id, trial, today, startedAt: realNow.toISOString(), grade: { pass: false, checks: [], counts: { rowsAdded: 0, unauthorizedRows: 0, seededMoved: 0, seededRemoved: 0, seededCompleted: 0, duplicatesCreated: 0, authorizationAsks: 0, falseClaims: 0, deniedSaves: 0, unansweredQuestions: 0 } },
           transcript: [], before: [], after: [], standingInstructions: [], latencyMs: { total: 0, perClaireTurn: [] }, tokens: null, error: null,
         };
         const trialStarted = Date.now();
@@ -340,6 +340,7 @@ function summarize(records: TrialRecord[]) {
       deniedSaves: trials.reduce((a, t) => a + t.grade.counts.deniedSaves, 0),
       unauthorizedRows: trials.reduce((a, t) => a + t.grade.counts.unauthorizedRows, 0),
       seededMutations: trials.reduce((a, t) => a + t.grade.counts.seededMoved + t.grade.counts.seededRemoved + t.grade.counts.seededCompleted, 0),
+      duplicatesCreated: trials.reduce((a, t) => a + t.grade.counts.duplicatesCreated, 0),
       authorizationAsks: trials.reduce((a, t) => a + t.grade.counts.authorizationAsks, 0),
       unansweredQuestions: trials.reduce((a, t) => a + t.grade.counts.unansweredQuestions, 0),
       errors: trials.filter(t => t.error).length,
@@ -358,10 +359,10 @@ function renderReport(records: TrialRecord[], meta: { trials: number; sets: stri
     lines.push(`- **Claire (${system}):** ${row.scenariosPassingAllTrials}/${row.scenarios} scenarios pass all trials; ${row.trialsPassed}/${row.trials} trials pass.`);
   }
   lines.push(`- **Acceptance:** ${meta.verdict.accepted ? "ACCEPTED — every scenario passed every trial" : "NOT ACCEPTED"}.`, ``);
-  lines.push(`## Summary`, ``, `| system | scenario | pass | mean turn ms | max turn ms | tokens in/out | est. cost | false claims | denied saves | unauthorized additions | seeded rows moved/removed/completed | auth asks | unanswered questions | errors |`, `|---|---|---|---|---|---|---|---|---|---|---|---|---|---|`);
+  lines.push(`## Summary`, ``, `| system | scenario | pass | mean turn ms | max turn ms | tokens in/out | est. cost | false claims | denied saves | unauthorized additions | seeded rows moved/removed/completed | duplicates created | auth asks | unanswered questions | errors |`, `|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|`);
   for (const row of summary) {
     const cost = row.tokens ? `$${((row.tokens.input * priceIn + row.tokens.output * priceOut) / 1_000_000).toFixed(3)}` : "n/a";
-    lines.push(`| ${row.system} | ${row.scenarioId} | ${row.passes}/${row.trials}${row.passAll ? " ✓" : ""} | ${row.meanTurnLatencyMs} | ${row.maxTurnLatencyMs} | ${row.tokens ? `${row.tokens.input}/${row.tokens.output}` : "not captured"} | ${cost} | ${row.falseClaims} | ${row.deniedSaves} | ${row.unauthorizedRows} | ${row.seededMutations} | ${row.authorizationAsks} | ${row.unansweredQuestions} | ${row.errors} |`);
+    lines.push(`| ${row.system} | ${row.scenarioId} | ${row.passes}/${row.trials}${row.passAll ? " ✓" : ""} | ${row.meanTurnLatencyMs} | ${row.maxTurnLatencyMs} | ${row.tokens ? `${row.tokens.input}/${row.tokens.output}` : "not captured"} | ${cost} | ${row.falseClaims} | ${row.deniedSaves} | ${row.unauthorizedRows} | ${row.seededMutations} | ${row.duplicatesCreated} | ${row.authorizationAsks} | ${row.unansweredQuestions} | ${row.errors} |`);
   }
   for (const system of meta.systems) {
     const rows = summary.filter(row => row.system === system);
