@@ -150,6 +150,9 @@ await session("desktop", { width: 1440, height: 900 }, async (page, shot) => {
   await page.getByTestId("claire-desk-why-toggle").click();
   await shot("desktop-why.png");
   await page.getByTestId("claire-desk-why-toggle").click();
+  // A pending mission moves by telling Claire: the chip starts the sentence in the input.
+  await page.getByTestId("claire-desk-move").click();
+  if ((await page.getByTestId("open-comms-input").inputValue()) !== 'Move "Placeholder mission" to ') violations.push("Move it to another day did not start the sentence to Claire");
   await page.getByTestId("open-comms-input").fill("Placeholder typed turn.");
   await page.getByTestId("open-comms-input").press("Enter");
   await page.getByTestId("open-comms-log").waitFor();
@@ -163,6 +166,9 @@ await session("desktop", { width: 1440, height: 900 }, async (page, shot) => {
   missionStatus = "needs_reschedule";
   await open(page);
   await shot("desktop-no-story-reschedule.png");
+  // Expired work moves with the full week plan's Reschedule control, in the drawer.
+  await page.getByTestId("claire-desk-move").click();
+  if (!(await page.getByTestId("claire-desk-drawer").isVisible())) violations.push("Move it to another day did not open the desk for expired work");
 });
 
 await session("phone", { width: 390, height: 844 }, async (page, shot) => {

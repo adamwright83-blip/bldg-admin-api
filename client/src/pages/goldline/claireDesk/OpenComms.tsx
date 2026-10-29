@@ -53,7 +53,16 @@ const blobToDataUrl = (blob: Blob) =>
  * always available: typing first opens a quiet text session (Claire answers in text, not aloud) that the mic can
  * join later. Nothing is "saved" unless the server says it persisted.
  */
-export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPhase?: (phase: Phase) => void }) {
+export function OpenComms({
+  onChanged,
+  onPhase,
+  draft,
+}: {
+  onChanged: () => void;
+  onPhase?: (phase: Phase) => void;
+  /** Text the page puts in the input for the operator to finish and send; a new `id` places it again. */
+  draft?: { id: number; text: string } | null;
+}) {
   const comms = trpc.system.weeklyMission.deskComms.useMutation();
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<Line[]>([]);
@@ -64,6 +73,8 @@ export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPha
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [micNote, setMicNote] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
+  const [joining, setJoining] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const sessionId = useRef(newSessionId());
   const stream = useRef<MediaStream | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
@@ -93,6 +104,14 @@ export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPha
   };
   const active = phase !== "idle" && phase !== "ended";
   useEffect(() => onPhase?.(phase), [onPhase, phase]);
+  useEffect(() => {
+    if (!draft) return;
+    setTyped(draft.text);
+    const el = input.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(draft.text.length, draft.text.length);
+  }, [draft]);
 
   const rms = () => {
     const a = analyser.current;
@@ -328,10 +347,17 @@ export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPha
 
   /** The mic joins a session that began in text: same conversation, and Claire speaks from here on. */
   async function joinVoice() {
+    // One microphone request at a time: a second tap while the first is pending would open a second stream.
+    if (joining || micOn.current) return;
     const mine = epoch.current;
     textOnly.current = false;
     setMicNote(null);
-    await startMic(mine);
+    setJoining(true);
+    try {
+      await startMic(mine);
+    } finally {
+      setJoining(false);
+    }
     if (epoch.current !== mine || !micOn.current || phaseRef.current === "processing" || phaseRef.current === "speaking") return;
     listen();
   }
@@ -424,6 +450,7 @@ export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPha
         <label htmlFor="cd-type" className="cd-sr">Tell Claire</label>
         <input
           id="cd-type"
+          ref={input}
           value={typed}
           onChange={e => setTyped(e.target.value)}
           placeholder={active ? "Type to Claire" : "Tell Claire what to change…"}
@@ -438,7 +465,7 @@ export function OpenComms({ onChanged, onPhase }: { onChanged: () => void; onPha
             <Mic aria-hidden />
           </button>
         ) : !micOn.current && phase !== "connecting" ? (
-          <button type="button" className="cd-comms-icon-button cd-mic" aria-label="Talk instead of typing" onClick={() => void joinVoice()} data-testid="open-comms-voice">
+          <button type="button" className="cd-comms-icon-button cd-mic" aria-label="Talk instead of typing" disabled={joining} onClick={() => void joinVoice()} data-testid="open-comms-voice">
             <Mic aria-hidden />
           </button>
         ) : null}

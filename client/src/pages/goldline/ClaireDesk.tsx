@@ -87,6 +87,7 @@ export default function ClaireDesk() {
   const [why, setWhy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [phase, setPhase] = useState<CommsPhase>("idle");
+  const [draft, setDraft] = useState<{ id: number; text: string } | null>(null);
   const deskOpener = useRef<HTMLElement | null>(null);
   const drawer = useRef<HTMLElement>(null);
 
@@ -184,7 +185,13 @@ export default function ClaireDesk() {
 
   const tonight = story.data?.enabled ? story.data : null;
   const chapter = tonight?.state === "available" ? tonight.chapter : null;
-  const canMove = primary?.status === "awaiting_approval" || primary?.status === "needs_reschedule";
+  // Expired work has a real Reschedule control in the full week plan; work still pending moves by telling Claire.
+  const moveToDay = () =>
+    primary?.status === "needs_reschedule"
+      ? openDesk("cd-week-plan")
+      : primary
+        ? setDraft(d => ({ id: (d?.id ?? 0) + 1, text: `Move "${primary.title}" to ` }))
+        : undefined;
 
   return (
     <div className="cd-root" data-testid="claire-desk" data-playing={playing || undefined}>
@@ -251,8 +258,8 @@ export default function ClaireDesk() {
                     <button type="button" className="cd-chip" disabled={confirmState.state === "saving"} onClick={() => void confirmTomorrow()} data-testid="confirm-tomorrow-button">
                       {confirmState.state === "saving" ? "Saving…" : confirmState.state === "error" ? "Retry confirm tomorrow" : m.tomorrowConfirmedAt ? "Confirm tomorrow again" : "Confirm tomorrow"}
                     </button>
-                    {canMove ? (
-                      <button type="button" className="cd-chip" onClick={() => openDesk("cd-week-plan")} aria-controls="cd-desk-drawer" data-testid="claire-desk-move">
+                    {primary?.status === "awaiting_approval" || primary?.status === "needs_reschedule" ? (
+                      <button type="button" className="cd-chip" onClick={moveToDay} data-testid="claire-desk-move">
                         Move it to another day
                       </button>
                     ) : null}
@@ -291,7 +298,7 @@ export default function ClaireDesk() {
               </>
             ) : null}
 
-            <OpenComms onChanged={refresh} onPhase={setPhase} />
+            <OpenComms onChanged={refresh} onPhase={setPhase} draft={draft} />
 
             <button type="button" className="cd-desk-link" onClick={() => openDesk()} aria-controls="cd-desk-drawer" aria-expanded={deskOpen} data-testid="claire-desk-drawer-open">
               Desk: runway, call sheet, settings <ArrowRight aria-hidden />
