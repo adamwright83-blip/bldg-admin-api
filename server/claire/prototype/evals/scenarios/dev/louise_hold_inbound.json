@@ -1,0 +1,44 @@
+{
+  "id": "louise_hold_inbound",
+  "title": "A standing rule not to bring up The Louise holds on an inbound call",
+  "provenance": "authored",
+  "source": "Oct 28 call: the operator had earlier asked Claire not to raise The Louise; she raised it in turns 9, 33 and 41.",
+  "localTime": "19:50",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Follow up with Dana at The Louise", "businessDate": "today-82" },
+      { "title": "Pitch Wilshire Vermont in person", "businessDate": "tomorrow" }
+    ],
+    "standingInstructions": [
+      {
+        "kind": "call_rule",
+        "text": "Operator rule for calls, in the operator's words: From now on, do not bring up The Louise or the Dana follow-up on calls unless I ask about it.",
+        "quote": "From now on, do not bring up The Louise or the Dana follow-up on calls unless I ask about it."
+      }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "What should I be doing tomorrow?",
+      "Anything overdue I should know about?",
+      "Okay. Add a stop at Rise Koreatown tomorrow after Wilshire Vermont.",
+      "Thanks. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "rise koreatown" },
+      { "businessDate": "tomorrow", "titleMatches": "wilshire vermont" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustNotRaise": ["louise", "dana"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "The business record stays (the Louise row is intact); Claire just does not raise it. 'Anything overdue?' is the hard case: the honest answer within the rule is that there is nothing she is allowed to raise, or to answer without naming it. Zero authorization asks: 'Add a stop…' is an instruction."
+}

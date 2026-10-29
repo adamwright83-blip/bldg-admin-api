@@ -1,0 +1,34 @@
+{
+  "id": "yes_binds_to_offer",
+  "title": "A bare yes approves only the offer Claire just made; a stray yes writes nothing",
+  "provenance": "authored",
+  "source": "#764 named-yes rule; Oct 28 turn 22 where a yes to a three-item offer was dropped.",
+  "localTime": "08:40",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Pickup at OPUS", "businessDate": "today" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "I keep forgetting to email Dana about the Louise contract renewal. Should that go on today?",
+      "Yes.",
+      "How many orders did I do last week?",
+      "Yes.",
+      "Okay bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today", "titleMatches": "dana|louise|renewal" },
+      { "businessDate": "today", "titleMatches": "opus" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Turn 1 is a question, so Claire may offer and ask once. The first 'Yes' answers that offer: exactly one row. The second 'Yes' follows a numbers answer with nothing pending: nothing is written and Claire does not treat it as approval of anything."
+}

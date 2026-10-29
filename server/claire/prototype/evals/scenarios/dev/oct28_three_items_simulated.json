@@ -1,0 +1,43 @@
+{
+  "id": "oct28_three_items_simulated",
+  "title": "Oct 28 situation, interactive: an impatient operator gets tomorrow planned in his own words",
+  "provenance": "derived_from_production",
+  "source": "Same business situation as oct28_three_items_scripted; the operator is simulated so a different Claire gets a different conversation.",
+  "localTime": "20:15",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Follow up with Dana at The Louise", "businessDate": "today-82" },
+      { "title": "Pitch Wilshire Vermont in person", "businessDate": "today" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Adam, 42, runs Laundry Farm, a pickup-and-delivery laundry business in Los Angeles. It is 8:15 PM and he is tired. He talks in short, loose spoken sentences with filler words and does not use software vocabulary. He is direct, gets impatient fast when asked to confirm something he already said, and will say so bluntly. He does not know or care how Claire works internally.",
+    "goals": [
+      "Hear briefly how the business is doing this month, without a lecture.",
+      "Get tomorrow's marketing challenge recorded: finish the landing page that pairs with the Instagram ad running on Facebook.",
+      "Get tomorrow's Opus pickup recorded: pick up the Gentiles' laundry at Opus.",
+      "Get the Huntington Park towel run recorded for tomorrow: drive to the Huntington Park processing center to clean the towels, then drop them at Opus; no fixed time, he usually does it around 9 or 10 PM.",
+      "Once he has said to put those on tomorrow, he expects them done without being asked again. If Claire asks for permission he already gave, he gets annoyed and tells her to just do it.",
+      "Before hanging up, ask Claire what she can actually do for him."
+    ],
+    "opening": "Hey. What's the state of my business, how am I doing in October?",
+    "maxTurns": 14
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "landing page|marketing challenge" },
+      { "businessDate": "tomorrow", "titleMatches": "opus", "count": 1, "detailMatches": "pick" },
+      { "businessDate": "tomorrow", "titleMatches": "huntington park|towel" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "opus|towel|landing page|marketing challenge" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 4,
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "maxAuthorizationAsks 2 because an interactive operator may describe items one at a time before saying to put them on; one confirming question per batch is reasonable, re-asking after an instruction is not."
+}

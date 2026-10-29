@@ -1,0 +1,44 @@
+{
+  "id": "bakery_three_days_one_breath",
+  "title": "Wholesale bakery owner fires off three tasks on three different days in one breath",
+  "provenance": "authored",
+  "localTime": "15:40",
+  "seed": {
+    "operatorName": "Priya",
+    "dayLine": [
+      { "title": "Pay the egg supplier", "businessDate": "today" },
+      { "title": "Larkspur Cafe standing bread order", "businessDate": "tomorrow", "detailNote": "Out the door by 6 a.m." }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Priya, 38, owns Marrow & Rye, a wholesale bakery in Glendale that delivers to hotels and cafes. She is brisk and precise, talks fast, and lists things in one go rather than one at a time. She does not use software vocabulary and does not care how Claire works. She dislikes repeating herself: if asked to confirm something she already said, she says 'I just told you' and repeats it once, flatly.",
+    "goals": [
+      "Get three things written down for the right days: tomorrow, the Fairmont croissant drop at 5 a.m.; the day after tomorrow, sourdough samples to Verdugo Market; and Friday, call the flour rep about the short pallet.",
+      "If asked which Friday she means, it is the next Friday coming up.",
+      "Before hanging up, have Claire read the three back so she can hear they landed on the right days. If one is on the wrong day, correct it once.",
+      "She does not want anything else added, moved, or discussed; if Claire offers extra help, decline.",
+      "Hang up when done, saying exactly: 'Perfect. Bye.'"
+    ],
+    "opening": "Hi Claire. Three things, write them down. Tomorrow, the Fairmont croissant drop at five a.m. Day after tomorrow, sourdough samples to Verdugo Market. And Friday, call the flour rep about the short pallet. Got all that?",
+    "maxTurns": 10
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "fairmont|croissant", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "verdugo|sourdough", "count": 1 },
+      { "businessDate": "next_friday", "titleMatches": "flour|pallet", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "larkspur" }
+    ],
+    "absent": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "fairmont|croissant" },
+      { "businessDate": "tomorrow", "titleMatches": "verdugo|sourdough" },
+      { "businessDate": "today", "titleMatches": "fairmont|croissant|verdugo|sourdough|flour|pallet" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the one-breath multi-item case: three items, three distinct days, each landing exactly once (count 1) with no duplicates and nothing split onto today. The opening is a direct instruction ('write them down'), so no authorization ask is needed; one is allowed only because 'Friday' can legitimately prompt 'this Friday or next?' on some run days, and the persona answers 'the next one coming up', which is what next_friday resolves to. Absent checks are limited to pairs of dates that can never coincide (tomorrow vs day after tomorrow); the Friday row is guarded by its expected placement plus maxRowsAdded 3, because on some run days Friday IS tomorrow or the day after. Seeded rows (egg supplier today, Larkspur tomorrow) must be untouched."
+}

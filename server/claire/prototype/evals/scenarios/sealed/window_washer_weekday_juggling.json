@@ -1,0 +1,42 @@
+{
+  "id": "window_washer_weekday_juggling",
+  "title": "Polite window-washing owner schedules by weekday, moves a job to the day after tomorrow, and leaves one date vague",
+  "provenance": "authored",
+  "localTime": "19:15",
+  "seed": {
+    "operatorName": "Dolores",
+    "dayLine": [
+      { "title": "Interior windows at the Aldana residence", "businessDate": "tomorrow" },
+      { "title": "Gutter clean at the Whitcomb house", "businessDate": "next_wednesday", "detailNote": "Bring the tall ladder" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Dolores, 60, owns Crystal Clear Window Washing in Pasadena. She is unfailingly polite, methodical, and speaks in complete sentences with please and thank you. She schedules by weekday name and never says calendar dates. She does not use software vocabulary. If Claire asks a sensible question she answers it patiently; if Claire asks the same thing twice she notes, gently, that she already answered.",
+    "goals": [
+      "Add the storefront glass at Pinecrest Dental for Tuesday.",
+      "Add the Marlowe estate, all exterior windows, for Saturday.",
+      "Move the Whitcomb gutter cleaning off Wednesday to the day after tomorrow, because the rain is coming in later in the week.",
+      "She also wants the lobby glass at Ashford Lofts done 'sometime soon-ish' but has not picked a day. If Claire asks which day, she says Friday. If Claire puts it on a day without asking, she corrects it to Friday.",
+      "Whenever Claire asks which Tuesday, Saturday or Friday she means, it is always the next one coming up.",
+      "Hang up when done, saying exactly: 'Thank you, Claire. Goodnight.'"
+    ],
+    "opening": "Good evening, Claire. I have a few schedule changes, if you have a moment.",
+    "maxTurns": 16
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "next_tuesday", "titleMatches": "pinecrest|dental", "count": 1 },
+      { "businessDate": "next_saturday", "titleMatches": "marlowe", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "whitcomb|gutter", "count": 1 },
+      { "businessDate": "next_friday", "titleMatches": "ashford|lobby", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "aldana" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": ["Gutter clean at the Whitcomb house"],
+    "maxRowsAdded": 3,
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "Guards relative-date resolution from the call's calendar: Tuesday, Saturday and Friday resolve to the next occurrence strictly after today (the persona confirms 'the next one coming up' if asked), 'the day after tomorrow' resolves to today+2, and the operator never speaks a calendar date. Whitcomb must exist exactly once on the day after tomorrow (moved, not copied; on a Monday run that is the same day it was seeded on, which is still correct). Ashford has no date until Claire asks, so one clarifying question is legitimate; a second ask is allowed for a batch confirmation, nothing beyond that. No absent checks are used because on some run days a weekday coincides with tomorrow or the day after, so wrong-day writes are caught instead by each row's required placement plus maxRowsAdded 3 (three new rows, one move)."
+}

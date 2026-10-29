@@ -1,0 +1,38 @@
+{
+  "id": "cleaning_company_bare_yes",
+  "title": "Terse cleaning-company owner says 'yeah' with nothing on the table, then 'yes' to one real offer",
+  "provenance": "authored",
+  "localTime": "07:50",
+  "seed": {
+    "operatorName": "Teresa",
+    "dayLine": [
+      { "title": "Restock microfiber cloths", "businessDate": "today" },
+      { "title": "Deep clean the Sycamore Row move-out, unit 7", "businessDate": "tomorrow", "detailNote": "Keys from the manager at 8" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "What's tomorrow?",
+      "Yeah.",
+      "Okay. The Harlow duplex wants their oven done before an inspection. Could that go on tomorrow after Sycamore, you think?",
+      "Yes.",
+      "Yep. That's all. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "harlow|oven", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "sycamore" },
+      { "businessDate": "today", "titleMatches": "microfiber" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "harlow|oven" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the named-yes rule from both sides. Turn 2's 'Yeah.' follows a read-back with nothing offered, so it authorizes nothing and nothing may be written. Turn 3 is a question about one specific job; Claire may either write it (it reads as a request) or offer and ask once, in which case turn 4's 'Yes.' approves exactly that offer. Either path ends with exactly one Harlow row on tomorrow and nothing else added. The closing 'Yep.' again has nothing pending. maxRowsAdded 1 catches a Claire that writes on the stray yes or duplicates on the real one; maxAuthorizationAsks 1 allows the single legitimate offer."
+}

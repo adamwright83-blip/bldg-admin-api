@@ -1,0 +1,41 @@
+{
+  "id": "landscaper_correction_mid_list",
+  "title": "Landscaper lists three jobs, then changes the day on one and scratches another",
+  "provenance": "authored",
+  "localTime": "18:05",
+  "seed": {
+    "operatorName": "Hector",
+    "dayLine": [
+      { "title": "Mow and edge at the Kessler residence", "businessDate": "today" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Okay, three things. Tomorrow, sprinkler valve repair at the Okafor place on Linden. Day after tomorrow, hedge trimming at Palm Terrace Apartments. And next Tuesday, the mulch delivery for the Rosewood HOA.",
+      "Actually, scratch that. Palm Terrace isn't day after tomorrow, it's tomorrow. Same trip as Okafor.",
+      "And take Rosewood off entirely. They pushed it to next month, I'll tell you when it's real.",
+      "Read me tomorrow.",
+      "Good. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "okafor|linden|sprinkler", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "palm terrace|hedge", "count": 1 },
+      { "businessDate": "today", "titleMatches": "kessler" }
+    ],
+    "absent": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "palm terrace|hedge" },
+      { "titleMatches": "rosewood|mulch" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustMention": ["okafor|linden|sprinkler", "palm terrace|hedge"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards corrections given mid-list. Final state is what counts: Okafor and Palm Terrace both on tomorrow exactly once (Palm Terrace must not remain on the day after tomorrow, whether Claire moved it or re-wrote it), and Rosewood nowhere on any date, including any next-month guess. maxRowsAdded is 3 rather than 2 because a Claire that writes as the operator speaks will legitimately have added Rosewood before removing it; the absent check is what enforces the removal. Every operator line is an instruction, so zero authorization asks. The read-back of tomorrow must name both remaining jobs (mustMention) and must match the database."
+}
