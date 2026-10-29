@@ -54,4 +54,19 @@ describe("Mission Director Daily Command constraints", () => {
     const after = computePlanningFingerprint({ ...base, commandFingerprint: "primary:dana" });
     expect(before).not.toBe(after);
   });
+
+  it("re-plans when the CleanCloud schedule turns verified or unverified; no effect for non-CleanCloud", () => {
+    const base = {
+      businessDate: "2026-09-21",
+      fieldItemIds: ["pickup:1"],
+      fieldScheduledAts: ["2026-09-21T15:00:00.000Z"] as (string | null)[],
+      campaigns: [buildCampaign({ campaignId: "office-pitch", title: "Office pitch", objective: "Win one office" })],
+      prepReady: { "office-pitch": true },
+      rankingContext: sparseContext,
+    };
+    const complete = computePlanningFingerprint({ ...base, scheduleComplete: true });
+    const incomplete = computePlanningFingerprint({ ...base, scheduleComplete: false });
+    expect(complete).not.toBe(incomplete);
+    expect(computePlanningFingerprint({ ...base, scheduleComplete: null })).toBe(computePlanningFingerprint(base));
+  });
 });

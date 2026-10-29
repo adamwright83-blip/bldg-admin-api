@@ -225,5 +225,36 @@ describe.skipIf(!allowed)(
       );
       expect(Number(orders[0].n)).toBe(0);
     });
+    it("an uncollected pickup that leaves CleanCloud's list leaves the Driver, and comes back if it returns", async () => {
+      const before = await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" });
+      const gone = before.find(job => job.pickupBridge?.state === "ready");
+      expect(gone).toBeTruthy();
+      const collected = before.filter(job => job.pickupBridge?.state !== "ready");
+      const full = snapshot();
+      const result = await capturePickups(actor, {
+        ...full,
+        rows: full.rows.filter(row => row.externalOrderId !== gone!.externalOrderId),
+      });
+      expect(result.removed).toBe(1);
+      const after = await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" });
+      expect(after.map(job => job.id)).not.toContain(gone!.id);
+      // Collected work is never removed by a later snapshot.
+      for (const job of collected) expect(after.map(j => j.id)).toContain(job.id);
+      await capturePickups(actor, snapshot());
+      expect(
+        (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id)
+      ).toContain(gone!.id);
+    });
+    it("an older snapshot arriving after a newer one changes nothing", async () => {
+      const older = { ...snapshot(), observedAt: new Date(Date.now() - 60_000).toISOString() };
+      const newer = snapshot();
+      await capturePickups(actor, newer);
+      const before = (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id).sort();
+      const result = await capturePickups(actor, { ...older, rows: older.rows.slice(0, 1) });
+      expect(result).toMatchObject({ superseded: true, imported: 0, removed: 0 });
+      expect(
+        (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id).sort()
+      ).toEqual(before);
+    });
   }
 );

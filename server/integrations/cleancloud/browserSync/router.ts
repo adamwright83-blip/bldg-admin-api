@@ -627,6 +627,22 @@ export const cleancloudBrowserSyncRouter = router({
         reportTypes: input?.reportTypes,
       });
     }),
+  /**
+   * One-shot READ-ONLY test: can the server's own CleanCloud session see the live
+   * pickup and delivery schedule? Logs in once, reads the store page once, writes
+   * nothing, and refuses while a recent sign-in failure has not been followed by a
+   * Gmail reconnection.
+   */
+  scheduleProbe: legacyDayforgeTenantOperatorProcedure.mutation(async ({ ctx }) => {
+    const { probeCleanCloudSchedule } = await import("./scheduleProbe");
+    const { getJawbreakerGmailConnectedAt } = await import("./gmailVerification");
+    const report = await probeCleanCloudSchedule({
+      tenantId: ctx.tenantId,
+      gmailConnectedAt: await getJawbreakerGmailConnectedAt(ctx.tenantId).catch(() => null),
+    });
+    console.info("[CleanCloudScheduleProbe]", JSON.stringify({ tenantId: ctx.tenantId, ...report }));
+    return report;
+  }),
   /** Starts Gmail (read-only) authorization for CleanCloud verification codes. */
   gmailConnectUrl: legacyDayforgeTenantOperatorProcedure.mutation(async ({ ctx }) => {
     const { createJawbreakerGmailConnectUrl } = await import("./gmailVerification");

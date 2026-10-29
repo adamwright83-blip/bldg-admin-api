@@ -278,8 +278,16 @@ export function computePlanningFingerprint(input: {
   commandFingerprint?: string | null;
   candidateFingerprint?: string | null;
   executionConstraint?: "mission" | "challenge" | null;
+  /**
+   * Whether the CleanCloud schedule was verified complete when the plan was made.
+   * Pocket confidence depends on it, so a change re-plans instead of reusing a plan
+   * whose windows were claimed (or withheld) under the other state. Absent for a
+   * business that does not run on CleanCloud, so its fingerprint is unchanged.
+   */
+  scheduleComplete?: boolean | null;
 }): string {
   return fingerprint({
+    ...(input.scheduleComplete == null ? {} : { scheduleComplete: input.scheduleComplete }),
     businessDate: input.businessDate,
     fieldItemIds: input.fieldItemIds,
     fieldScheduledAts: input.fieldScheduledAts,
@@ -498,7 +506,16 @@ export async function computeMissionPlan(input: {
       durationMinutes: occupancy.durationMinutes,
     })),
   ];
-  const rawPockets = detectTimePockets({ timeline });
+  // A pocket is only as good as the schedule it sits in: an unverified CleanCloud day
+  // (stale pickups, no delivery feed) may hide a stop inside any gap.
+  const { loadScheduleFreshness } = await import("../../integrations/cleancloud/pickups/scheduleFreshness");
+  const freshness = await loadScheduleFreshness({ tenantId: input.tenantId, timeZone });
+  const rawPockets = detectTimePockets({
+    timeline,
+    scheduleCoverage: freshness.applicable
+      ? { complete: freshness.complete, reason: freshness.label || null }
+      : undefined,
+  });
   const pockets = applyCommandProtection(
     rawPockets,
     Boolean(command?.constraints.protectDiscretionary)
@@ -589,6 +606,7 @@ export async function computeMissionPlan(input: {
     commandFingerprint: command?.constraints.fingerprint ?? null,
     candidateFingerprint: candidateFeed?.fingerprint ?? null,
     executionConstraint: weeklyExecution,
+    scheduleComplete: freshness.applicable ? freshness.complete : null,
   });
   if (options.needsExplanation && !(await options.needsExplanation(inputFingerprint))) {
     return { outcome: { ...bare, workPlan } as MissionPlanOutcome, inputFingerprint, unchanged: true };

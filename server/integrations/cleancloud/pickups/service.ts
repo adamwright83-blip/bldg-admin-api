@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../../db";
 import { externalOperationalOrders } from "../../../../drizzle/schema";
@@ -131,6 +131,17 @@ export async function capturePickups(
         code: "CONFLICT",
         message: "Pickup connection changed.",
       });
+    // Captures can arrive out of order. A snapshot observed before the one already
+    // applied is superseded: applying it would re-add or remove pickups based on an
+    // older view of CleanCloud than the Driver already shows.
+    if (locked.capturedAt && observedAt.getTime() < locked.capturedAt.getTime())
+      return {
+        imported: 0,
+        removed: 0,
+        excluded: 0,
+        superseded: true,
+        capturedAt: locked.capturedAt.toISOString(),
+      };
     const excluded = new Set(locked.excludedOrderIds);
     let imported = 0;
     for (const row of snapshot.rows) {
@@ -215,12 +226,53 @@ export async function capturePickups(
       }
       imported++;
     }
+    // The snapshot is CleanCloud's complete awaiting-pickup list (the bridge checks its
+    // row count against CleanCloud's own counter). An uncollected pickup that is no
+    // longer in it was cancelled, rescheduled out, or collected elsewhere, so it leaves
+    // the Driver instead of lingering as a stop that does not exist.
+    const present = new Set(ids);
+    const open = await tx
+      .select({
+        id: driverPickups.id,
+        externalOrderId: driverPickups.externalOrderId,
+        externalOperationalOrderId: driverPickups.externalOperationalOrderId,
+        state: driverPickups.state,
+      })
+      .from(driverPickups)
+      .where(
+        and(
+          eq(driverPickups.tenantId, actor.tenantId),
+          eq(driverPickups.bindingId, snapshot.bindingId),
+          isNull(driverPickups.collectedAt)
+        )
+      )
+      .for("update");
+    const vanished = open.filter(
+      row => !present.has(row.externalOrderId) && row.state !== "held"
+    );
+    for (const row of vanished) {
+      await tx
+        .update(driverPickups)
+        .set({ state: "held", lastError: "No longer in CleanCloud's pickup list." })
+        .where(eq(driverPickups.id, row.id));
+      await tx
+        .update(externalOperationalOrders)
+        .set({ reviewState: "discarded" })
+        .where(
+          and(
+            eq(externalOperationalOrders.id, row.externalOperationalOrderId),
+            eq(externalOperationalOrders.tenantId, actor.tenantId)
+          )
+        );
+    }
     await tx
       .update(pickupConnections)
       .set({ capturedAt: observedAt, lastError: null })
       .where(eq(pickupConnections.tenantId, actor.tenantId));
     return {
       imported,
+      removed: vanished.length,
+      superseded: false,
       excluded: snapshot.rows.filter(row => excluded.has(row.externalOrderId))
         .length,
       capturedAt: observedAt.toISOString(),

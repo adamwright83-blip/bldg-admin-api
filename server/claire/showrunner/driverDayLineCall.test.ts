@@ -15,6 +15,7 @@ import { buildShowrunnerBriefing, showrunnerOpening } from "./showrunnerBriefing
 import { runShowrunnerTurn, type ShowrunnerCallState } from "./showrunnerTurn";
 import {
   loadDriverDayLineForCall,
+  speakDriverDayLineCall,
   projectDriverDayLineForCall,
   type DriverDayLineCallFacts,
   type DriverDayLineProjectionInput,
@@ -326,6 +327,43 @@ describe("driver Day Line on the Claire call", () => {
     expect(line.read).toBe("read");
     expect(line.stops.some(stop => stop.title === "Call Harbor Laundry")).toBe(true);
     expect(line.stops.some(stop => stop.evidence === "pickup:42")).toBe(true);
+  });
+
+  it("names an incomplete CleanCloud schedule instead of reading the day as whole", async () => {
+    const { assessScheduleFreshness } = await import("../../../shared/cleancloudScheduleFreshness");
+    const line = await loadDriverDayLineForCall({
+      caller: {
+        tenantId: "tenant-a",
+        userId: "adam",
+        includeAllAssignees: false,
+        dayDirectorActorId: "actor-1",
+        dayDirectorActorIds: ["actor-1"],
+        canonicalOperatorId: "op-1",
+      },
+      businessDate: "2026-10-16",
+      now: NOW,
+      timeZone: "America/Los_Angeles",
+      getField: async () => field,
+      listOrders: async () => [],
+      listExternal: async () => [],
+      getDay: async () => ({ processingLocation: null, commitments: [], dismissedPromptKeys: [], intelligenceAvailable: false }) as never,
+      getPlan: async () => null,
+      listSales: async () => [],
+      readOpenChannel: async () => null,
+      readScheduleFreshness: async ({ now }) =>
+        assessScheduleFreshness(
+          {
+            usesCleanCloud: true,
+            pickupConnection: { enabled: true, capturedAt: new Date(now.getTime() - 3 * 3_600_000), lastError: null },
+            deliveriesSynced: false,
+          },
+          now
+        ),
+    });
+    expect(line.omissions).toEqual(expect.arrayContaining(["cleancloud_pickups", "cleancloud_deliveries"]));
+    expect(speakDriverDayLineCall(line, "morning_readiness")).toContain(
+      "I could not read current CleanCloud pickups and CleanCloud deliveries, so this is not the full Day Line."
+    );
   });
 
   it("a simulated morning turn reads the line and does not treat a report as execution evidence", async () => {
