@@ -4,6 +4,11 @@ name: Claire prototype evaluation (real models, disposable MySQL)
 # native-tool prototype and, when asked, production Brain V2 on the same
 # scenarios, three trials each, and uploads traces + report as artifacts.
 on:
+  # A push to the prototype branch runs the default evaluation (GitHub does not
+  # register a new workflow for manual dispatch until it exists on main).
+  push:
+    branches: [claude/pre-launch-ai-harness-review-h52nrt]
+    paths: ['server/claire/prototype/**', '.github/workflows/claire-prototype-eval.yml']
   workflow_dispatch:
     inputs:
       systems:
@@ -67,10 +72,10 @@ jobs:
       - name: Run the evaluation
         run: |
           pnpm tsx server/claire/prototype/evals/runEvals.ts \
-            --systems "${{ github.event.inputs.systems }}" \
-            --sets "${{ github.event.inputs.sets }}" \
-            --trials "${{ github.event.inputs.trials }}" \
-            --only "${{ github.event.inputs.only }}" \
+            --systems "${{ github.event.inputs.systems || 'prototype' }}" \
+            --sets "${{ github.event.inputs.sets || 'dev,sealed' }}" \
+            --trials "${{ github.event.inputs.trials || '3' }}" \
+            --only "${{ github.event.inputs.only || '' }}" \
             --out eval-output
       - name: Print the report
         if: always()
