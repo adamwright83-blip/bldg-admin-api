@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { externalOperationalOrders } from "../../../../drizzle/schema";
 import { pickupConnections } from "./schema";
+import { browserSyncBindings } from "../browserSync/schema";
 import {
   NOT_APPLICABLE_SCHEDULE,
   assessScheduleFreshness,
@@ -32,7 +33,17 @@ export async function loadScheduleFreshness(input: {
       .from(pickupConnections)
       .where(eq(pickupConnections.tenantId, input.tenantId))
       .limit(1);
+    // A paired CleanCloud store (sales sync) is enough: a business on CleanCloud
+    // whose pickup bridge was never installed is "not connected", never "not applicable".
     let usesCleanCloud = Boolean(connection);
+    if (!usesCleanCloud) {
+      const [binding] = await db
+        .select({ tenantId: browserSyncBindings.tenantId })
+        .from(browserSyncBindings)
+        .where(eq(browserSyncBindings.tenantId, input.tenantId))
+        .limit(1);
+      usesCleanCloud = Boolean(binding);
+    }
     if (!usesCleanCloud) {
       const [row] = await db
         .select({ id: externalOperationalOrders.id })

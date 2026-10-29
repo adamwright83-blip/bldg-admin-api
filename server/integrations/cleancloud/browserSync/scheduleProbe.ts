@@ -25,7 +25,12 @@ import { AUTH_FAILURE_BACKOFF_MS } from "./cleancloudDirectScheduler";
 
 export type ScheduleProbeReport = {
   ranAt: string;
-  outcome: "read" | "refused" | "login_failed" | "store_unreadable";
+  outcome:
+    | "read"
+    | "refused"
+    | "login_failed"
+    | "store_unreadable"
+    | "not_authenticated";
   message: string;
   storePage: { status: number; bytes: number } | null;
   pickups: {
@@ -58,6 +63,21 @@ function stripTags(html: string): string {
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Pure: whether a 200 response is the signed-in store page rather than a login
+ * screen. A login page must never be read as "the pickup table is not there".
+ */
+export function isAuthenticatedStorePage(html: string): boolean {
+  const loginForm =
+    /name=["']login_email["']/i.test(html) ||
+    (/process_login_new\.php/i.test(html) &&
+      /type=["']password["']/i.test(html));
+  const storeMarkers =
+    /id=["'](?:online_page|awaiting_dc_pickup|pu_o_c)["']/i.test(html) ||
+    /logout/i.test(html);
+  return storeMarkers && !loginForm;
 }
 
 /** Pure: what a CleanCloud store page structurally offers for the schedule. Exported for tests. */
@@ -250,6 +270,15 @@ export async function probeCleanCloudSchedule(input: {
       outcome: "store_unreadable",
       storePage: { status, bytes: html.length },
       message: `Signed in, but the store page answered ${status}. The session may not carry over to the store page.`,
+    };
+  }
+  if (!isAuthenticatedStorePage(html)) {
+    return {
+      ...base,
+      outcome: "not_authenticated",
+      storePage: { status, bytes: html.length },
+      message:
+        "Login reported success, but the store page came back as a sign-in screen, not the store. Nothing about the pickup table can be concluded from it.",
     };
   }
   const analysis = analyzeStorePage(html);

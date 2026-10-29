@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { analyzeStorePage, probeCleanCloudSchedule } from "./scheduleProbe";
+import {
+  analyzeStorePage,
+  isAuthenticatedStorePage,
+  probeCleanCloudSchedule,
+} from "./scheduleProbe";
 
 const PAGE = `
 <div id="online_page"><span id="pu_o_c">2</span></div>
@@ -96,5 +100,21 @@ describe("CleanCloud schedule probe (read-only)", () => {
     expect(report.outcome).toBe("login_failed");
     expect(report.message).toMatch(/invalid_grant/);
     expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("a 200 login screen is not authenticated and concludes nothing about the pickup table", async () => {
+    const loginPage = `<form action="include/process_login_new.php"><input name="login_email"><input type="password" name="login_password"></form>`;
+    expect(isAuthenticatedStorePage(loginPage)).toBe(false);
+    expect(isAuthenticatedStorePage(PAGE)).toBe(true);
+    const report = await probeCleanCloudSchedule({
+      tenantId: "t",
+      login: async () => ({ cookieHeader: "s=1" }),
+      fetchImpl: (async () =>
+        new Response(loginPage, { status: 200 })) as unknown as typeof fetch,
+      latestAttempt: null,
+    });
+    expect(report.outcome).toBe("not_authenticated");
+    expect(report.pickups).toBeNull();
+    expect(report.findings).toEqual([]);
   });
 });
