@@ -13,6 +13,7 @@ import { beginReading } from "./understanding/run";
 import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
 import { answerFinding, findingPicture } from "./crew";
+import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -142,6 +143,43 @@ export const firstTenMinutesRouter = router({
       const { journey } = await requireJourney(input);
       await answerFinding(journey, input.findingId, input.answer, input.correction ?? null);
       return understandingView(journey.id);
+    }),
+
+  /**
+   * Claire's portrait. `preparePortrait` begins (or rejoins) the writing once the crew's reading is complete and
+   * returns at once; `portrait` follows it. It is written again only while the person hasn't kept it and what it
+   * rests on has changed.
+   */
+  preparePortrait: publicProcedure.input(credentials).mutation(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return (await preparePortrait(journey)).view;
+  }),
+
+  portrait: publicProcedure.input(credentials).query(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return portraitView(journey.id);
+  }),
+
+  /**
+   * "That sounds like me" keeps the page as it stands. "Let me change something" puts the person's own words in place
+   * of one line (`to`), takes it out (`to: null`), or puts Claire's line back (restore).
+   */
+  answerPortrait: publicProcedure
+    .input(
+      z.discriminatedUnion("answer", [
+        credentials.extend({ answer: z.literal("keep") }),
+        credentials.extend({ answer: z.literal("change"), key: z.string().regex(/^p[1-3]\.s[1-3]$/), to: z.string().trim().max(400).nullable() }),
+        credentials.extend({ answer: z.literal("restore"), key: z.string().regex(/^p[1-3]\.s[1-3]$/) }),
+      ])
+    )
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      if (input.answer === "keep") return keepPortraitFor(journey);
+      if (input.answer === "restore") return restorePortraitLine(journey, input.key);
+      return changePortraitLine(journey, input.key, input.to);
     }),
 
   /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */

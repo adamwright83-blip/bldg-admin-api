@@ -76,10 +76,11 @@ test("Nina's words, Sable's question, Sunday folds closed, and the crew in turn"
   await expect(page.getByTestId("first-ten-thread")).toBeVisible();
   await shots("26-ilex", page, testInfo);
 
-  await expect(page.getByTestId("first-ten-look-closer")).toBeVisible({ timeout: 20_000 });
   for (const who of ["sable", "mara", "rook", "bront", "luma", "orren", "ilex"]) {
     await expect(page.getByTestId("first-ten-crew").locator(`[data-crew="${who}"]`)).toBeVisible();
   }
+  // when everyone has had their say, the scene settles under Claire's page
+  await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 30_000 });
 
   // the answer persisted: after a reload Sunday stays closed
   await page.reload();

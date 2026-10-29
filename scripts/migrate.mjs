@@ -5818,5 +5818,14 @@ await ensureRequiredColumn(
   await assertRequiredColumns("first_ten_events", ["id", "journey_id", "kind", "payload_json", "created_at"]);
 }
 
+// 0155: JOYSTICK's first ten minutes, Claire's portrait of a journey and the person's own words beside it. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0155_first_ten_portraits.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes portraits");
+  await assertRequiredColumns("first_ten_portraits", [
+    "journey_id", "run_id", "status", "basis", "portrait_json", "edits_json", "written_by", "lease_until", "kept_at", "created_at", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

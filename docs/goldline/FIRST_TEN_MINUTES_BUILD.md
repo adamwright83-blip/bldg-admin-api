@@ -107,9 +107,9 @@ stage's line is shown only while that work runs:
 
 | Stage | Line (Astra's) | The work |
 |---|---|---|
-| `people` | Meeting the people you write to. | Sent and received Gmail (last twelve months, at most 160 sent and 240 received). People by correspondence, Rook's habit (how the person ends their own mail), Luma's image (a picture attached to two or more sent messages). No model. |
+| `people` | Meeting the people you write to. | Sent and received Gmail (last twelve months, at most 160 sent and 240 received). The person's own name, people by correspondence, Rook's habit (how the person ends their own mail), Luma's image (a picture attached to two or more sent messages). No model. |
 | `conversations` | Following the conversations you keep coming back to. | One Claude call over the person's own mail and mail from people they write to: the business, rules, promises, requests, replies, services, places, a contrast between two kinds of request. |
-| `work` | Finding the work already in motion. | Calendar (last 90 days, next 30), Drive (recent files, the text of up to 12 documents), Slack (the person's own messages and messages to them, last 90 days). Orren's route (a weekday the calendar repeats, with places), a second Claude call over documents and Slack, coordinates for places and stops, and Ilex's opportunity. |
+| `work` | Finding the work already in motion. | Calendar (last 90 days, next 30), Drive (recent files, the text of up to 12 documents), Slack (the person's own messages and messages to them, last 90 days). Orren's route (a weekday the calendar repeats, with places), the week's rhythms (one-off events that keep landing on the same days), a second Claude call over documents and Slack, coordinates for places and stops, and Ilex's opportunity. |
 
 **What the model may do.** It proposes; `extract.ts` decides. Every item cites its source and copies the exact words.
 An item is dropped when the words aren't in that source (case, curly quotes and spacing aside), or when it comes from
@@ -169,14 +169,45 @@ word or two ("Struck."), and it is never revealed again.
 **Pictures.** The example shows a painted stand-in. For a real account, the person's own attachment is fetched from
 Gmail when it is shown (at most 4 MB) and never stored.
 
+## Claire's portrait (slice 4)
+
+When the crew has had its say, the scene settles and one page appears: Claire's portrait of the person's working life,
+signed in her hand. It opens with Astra's greeting ("Nina, here's where you are."), and ends with "There's one I'd like
+to show you." only when the reading found an opportunity. Two quiet answers sit under it: **That sounds like me** and
+**Let me change something**. There is no share option yet.
+
+**How it's written.** `server/firstTenMinutes/portrait/`. For a real account, one Claude call writes two or three short
+paragraphs from the findings still standing, with the person's corrections as the truth; each sentence cites the
+findings it rests on. The server then strikes any line that:
+
+- names a person, place, day, month, number or quotation those findings don't hold,
+- cites a finding that isn't there, or
+- mentions the machinery (JOYSTICK, Claire, the crew, AI).
+
+A page with fewer than two lines left isn't shown at all, and the journey carries on without it. Nina's example is
+Astra's page word for word, each line tied to her invented records; a changed Sunday rule changes its line.
+
+Two findings were added to the reading for this: the person's own name (the name their mail goes out under, never their
+business's) and a rhythm (one-off events that keep landing on the same days, such as Nina's five Saturday weddings).
+
+**Changing it.** "Let me change something" makes each line touchable. A line opens to where it came from; the
+person's words then stand on the page in their own hand beside Claire's struck line. They can take a line out, or put
+Claire's back.
+
+**Keeping it.** "That sounds like me" keeps the page with the changes; Claire's seal is pressed beside her name, and
+the journey moves on. The page is stored in `first_ten_portraits` (migration 0155). It is written again only while
+not yet kept and only when what it rests on changes. Every change and the keep are appended to `first_ten_events`.
+
+**AI spend:** one call per page, attributed per journey like the reading.
+
 ## Slices
 
 | # | Slice | State |
 |---|---|---|
 | 1 | Connect: Google and Slack OAuth, what connecting includes, the labelled example | merged |
 | 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | merged |
-| 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | this PR |
-| 4 | Claire's portrait: "That sounds like me / Let me change something" | |
+| 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | merged |
+| 4 | Claire's portrait: "That sounds like me / Let me change something" | this PR |
 | 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | |
 | 6 | Activation at the moment of value: the draft, scene and decision survive checkout | |
 | 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | |

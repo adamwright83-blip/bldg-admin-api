@@ -31,6 +31,7 @@ export type PersonRef = { name: string | null; address: string };
 
 export type FindingKind =
   | "business"
+  | "owner"
   | "person"
   | "rule"
   | "promise"
@@ -41,6 +42,7 @@ export type FindingKind =
   | "habit"
   | "image"
   | "route"
+  | "rhythm"
   | "contrast"
   | "opportunity";
 
@@ -50,6 +52,8 @@ export type RouteStop = { label: string; location: string; lat: number | null; l
 
 export type FindingPayload =
   | { kind: "business"; name: string }
+  /** the person's own name, as their sent mail is signed and sent */
+  | { kind: "owner"; name: string }
   | { kind: "person"; person: PersonRef; sent: number; received: number; lastAt: string }
   /** something the person said about how their business works, in their own words */
   | { kind: "rule"; statement: string; quote: string; saidTo: PersonRef | null; at: string }
@@ -78,6 +82,8 @@ export type FindingPayload =
   | { kind: "image"; name: string | null; fileName: string; uses: number; mimeType: string | null; inWhat: "proposals" | "emails" }
   /** recurring calendar work on one weekday */
   | { kind: "route"; title: string; weekday: number; stops: RouteStop[]; occurrences: number; since: string }
+  /** one kind of event that keeps landing on the same days of the week ("wedding", on Saturdays) */
+  | { kind: "rhythm"; word: string; days: number[]; count: number; titles: string[] }
   /** two requests side by side that show what different people are buying */
   | { kind: "contrast"; aLine: string; bLine: string; aRequestId: string; bRequestId: string }
   | {

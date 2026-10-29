@@ -58,12 +58,15 @@ export function CrewScene({
   journeyId,
   view,
   picture,
+  introduced = false,
   onAnswer,
   onFinished,
 }: {
   journeyId: string;
   view: UnderstandingView;
   picture: string | null;
+  /** the crew has already introduced itself on this journey: show the desk as it was left */
+  introduced?: boolean;
   onAnswer: Answer;
   onFinished: () => void;
 }) {
@@ -76,7 +79,7 @@ export function CrewScene({
     () => new Map(buildReveals(view.findings, { final, includeCorrected: true }).map(reveal => [reveal.companion, reveal])),
     [view.findings, final]
   );
-  const [seen, setSeen] = useState<CompanionId[]>(() => readSeen(journeyId));
+  const [seen, setSeen] = useState<CompanionId[]>(() => (introduced ? [...CREW_ORDER] : readSeen(journeyId)));
   const [beat, setBeat] = useState(0);
   const [after, setAfter] = useState<string | null>(null);
   const [open, setOpen] = useState<ObjectKey | null>(null);

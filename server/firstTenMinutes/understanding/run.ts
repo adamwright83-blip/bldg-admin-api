@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { UnderstandingStage, UnderstandingView } from "../../../shared/firstTenMinutesFindings";
 import type { FindingOrigin } from "../schema";
 import { type DraftFinding, findingIds } from "./draft";
-import { habitFindings, imageFindings, imageOrigin, peopleFindings, routeFindings } from "./deterministic";
+import { habitFindings, imageFindings, imageOrigin, ownerFindings, peopleFindings, rhythmFindings, routeFindings } from "./deterministic";
 import {
   CONVERSATIONS_SYSTEM,
   WORK_SYSTEM,
@@ -20,9 +20,10 @@ import { claimReading, finishReading, saveFindings, updateReading } from "./stor
 
 /**
  * The crew's reading of one journey, in three stages, each the real work its line names:
- *   people         "Meeting the people you write to."                      sent mail, people, habits, images
+ *   people         "Meeting the people you write to."                      sent mail, the person's name, people,
+ *                                                                           habits, images
  *   conversations  "Following the conversations you keep coming back to."  the email reading (one model call)
- *   work           "Finding the work already in motion."                   calendar, Drive, Slack, routes,
+ *   work           "Finding the work already in motion."                   calendar, Drive, Slack, routes, rhythms,
  *                                                                           places, opportunities (one model call)
  * Findings are stored as soon as they are verified, so names reach the screen while the reading goes on.
  * A source that can't be read becomes a plain note; the reading carries on without it.
@@ -97,7 +98,7 @@ export async function runReading(journeyId: string, runId: string, deps: Reading
       const origin = imageOrigin(sent, image.payload.fileName);
       if (origin) origins.set(image.id, { provider: "gmail", ...origin });
     }
-    await keep([...peopleFindings(sent, received, owner, ids), ...habitFindings(sent, ids), ...images]);
+    await keep([...ownerFindings(sent, owner, ids), ...peopleFindings(sent, received, owner, ids), ...habitFindings(sent, ids), ...images]);
     finished.push("people");
 
     // ---------------------------------------------------------------- conversations
@@ -128,7 +129,7 @@ export async function runReading(journeyId: string, runId: string, deps: Reading
     counts.files = files.length;
     counts.slack = slack.length;
     await updateReading(journeyId, runId, { counts });
-    await keep(routeFindings(events, ids));
+    await keep([...routeFindings(events, ids), ...rhythmFindings(events, ids)]);
 
     let proposals: WorkExtraction["opportunities"] = [];
     const hasWork = files.some(file => file.text) || slack.length > 0 || events.length > 0;
