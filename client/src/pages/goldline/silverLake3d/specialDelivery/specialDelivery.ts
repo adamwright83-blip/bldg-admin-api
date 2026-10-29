@@ -1,5 +1,8 @@
 import * as THREE from "three";
-import type { CourtyardActivityApi, SilverLakeHandle } from "../silverLakeRuntime";
+import type {
+  CourtyardActivityApi,
+  SilverLakeHandle,
+} from "../silverLakeRuntime";
 import { COURSE, PLANE_X } from "./deliveryCourse";
 import {
   MAX_PULL,
@@ -16,9 +19,20 @@ import {
   type WorldEvent,
   type WorldState,
 } from "./deliveryPhysics";
-import { OFFSET, buildDeliveryScene, gliderMesh, toWorld, type AimView } from "./deliveryScene";
+import {
+  OFFSET,
+  buildDeliveryScene,
+  gliderMesh,
+  toWorld,
+  type AimView,
+} from "./deliveryScene";
 import { loadRookPuppet, type RookPuppet, type RookState } from "./rookPuppet";
-import { loadBella, loadCleo, type BellaPuppet, type CleoPuppet } from "./courtyardFolk";
+import {
+  loadBella,
+  loadCleo,
+  type BellaPuppet,
+  type CleoPuppet,
+} from "./courtyardFolk";
 import { createDeliveryAudio } from "./deliveryAudio";
 import { LINES, pickLine, type LineKey } from "./rookLines";
 import {
@@ -66,6 +80,8 @@ export type SpecialDeliveryController = {
   setControlMode(mode: ControlMode): void;
   /** the same as tapping the fan (or F): turns it, once there has been a delivery */
   turnFan(): void;
+  /** Rook says one of his lines (when you come back from his desk) */
+  say(key: LineKey): void;
   /** keyboard and accessibility: a launch at an angle (deg) and a pull from 0..1 */
   aimBy(deltaAngleDeg: number, deltaPower: number): void;
   launchNow(): void;
@@ -80,20 +96,48 @@ const EAST_LAMP = { x: 8.9, z: 0 };
 const STAGED_CAST = new Set(["Bella", "Cleo"]);
 /** while the course is on screen: no neighbour stands in the flight plane, and Bella and Cleo are at the airmail */
 const courseHides = (p: THREE.Vector3, view: { name: string }) =>
-  STAGED_CAST.has(view.name) || (p.x > PLANE_X - 2.8 && p.x < PLANE_X + 1.2 && Math.abs(p.z - OFFSET) < 8);
+  STAGED_CAST.has(view.name) ||
+  (p.x > PLANE_X - 2.8 && p.x < PLANE_X + 1.2 && Math.abs(p.z - OFFSET) < 8);
 /** Rook, his station, the fan and the watering can (sim x, y), for his own moments */
-const STATION_SHOT = { x0: COURSE.station.x1 + 2.6, x1: COURSE.rook.x - 1.3, y0: -0.3, y1: 3.4 };
+const STATION_SHOT = {
+  x0: COURSE.station.x1 + 2.6,
+  x1: COURSE.rook.x - 1.3,
+  y0: -0.3,
+  y1: 3.4,
+};
+/** the courtyard orchestra: Rook conducting under the line, all three cups, and Cleo (for her entrance) */
+const CONCERT_SHOT = {
+  x0: COURSE.cat.x + 0.9,
+  x1: COURSE.cups[0].anchor.x - 1.6,
+  y0: -0.9,
+  y1: 4.7,
+};
 /** a phone held upright, waiting to throw: Rook and his stall, the fan and the first cup, readable */
-const STATION_SHOT_PORTRAIT = { x0: COURSE.fan.x + 0.75, x1: COURSE.rook.x - 0.7, y0: -0.3, y1: 4.2 };
+const STATION_SHOT_PORTRAIT = {
+  x0: COURSE.fan.x + 0.75,
+  x1: COURSE.rook.x - 0.7,
+  y0: -0.3,
+  y1: 4.2,
+};
 // in portrait the camera has to stand far back across the plaza: the fountain and the bench by it step aside
-const PLAZA_FOUNTAIN = { x: 0.3, z: -0.6, r: 3.4, match: /water|stone|fountain/i };
+const PLAZA_FOUNTAIN = {
+  x: 0.3,
+  z: -0.6,
+  r: 3.4,
+  match: /water|stone|fountain/i,
+};
 const PLAZA_BENCH = { x: 4.7, z: -1.6, r: 1.8, match: /bench/i };
 const RESET_AFTER_MISS = 1.25;
 const RESET_AFTER_CATCH = 1.0;
 
 export async function mountSpecialDelivery(
   handle: SilverLakeHandle,
-  opts: { memory: CourtyardDiscoveries; visitStartedAt: number; callbacks: SpecialDeliveryCallbacks; arriveFacingStation?: boolean }
+  opts: {
+    memory: CourtyardDiscoveries;
+    visitStartedAt: number;
+    callbacks: SpecialDeliveryCallbacks;
+    arriveFacingStation?: boolean;
+  }
 ): Promise<SpecialDeliveryController> {
   const cb = opts.callbacks;
   let memory = opts.memory;
@@ -102,7 +146,11 @@ export async function mountSpecialDelivery(
   let disposed = false;
 
   // assets first (Rook's atlases, Cleo's and Bella's cards); the activity mounts once they are in
-  const [rook, cleo, bella] = await Promise.all([loadRookPuppet(), loadCleo(COURSE, false), loadBella(COURSE)]);
+  const [rook, cleo, bella] = await Promise.all([
+    loadRookPuppet(),
+    loadCleo(COURSE, false),
+    loadBella(COURSE),
+  ]);
   const audio = createDeliveryAudio();
 
   let controller!: SpecialDeliveryController;
@@ -116,7 +164,13 @@ export async function mountSpecialDelivery(
 
   function createActivity() {
     const scene3d = buildDeliveryScene(api, COURSE);
-    scene3d.root.add(rook.group, cleo.group, cleo.tail, cleo.tailInk, bella.group);
+    scene3d.root.add(
+      rook.group,
+      cleo.group,
+      cleo.tail,
+      cleo.tailInk,
+      bella.group
+    );
     // Bella and Cleo live in the courtyard (their errands, their doorsteps). The airmail borrows them: while you are at
     // the station (or watching its first establishing look) the course has them and the courtyard's pair steps out;
     // otherwise the course is just the stall, the line and an empty balcony.
@@ -137,7 +191,9 @@ export async function mountSpecialDelivery(
     if (opts.arriveFacingStation) {
       const station = toWorld((COURSE.station.x0 + COURSE.station.x1) / 2, 0);
       const at = api.b2t(4.6, -3.2);
-      api.placeHero(at, Math.atan2(station.x - at.x, station.z - at.z), { behind: true });
+      api.placeHero(at, Math.atan2(station.x - at.x, station.z - at.z), {
+        behind: true,
+      });
       // and, once the courtyard's opening camera has landed, one quiet look at the whole course: Rook at his
       // station, the line and its cups, Cleo asleep, Bella waiting on her balcony. Any key or touch ends it.
       showcaseAt = performance.now() + 2600;
@@ -158,7 +214,16 @@ export async function mountSpecialDelivery(
     let rookEagerCountdown = 2; // Rook keeps his wings to himself for the first flights of a visit
 
     // ------------------------------------------------------------ the episode state
-    type Phase = "walking" | "entering" | "intro" | "ready" | "aiming" | "flying" | "result" | "payoff" | "orchestra";
+    type Phase =
+      | "walking"
+      | "entering"
+      | "intro"
+      | "ready"
+      | "aiming"
+      | "flying"
+      | "result"
+      | "payoff"
+      | "orchestra";
     let phase: Phase = "walking";
     let engaged = false;
     let controlMode: ControlMode = "hold";
@@ -169,7 +234,10 @@ export async function mountSpecialDelivery(
     let envelope: EnvelopeKind = "none";
     let envelopeOffered = false;
     let now = 0;
-    let sequence: { start: number; cues: { at: number; run: () => void; done?: boolean }[] } | null = null;
+    let sequence: {
+      start: number;
+      cues: { at: number; run: () => void; done?: boolean }[];
+    } | null = null;
     let shake = 0;
     let saidThisVisit = new Set<string>();
     let lastLineAt = -99;
@@ -181,30 +249,49 @@ export async function mountSpecialDelivery(
     // ------------------------------------------------------------ the envelope and the orchestra sign (3D)
     const envGroup = new THREE.Group();
     const envTex = envelopeTexture();
-    const envMat = new THREE.MeshBasicMaterial({ map: envTex, toneMapped: false, side: THREE.DoubleSide });
+    const envMat = new THREE.MeshBasicMaterial({
+      map: envTex,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    });
     api.noOutline(envMat);
     const envMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), envMat);
     envMesh.rotation.x = -Math.PI / 2.4;
     envMesh.rotation.z = Math.PI / 2;
     envGroup.add(envMesh);
-    envGroup.position.copy(toWorld(COURSE.station.x0 + 0.12, COURSE.station.top + 0.04, -0.18));
+    envGroup.position.copy(
+      toWorld(COURSE.station.x0 + 0.12, COURSE.station.top + 0.04, -0.18)
+    );
     envGroup.visible = false;
     scene3d.root.add(envGroup);
 
-    const orchestraSign = signMesh("ROOK'S COURTYARD ORCHESTRA", "ONE PERFORMANCE ONLY", api);
+    const orchestraSign = signMesh(
+      "ROOK'S COURTYARD ORCHESTRA",
+      "ONE PERFORMANCE ONLY",
+      api
+    );
     orchestraSign.position.copy(toWorld(-0.3, 0.55, -0.55));
     orchestraSign.visible = false;
     scene3d.root.add(orchestraSign);
 
     // the crumpled first draft (intro) and a leaf (orchestra encore)
-    const paperBall = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), new THREE.MeshToonMaterial({ color: 0xfbf6ec }));
+    const paperBall = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.07, 1),
+      new THREE.MeshToonMaterial({ color: 0xfbf6ec })
+    );
     paperBall.visible = false;
     scene3d.root.add(paperBall);
-    const leaf = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.1), new THREE.MeshToonMaterial({ color: 0x8fbf5a, side: THREE.DoubleSide }));
+    const leaf = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.16, 0.1),
+      new THREE.MeshToonMaterial({ color: 0x8fbf5a, side: THREE.DoubleSide })
+    );
     leaf.visible = false;
     scene3d.root.add(leaf);
     const drops = Array.from({ length: 8 }, () => {
-      const d = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), new THREE.MeshBasicMaterial({ color: 0x9fd6f5 }));
+      const d = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 6, 4),
+        new THREE.MeshBasicMaterial({ color: 0x9fd6f5 })
+      );
       d.visible = false;
       scene3d.root.add(d);
       return { d, v: new THREE.Vector3() };
@@ -250,7 +337,11 @@ export async function mountSpecialDelivery(
 
     // ------------------------------------------------------------ remembered things, shown on later visits
     function applyMemory() {
-      orchestraSign.visible = rememberedBefore(memory.beats.orchestra_performed ?? memory.discoveries.three_cups?.firstAt, visitStartedAt);
+      orchestraSign.visible = rememberedBefore(
+        memory.beats.orchestra_performed ??
+          memory.discoveries.three_cups?.firstAt,
+        visitStartedAt
+      );
       const improved = Boolean(memory.beats.improvements_unveiled);
       scene3d.showSecondBand(improved);
       world.fan = memory.fan as FanSetting;
@@ -279,7 +370,10 @@ export async function mountSpecialDelivery(
     }
     function hitObject(e: PointerEvent, objects: THREE.Object3D[]) {
       const rect = api.canvas.getBoundingClientRect();
-      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      ndc.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
       raycaster.setFromCamera(ndc, api.camera);
       return raycaster.intersectObjects(objects, true).length > 0;
     }
@@ -291,14 +385,23 @@ export async function mountSpecialDelivery(
       if (showcasing || showcaseAt) endShowcase();
       if (!engaged) {
         // walking: a tap on the station, Rook or the envelope is an invitation, nothing more
-        if (hitObject(e, [scene3d.root.getObjectByName("special-delivery")!, rook.group])) {
+        if (
+          hitObject(e, [
+            scene3d.root.getObjectByName("special-delivery")!,
+            rook.group,
+          ])
+        ) {
           const dist = api.hero().position.distanceTo(scene3d.stationWorld());
           if (dist < 9) controller.enter();
         }
         return;
       }
       e.preventDefault();
-      if (envelope === "waiting" && envGroup.visible && hitObject(e, [envGroup])) {
+      if (
+        envelope === "waiting" &&
+        envGroup.visible &&
+        hitObject(e, [envGroup])
+      ) {
         cb.onOpenEnvelope();
         return;
       }
@@ -328,7 +431,11 @@ export async function mountSpecialDelivery(
         }
         return;
       }
-      if (phase === "result" && resultKind !== "delivered" && now - resultAt > 0.35) {
+      if (
+        phase === "result" &&
+        resultKind !== "delivered" &&
+        now - resultAt > 0.35
+      ) {
         resetGlider();
       }
     };
@@ -337,7 +444,8 @@ export async function mountSpecialDelivery(
       // drag back from where you pressed: the pull is the reverse of the drag, held to the elastic's reach
       let pull = pullOfDrag(e.clientX - pressAt.x, e.clientY - pressAt.y);
       const l = Math.hypot(pull.x, pull.y);
-      if (l > MAX_PULL) pull = { x: (pull.x / l) * MAX_PULL, y: (pull.y / l) * MAX_PULL };
+      if (l > MAX_PULL)
+        pull = { x: (pull.x / l) * MAX_PULL, y: (pull.y / l) * MAX_PULL };
       // the rail aims across the courtyard, never back at Rook or down into the table
       const ang = Math.atan2(pull.y, pull.x);
       const clampedAng = Math.max(0.09, Math.min(1.5, ang));
@@ -371,7 +479,14 @@ export async function mountSpecialDelivery(
     };
     const onKey = (e: KeyboardEvent, down: boolean) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "BUTTON" || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "BUTTON" ||
+          t.isContentEditable)
+      )
+        return;
       if (down && (e.code === "Space" || e.code === "Enter")) lastInput = "key";
       if (!engaged) {
         if (down && (showcasing || showcaseAt)) endShowcase();
@@ -397,7 +512,8 @@ export async function mountSpecialDelivery(
         if (e.repeat) return;
         audio.unlock();
         if (phase === "intro") return skipSequence();
-        if (phase === "ready" || phase === "aiming") return controller.launchNow();
+        if (phase === "ready" || phase === "aiming")
+          return controller.launchNow();
         if (phase === "flying") {
           if (controlMode === "toggle") applyWings(!world.wingOpen);
           else {
@@ -411,9 +527,11 @@ export async function mountSpecialDelivery(
       }
       if (!down) return;
       if (e.code === "ArrowLeft") (controller.aimBy(4, 0), e.preventDefault());
-      if (e.code === "ArrowRight") (controller.aimBy(-4, 0), e.preventDefault());
+      if (e.code === "ArrowRight")
+        (controller.aimBy(-4, 0), e.preventDefault());
       if (e.code === "ArrowUp") (controller.aimBy(0, 0.06), e.preventDefault());
-      if (e.code === "ArrowDown") (controller.aimBy(0, -0.06), e.preventDefault());
+      if (e.code === "ArrowDown")
+        (controller.aimBy(0, -0.06), e.preventDefault());
       if (e.code === "KeyF" && phase === "ready") turnFan();
     };
     const onKeyDown = (e: KeyboardEvent) => onKey(e, true);
@@ -466,7 +584,10 @@ export async function mountSpecialDelivery(
       lastTensionStep = -1;
       const power = Math.hypot(pull.x, pull.y) / MAX_PULL;
       audio.launch(power);
-      rook.play(power > 0.8 ? "brace" : "point", { facing: "left", restart: true });
+      rook.play(power > 0.8 ? "brace" : "point", {
+        facing: "left",
+        restart: true,
+      });
       if (wingsHeldByPointer || wingsHeldByKey) applyWings(true);
       rookEagerCountdown--;
       // the first flights of a visit say how the wings work, until they have been used
@@ -503,10 +624,19 @@ export async function mountSpecialDelivery(
     }
 
     function reportFan() {
-      cb.onFan?.({ setting: world.fan, unlocked: Boolean(memory.discoveries.first_delivery || discoveredThisVisit.has("first_delivery")) });
+      cb.onFan?.({
+        setting: world.fan,
+        unlocked: Boolean(
+          memory.discoveries.first_delivery ||
+            discoveredThisVisit.has("first_delivery")
+        ),
+      });
     }
     function turnFan() {
-      if (!memory.discoveries.first_delivery && !discoveredThisVisit.has("first_delivery")) {
+      if (
+        !memory.discoveries.first_delivery &&
+        !discoveredThisVisit.has("first_delivery")
+      ) {
         sayLine("fan_locked", 2000);
         return;
       }
@@ -517,7 +647,14 @@ export async function mountSpecialDelivery(
       audio.click();
       cb.onObserve({ kind: "fan", setting: next });
       reportFan();
-      sayLine(next === "up" ? "fan_up" : next === "forward" ? "fan_forward" : "fan_back", 1700);
+      sayLine(
+        next === "up"
+          ? "fan_up"
+          : next === "forward"
+            ? "fan_forward"
+            : "fan_back",
+        1700
+      );
     }
 
     // ------------------------------------------------------------ reactions to what the world reports
@@ -528,7 +665,8 @@ export async function mountSpecialDelivery(
           break;
         case "fan_exit":
           audio.flutter(0);
-          if (ev.rise > 1.2) rook.play("point", { facing: "left", restart: true });
+          if (ev.rise > 1.2)
+            rook.play("point", { facing: "left", restart: true });
           break;
         case "bell":
           audio.jingle(ev.strength);
@@ -574,7 +712,10 @@ export async function mountSpecialDelivery(
           audio.whap();
           break;
         case "rook_reach":
-          rook.play(ev.toward.y > 1.9 ? "catch" : "lunge", { facing: "left", restart: true });
+          rook.play(ev.toward.y > 1.9 ? "catch" : "lunge", {
+            facing: "left",
+            restart: true,
+          });
           break;
         case "rook_catch":
           audio.pat();
@@ -617,11 +758,21 @@ export async function mountSpecialDelivery(
       resultAt = now;
       phase = "result";
       audio.flutter(0);
-      const observed = { flightId, delivered: outcome === "delivered", via: [...world.via], cups: [...world.cupSequence] };
-      lastFlight = { pull: { ...flightInput.pull }, wings: [...flightInput.wings] };
+      const observed = {
+        flightId,
+        delivered: outcome === "delivered",
+        via: [...world.via],
+        cups: [...world.cupSequence],
+      };
+      lastFlight = {
+        pull: { ...flightInput.pull },
+        wings: [...flightInput.wings],
+      };
       cb.onObserve({ kind: "flight", flight: observed });
       const proved = discoveriesFromFlight(observed);
-      const firstTimes = proved.filter(id => !memory.discoveries[id] && !discoveredThisVisit.has(id));
+      const firstTimes = proved.filter(
+        id => !memory.discoveries[id] && !discoveredThisVisit.has(id)
+      );
       proved.forEach(id => discoveredThisVisit.add(id));
       if (proved.includes("first_delivery")) reportFan();
       const cupsInOrder = world.cupSequence.join(",").includes("0,1,2");
@@ -629,46 +780,68 @@ export async function mountSpecialDelivery(
       if (outcome === "delivered") {
         const isFirst = firstTimes.includes("first_delivery");
         const catAssist = world.via.includes("tail");
-        if (cupsInOrder && !memory.beats.orchestra_performed) return startOrchestra(true, true);
-        return startPayoff({ first: isFirst, catAssist, firstCat: firstTimes.includes("cat_assist") });
+        if (cupsInOrder && !memory.beats.orchestra_performed)
+          return startOrchestra(true, true);
+        return startPayoff({
+          first: isFirst,
+          catAssist,
+          firstCat: firstTimes.includes("cat_assist"),
+        });
       }
-      if (cupsInOrder) return startOrchestra(!memory.beats.orchestra_performed, false);
+      if (cupsInOrder)
+        return startOrchestra(!memory.beats.orchestra_performed, false);
       // a miss: something quick and funny, then straight back to ready
       const where = world.restWhere;
       if (outcome === "caught") {
-        rook.play("catch", { facing: "left", restart: true, then: () => rook.play("talk", { facing: "front" }) });
+        rook.play("catch", {
+          facing: "left",
+          restart: true,
+          then: () => rook.play("talk", { facing: "front" }),
+        });
         sayLine("caught", 1500);
         return;
       }
       if (world.via.includes("rook_flick")) sayLine("flick_missed", 1700);
       else if (where === "away") sayLine("away", 1800);
-      else if (world.events.some(e => e.kind === "sheet_caught")) sayLine("laundry", 1700);
+      else if (world.events.some(e => e.kind === "sheet_caught"))
+        sayLine("laundry", 1700);
       else if (where === "balcony") {
         bella.setPose("selected");
         sayLine("balcony", 1700);
       } else if (world.via.includes("cat")) {
-        sayLine(saidThisVisit.has("cat_first") ? "cat_again" : "cat_first", 2000);
+        sayLine(
+          saidThisVisit.has("cat_first") ? "cat_again" : "cat_first",
+          2000
+        );
         saidThisVisit.add("cat_first");
       } else if (world.cupSequence.length >= 2) sayLine("two_cups", 1500);
       else if (Math.random() < 0.6) sayLine("miss", 1500);
-      rook.play("shrug", { facing: "left", restart: true, then: () => rook.play("idle", { facing: "left" }) });
+      rook.play("shrug", {
+        facing: "left",
+        restart: true,
+        then: () => rook.play("idle", { facing: "left" }),
+      });
     }
 
     // ------------------------------------------------------------ authored sequences
-    function startSequence(cues: { at: number; run: () => void }[], kind: Phase) {
+    function startSequence(
+      cues: { at: number; run: () => void }[],
+      kind: Phase
+    ) {
       sequence = { start: now, cues: cues.map(c => ({ ...c })) };
       phase = kind;
     }
     function skipSequence() {
       if (!sequence) return;
-      for (const c of sequence.cues) if (!c.done) {
-        c.done = true;
-        try {
-          c.run();
-        } catch {
-          /* a skipped beat is fine */
+      for (const c of sequence.cues)
+        if (!c.done) {
+          c.done = true;
+          try {
+            c.run();
+          } catch {
+            /* a skipped beat is fine */
+          }
         }
-      }
       sequence = null;
       if (phase === "intro") toReady();
     }
@@ -677,7 +850,11 @@ export async function mountSpecialDelivery(
       camFocus = null;
       bellTaken = false;
       bella.holdBell(false);
-      if (bella.pose !== "idle") setTimeout(() => !disposed && phase !== "payoff" && bella.setPose("idle"), 1600);
+      if (bella.pose !== "idle")
+        setTimeout(
+          () => !disposed && phase !== "payoff" && bella.setPose("idle"),
+          1600
+        );
       if (engaged) audio.fanHum(true);
       resetGlider();
       if (line) sayLine(line);
@@ -688,38 +865,123 @@ export async function mountSpecialDelivery(
       // Rook is folding; the first try is a crumpled ball; he notices you; it goes in the watering can
       const ball = () => {
         paperBall.visible = true;
-        paperBall.position.copy(rook.group.position).add(new THREE.Vector3(-0.1, 0.9, -0.25));
+        paperBall.position
+          .copy(rook.group.position)
+          .add(new THREE.Vector3(-0.1, 0.9, -0.25));
       };
       startSequence(
         [
           // close on Rook and his station for his routine; the test ding lets the camera go, so the whole course
           // (and Cleo opening one eye) is in view for "Aim for the basket"
-          { at: 0.0, run: () => ((camFocus = STATION_SHOT), rook.play("fold", { facing: "left" })) },
-          { at: 0.9, run: () => (ball(), rook.play("hide", { facing: "left", restart: true })) },
-          { at: 1.7, run: () => (paperBall.visible = false, rook.play("talk", { facing: "front" }), say(LINES.intro_plan[0], 2100)) },
-          { at: 3.9, run: () => (ball(), rook.play("shrug", { facing: "front", restart: true })) },
+          {
+            at: 0.0,
+            run: () => (
+              (camFocus = STATION_SHOT),
+              rook.play("fold", { facing: "left" })
+            ),
+          },
+          {
+            at: 0.9,
+            run: () => (
+              ball(),
+              rook.play("hide", { facing: "left", restart: true })
+            ),
+          },
+          {
+            at: 1.7,
+            run: () => (
+              (paperBall.visible = false),
+              rook.play("talk", { facing: "front" }),
+              say(LINES.intro_plan[0], 2100)
+            ),
+          },
+          {
+            at: 3.9,
+            run: () => (
+              ball(),
+              rook.play("shrug", { facing: "front", restart: true })
+            ),
+          },
           { at: 4.6, run: () => say(LINES.intro_working[0], 2000) },
-          { at: 6.4, run: () => (rook.play("toss", { facing: "left", restart: true }), throwBall()) },
+          {
+            at: 6.4,
+            run: () => (
+              rook.play("toss", { facing: "left", restart: true }),
+              throwBall()
+            ),
+          },
           { at: 7.6, run: () => rook.play("idle", { facing: "front" }) },
-          { at: 8.3, run: () => rook.play("letter", { facing: "left", restart: true }) },
-          { at: 9.1, run: () => ((camFocus = null), scene3d.popGlider(), audio.testDing(), cleo.look("one", 1900)) },
+          {
+            at: 8.3,
+            run: () => rook.play("letter", { facing: "left", restart: true }),
+          },
+          {
+            at: 9.1,
+            run: () => (
+              (camFocus = null),
+              scene3d.popGlider(),
+              audio.testDing(),
+              cleo.look("one", 1900)
+            ),
+          },
           { at: 9.9, run: () => rook.play("idle", { facing: "left" }) },
-          { at: 10.6, run: () => (rook.play("talk", { facing: "front" }), say(LINES.intro_aim[0], 2600)) },
-          { at: 12.6, run: () => (cb.onObserve({ kind: "beat", beat: "intro_seen" }), memory = { ...memory, beats: { ...memory.beats, intro_seen: new Date().toISOString() } }, toReady()) },
+          {
+            at: 10.6,
+            run: () => (
+              rook.play("talk", { facing: "front" }),
+              say(LINES.intro_aim[0], 2600)
+            ),
+          },
+          {
+            at: 12.6,
+            run: () => (
+              cb.onObserve({ kind: "beat", beat: "intro_seen" }),
+              (memory = {
+                ...memory,
+                beats: {
+                  ...memory.beats,
+                  intro_seen: new Date().toISOString(),
+                },
+              }),
+              toReady()
+            ),
+          },
         ],
         "intro"
       );
     }
-    let ballFlight: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
+    let ballFlight: {
+      from: THREE.Vector3;
+      to: THREE.Vector3;
+      t: number;
+    } | null = null;
     function throwBall() {
       paperBall.visible = true;
-      const from = rook.group.position.clone().add(new THREE.Vector3(0, 1.3, -0.2));
-      ballFlight = { from, to: scene3d.canWorld().clone().add(new THREE.Vector3(0, 0.18, 0)), t: 0 };
+      const from = rook.group.position
+        .clone()
+        .add(new THREE.Vector3(0, 1.3, -0.2));
+      ballFlight = {
+        from,
+        to: scene3d
+          .canWorld()
+          .clone()
+          .add(new THREE.Vector3(0, 0.18, 0)),
+        t: 0,
+      };
     }
 
-    function startPayoff(o: { first: boolean; catAssist: boolean; firstCat: boolean }) {
+    function startPayoff(o: {
+      first: boolean;
+      catAssist: boolean;
+      firstCat: boolean;
+    }) {
       const cues: { at: number; run: () => void }[] = [];
-      const balconyShot = { x0: COURSE.balcony.x1 + 0.9, x1: COURSE.basket.x - 1.5, y0: COURSE.balcony.floor - 1.0, y1: COURSE.balcony.floor + 1.9 };
+      const balconyShot = {
+        x0: COURSE.balcony.x1 + 0.9,
+        x1: COURSE.basket.x - 1.5,
+        y0: COURSE.balcony.floor - 1.0,
+        y1: COURSE.balcony.floor + 1.9,
+      };
       const bellToHand = () => {
         bellTaken = true;
         bella.holdBell(true);
@@ -740,7 +1002,10 @@ export async function mountSpecialDelivery(
       };
       if (o.catAssist && o.firstCat) {
         cues.push(
-          { at: 0.3, run: () => rook.play("point", { facing: "left", restart: true }) },
+          {
+            at: 0.3,
+            run: () => rook.play("point", { facing: "left", restart: true }),
+          },
           { at: 1.1, run: () => say(LINES.cat_assist_first[0], 2400) }
         );
       }
@@ -763,16 +1028,32 @@ export async function mountSpecialDelivery(
           { at: t0 + 6.4, run: () => ringOnce(false) },
           { at: t0 + 6.55, run: () => shutters.slam(audio) },
           { at: t0 + 6.7, run: () => audio.meow("mrrp") },
-          { at: t0 + 8.0, run: () => (bella.setPose("selected"), rook.play("talk", { facing: "front" }), say(LINES.next_delivery[0], 1800)) },
+          {
+            at: t0 + 8.0,
+            run: () => (
+              bella.setPose("selected"),
+              rook.play("talk", { facing: "front" }),
+              say(LINES.next_delivery[0], 1800)
+            ),
+          },
           { at: t0 + 9.6, run: () => (shutters.reset(), toReady()) }
         );
       } else {
         cues.push(
           { at: t0 + 0.7, run: bellToHand },
           { at: t0 + 1.4, run: () => ringOnce(false) },
-          { at: t0 + 1.6, run: () => (Math.random() < 0.5 ? shutters.open(Math.floor(Math.random() * 3), audio) : birds.fly(audio)) },
+          {
+            at: t0 + 1.6,
+            run: () =>
+              Math.random() < 0.5
+                ? shutters.open(Math.floor(Math.random() * 3), audio)
+                : birds.fly(audio),
+          },
           { at: t0 + 2.6, run: () => sayLine("bell_again") },
-          { at: t0 + 4.4, run: () => (bella.setPose("selected"), shutters.reset(), toReady()) }
+          {
+            at: t0 + 4.4,
+            run: () => (bella.setPose("selected"), shutters.reset(), toReady()),
+          }
         );
       }
       startSequence(cues, "payoff");
@@ -784,9 +1065,35 @@ export async function mountSpecialDelivery(
         // the reprise: three notes, a nod, back to work
         startSequence(
           [
-            { at: 0.4, run: () => [0, 1, 2].forEach((i, k) => setTimeout(() => (audio.chord(i), scene3d.ringCup(i)), k * 260)) },
-            { at: 1.4, run: () => (rook.play("bow", { facing: "front", restart: true }), sayLine("orchestra_again")) },
-            { at: 3.2, run: () => (delivered ? startPayoff({ first: false, catAssist: false, firstCat: false }) : toReady()) },
+            { at: 0.0, run: () => (camFocus = CONCERT_SHOT) },
+            {
+              at: 0.4,
+              run: () =>
+                [0, 1, 2].forEach((i, k) =>
+                  setTimeout(
+                    () => (audio.chord(i), scene3d.ringCup(i)),
+                    k * 260
+                  )
+                ),
+            },
+            {
+              at: 1.4,
+              run: () => (
+                rook.play("bow", { facing: "front", restart: true }),
+                sayLine("orchestra_again")
+              ),
+            },
+            {
+              at: 3.2,
+              run: () =>
+                delivered
+                  ? startPayoff({
+                      first: false,
+                      catAssist: false,
+                      firstCat: false,
+                    })
+                  : toReady(),
+            },
           ],
           "orchestra"
         );
@@ -797,9 +1104,22 @@ export async function mountSpecialDelivery(
       conductBeat = -1;
       startSequence(
         [
-          // the courtyard holds its breath for a beat
-          { at: 0.0, run: () => (audio.fanHum(false), rook.play("walk", { facing: "left" })) },
-          { at: 1.6, run: () => (rook.play("conduct", { facing: "front" }), (conductBeat = 0)) },
+          // the courtyard holds its breath for a beat, and the camera finds its seat
+          {
+            at: 0.0,
+            run: () => (
+              (camFocus = CONCERT_SHOT),
+              audio.fanHum(false),
+              rook.play("walk", { facing: "left" })
+            ),
+          },
+          {
+            at: 1.6,
+            run: () => (
+              rook.play("conduct", { facing: "front" }),
+              (conductBeat = 0)
+            ),
+          },
           { at: 2.1, run: () => (audio.chord(0), scene3d.ringCup(0)) },
           { at: 2.65, run: () => (audio.chord(1), scene3d.ringCup(1)) },
           { at: 3.2, run: () => (audio.chord(2), scene3d.ringCup(2)) },
@@ -809,17 +1129,48 @@ export async function mountSpecialDelivery(
           { at: 4.85, run: () => (audio.meow("indignant"), cleo.sitUp(1500)) },
           { at: 4.9, run: () => rook.freeze() },
           { at: 5.8, run: () => say(LINES.orchestra_finale[0], 2000) },
-          { at: 7.4, run: () => (rook.play("bow", { facing: "front", restart: true }), audio.finale()) },
-          { at: 8.2, run: () => (shutters.open(0, audio), shutters.open(2, audio)) },
+          {
+            at: 7.4,
+            run: () => (
+              rook.play("bow", { facing: "front", restart: true }),
+              audio.finale()
+            ),
+          },
+          {
+            at: 8.2,
+            run: () => (shutters.open(0, audio), shutters.open(2, audio)),
+          },
           { at: 8.7, run: () => dropLeaf() },
-          { at: 10.2, run: () => (shutters.reset(), (walkTarget = rookHome), rook.play("walk", { facing: "right" })) },
+          {
+            at: 10.2,
+            run: () => (
+              shutters.reset(),
+              (walkTarget = rookHome),
+              rook.play("walk", { facing: "right" })
+            ),
+          },
           {
             at: 11.6,
             run: () => {
               cb.onObserve({ kind: "beat", beat: "orchestra_performed" });
-              memory = { ...memory, beats: { ...memory.beats, orchestra_performed: new Date().toISOString() } };
+              memory = {
+                ...memory,
+                beats: {
+                  ...memory.beats,
+                  orchestra_performed: new Date().toISOString(),
+                },
+              };
               audio.fanHum(true);
-              if (delivered) startPayoff({ first: !memory.discoveries.first_delivery && !discoveredThisVisit.has("first_delivery") ? true : false, catAssist: false, firstCat: false });
+              if (delivered)
+                startPayoff({
+                  first:
+                    !memory.discoveries.first_delivery &&
+                    !discoveredThisVisit.has("first_delivery")
+                      ? true
+                      : false,
+                  catAssist: false,
+                  firstCat: false,
+                });
               else toReady();
             },
           },
@@ -835,7 +1186,10 @@ export async function mountSpecialDelivery(
     }
 
     function offerEnvelopeIfAny() {
-      const show = envelope === "waiting" && (memory.discoveries.first_delivery || discoveredThisVisit.has("first_delivery"));
+      const show =
+        envelope === "waiting" &&
+        (memory.discoveries.first_delivery ||
+          discoveredThisVisit.has("first_delivery"));
       envGroup.visible = Boolean(show);
       cb.onEnvelope(Boolean(show));
       if (show && !envelopeOffered && engaged) {
@@ -845,7 +1199,13 @@ export async function mountSpecialDelivery(
           rook.play("confide", { facing: "front" });
           sayLine("envelope_offer", 3000, { once: true });
           cb.onObserve({ kind: "beat", beat: "desk_offered" });
-          setTimeout(() => !disposed && phase === "ready" && rook.play("idle", { facing: "left" }), 3000);
+          setTimeout(
+            () =>
+              !disposed &&
+              phase === "ready" &&
+              rook.play("idle", { facing: "left" }),
+            3000
+          );
         }, 900);
       }
     }
@@ -855,18 +1215,28 @@ export async function mountSpecialDelivery(
     const camLook = new THREE.Vector3();
     let camBlend = 0;
     /** a closer box (sim coordinates) a sequence holds, e.g. Bella's balcony while the bell is rung; null is the course */
-    let camFocus: { x0: number; x1: number; y0: number; y1: number } | null = null;
-    let walkHeroBefore: { position: THREE.Vector3; heading: number } | null = null;
+    let camFocus: { x0: number; x1: number; y0: number; y1: number } | null =
+      null;
+    let walkHeroBefore: { position: THREE.Vector3; heading: number } | null =
+      null;
     const ppmA = new THREE.Vector3();
     const ppmB = new THREE.Vector3();
     /** screen pixels per metre of the course plane, at the launch rail */
     function pixelsPerMetre() {
       const rect = api.container.getBoundingClientRect();
       ppmA.copy(toWorld(COURSE.launch.x, COURSE.launch.y)).project(api.camera);
-      ppmB.copy(toWorld(COURSE.launch.x + 1, COURSE.launch.y)).project(api.camera);
-      return Math.hypot(((ppmA.x - ppmB.x) / 2) * rect.width, ((ppmA.y - ppmB.y) / 2) * rect.height);
+      ppmB
+        .copy(toWorld(COURSE.launch.x + 1, COURSE.launch.y))
+        .project(api.camera);
+      return Math.hypot(
+        ((ppmA.x - ppmB.x) / 2) * rect.width,
+        ((ppmA.y - ppmB.y) / 2) * rect.height
+      );
     }
-    function framing(out: { pos: THREE.Vector3; look: THREE.Vector3 }, follow: V2 | null) {
+    function framing(
+      out: { pos: THREE.Vector3; look: THREE.Vector3 },
+      follow: V2 | null
+    ) {
       const cam = api.camera;
       const aspect = cam.aspect || 1.6;
       // the box to keep in view: station and Rook, the balcony and the basket, ground to the line
@@ -902,11 +1272,13 @@ export async function mountSpecialDelivery(
         cam.updateProjectionMatrix();
       }
       const t = Math.tan(THREE.MathUtils.degToRad(fov / 2));
-      const d = Math.min(17, Math.max((h / 2) / t, (w / 2) / (t * aspect)) * 1.05);
+      const d = Math.min(17, Math.max(h / 2 / t, w / 2 / (t * aspect)) * 1.05);
       // farther back means higher up, so the plaza's fountain stays below the view (and never around the camera)
       const camX = PLANE_X - d;
       // (in portrait the fountain is ghosted, so the camera can stay lower and look at the course square on)
-      const lift = portrait ? Math.max(0, d - 8.5) * 0.18 : Math.max(Math.max(0, d - 8.5) * 0.42, Math.abs(camX) < 2.8 ? 1.3 : 0);
+      const lift = portrait
+        ? Math.max(0, d - 8.5) * 0.18
+        : Math.max(Math.max(0, d - 8.5) * 0.42, Math.abs(camX) < 2.8 ? 1.3 : 0);
       const cx = (x0 + x1) / 2;
       // a phone held upright has its controls top and bottom: the course sits a little low, between them, with sky
       // under the courtyard's header rather than empty paving above the airmail's buttons
@@ -917,10 +1289,16 @@ export async function mountSpecialDelivery(
     }
     const goal = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     const placeCamera = (camera: THREE.PerspectiveCamera, dt: number) => {
-      const follow = phase === "flying" && !api.reduceMotion ? { x: world.p.x, y: world.p.y } : null;
+      const follow =
+        phase === "flying" && !api.reduceMotion
+          ? { x: world.p.x, y: world.p.y }
+          : null;
       framing(goal, follow);
       if (camBlend < 1) {
-        camBlend = Math.min(1, camBlend + dt / (api.reduceMotion ? 0.01 : 1.15));
+        camBlend = Math.min(
+          1,
+          camBlend + dt / (api.reduceMotion ? 0.01 : 1.15)
+        );
         const u = THREE.MathUtils.smootherstep(camBlend, 0, 1);
         camera.position.lerpVectors(camPos, goal.pos, u);
         const look = new THREE.Vector3().lerpVectors(camLook, goal.look, u);
@@ -931,7 +1309,9 @@ export async function mountSpecialDelivery(
       camera.position.lerp(goal.pos, k);
       const look = new THREE.Vector3();
       camera.getWorldDirection(look);
-      const cur = camera.position.clone().addScaledVector(look, camera.position.distanceTo(goal.look));
+      const cur = camera.position
+        .clone()
+        .addScaledVector(look, camera.position.distanceTo(goal.look));
       cur.lerp(goal.look, 1 - Math.exp(-dt * 4));
       if (shake > 0.001 && !api.reduceMotion) {
         camera.position.x += (Math.random() - 0.5) * shake;
@@ -981,10 +1361,16 @@ export async function mountSpecialDelivery(
       while (accumulator >= STEP) {
         accumulator -= STEP;
         // a replayed input opens and folds the wings on its recorded steps, the way simulate() does
-        while (replayWings.length && world.phase === "flying" && world.step - launchStep >= replayWings[0].at) applyWings(replayWings.shift()!.open);
+        while (
+          replayWings.length &&
+          world.phase === "flying" &&
+          world.step - launchStep >= replayWings[0].at
+        )
+          applyWings(replayWings.shift()!.open);
         step(world, COURSE);
       }
-      while (eventCursor < world.events.length) react(world.events[eventCursor++]);
+      while (eventCursor < world.events.length)
+        react(world.events[eventCursor++]);
       if (phase === "flying" && world.phase === "done") flightFinished();
 
       // sequences
@@ -1000,7 +1386,8 @@ export async function mountSpecialDelivery(
 
       // results that don't have a payoff go back to ready by themselves, fast
       if (phase === "result") {
-        const wait = resultKind === "caught" ? RESET_AFTER_CATCH : RESET_AFTER_MISS;
+        const wait =
+          resultKind === "caught" ? RESET_AFTER_CATCH : RESET_AFTER_MISS;
         if (now - resultAt > wait) resetGlider();
       }
 
@@ -1018,10 +1405,20 @@ export async function mountSpecialDelivery(
       }
 
       // idle variety at the ready, never a nag
-      if (phase === "ready" && engaged && now - idleSince > 9 && now - lastLineAt > 18) {
+      if (
+        phase === "ready" &&
+        engaged &&
+        now - idleSince > 9 &&
+        now - lastLineAt > 18
+      ) {
         idleSince = now;
         if (Math.random() < 0.5) sayLine("idle");
-        else rook.play(Math.random() < 0.5 ? "wait" : "shrug", { facing: "left", restart: true, then: () => rook.play("idle", { facing: "left" }) });
+        else
+          rook.play(Math.random() < 0.5 ? "wait" : "shrug", {
+            facing: "left",
+            restart: true,
+            then: () => rook.play("idle", { facing: "left" }),
+          });
       }
       if (phase === "aiming" && aim) {
         const tension = Math.hypot(aim.pull.x, aim.pull.y) / MAX_PULL;
@@ -1041,7 +1438,9 @@ export async function mountSpecialDelivery(
           audio.splash();
           drops.forEach((dr, i) => {
             dr.d.visible = true;
-            dr.d.position.copy(scene3d.canWorld()).add(new THREE.Vector3(0, 0.25, 0));
+            dr.d.position
+              .copy(scene3d.canWorld())
+              .add(new THREE.Vector3(0, 0.25, 0));
             const a = (i / drops.length) * Math.PI * 2;
             dr.v.set(Math.cos(a) * 0.6, 1.6 + (i % 3) * 0.3, Math.sin(a) * 0.6);
           });
@@ -1056,7 +1455,15 @@ export async function mountSpecialDelivery(
       if (leafT >= 0) {
         leafT += dt;
         const start = toWorld(COURSE.balcony.x0 + 0.6, 4.4, 0.1);
-        leaf.position.copy(start).add(new THREE.Vector3(Math.sin(leafT * 3) * 0.3, -leafT * 0.55, Math.sin(leafT * 1.7) * 0.4));
+        leaf.position
+          .copy(start)
+          .add(
+            new THREE.Vector3(
+              Math.sin(leafT * 3) * 0.3,
+              -leafT * 0.55,
+              Math.sin(leafT * 1.7) * 0.4
+            )
+          );
         leaf.rotation.set(leafT * 2, leafT * 3.1, Math.sin(leafT * 4));
         if (leaf.position.y < 0.05) {
           leafT = -1;
@@ -1071,14 +1478,25 @@ export async function mountSpecialDelivery(
       bella.update(dt, elapsed, api.camera);
       shutters.update(dt);
       birds.update(dt, world);
-      const aimView: AimView = aim ? { pull: aim.pull, tension: Math.hypot(aim.pull.x, aim.pull.y) / MAX_PULL } : null;
+      const aimView: AimView = aim
+        ? {
+            pull: aim.pull,
+            tension: Math.hypot(aim.pull.x, aim.pull.y) / MAX_PULL,
+          }
+        : null;
       // how big the course is drawn: on a small or far view the glider and its aim guide grow so they still read
       const ppm = pixelsPerMetre();
       const small = THREE.MathUtils.clamp(78 / Math.max(1, ppm), 1, 1.9);
       scene3d.sync(world, dt, elapsed, aimView, {
         fan: world.fan,
-        showGlow: engaged && !memory.discoveries.first_delivery && !discoveredThisVisit.has("first_delivery"),
-        gliderHidden: (phase === "intro" && (sequence ? now - sequence.start < 9.1 : false)) || bellTaken,
+        showGlow:
+          engaged &&
+          !memory.discoveries.first_delivery &&
+          !discoveredThisVisit.has("first_delivery"),
+        gliderHidden:
+          (phase === "intro" &&
+            (sequence ? now - sequence.start < 9.1 : false)) ||
+          bellTaken,
         small,
       });
       envGroup.rotation.y = Math.sin(elapsed * 2) * 0.04;
@@ -1087,7 +1505,8 @@ export async function mountSpecialDelivery(
       const wantPortraitGhosts = engaged && (api.camera.aspect || 1.6) < 1;
       if (wantPortraitGhosts !== portraitGhosts) {
         portraitGhosts = wantPortraitGhosts;
-        for (const g of [PLAZA_FOUNTAIN, PLAZA_BENCH]) api.ghostProps(g.x, g.z, g.r, portraitGhosts, g.match, 0);
+        for (const g of [PLAZA_FOUNTAIN, PLAZA_BENCH])
+          api.ghostProps(g.x, g.z, g.r, portraitGhosts, g.match, 0);
       }
 
       // bubble follows Rook's head
@@ -1097,16 +1516,25 @@ export async function mountSpecialDelivery(
         cb.onLine?.(null);
       }
       if (bubbleUntil) {
-        const head = rook.group.position.clone().add(new THREE.Vector3(0, 1.75, 0)).project(api.camera);
+        const head = rook.group.position
+          .clone()
+          .add(new THREE.Vector3(0, 1.75, 0))
+          .project(api.camera);
         const rect = api.container.getBoundingClientRect();
         const bw = bubble.offsetWidth || 240;
         const bh = bubble.offsetHeight || 48;
         const hx = ((head.x + 1) / 2) * rect.width;
         const hy = ((1 - head.y) / 2) * rect.height;
-        const cx = Math.min(rect.width - 12 - bw / 2, Math.max(12 + bw / 2, hx));
+        const cx = Math.min(
+          rect.width - 12 - bw / 2,
+          Math.max(12 + bw / 2, hx)
+        );
         const cy = Math.max(bh + 14, hy);
         bubble.style.transform = `translate(-50%, -100%) translate(${cx}px, ${cy}px)`;
-        bubble.style.setProperty("--tail", `${Math.max(16, Math.min(bw - 16, bw / 2 + (hx - cx)))}px`);
+        bubble.style.setProperty(
+          "--tail",
+          `${Math.max(16, Math.min(bw - 16, bw / 2 + (hx - cx)))}px`
+        );
       }
 
       // the first-visit establishing shot of the course, then back to her
@@ -1118,12 +1546,15 @@ export async function mountSpecialDelivery(
 
       // walking: is the hero at the station?
       if (!engaged) {
-        const d = api.hero().position.distanceTo(scene3d.stationWorld().setY(0));
+        const d = api
+          .hero()
+          .position.distanceTo(scene3d.stationWorld().setY(0));
         const near = d < STATION_REACH;
         if (near !== nearStation) {
           nearStation = near;
           cb.onNearStation(near);
-          if (near && !memory.beats.intro_seen) rook.play("talk", { facing: "front" });
+          if (near && !memory.beats.intro_seen)
+            rook.play("talk", { facing: "front" });
           if (!near) rook.play("fold", { facing: "left" });
         }
       }
@@ -1150,7 +1581,10 @@ export async function mountSpecialDelivery(
         reportFan();
         walkHeroBefore = api.hero();
         // the hero steps to the side of the station, just out of the shot, watching the course with Rook
-        api.placeHero(toWorld(COURSE.rook.x - 2.2, 0, -1.6), -Math.PI / 2 - 0.4);
+        api.placeHero(
+          toWorld(COURSE.rook.x - 2.2, 0, -1.6),
+          -Math.PI / 2 - 0.4
+        );
         if (!fromShowcase) {
           // glide from wherever the walking camera is; from the establishing shot it is already framed
           camPos.copy(api.camera.position);
@@ -1168,18 +1602,39 @@ export async function mountSpecialDelivery(
           return;
         }
         // a later visit: a short, remembered greeting, then straight to it
-        const returning = rememberedBefore(memory.discoveries.first_delivery?.firstAt, visitStartedAt);
+        const returning = rememberedBefore(
+          memory.discoveries.first_delivery?.firstAt,
+          visitStartedAt
+        );
         let line: LineKey | undefined;
         if (returning && !memory.beats.improvements_unveiled) {
           cb.onObserve({ kind: "beat", beat: "improvements_unveiled" });
-          memory = { ...memory, beats: { ...memory.beats, improvements_unveiled: new Date().toISOString() } };
+          memory = {
+            ...memory,
+            beats: {
+              ...memory.beats,
+              improvements_unveiled: new Date().toISOString(),
+            },
+          };
           scene3d.showSecondBand(true);
           startSequence(
             [
               { at: 0.0, run: () => (camFocus = STATION_SHOT) },
-              { at: 0.9, run: () => (rook.play("talk", { facing: "front" }), say(LINES.improvements[0], 1800)) },
+              {
+                at: 0.9,
+                run: () => (
+                  rook.play("talk", { facing: "front" }),
+                  say(LINES.improvements[0], 1800)
+                ),
+              },
               { at: 2.8, run: () => rook.play("idle", { facing: "left" }) },
-              { at: 3.4, run: () => (rook.play("shrug", { facing: "front", restart: true }), say(LINES.improvements_untested[0], 1900)) },
+              {
+                at: 3.4,
+                run: () => (
+                  rook.play("shrug", { facing: "front", restart: true }),
+                  say(LINES.improvements_untested[0], 1900)
+                ),
+              },
               { at: 5.4, run: () => toReady() },
             ],
             "intro"
@@ -1187,10 +1642,19 @@ export async function mountSpecialDelivery(
           return;
         }
         if (orchestraSign.visible) line = "orchestra_remembered";
-        else if (rememberedBefore(memory.discoveries.cat_assist?.firstAt, visitStartedAt)) line = "cat_remembered";
+        else if (
+          rememberedBefore(
+            memory.discoveries.cat_assist?.firstAt,
+            visitStartedAt
+          )
+        )
+          line = "cat_remembered";
         else line = "welcome_back";
         if (saidThisVisit.has(line)) line = undefined;
-        setTimeout(() => !disposed && toReady(line), api.reduceMotion ? 50 : 1100);
+        setTimeout(
+          () => !disposed && toReady(line),
+          api.reduceMotion ? 50 : 1100
+        );
         phase = "entering";
       },
       exit() {
@@ -1209,11 +1673,17 @@ export async function mountSpecialDelivery(
         api.setVillagersHiddenWhere(null);
         api.ghostProps(EAST_LAMP.x, EAST_LAMP.z, 0.9, false);
         stageCast(false);
-        if (walkHeroBefore) api.placeHero(walkHeroBefore.position, walkHeroBefore.heading);
+        if (walkHeroBefore)
+          api.placeHero(walkHeroBefore.position, walkHeroBefore.heading);
         audio.fanHum(false);
         audio.flutter(0);
         bubble.style.opacity = "0";
-        envGroup.visible = envelope === "waiting" && Boolean(memory.discoveries.first_delivery || discoveredThisVisit.has("first_delivery"));
+        envGroup.visible =
+          envelope === "waiting" &&
+          Boolean(
+            memory.discoveries.first_delivery ||
+              discoveredThisVisit.has("first_delivery")
+          );
         cb.onEngaged(false);
         rook.play("fold", { facing: "left" });
       },
@@ -1228,7 +1698,8 @@ export async function mountSpecialDelivery(
         if (kind === "none") {
           envGroup.visible = false;
           cb.onEnvelope(false);
-        } else if (phase === "ready" || phase === "walking") offerEnvelopeIfAny();
+        } else if (phase === "ready" || phase === "walking")
+          offerEnvelopeIfAny();
       },
       setControlMode(mode) {
         controlMode = mode;
@@ -1236,11 +1707,27 @@ export async function mountSpecialDelivery(
       turnFan() {
         if (engaged && phase === "ready") turnFan();
       },
+      say(key) {
+        if (engaged && (phase === "ready" || phase === "aiming"))
+          setTimeout(() => !disposed && sayLine(key), 350);
+      },
       aimBy(dAngle, dPower) {
         if (!engaged || (phase !== "ready" && phase !== "aiming")) return;
-        const cur = aim?.pull ?? { x: Math.cos(0.75) * MAX_PULL * 0.55, y: Math.sin(0.75) * MAX_PULL * 0.55 };
-        const ang = Math.max(0.09, Math.min(1.5, Math.atan2(cur.y, cur.x) + THREE.MathUtils.degToRad(dAngle)));
-        const pw = Math.max(MIN_PULL + 0.02, Math.min(MAX_PULL, Math.hypot(cur.x, cur.y) + dPower * MAX_PULL));
+        const cur = aim?.pull ?? {
+          x: Math.cos(0.75) * MAX_PULL * 0.55,
+          y: Math.sin(0.75) * MAX_PULL * 0.55,
+        };
+        const ang = Math.max(
+          0.09,
+          Math.min(
+            1.5,
+            Math.atan2(cur.y, cur.x) + THREE.MathUtils.degToRad(dAngle)
+          )
+        );
+        const pw = Math.max(
+          MIN_PULL + 0.02,
+          Math.min(MAX_PULL, Math.hypot(cur.x, cur.y) + dPower * MAX_PULL)
+        );
         aim = { pull: { x: Math.cos(ang) * pw, y: Math.sin(ang) * pw } };
         phase = "aiming";
         audio.stretch(pw / MAX_PULL);
@@ -1261,7 +1748,19 @@ export async function mountSpecialDelivery(
     // dev and capture hooks: these give the same input a player gives (a pull, then wings on given steps) and the
     // simulation decides what happens; nothing here places the glider or picks an outcome
     (window as unknown as { __specialDelivery?: unknown }).__specialDelivery = {
-      state: () => ({ phase, engaged, worldPhase: world.phase, outcome: world.outcome, rest: world.restWhere, via: [...world.via], cups: [...world.cupSequence], fan: world.fan, p: { ...world.p }, t: world.t, cat: world.cat.phase }),
+      state: () => ({
+        phase,
+        engaged,
+        worldPhase: world.phase,
+        outcome: world.outcome,
+        rest: world.restWhere,
+        via: [...world.via],
+        cups: [...world.cupSequence],
+        fan: world.fan,
+        p: { ...world.p },
+        t: world.t,
+        cat: world.cat.phase,
+      }),
       enter: () => controller.enter(),
       exit: () => controller.exit(),
       /** the last flight as it was actually flown: replaying it from rest reproduces it */
@@ -1282,7 +1781,13 @@ export async function mountSpecialDelivery(
       /** what this exact input does from a settled courtyard, simulated offline (for tests and captures) */
       predict(input: FlightInput) {
         const w = simulate(COURSE, input, world.fan);
-        return { outcome: w.outcome, rest: w.restWhere, via: w.via, cups: w.cupSequence, t: w.t };
+        return {
+          outcome: w.outcome,
+          rest: w.restWhere,
+          via: w.via,
+          cups: w.cupSequence,
+          t: w.t,
+        };
       },
       setFan(f: FanSetting) {
         world.fan = f;
@@ -1293,7 +1798,10 @@ export async function mountSpecialDelivery(
         const rect = api.canvas.getBoundingClientRect();
         const k = fullPullPx() / MAX_PULL;
         // press a little left of the middle (clear of the fan, the stall and the HUD); the drag is screen-relative
-        const from = { x: rect.left + rect.width * 0.42, y: rect.top + rect.height * 0.38 };
+        const from = {
+          x: rect.left + rect.width * 0.42,
+          y: rect.top + rect.height * 0.38,
+        };
         return { from, to: { x: from.x + pull.x * k, y: from.y + pull.y * k } };
       },
     };
@@ -1320,7 +1828,8 @@ export async function mountSpecialDelivery(
         bella.dispose();
         audio.dispose();
         envTex.dispose();
-        delete (window as unknown as { __specialDelivery?: unknown }).__specialDelivery;
+        delete (window as unknown as { __specialDelivery?: unknown })
+          .__specialDelivery;
       },
     };
   }
@@ -1384,7 +1893,10 @@ function signMesh(title: string, sub: string, api: CourtyardActivityApi) {
   const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.39), m);
   board.position.y = 0.55;
   board.rotation.y = -Math.PI / 2;
-  const stake = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.04), new THREE.MeshStandardMaterial({ name: "timber", color: 0x7b5232 }));
+  const stake = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.55, 0.04),
+    new THREE.MeshStandardMaterial({ name: "timber", color: 0x7b5232 })
+  );
   stake.position.y = 0.27;
   group.add(board, stake);
   api.stylize(stake);
@@ -1397,38 +1909,95 @@ function buildShutters(api: CourtyardActivityApi, root: THREE.Group) {
   // outward normal), so when the bell goes they are thrown open where the camera can see them.
   const YELLOW_N = new THREE.Vector3(-0.87, 0, 0.5);
   const TEAL_N = new THREE.Vector3(-0.87, 0, -0.5);
-  const spots: { x: number; y: number; depth: number; w: number; h: number; normal: THREE.Vector3; color: number; glass: boolean }[] = [
+  const spots: {
+    x: number;
+    y: number;
+    depth: number;
+    w: number;
+    h: number;
+    normal: THREE.Vector3;
+    color: number;
+    glass: boolean;
+  }[] = [
     // the teal cottage's front window, by Rook's station
-    { x: -5.68, y: 2.27, depth: 1.18, w: 0.98, h: 0.62, normal: TEAL_N, color: 0xf1e3c2, glass: false },
+    {
+      x: -5.68,
+      y: 2.27,
+      depth: 1.18,
+      w: 0.98,
+      h: 0.62,
+      normal: TEAL_N,
+      color: 0xf1e3c2,
+      glass: false,
+    },
     // the yellow cottage's window beside the balcony
-    { x: 2.2, y: 2.15, depth: 1.31, w: 0.6, h: 0.62, normal: YELLOW_N, color: 0x6fa06a, glass: false },
+    {
+      x: 2.2,
+      y: 2.15,
+      depth: 1.31,
+      w: 0.6,
+      h: 0.62,
+      normal: YELLOW_N,
+      color: 0x6fa06a,
+      glass: false,
+    },
     // and a little one on the yellow cottage's plaster, left of the balcony (its own frame and glass)
-    { x: 4.86, y: 2.5, depth: -0.04, w: 0.52, h: 0.56, normal: YELLOW_N, color: 0x6fa06a, glass: true },
+    {
+      x: 4.86,
+      y: 2.5,
+      depth: -0.04,
+      w: 0.52,
+      h: 0.56,
+      normal: YELLOW_N,
+      color: 0x6fa06a,
+      glass: true,
+    },
   ];
   const items = spots.map(sp => {
     const unit = new THREE.Group();
     unit.position.copy(toWorld(sp.x, sp.y, sp.depth));
     unit.lookAt(unit.position.clone().add(sp.normal));
     if (sp.glass) {
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(sp.w * 0.92, sp.h * 0.92), new THREE.MeshToonMaterial({ name: "window_glass", color: 0x2f4a66 }));
+      const glass = new THREE.Mesh(
+        new THREE.PlaneGeometry(sp.w * 0.92, sp.h * 0.92),
+        new THREE.MeshToonMaterial({ name: "window_glass", color: 0x2f4a66 })
+      );
       glass.position.z = 0.005;
       unit.add(glass);
-      const frameMat = new THREE.MeshToonMaterial({ name: "window_frame", color: 0xf6ead2 });
-      for (const [fw, fh, fx, fy] of [[sp.w + 0.06, 0.05, 0, sp.h / 2], [sp.w + 0.06, 0.07, 0, -sp.h / 2], [0.05, sp.h, -sp.w / 2, 0], [0.05, sp.h, sp.w / 2, 0], [0.03, sp.h, 0, 0]] as const) {
+      const frameMat = new THREE.MeshToonMaterial({
+        name: "window_frame",
+        color: 0xf6ead2,
+      });
+      for (const [fw, fh, fx, fy] of [
+        [sp.w + 0.06, 0.05, 0, sp.h / 2],
+        [sp.w + 0.06, 0.07, 0, -sp.h / 2],
+        [0.05, sp.h, -sp.w / 2, 0],
+        [0.05, sp.h, sp.w / 2, 0],
+        [0.03, sp.h, 0, 0],
+      ] as const) {
         const f = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, 0.04), frameMat);
         f.position.set(fx, fy, 0.02);
         unit.add(f);
       }
     }
-    const panelMat = new THREE.MeshStandardMaterial({ name: "door_shutter", color: sp.color });
+    const panelMat = new THREE.MeshStandardMaterial({
+      name: "door_shutter",
+      color: sp.color,
+    });
     const panels = [-1, 1].map(side => {
       const hinge = new THREE.Group();
       hinge.position.set((side * sp.w) / 2, 0, 0.035);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(sp.w / 2, sp.h, 0.035), panelMat);
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(sp.w / 2, sp.h, 0.035),
+        panelMat
+      );
       panel.position.x = (-side * sp.w) / 4;
       // two slats so a shutter reads as a shutter
       for (const dy of [-sp.h / 4, sp.h / 4]) {
-        const slat = new THREE.Mesh(new THREE.BoxGeometry(sp.w / 2 - 0.06, 0.035, 0.02), panelMat);
+        const slat = new THREE.Mesh(
+          new THREE.BoxGeometry(sp.w / 2 - 0.06, 0.035, 0.02),
+          panelMat
+        );
         slat.position.set(0, dy, 0.025);
         panel.add(slat);
       }
@@ -1442,8 +2011,14 @@ function buildShutters(api: CourtyardActivityApi, root: THREE.Group) {
   });
   // a folded newspaper, dropped from the window beside the balcony
   const paper = new THREE.Group();
-  const sheet = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.26, 0.36), new THREE.MeshToonMaterial({ color: 0xf2efe6 }));
-  const print = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, 0.28), new THREE.MeshToonMaterial({ color: 0x8a8a8a }));
+  const sheet = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.26, 0.36),
+    new THREE.MeshToonMaterial({ color: 0xf2efe6 })
+  );
+  const print = new THREE.Mesh(
+    new THREE.BoxGeometry(0.045, 0.05, 0.28),
+    new THREE.MeshToonMaterial({ color: 0x8a8a8a })
+  );
   print.position.y = 0.06;
   paper.add(sheet, print);
   paper.visible = false;
@@ -1511,17 +2086,36 @@ function buildBirds(api: CourtyardActivityApi, root: THREE.Group) {
     body.position.y = 0.1;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), bodyMat);
     head.position.set(0, 0.2, i % 2 ? 0.08 : -0.08);
-    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.07, 6), new THREE.MeshToonMaterial({ color: 0xf2b84b }));
+    const beak = new THREE.Mesh(
+      new THREE.ConeGeometry(0.025, 0.07, 6),
+      new THREE.MeshToonMaterial({ color: 0xf2b84b })
+    );
     beak.rotation.x = i % 2 ? Math.PI / 2 : -Math.PI / 2;
     beak.position.set(0, 0.2, i % 2 ? 0.16 : -0.16);
     const wingMat = new THREE.MeshToonMaterial({ color: 0x3b2a1e });
-    const wingL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.22), wingMat);
+    const wingL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 0.02, 0.22),
+      wingMat
+    );
     wingL.position.set(0.05, 0.14, 0);
     const wingR = wingL.clone();
     wingR.position.x = -0.05;
     g.add(body, head, beak, wingL, wingR);
     root.add(g);
-    return { g, wingL, wingR, x, t: -1, hop: -1, i, dir: new THREE.Vector3(-0.6 - (i % 2) * 0.5, 1, (i < 2 ? 1 : -1) * (0.8 + i * 0.15)) };
+    return {
+      g,
+      wingL,
+      wingR,
+      x,
+      t: -1,
+      hop: -1,
+      i,
+      dir: new THREE.Vector3(
+        -0.6 - (i % 2) * 0.5,
+        1,
+        (i < 2 ? 1 : -1) * (0.8 + i * 0.15)
+      ),
+    };
   });
   const perchAt = (x: number, sag: number) => {
     const { a, b } = COURSE.line;
@@ -1537,7 +2131,14 @@ function buildBirds(api: CourtyardActivityApi, root: THREE.Group) {
       for (const b of birds) {
         const home = toWorld(b.x, perchAt(b.x, world.lineSag), 0);
         // a glider passing close: this one hops up and settles again
-        if (b.t < 0 && b.hop < 0 && world.phase === "flying" && Math.hypot(world.p.x - b.x, world.p.y - perchAt(b.x, world.lineSag)) < 0.55) b.hop = 0;
+        if (
+          b.t < 0 &&
+          b.hop < 0 &&
+          world.phase === "flying" &&
+          Math.hypot(world.p.x - b.x, world.p.y - perchAt(b.x, world.lineSag)) <
+            0.55
+        )
+          b.hop = 0;
         let flap = 0;
         if (b.t >= 0) {
           b.t += dt;
@@ -1545,7 +2146,11 @@ function buildBirds(api: CourtyardActivityApi, root: THREE.Group) {
           // off and away, out of the frame; then, a while later, a glide back down to the line
           const back = b.t > 6.5 ? Math.min(1, (b.t - 6.5) / 1.6) : 0;
           const away = home.clone().addScaledVector(b.dir, out * 2.4);
-          b.g.position.lerpVectors(away, home, THREE.MathUtils.smoothstep(back, 0, 1));
+          b.g.position.lerpVectors(
+            away,
+            home,
+            THREE.MathUtils.smoothstep(back, 0, 1)
+          );
           flap = back < 1 ? Math.sin(b.t * 34) : 0;
           if (b.t > 8.1) b.t = -1;
         } else if (b.hop >= 0) {

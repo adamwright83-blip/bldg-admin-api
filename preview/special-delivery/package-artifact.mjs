@@ -4,18 +4,29 @@
 // page works wherever it is served.
 //
 //   npx vite build --config vite.special-delivery-preview.config.ts && node preview/special-delivery/package-artifact.mjs
-import { existsSync, readdirSync, readFileSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const out = path.join(root, "tmp/special-delivery-preview-build");
-const allow = JSON.parse(readFileSync(path.join(import.meta.dirname, "artifact-files.json"), "utf8"));
+const allow = JSON.parse(
+  readFileSync(path.join(import.meta.dirname, "artifact-files.json"), "utf8")
+);
 const keepFiles = new Set(allow.files);
 const keepDirs = allow.dirs ?? [];
 const MAX_FILE = 15 * 1024 * 1024;
 const PART = 9 * 1024 * 1024; // bytes per model part (12 MB of base64 text)
 
-if (!existsSync(path.join(out, "index.html"))) throw new Error(`no preview build at ${out}; run vite build first`);
+if (!existsSync(path.join(out, "index.html")))
+  throw new Error(`no preview build at ${out}; run vite build first`);
 
 function walk(dir, acc = []) {
   for (const name of readdirSync(dir)) {
@@ -38,7 +49,11 @@ let removed = 0;
 for (const file of walk(out)) {
   const rel = path.relative(out, file).split(path.sep).join("/");
   const viteChunk = /^assets\/[^/]+\.(js|css)$/.test(rel);
-  const keep = rel === "index.html" || viteChunk || keepFiles.has(rel) || keepDirs.some(d => rel.startsWith(d));
+  const keep =
+    rel === "index.html" ||
+    viteChunk ||
+    keepFiles.has(rel) ||
+    keepDirs.some(d => rel.startsWith(d));
   if (!keep) {
     rmSync(file);
     removed++;
@@ -54,10 +69,18 @@ for (const glb of walk(out).filter(f => f.endsWith(".glb"))) {
   const step = PART - (PART % 3);
   for (let at = 0, i = 0; at < bytes.length; at += step, i++) {
     const name = `${path.basename(glb)}.part${i}.json`;
-    writeFileSync(path.join(path.dirname(glb), name), JSON.stringify(bytes.subarray(at, Math.min(bytes.length, at + step)).toString("base64")));
+    writeFileSync(
+      path.join(path.dirname(glb), name),
+      JSON.stringify(
+        bytes.subarray(at, Math.min(bytes.length, at + step)).toString("base64")
+      )
+    );
     parts.push(name);
   }
-  writeFileSync(`${glb}.parts.json`, JSON.stringify({ size: bytes.length, encoding: "base64", parts }));
+  writeFileSync(
+    `${glb}.parts.json`,
+    JSON.stringify({ size: bytes.length, encoding: "base64", parts })
+  );
   rmSync(glb);
 }
 
@@ -70,7 +93,11 @@ for (const file of walk(path.join(out, "assets"))) {
     ? src.replace(/url\((["']?)\/assets\//g, (_m, q) => `url(${q}./`)
     : src.replace(/(["'`])\/assets\//g, (_m, q) => `${q}./assets/`);
   if (next !== src) {
-    rewrites += (src.match(file.endsWith(".css") ? /url\((["']?)\/assets\//g : /(["'`])\/assets\//g) ?? []).length;
+    rewrites += (
+      src.match(
+        file.endsWith(".css") ? /url\((["']?)\/assets\//g : /(["'`])\/assets\//g
+      ) ?? []
+    ).length;
     writeFileSync(file, next);
   }
 }
@@ -79,8 +106,15 @@ for (const file of walk(path.join(out, "assets"))) {
 //    just its title, its look, vite's two tags and the root
 const html = readFileSync(path.join(out, "index.html"), "utf8");
 const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "Special Delivery";
-const tags = [...html.matchAll(/<(script|link)\b[^>]*(?:src|href)="\.\/assets\/[^"]+"[^>]*>(?:<\/script>)?/g)].map(m => m[0]);
-if (tags.length < 2) throw new Error("vite's script and stylesheet tags were not found in index.html");
+const tags = [
+  ...html.matchAll(
+    /<(script|link)\b[^>]*(?:src|href)="\.\/assets\/[^"]+"[^>]*>(?:<\/script>)?/g
+  ),
+].map(m => m[0]);
+if (tags.length < 2)
+  throw new Error(
+    "vite's script and stylesheet tags were not found in index.html"
+  );
 writeFileSync(
   path.join(out, "index.html"),
   [
@@ -99,7 +133,13 @@ writeFileSync(
 const files = walk(out);
 const total = files.reduce((n, f) => n + statSync(f).size, 0);
 const big = files.filter(f => statSync(f).size > MAX_FILE);
-console.log(`artifact: ${files.length} files, ${(total / 1e6).toFixed(1)} MB; removed ${removed}; ${rewrites} asset URLs made relative`);
+console.log(
+  `artifact: ${files.length} files, ${(total / 1e6).toFixed(1)} MB; removed ${removed}; ${rewrites} asset URLs made relative`
+);
 if (big.length) throw new Error(`files over 15 MB: ${big.join(", ")}`);
-if (files.length > 255) throw new Error(`${files.length} files: one publish takes at most 255`);
-if (total > 64 * 1024 * 1024) throw new Error(`${(total / 1e6).toFixed(1)} MB: one publish takes at most 64 MB`);
+if (files.length > 255)
+  throw new Error(`${files.length} files: one publish takes at most 255`);
+if (total > 64 * 1024 * 1024)
+  throw new Error(
+    `${(total / 1e6).toFixed(1)} MB: one publish takes at most 64 MB`
+  );

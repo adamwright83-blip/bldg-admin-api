@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
 import {
+  TESSA_PARK_CASES,
   TESSA_PARK_FIXTURE,
   buildSableRecall,
   composeRookDraft,
@@ -26,7 +27,11 @@ import styles from "./special-delivery.module.css";
  * In the synthetic preview the desk shows a labelled fixture and nothing is written anywhere.
  */
 
-export type UnfinishedDeskDraft = { customerId: string; draftBody: string; updatedAt: string } | null;
+export type UnfinishedDeskDraft = {
+  customerId: string;
+  draftBody: string;
+  updatedAt: string;
+} | null;
 
 export function CorrespondenceDesk(props: {
   synthetic: boolean;
@@ -35,7 +40,8 @@ export function CorrespondenceDesk(props: {
   unfinished: UnfinishedDeskDraft;
   onSaveDraft(target: CozyProjectedTarget, draft: string): Promise<void> | void;
   onOpenLetterDesk(target: CozyProjectedTarget, draft: string): void;
-  onClose(): void;
+  /** closed: "saved" if a draft was saved here, "passed" if you passed on them */
+  onClose(outcome?: "saved" | "passed" | "left_be"): void;
   onNotNow(): void;
 }) {
   const { synthetic, target } = props;
@@ -44,7 +50,8 @@ export function CorrespondenceDesk(props: {
     { territoryId: props.territoryId, customerId: real?.customerId ?? "" },
     { enabled: Boolean(real), staleTime: 10_000 }
   );
-  const recordPass = trpc.system.goldlineWorld.recordReunionQuestEvent.useMutation();
+  const recordPass =
+    trpc.system.goldlineWorld.recordReunionQuestEvent.useMutation();
   const utils = trpc.useUtils();
 
   const customer: DeskCustomer | null = synthetic
@@ -55,29 +62,54 @@ export function CorrespondenceDesk(props: {
           displayName: real.displayName,
           paidOrders: real.paidOrders,
           lastOrderDate: real.lastOrderDate,
-          daysSinceLastOrder: Number.isFinite(real.daysSinceLastOrder) ? real.daysSinceLastOrder : null,
+          daysSinceLastOrder: Number.isFinite(real.daysSinceLastOrder)
+            ? real.daysSinceLastOrder
+            : null,
           lastOrderSummary: real.lastOrderSummary,
         }
       : null;
 
+  // the synthetic preview can show the fixture in other situations (#desk-question, #desk-opt-out, …)
+  const fixtureCase = synthetic ? previewCase() : null;
   const entries: RecallEntry[] = useMemo(() => {
-    if (synthetic) return TESSA_PARK_FIXTURE.recallEntries;
-    return ((recallQuery.data as { entries?: RecallEntry[] } | undefined)?.entries ?? []) as RecallEntry[];
-  }, [synthetic, recallQuery.data]);
+    if (synthetic)
+      return fixtureCase
+        ? TESSA_PARK_CASES[fixtureCase].entries
+        : TESSA_PARK_FIXTURE.recallEntries;
+    return ((recallQuery.data as { entries?: RecallEntry[] } | undefined)
+      ?.entries ?? []) as RecallEntry[];
+  }, [synthetic, fixtureCase, recallQuery.data]);
   const recall = useMemo(() => buildSableRecall(entries), [entries]);
   // Rook writes from what Sable found, so he waits for her; if she can't read the record he doesn't guess
-  const recallReady = synthetic || !real || recallQuery.isFetched || recallQuery.isError;
+  const recallReady =
+    synthetic || !real || recallQuery.isFetched || recallQuery.isError;
   const rook: RookDraft | null = useMemo(() => {
     if (!customer || !recallReady) return null;
     if (real && recallQuery.isError) {
-      return { mode: "review", draft: `Hi ${firstName(customer.displayName)}, `, note: "Sable couldn't read the record just now, so Rook won't guess. Write it yourself, or come back later." };
+      return {
+        mode: "review",
+        draft: `Hi ${firstName(customer.displayName)}, `,
+        note: "Sable couldn't read the record just now, so Rook won't guess. Write it yourself, or come back later.",
+      };
     }
-    return composeRookDraft({ displayName: customer.displayName, recall, service: "laundry", fallback: real?.suggestedMessage ?? null });
+    return composeRookDraft({
+      displayName: customer.displayName,
+      recall,
+      service: "laundry",
+      fallback: real?.suggestedMessage ?? null,
+    });
   }, [customer, recallReady, real, recallQuery.isError, recall]);
 
-  const saved = props.unfinished && customer && props.unfinished.customerId === customer.customerId ? props.unfinished : null;
+  const saved =
+    props.unfinished &&
+    customer &&
+    props.unfinished.customerId === customer.customerId
+      ? props.unfinished
+      : null;
   const [draft, setDraft] = useState<string>("");
   const [savedNow, setSavedNow] = useState(false);
+  const savedRef = useRef(false);
+  savedRef.current = savedNow;
   const [note, setNote] = useState<string | null>(null);
   const [previewHandoff, setPreviewHandoff] = useState(false);
   const prefilled = useRef(false);
@@ -87,10 +119,19 @@ export function CorrespondenceDesk(props: {
     // your own saved words come back as you left them, except to someone who asked not to be contacted
     setDraft(saved && rook.mode !== "none" ? saved.draftBody : rook.draft);
   }, [saved, rook]);
-  const ready = rook ? draftReady(rook.mode, draft, customer?.displayName ?? "") : false;
+  const ready = rook
+    ? draftReady(rook.mode, draft, customer?.displayName ?? "")
+    : false;
+  // someone who asked not to be contacted is left be: no snooze, no "not now", nothing that implies a later message
+  const leaveBe = rook?.mode === "none";
+  const leaveBeRef = useRef(false);
+  leaveBeRef.current = leaveBe;
+  const closeOutcome = () =>
+    savedRef.current ? "saved" : leaveBeRef.current ? "left_be" : undefined;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
+    const onKey = (e: KeyboardEvent) =>
+      e.key === "Escape" && props.onClose(closeOutcome());
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [props]);
@@ -98,8 +139,16 @@ export function CorrespondenceDesk(props: {
   const loading = Boolean(real) && recallQuery.isLoading;
   // the preview never opens anything, so it never claims a hand-off happened
   const message = synthetic ? null : (real?.silverLakeStatus?.message ?? null);
-  const replyObserved = synthetic ? false : real?.silverLakeStatus?.reply === "customer_reply_observed" || recall.replyRecorded;
-  const state = deskStateLabel({ saved: Boolean(saved) || savedNow, message, replyObserved });
+  const replyObserved = synthetic
+    ? false
+    : real?.silverLakeStatus?.reply === "customer_reply_observed" ||
+      recall.replyRecorded;
+  const state = deskStateLabel({
+    saved: (Boolean(saved) && !leaveBe) || savedNow,
+    drafted: ready,
+    message,
+    replyObserved,
+  });
 
   if (!customer) {
     return (
@@ -107,18 +156,26 @@ export function CorrespondenceDesk(props: {
         <section className={styles.desk}>
           <header className={styles.deskHead}>
             <div>
-              <span className={styles.deskKicker}>Rook's desk · your business</span>
+              <span className={styles.deskKicker}>
+                Rook's desk · your business
+              </span>
               <h2>Nothing needs you here today</h2>
             </div>
-            <button type="button" className={styles.deskClose} onClick={props.onClose} aria-label="Back to the courtyard">
+            <button
+              type="button"
+              className={styles.deskClose}
+              onClick={() => props.onClose(savedNow ? "saved" : undefined)}
+              aria-label="Back to the courtyard"
+            >
               ✕
             </button>
           </header>
           <p className={styles.deskEmpty}>
-            No customer in Silver Lake is waiting on a note right now. When someone who used to order goes quiet, Rook will put them here.
+            No customer in Silver Lake is waiting on a note right now. When
+            someone who used to order goes quiet, Rook will put them here.
           </p>
           <div className={styles.deskActions}>
-            <button type="button" onClick={props.onClose}>
+            <button type="button" onClick={() => props.onClose()}>
               Back to the courtyard
             </button>
           </div>
@@ -129,21 +186,39 @@ export function CorrespondenceDesk(props: {
 
   const first = customer.displayName.split(" ")[0];
   return (
-    <div className={styles.deskWrap} role="dialog" aria-label={`Rook's desk: ${customer.displayName}`} data-testid="correspondence-desk">
+    <div
+      className={styles.deskWrap}
+      role="dialog"
+      aria-label={`Rook's desk: ${customer.displayName}`}
+      data-testid="correspondence-desk"
+    >
       <section className={styles.desk}>
         <header className={styles.deskHead}>
           <div>
-            <span className={styles.deskKicker}>Rook's desk · your business</span>
+            <span className={styles.deskKicker}>
+              Rook's desk · your business
+            </span>
             <h2>{customer.displayName}</h2>
             {synthetic ? (
-              <span className={styles.fixtureBadge} data-testid="desk-fixture-badge">
+              <span
+                className={styles.fixtureBadge}
+                data-testid="desk-fixture-badge"
+              >
                 {TESSA_PARK_FIXTURE.label}
+                {fixtureCase ? ` · ${TESSA_PARK_CASES[fixtureCase].label}` : ""}
               </span>
             ) : (
-              <span className={styles.realBadge}>A real customer of yours. Nothing here is make-believe.</span>
+              <span className={styles.realBadge}>
+                A real customer of yours. Nothing here is make-believe.
+              </span>
             )}
           </div>
-          <button type="button" className={styles.deskClose} onClick={props.onClose} aria-label="Back to the courtyard">
+          <button
+            type="button"
+            className={styles.deskClose}
+            onClick={() => props.onClose(closeOutcome())}
+            aria-label="Back to the courtyard"
+          >
             ✕
           </button>
         </header>
@@ -152,7 +227,11 @@ export function CorrespondenceDesk(props: {
           {whyNow(customer)}
         </p>
 
-        <article className={styles.sable} aria-label="Sable: what's on record" data-testid="desk-sable">
+        <article
+          className={styles.sable}
+          aria-label="Sable: what's on record"
+          data-testid="desk-sable"
+        >
           <h3>
             <span className={styles.who}>Sable</span> · previous conversation
           </h3>
@@ -160,35 +239,52 @@ export function CorrespondenceDesk(props: {
           {/* only words they could have received are "you said"; words that never left say so */}
           {!loading && recall.promise ? (
             <blockquote data-testid="desk-promise">
-              <b>{formatDay(recall.promise.at)}</b> — You said: “{recall.promise.quote}”
+              <b>{formatDay(recall.promise.at)}</b> — You said: “
+              {recall.promise.quote}”
               <cite>
-                {recall.promise.heard === "observed" ? "Sent (observed)" : "You reported sending it"} · {recall.promise.source}
+                {recall.promise.heard === "observed"
+                  ? "Sent (observed)"
+                  : "You reported sending it"}{" "}
+                · {recall.promise.source}
               </cite>
             </blockquote>
           ) : null}
           {!loading && recall.unsentPromise ? (
-            <blockquote className={styles.unsent} data-testid="desk-unsent-promise">
+            <blockquote
+              className={styles.unsent}
+              data-testid="desk-unsent-promise"
+            >
               <b>{formatDay(recall.unsentPromise.at)}</b> —{" "}
-              {recall.unsentPromise.state === "opened" ? "In a message you opened but never recorded as sent" : "In a draft you saved but never sent"}: “
-              {recall.unsentPromise.quote}”<cite>{recall.unsentPromise.source}</cite>
+              {recall.unsentPromise.state === "opened"
+                ? "In a message you opened but never recorded as sent"
+                : "In a draft you saved but never sent"}
+              : “{recall.unsentPromise.quote}”
+              <cite>{recall.unsentPromise.source}</cite>
             </blockquote>
           ) : null}
           {!loading && recall.lastReply ? (
             <blockquote className={styles.reply} data-testid="desk-reply">
-              <b>{formatDay(recall.lastReply.at)}</b> — They replied: {recall.lastReply.text ? `“${recall.lastReply.text}”` : "(no words recorded)"}
+              <b>{formatDay(recall.lastReply.at)}</b> — They replied:{" "}
+              {recall.lastReply.text
+                ? `“${recall.lastReply.text}”`
+                : "(no words recorded)"}
               <cite>
                 {recall.lastReply.label} · {recall.lastReply.source}
               </cite>
             </blockquote>
           ) : null}
-          {!loading && !recall.promise && !recall.unsentPromise && !recall.lastReply ? (
+          {!loading &&
+          !recall.promise &&
+          !recall.unsentPromise &&
+          !recall.lastReply ? (
             <ul className={styles.recallList} data-testid="desk-recall-lines">
               {recallLines(recall)
                 .slice(-3)
                 .map((line, i) => (
                   <li key={i}>
                     <b>{formatDay(line.at)}</b> {line.tag}
-                    {line.text ? `: “${line.text}”` : "."} <cite>{line.source}</cite>
+                    {line.text ? `: “${line.text}”` : "."}{" "}
+                    <cite>{line.source}</cite>
                   </li>
                 ))}
             </ul>
@@ -200,14 +296,30 @@ export function CorrespondenceDesk(props: {
               ))}
             </ul>
           ) : null}
-          {recallQuery.isError ? <p className={styles.muted}>Sable couldn't read the record just now. Nothing is assumed.</p> : null}
+          {recallQuery.isError ? (
+            <p className={styles.muted}>
+              Sable couldn't read the record just now. Nothing is assumed.
+            </p>
+          ) : null}
         </article>
 
-        <article className={styles.rook} aria-label="Rook's draft" data-mode={rook?.mode ?? "waiting"} data-testid="desk-rook">
+        <article
+          className={styles.rook}
+          aria-label="Rook's draft"
+          data-mode={rook?.mode ?? "waiting"}
+          data-testid="desk-rook"
+        >
           <h3>
-            <span className={styles.who}>Rook</span> · {rook?.mode === "review" ? "over to you" : rook?.mode === "hold" || rook?.mode === "none" ? "no message" : "draft"}
+            <span className={styles.who}>Rook</span> ·{" "}
+            {rook?.mode === "review"
+              ? "over to you"
+              : rook?.mode === "hold" || rook?.mode === "none"
+                ? "no message"
+                : "draft"}
           </h3>
-          {!rook ? <p className={styles.muted}>Rook is waiting for Sable.</p> : null}
+          {!rook ? (
+            <p className={styles.muted}>Rook is waiting for Sable.</p>
+          ) : null}
           {rook && rook.mode !== "none" ? (
             <>
               <label className={styles.srOnly} htmlFor="desk-draft">
@@ -216,13 +328,17 @@ export function CorrespondenceDesk(props: {
               <textarea
                 id="desk-draft"
                 value={draft}
-                placeholder={rook.mode === "hold" ? "Write something only if you mean to." : undefined}
+                placeholder={
+                  rook.mode === "hold"
+                    ? "Write something only if you mean to."
+                    : undefined
+                }
                 onChange={e => {
                   setDraft(e.target.value);
                   setSavedNow(false);
                   setPreviewHandoff(false);
                 }}
-                rows={4}
+                rows={3}
                 data-testid="desk-draft"
               />
             </>
@@ -246,7 +362,11 @@ export function CorrespondenceDesk(props: {
               type="button"
               className={styles.primary}
               disabled={!ready}
-              title={rook?.mode === "review" && !ready ? "Write it in your own words first." : undefined}
+              title={
+                rook?.mode === "review" && !ready
+                  ? "Write it in your own words first."
+                  : undefined
+              }
               onClick={() => {
                 if (synthetic) {
                   setPreviewHandoff(true);
@@ -264,43 +384,68 @@ export function CorrespondenceDesk(props: {
               type="button"
               disabled={!ready}
               onClick={async () => {
-                if (!synthetic && real) await props.onSaveDraft(real, draft.trim());
+                if (!synthetic && real)
+                  await props.onSaveDraft(real, draft.trim());
                 setSavedNow(true);
                 setPreviewHandoff(false);
-                setNote(synthetic ? "(Preview: saved on this page only.)" : null);
+                setNote(
+                  synthetic ? "(Preview: saved on this page only.)" : null
+                );
               }}
               data-testid="desk-save"
             >
               Save for later
             </button>
           ) : null}
-          <button type="button" onClick={props.onNotNow} data-testid="desk-not-now">
-            Not now
-          </button>
+          {!leaveBe ? (
+            <button
+              type="button"
+              onClick={props.onNotNow}
+              data-testid="desk-not-now"
+            >
+              Not now
+            </button>
+          ) : null}
+          {!leaveBe ? (
+            <button
+              type="button"
+              className={styles.quiet}
+              disabled={recordPass.isPending}
+              onClick={async () => {
+                if (synthetic) {
+                  setPreviewHandoff(false);
+                  setNote(
+                    `(Preview: you passed on ${first}. Nothing is recorded.)`
+                  );
+                  return;
+                }
+                if (!real) return;
+                try {
+                  await recordPass.mutateAsync({
+                    territoryId: props.territoryId,
+                    customerId: real.customerId,
+                    templateId: "rook_desk",
+                    kind: "passed",
+                  });
+                  await utils.system.goldlineWorld.reunionQuestEvents.invalidate();
+                  props.onClose("passed");
+                } catch (err) {
+                  setNote(
+                    `The pass was not recorded, so nothing changed. ${err instanceof Error ? err.message : ""}`.trim()
+                  );
+                }
+              }}
+              data-testid="desk-pass"
+            >
+              Pass on {first} for a week
+            </button>
+          ) : null}
           <button
             type="button"
-            className={styles.quiet}
-            disabled={recordPass.isPending}
-            onClick={async () => {
-              if (synthetic) {
-                setPreviewHandoff(false);
-                setNote(`(Preview: you passed on ${first}. Nothing is recorded.)`);
-                return;
-              }
-              if (!real) return;
-              try {
-                await recordPass.mutateAsync({ territoryId: props.territoryId, customerId: real.customerId, templateId: "rook_desk", kind: "passed" });
-                await utils.system.goldlineWorld.reunionQuestEvents.invalidate();
-                props.onClose();
-              } catch (err) {
-                setNote(`The pass was not recorded, so nothing changed. ${err instanceof Error ? err.message : ""}`.trim());
-              }
-            }}
-            data-testid="desk-pass"
+            className={leaveBe ? undefined : styles.quiet}
+            onClick={() => props.onClose(closeOutcome())}
+            data-testid="desk-back"
           >
-            Pass on {first} for a week
-          </button>
-          <button type="button" className={styles.quiet} onClick={props.onClose} data-testid="desk-back">
             Back to the courtyard
           </button>
         </div>
@@ -309,3 +454,11 @@ export function CorrespondenceDesk(props: {
   );
 }
 
+/** the preview's fixture situation from the page's #anchor (#desk-question …), when there is one */
+function previewCase(): keyof typeof TESSA_PARK_CASES | null {
+  if (typeof window === "undefined") return null;
+  const name = window.location.hash.replace(/^#desk-/, "");
+  return name !== window.location.hash && name in TESSA_PARK_CASES
+    ? name
+    : null;
+}

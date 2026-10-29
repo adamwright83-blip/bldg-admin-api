@@ -18,7 +18,11 @@ export type V2 = { x: number; y: number };
 export type FanSetting = "up" | "forward" | "back";
 export const FAN_SETTINGS: readonly FanSetting[] = ["up", "forward", "back"];
 /** blowing direction, radians from straight up; positive leans toward the basket */
-export const FAN_ANGLE: Record<FanSetting, number> = { up: 0, forward: 0.62, back: -0.62 };
+export const FAN_ANGLE: Record<FanSetting, number> = {
+  up: 0,
+  forward: 0.62,
+  back: -0.62,
+};
 
 export type CupDef = { anchor: V2; length: number; radius: number };
 
@@ -67,7 +71,12 @@ export type WorldEvent =
   | { kind: "bell"; t: number; strength: number }
   | { kind: "line_bounce"; t: number; speed: number }
   | { kind: "line_skim_start"; t: number; x: number }
-  | { kind: "line_skim_end"; t: number; x: number; off: "end" | "lift" | "slow" }
+  | {
+      kind: "line_skim_end";
+      t: number;
+      x: number;
+      off: "end" | "lift" | "slow";
+    }
   | { kind: "sheet"; t: number; index: number; speed: number }
   | { kind: "sheet_caught"; t: number; index: number }
   | { kind: "cup"; t: number; index: number; speed: number }
@@ -88,7 +97,18 @@ export type WorldEvent =
   | { kind: "bella"; t: number; speed: number }
   | { kind: "ground"; t: number; x: number; speed: number }
   | { kind: "away"; t: number; where: "roof" | "left" | "right" }
-  | { kind: "rest"; t: number; where: "ground" | "sheet" | "line" | "balcony" | "station" | "rook" | "basket" };
+  | {
+      kind: "rest";
+      t: number;
+      where:
+        | "ground"
+        | "sheet"
+        | "line"
+        | "balcony"
+        | "station"
+        | "rook"
+        | "basket";
+    };
 
 export type Outcome = "delivered" | "missed" | "caught";
 
@@ -119,8 +139,24 @@ export type WorldState = {
   sheetHold: { index: number; t: number } | null;
   cups: { angle: number; omega: number; rungAt: number }[];
   cupSequence: number[];
-  cat: { phase: CatPhase; since: number; tail: number; tailOmega: number; roll: number; nearAt: number; bellAt: number; hits: number; ride: number | null };
-  rook: { phase: RookPhase; since: number; reach: V2; tried: boolean; eager: boolean };
+  cat: {
+    phase: CatPhase;
+    since: number;
+    tail: number;
+    tailOmega: number;
+    roll: number;
+    nearAt: number;
+    bellAt: number;
+    hits: number;
+    ride: number | null;
+  };
+  rook: {
+    phase: RookPhase;
+    since: number;
+    reach: V2;
+    tried: boolean;
+    eager: boolean;
+  };
   via: string[]; // observed contacts this flight, in order (for the memory: what physically happened)
   events: WorldEvent[];
   /** seconds the glider has barely moved while in flight (wedged) */
@@ -141,10 +177,13 @@ const sub = (a: V2, b: V2): V2 => ({ x: a.x - b.x, y: a.y - b.y });
 const mul = (a: V2, k: number): V2 => ({ x: a.x * k, y: a.y * k });
 const dot = (a: V2, b: V2) => a.x * b.x + a.y * b.y;
 const len = (a: V2) => Math.hypot(a.x, a.y);
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.min(hi, Math.max(lo, v));
 
-
-export function createWorld(course: CourseDef, fan: FanSetting = "up"): WorldState {
+export function createWorld(
+  course: CourseDef,
+  fan: FanSetting = "up"
+): WorldState {
   return {
     t: 0,
     step: 0,
@@ -169,8 +208,24 @@ export function createWorld(course: CourseDef, fan: FanSetting = "up"): WorldSta
     sheetHold: null,
     cups: course.cups.map(() => ({ angle: 0, omega: 0, rungAt: -9 })),
     cupSequence: [],
-    cat: { phase: "asleep", since: 0, tail: course.cat.rest, tailOmega: 0, roll: 0, nearAt: -9, bellAt: -9, hits: 0, ride: null },
-    rook: { phase: "ready", since: 0, reach: { ...course.rook.reach }, tried: false, eager: true },
+    cat: {
+      phase: "asleep",
+      since: 0,
+      tail: course.cat.rest,
+      tailOmega: 0,
+      roll: 0,
+      nearAt: -9,
+      bellAt: -9,
+      hits: 0,
+      ride: null,
+    },
+    rook: {
+      phase: "ready",
+      since: 0,
+      reach: { ...course.rook.reach },
+      tried: false,
+      eager: true,
+    },
     via: [],
     events: [],
   };
@@ -190,7 +245,11 @@ export const LAUNCH_MAX = 11.5;
 /** Releases shorter than this are a cancelled aim, never a launch (accidental taps). */
 export const MIN_PULL = 0.16;
 
-export function launch(world: WorldState, course: CourseDef, pull: V2): boolean {
+export function launch(
+  world: WorldState,
+  course: CourseDef,
+  pull: V2
+): boolean {
   if (world.phase !== "ready") return false;
   if (len(pull) < MIN_PULL) return false;
   const v = launchVelocity(pull);
@@ -198,7 +257,12 @@ export function launch(world: WorldState, course: CourseDef, pull: V2): boolean 
   world.v = v;
   world.p = { ...course.launch };
   world.angle = Math.atan2(v.y, v.x);
-  world.events.push({ kind: "launch", t: world.t, speed: len(v), angle: world.angle });
+  world.events.push({
+    kind: "launch",
+    t: world.t,
+    speed: len(v),
+    angle: world.angle,
+  });
   world.bellEnergy = Math.max(world.bellEnergy, 0.35);
   return true;
 }
@@ -206,7 +270,8 @@ export function launch(world: WorldState, course: CourseDef, pull: V2): boolean 
 export function setWings(world: WorldState, open: boolean) {
   if (world.wingOpen === open) return;
   world.wingOpen = open;
-  if (world.phase === "flying") world.events.push({ kind: "wings", t: world.t, open });
+  if (world.phase === "flying")
+    world.events.push({ kind: "wings", t: world.t, open });
 }
 
 // ---------------------------------------------------------------- course geometry helpers
@@ -232,7 +297,12 @@ function lineSAt(course: CourseDef, x: number): number | null {
   return s >= 0 && s <= 1 ? s : null;
 }
 
-export function fanWind(course: CourseDef, setting: FanSetting, p: V2, t: number): V2 {
+export function fanWind(
+  course: CourseDef,
+  setting: FanSetting,
+  p: V2,
+  t: number
+): V2 {
   const { fan } = course;
   const ang = FAN_ANGLE[setting];
   // the column runs from the blades along the blowing direction
@@ -246,7 +316,10 @@ export function fanWind(course: CourseDef, setting: FanSetting, p: V2, t: number
   const edge = Math.cos((across / half) * (Math.PI / 2)); // soft edges
   const fall = Math.pow(clamp(1 - along / fan.reach, 0, 1), 0.65);
   // a little gusting, deterministic in time and height, so the bell chatters in the updraft
-  const gust = 1 + 0.16 * Math.sin(t * 17.3 + p.y * 3.1) + 0.08 * Math.sin(t * 41.7 + p.x * 5.3);
+  const gust =
+    1 +
+    0.16 * Math.sin(t * 17.3 + p.y * 3.1) +
+    0.08 * Math.sin(t * 41.7 + p.x * 5.3);
   const w = fan.strength * edge * fall * gust;
   return { x: dir.x * w, y: dir.y * w };
 }
@@ -259,16 +332,29 @@ function closestOnSegment(p: V2, a: V2, b: V2): { q: V2; t: number } {
 }
 
 /** Cleo's tail as a straight segment from its root at the given angle (good enough for contact; drawn curled). */
-export function tailSegment(course: CourseDef, angle: number): { a: V2; b: V2 } {
+export function tailSegment(
+  course: CourseDef,
+  angle: number
+): { a: V2; b: V2 } {
   const a = add({ x: course.cat.x, y: course.cat.y }, course.cat.tailRoot);
-  const b = add(a, mul({ x: Math.cos(angle), y: Math.sin(angle) }, course.cat.tailLen));
+  const b = add(
+    a,
+    mul({ x: Math.cos(angle), y: Math.sin(angle) }, course.cat.tailLen)
+  );
   return { a, b };
 }
 
-export function cupPosition(course: CourseDef, world: WorldState, i: number): V2 {
+export function cupPosition(
+  course: CourseDef,
+  world: WorldState,
+  i: number
+): V2 {
   const c = course.cups[i];
   const ang = world.cups[i].angle;
-  return { x: c.anchor.x + Math.sin(ang) * c.length, y: c.anchor.y - Math.cos(ang) * c.length };
+  return {
+    x: c.anchor.x + Math.sin(ang) * c.length,
+    y: c.anchor.y - Math.cos(ang) * c.length,
+  };
 }
 
 // ---------------------------------------------------------------- the step
@@ -283,7 +369,8 @@ export function step(world: WorldState, course: CourseDef) {
   if (world.t > MAX_FLIGHT) return finish(world, "missed", "ground");
 
   // wings ease open and shut (a paper glider unfolds fast but not instantly)
-  world.wing += ((world.wingOpen ? 1 : 0) - world.wing) * (1 - Math.exp(-dt / 0.07));
+  world.wing +=
+    ((world.wingOpen ? 1 : 0) - world.wing) * (1 - Math.exp(-dt / 0.07));
   world.tumble = Math.max(0, world.tumble - dt);
   world.bellEnergy = Math.max(0, world.bellEnergy - dt * 1.8);
 
@@ -293,7 +380,11 @@ export function step(world: WorldState, course: CourseDef) {
     world.sheetHold.t += dt;
     world.p.y -= dt * 0.9;
     world.v = { x: 0, y: -0.9 };
-    const top = linePoint(course, lineSAt(course, (sh.x0 + sh.x1) / 2) ?? 0.5, world.lineSag).y;
+    const top = linePoint(
+      course,
+      lineSAt(course, (sh.x0 + sh.x1) / 2) ?? 0.5,
+      world.lineSag
+    ).y;
     if (world.p.y < top - sh.drop - 0.05) {
       world.sheetHold = null;
       world.v = { x: 0.15, y: -1.2 };
@@ -306,8 +397,15 @@ export function step(world: WorldState, course: CourseDef) {
   integrateFree(world, course, dt, t, false);
   // wedged somewhere (against Bella, in a corner): a beat, then it drops where it is
   if (world.phase === "flying") {
-    world.stillFor = Math.hypot(world.v.x, world.v.y) < 0.35 ? (world.stillFor ?? 0) + dt : 0;
-    if (world.stillFor > 1.2) finish(world, "missed", "ground", { kind: "ground", t, x: world.p.x, speed: 0 });
+    world.stillFor =
+      Math.hypot(world.v.x, world.v.y) < 0.35 ? (world.stillFor ?? 0) + dt : 0;
+    if (world.stillFor > 1.2)
+      finish(world, "missed", "ground", {
+        kind: "ground",
+        t,
+        x: world.p.x,
+        speed: 0,
+      });
   }
 }
 
@@ -319,7 +417,8 @@ function stepTailRide(world: WorldState, course: CourseDef) {
   const at = add(seg.a, mul(sub(seg.b, seg.a), r));
   world.p = { x: at.x, y: at.y + GLIDER_R * 0.7 };
   world.v = { x: 0, y: 0 };
-  const released = cs.phase === "swat" && cs.tail <= course.cat.swat.windup - 0.55;
+  const released =
+    cs.phase === "swat" && cs.tail <= course.cat.swat.windup - 0.55;
   if (released) {
     const speed = course.cat.fling * r * course.cat.tailLen;
     const a = course.cat.flingAngle + (0.5 - r) * course.cat.flingSpread;
@@ -341,7 +440,8 @@ function stepEnvironment(world: WorldState, course: CourseDef, dt: number) {
   const acc = -k * world.lineSag - c * world.lineSagV;
   world.lineSagV += acc * dt;
   world.lineSag += world.lineSagV * dt;
-  if (world.skim) world.lineSag = Math.max(world.lineSag, 0.1 + 0.06 * Math.sin(world.t * 9));
+  if (world.skim)
+    world.lineSag = Math.max(world.lineSag, 0.1 + 0.06 * Math.sin(world.t * 9));
   for (const sh of world.sheets) {
     const a = -38 * sh.push - 3.2 * sh.pushV;
     sh.pushV += a * dt;
@@ -350,7 +450,8 @@ function stepEnvironment(world: WorldState, course: CourseDef, dt: number) {
   // cups are little pendulums
   course.cups.forEach((cup, i) => {
     const s = world.cups[i];
-    const a = (-course.gravity / cup.length) * Math.sin(s.angle) - 0.9 * s.omega;
+    const a =
+      (-course.gravity / cup.length) * Math.sin(s.angle) - 0.9 * s.omega;
     s.omega += a * dt;
     s.angle += s.omega * dt;
   });
@@ -358,7 +459,13 @@ function stepEnvironment(world: WorldState, course: CourseDef, dt: number) {
   stepRook(world, course, dt);
 }
 
-function integrateFree(world: WorldState, course: CourseDef, dt: number, t: number, sliding: boolean) {
+function integrateFree(
+  world: WorldState,
+  course: CourseDef,
+  dt: number,
+  t: number,
+  sliding: boolean
+) {
   const prev = { ...world.p };
   if (!sliding) {
     const wind = fanWind(course, world.fan, world.p, t);
@@ -370,9 +477,17 @@ function integrateFree(world: WorldState, course: CourseDef, dt: number, t: numb
       world.via.push("fan");
     } else if (!inFan && world.inFan) {
       world.inFan = false;
-      world.events.push({ kind: "fan_exit", t, rise: world.p.y - world.fanEnteredY });
+      world.events.push({
+        kind: "fan_exit",
+        t,
+        rise: world.p.y - world.fanEnteredY,
+      });
     }
-    if (inFan) world.bellEnergy = Math.max(world.bellEnergy, 0.25 + 0.4 * Math.abs(Math.sin(t * 23)));
+    if (inFan)
+      world.bellEnergy = Math.max(
+        world.bellEnergy,
+        0.25 + 0.4 * Math.abs(Math.sin(t * 23))
+      );
     const rel = sub(world.v, wind);
     const s = len(rel);
     const g = { x: 0, y: -course.gravity };
@@ -381,7 +496,10 @@ function integrateFree(world: WorldState, course: CourseDef, dt: number, t: numb
       const w = world.wing;
       const scramble = world.tumble > 0 ? 0.25 : 1;
       const kL = (LIFT_FOLDED + (LIFT_OPEN - LIFT_FOLDED) * w) * scramble;
-      const kD = DRAG_FOLDED + (DRAG_OPEN - DRAG_FOLDED) * w + (world.tumble > 0 ? 0.03 : 0);
+      const kD =
+        DRAG_FOLDED +
+        (DRAG_OPEN - DRAG_FOLDED) * w +
+        (world.tumble > 0 ? 0.03 : 0);
       // lift is perpendicular to the airflow, on the glider's "up" side whichever way it travels
       const side = rel.x >= 0 ? 1 : -1;
       const liftDir = { x: (-rel.y / s) * side, y: (rel.x / s) * side };
@@ -399,7 +517,10 @@ function integrateFree(world: WorldState, course: CourseDef, dt: number, t: numb
     world.angle += world.spin * dt;
     world.spin *= Math.exp(-dt * 1.6);
   } else {
-    const d = Math.atan2(Math.sin(heading - world.angle), Math.cos(heading - world.angle));
+    const d = Math.atan2(
+      Math.sin(heading - world.angle),
+      Math.cos(heading - world.angle)
+    );
     world.angle += d * (1 - Math.exp(-dt * 11));
   }
 
@@ -422,7 +543,14 @@ function stepSkim(world: WorldState, course: CourseDef, dt: number, t: number) {
   world.v = mul(tan, sk.speed);
   world.angle = Math.atan2(tan.y, tan.x);
   const liftOff = world.wing > 0.6 && Math.abs(sk.speed) > 2.6;
-  const off: "end" | "lift" | "slow" | null = sk.s >= 1 || sk.s <= 0 ? "end" : liftOff ? "lift" : Math.abs(sk.speed) < 0.05 && Math.abs(tan.y) < 0.05 ? "slow" : null;
+  const off: "end" | "lift" | "slow" | null =
+    sk.s >= 1 || sk.s <= 0
+      ? "end"
+      : liftOff
+        ? "lift"
+        : Math.abs(sk.speed) < 0.05 && Math.abs(tan.y) < 0.05
+          ? "slow"
+          : null;
   if (off) {
     world.events.push({ kind: "line_skim_end", t, x: world.p.x, off });
     world.skim = null;
@@ -437,7 +565,12 @@ function stepSkim(world: WorldState, course: CourseDef, dt: number, t: number) {
   }
 }
 
-function bounce(world: WorldState, n: V2, restitution: number, friction: number) {
+function bounce(
+  world: WorldState,
+  n: V2,
+  restitution: number,
+  friction: number
+) {
   const vn = dot(world.v, n);
   if (vn >= 0) return 0;
   const vt = sub(world.v, mul(n, vn));
@@ -448,8 +581,16 @@ function bounce(world: WorldState, n: V2, restitution: number, friction: number)
 function knock(world: WorldState, strength: number) {
   world.tumble = Math.max(world.tumble, clamp(strength * 0.12, 0.15, 0.9));
   world.spin = strength * 3.2 * (world.v.x >= 0 ? -1 : 1);
-  world.bellEnergy = Math.max(world.bellEnergy, clamp(0.3 + strength * 0.12, 0, 1));
-  if (strength > 1.2) world.events.push({ kind: "bell", t: world.t, strength: clamp(strength / 6, 0.2, 1) });
+  world.bellEnergy = Math.max(
+    world.bellEnergy,
+    clamp(0.3 + strength * 0.12, 0, 1)
+  );
+  if (strength > 1.2)
+    world.events.push({
+      kind: "bell",
+      t: world.t,
+      strength: clamp(strength / 6, 0.2, 1),
+    });
 }
 
 function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
@@ -457,9 +598,12 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
   const speed = len(world.v);
 
   // ---- out of the courtyard
-  if (p.y > course.bounds.maxY) return finish(world, "missed", "away", { kind: "away", t, where: "roof" });
-  if (p.x < course.bounds.minX) return finish(world, "missed", "away", { kind: "away", t, where: "left" });
-  if (p.x > course.bounds.maxX) return finish(world, "missed", "away", { kind: "away", t, where: "right" });
+  if (p.y > course.bounds.maxY)
+    return finish(world, "missed", "away", { kind: "away", t, where: "roof" });
+  if (p.x < course.bounds.minX)
+    return finish(world, "missed", "away", { kind: "away", t, where: "left" });
+  if (p.x > course.bounds.maxX)
+    return finish(world, "missed", "away", { kind: "away", t, where: "right" });
 
   // ---- static walls (building faces, the mast)
   for (const w of course.walls) {
@@ -483,11 +627,17 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
   const bx1 = bk.x + bk.width / 2;
   if (prev.y >= bk.y && p.y < bk.y && p.x > bx0 + 0.03 && p.x < bx1 - 0.03) {
     world.events.push({ kind: "basket", t, speed, via: [...world.via] });
-    world.p = { x: clamp(p.x, bx0 + 0.12, bx1 - 0.12), y: bk.y - bk.depth * 0.45 };
+    world.p = {
+      x: clamp(p.x, bx0 + 0.12, bx1 - 0.12),
+      y: bk.y - bk.depth * 0.45,
+    };
     world.v = { x: 0, y: 0 };
     return finish(world, "delivered", "basket");
   }
-  for (const corner of [{ x: bx0, y: bk.y }, { x: bx1, y: bk.y }]) {
+  for (const corner of [
+    { x: bx0, y: bk.y },
+    { x: bx1, y: bk.y },
+  ]) {
     const d = sub(p, corner);
     const dl = len(d);
     if (dl < GLIDER_R * 0.9 && dl > 1e-6) {
@@ -501,7 +651,10 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
       }
     }
   }
-  for (const [x, nx] of [[bx0, -1], [bx1, 1]] as const) {
+  for (const [x, nx] of [
+    [bx0, -1],
+    [bx1, 1],
+  ] as const) {
     if (p.y < bk.y && p.y > bk.y - bk.depth && Math.abs(p.x - x) < GLIDER_R) {
       const outside = (p.x - x) * nx > 0;
       if (outside) {
@@ -514,7 +667,12 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
       }
     }
   }
-  if (p.x > bx0 && p.x < bx1 && p.y < bk.y - bk.depth && p.y > bk.y - bk.depth - GLIDER_R) {
+  if (
+    p.x > bx0 &&
+    p.x < bx1 &&
+    p.y < bk.y - bk.depth &&
+    p.y > bk.y - bk.depth - GLIDER_R
+  ) {
     world.p.y = bk.y - bk.depth - GLIDER_R;
     bounce(world, { x: 0, y: -1 }, 0.2, 0.6);
   }
@@ -530,7 +688,12 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
     }
   }
   // the balcony slab is solid from underneath too
-  if (p.x > bal.x0 - GLIDER_R * 0.5 && p.x < bal.x1 && prev.y <= bal.floor - 0.16 && p.y > bal.floor - 0.16 - GLIDER_R * 0.2) {
+  if (
+    p.x > bal.x0 - GLIDER_R * 0.5 &&
+    p.x < bal.x1 &&
+    prev.y <= bal.floor - 0.16 &&
+    p.y > bal.floor - 0.16 - GLIDER_R * 0.2
+  ) {
     world.p.y = bal.floor - 0.17 - GLIDER_R * 0.2;
     const hit = bounce(world, { x: 0, y: -1 }, 0.3, 0.7);
     if (hit > 0.4) {
@@ -538,7 +701,12 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
       knock(world, hit);
     }
   }
-  if (p.y > bal.floor - 0.15 && p.y < bal.rail && Math.abs(p.x - bal.x0) < GLIDER_R && prev.x < bal.x0) {
+  if (
+    p.y > bal.floor - 0.15 &&
+    p.y < bal.rail &&
+    Math.abs(p.x - bal.x0) < GLIDER_R &&
+    prev.x < bal.x0
+  ) {
     world.p.x = bal.x0 - GLIDER_R;
     const hit = bounce(world, { x: -1, y: 0 }, 0.35, 0.7);
     if (hit > 0.4) {
@@ -565,10 +733,16 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
   // Bella: startled, soft, she does not catch
   {
     const be = course.bella;
-    const e = { x: (p.x - be.x) / (be.rx + GLIDER_R), y: (p.y - be.y) / (be.ry + GLIDER_R) };
+    const e = {
+      x: (p.x - be.x) / (be.rx + GLIDER_R),
+      y: (p.y - be.y) / (be.ry + GLIDER_R),
+    };
     const ed = Math.hypot(e.x, e.y);
     if (ed < 1 && ed > 1e-6) {
-      world.p = { x: be.x + (e.x / ed) * (be.rx + GLIDER_R), y: be.y + (e.y / ed) * (be.ry + GLIDER_R) };
+      world.p = {
+        x: be.x + (e.x / ed) * (be.rx + GLIDER_R),
+        y: be.y + (e.y / ed) * (be.ry + GLIDER_R),
+      };
       const nn = { x: e.x / (be.rx + GLIDER_R), y: e.y / (be.ry + GLIDER_R) };
       const hit = bounce(world, mul(nn, 1 / (len(nn) || 1)), 0.25, 0.5);
       if (hit > 0.3 && !world.via.includes("bella")) {
@@ -581,10 +755,20 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
 
   // ---- the station table
   const st = course.station;
-  if (world.t > 0.12 && p.x > st.x0 && p.x < st.x1 && prev.y >= st.top && p.y < st.top + 0.02) {
+  if (
+    world.t > 0.12 &&
+    p.x > st.x0 &&
+    p.x < st.x1 &&
+    prev.y >= st.top &&
+    p.y < st.top + 0.02
+  ) {
     world.p.y = st.top + 0.02;
     world.v = { x: world.v.x * 0.3, y: 0 };
-    return finish(world, "missed", "station", { kind: "rest", t, where: "station" });
+    return finish(world, "missed", "station", {
+      kind: "rest",
+      t,
+      where: "station",
+    });
   }
 
   // ---- the laundry line: a gentle landing skims along it, a hard one bounces
@@ -660,8 +844,9 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
         s.rungAt = t;
         world.events.push({ kind: "cup", t, index: i, speed });
         world.via.push(`cup${i}`);
-        if (world.cupSequence[world.cupSequence.length - 1] !== i) world.cupSequence.push(i);
-        s.omega += clamp(world.v.x, -7, 7) * 0.9 / cup.length;
+        if (world.cupSequence[world.cupSequence.length - 1] !== i)
+          world.cupSequence.push(i);
+        s.omega += (clamp(world.v.x, -7, 7) * 0.9) / cup.length;
         // the cup takes a little of the glider's way; it does not stop it
         world.v = mul(world.v, 0.9);
         world.v.y += 0.25;
@@ -681,18 +866,33 @@ function collide(world: WorldState, course: CourseDef, prev: V2, t: number) {
   // ---- the ground
   if (p.y < GLIDER_R * 0.4) {
     world.p.y = GLIDER_R * 0.4;
-    if (speed > 2.5 && world.v.y < -1.5 && !world.via.includes("bounced_ground")) {
+    if (
+      speed > 2.5 &&
+      world.v.y < -1.5 &&
+      !world.via.includes("bounced_ground")
+    ) {
       // a fast dart skips once, the way paper does on paving
       world.v = { x: world.v.x * 0.45, y: -world.v.y * 0.22 };
       world.via.push("bounced_ground");
       knock(world, speed * 0.4);
       return;
     }
-    return finish(world, "missed", "ground", { kind: "ground", t, x: p.x, speed });
+    return finish(world, "missed", "ground", {
+      kind: "ground",
+      t,
+      x: p.x,
+      speed,
+    });
   }
 }
 
-function collideCat(world: WorldState, course: CourseDef, prev: V2, t: number, speed: number) {
+function collideCat(
+  world: WorldState,
+  course: CourseDef,
+  prev: V2,
+  t: number,
+  speed: number
+) {
   const cat = course.cat;
   const p = world.p;
   const body = { x: cat.x, y: cat.y + cat.ry };
@@ -700,17 +900,29 @@ function collideCat(world: WorldState, course: CourseDef, prev: V2, t: number, s
   const cs = world.cat;
 
   // a glider whooshing past her ear
-  if (len(sub(p, head)) < 1.25 && t - cs.nearAt > 1.2 && cs.phase === "asleep") {
+  if (
+    len(sub(p, head)) < 1.25 &&
+    t - cs.nearAt > 1.2 &&
+    cs.phase === "asleep"
+  ) {
     cs.nearAt = t;
     world.events.push({ kind: "cat_near", t });
   }
-  if (world.bellEnergy > 0.45 && len(sub(p, head)) < 2.6 && t - cs.bellAt > 1.6 && cs.phase === "asleep") {
+  if (
+    world.bellEnergy > 0.45 &&
+    len(sub(p, head)) < 2.6 &&
+    t - cs.bellAt > 1.6 &&
+    cs.phase === "asleep"
+  ) {
     cs.bellAt = t;
     world.events.push({ kind: "cat_bell", t });
   }
 
   // body: an ellipse, soft (fur), barely any bounce
-  const e = { x: (p.x - body.x) / (cat.rx + GLIDER_R), y: (p.y - body.y) / (cat.ry + GLIDER_R) };
+  const e = {
+    x: (p.x - body.x) / (cat.rx + GLIDER_R),
+    y: (p.y - body.y) / (cat.ry + GLIDER_R),
+  };
   const ed = Math.hypot(e.x, e.y);
   const hd = len(sub(p, head));
   const onHead = hd < cat.headR + GLIDER_R;
@@ -718,17 +930,33 @@ function collideCat(world: WorldState, course: CourseDef, prev: V2, t: number, s
     const n = onHead
       ? mul(sub(p, head), 1 / (hd || 1))
       : (() => {
-          const nn = { x: e.x / (cat.rx + GLIDER_R), y: e.y / (cat.ry + GLIDER_R) };
+          const nn = {
+            x: e.x / (cat.rx + GLIDER_R),
+            y: e.y / (cat.ry + GLIDER_R),
+          };
           const l = len(nn) || 1;
           return mul(nn, 1 / l);
         })();
     if (onHead) world.p = add(head, mul(n, cat.headR + GLIDER_R));
-    else world.p = { x: body.x + (e.x / (ed || 1)) * (cat.rx + GLIDER_R), y: body.y + (e.y / (ed || 1)) * (cat.ry + GLIDER_R) };
+    else
+      world.p = {
+        x: body.x + (e.x / (ed || 1)) * (cat.rx + GLIDER_R),
+        y: body.y + (e.y / (ed || 1)) * (cat.ry + GLIDER_R),
+      };
     const hit = bounce(world, n, 0.18, 0.55);
     // she startles once per glider; after that it's just a soft cat to bounce off
-    if (hit > 0.25 && (cs.phase === "asleep" || cs.phase === "grumpy") && !world.via.includes("cat")) {
+    if (
+      hit > 0.25 &&
+      (cs.phase === "asleep" || cs.phase === "grumpy") &&
+      !world.via.includes("cat")
+    ) {
       cs.hits++;
-      world.events.push({ kind: "cat_hit", t, part: onHead ? "head" : "body", speed: hit });
+      world.events.push({
+        kind: "cat_hit",
+        t,
+        part: onHead ? "head" : "body",
+        speed: hit,
+      });
       world.via.push("cat");
       knock(world, hit * 0.5);
       // a reflex: a beat, then the tail lashes and she rolls
@@ -738,7 +966,13 @@ function collideCat(world: WorldState, course: CourseDef, prev: V2, t: number, s
   }
 
   // asleep, her tail lies along the paving: a glider that comes down on it stays there, and wakes her
-  if ((cs.phase === "asleep" || cs.phase === "grumpy") && cs.ride === null && !world.via.includes("tail") && world.v.y <= 0.2 && speed < course.cat.rideMaxSpeed) {
+  if (
+    (cs.phase === "asleep" || cs.phase === "grumpy") &&
+    cs.ride === null &&
+    !world.via.includes("tail") &&
+    world.v.y <= 0.2 &&
+    speed < course.cat.rideMaxSpeed
+  ) {
     const seg = tailSegment(course, cs.tail);
     const { q, t: along } = closestOnSegment(p, seg.a, seg.b);
     if (len(sub(p, q)) < GLIDER_R + 0.07 && along > 0.08) {
@@ -764,7 +998,10 @@ function collideCat(world: WorldState, course: CourseDef, prev: V2, t: number, s
       // a whip: the outer half of the tail carries nearly the tip's speed
       const r = Math.max(along, 0.6) * course.cat.tailLen;
       // surface velocity of the tail at the contact point (rotation about the root)
-      const vTail = mul({ x: -Math.sin(cs.tail), y: Math.cos(cs.tail) }, cs.tailOmega * r);
+      const vTail = mul(
+        { x: -Math.sin(cs.tail), y: Math.cos(cs.tail) },
+        cs.tailOmega * r
+      );
       world.v = add(mul(vTail, 1.05), mul(world.v, 0.15));
       world.p = add(q, mul(d, (GLIDER_R + 0.08) / (dl || 1)));
       world.events.push({ kind: "cat_tail", t, speed: len(vTail) });
@@ -794,7 +1031,8 @@ function stepCat(world: WorldState, course: CourseDef, dt: number) {
     const { windup, follow, duration } = course.cat.swat;
     // a lash is all speed: near-constant angular velocity, easing only at the very end
     const u = clamp((t - cs.since) / duration, 0, 1);
-    const ease = u < 0.85 ? u / 0.925 : 1 - Math.pow(1 - u, 2) / (2 * 0.15 * 0.925);
+    const ease =
+      u < 0.85 ? u / 0.925 : 1 - Math.pow(1 - u, 2) / (2 * 0.15 * 0.925);
     cs.tail = windup + (follow - windup) * clamp(ease, 0, 1);
     cs.tailOmega = (cs.tail - prevTail) / dt;
     cs.roll = Math.min(1, cs.roll + dt * 4);
@@ -804,7 +1042,9 @@ function stepCat(world: WorldState, course: CourseDef, dt: number) {
       cs.tailOmega = 0;
     }
   } else if (cs.phase === "grumpy") {
-    cs.tail += (course.cat.rest - 0.15 * Math.sin(t * 6) - cs.tail) * (1 - Math.exp(-dt / 0.25));
+    cs.tail +=
+      (course.cat.rest - 0.15 * Math.sin(t * 6) - cs.tail) *
+      (1 - Math.exp(-dt / 0.25));
     cs.roll = Math.max(0, cs.roll - dt * 0.8);
     if (t - cs.since > 3.2) {
       cs.phase = "asleep";
@@ -815,7 +1055,12 @@ function stepCat(world: WorldState, course: CourseDef, dt: number) {
   }
 }
 
-function collideRook(world: WorldState, course: CourseDef, t: number, speed: number) {
+function collideRook(
+  world: WorldState,
+  course: CourseDef,
+  t: number,
+  speed: number
+) {
   const rk = world.rook;
   const p = world.p;
   if (rk.phase === "ready" && rk.eager && !rk.tried && world.t > 0.35) {
@@ -836,8 +1081,14 @@ function collideRook(world: WorldState, course: CourseDef, t: number, speed: num
     const want = sub(lead, course.rook.reach);
     const wl = len(want);
     const limit = 0.75;
-    const target = add(course.rook.reach, wl > limit ? mul(want, limit / wl) : want);
-    rk.reach = add(rk.reach, mul(sub(target, rk.reach), 1 - Math.exp(-STEP / 0.06)));
+    const target = add(
+      course.rook.reach,
+      wl > limit ? mul(want, limit / wl) : want
+    );
+    rk.reach = add(
+      rk.reach,
+      mul(sub(target, rk.reach), 1 - Math.exp(-STEP / 0.06))
+    );
     if (len(sub(p, rk.reach)) < course.rook.radius + GLIDER_R) {
       if (speed < 3.2) {
         world.events.push({ kind: "rook_catch", t });
@@ -874,13 +1125,22 @@ function collideRook(world: WorldState, course: CourseDef, t: number, speed: num
 function stepRook(world: WorldState, course: CourseDef, dt: number) {
   const rk = world.rook;
   if (rk.phase === "flick" || rk.phase === "flail") {
-    rk.reach = add(rk.reach, mul(sub(course.rook.reach, rk.reach), 1 - Math.exp(-dt / 0.2)));
+    rk.reach = add(
+      rk.reach,
+      mul(sub(course.rook.reach, rk.reach), 1 - Math.exp(-dt / 0.2))
+    );
   }
 }
 
-function finish(world: WorldState, outcome: Outcome, where: string, event?: WorldEvent) {
+function finish(
+  world: WorldState,
+  outcome: Outcome,
+  where: string,
+  event?: WorldEvent
+) {
   if (event) world.events.push(event);
-  if (where !== "away" && !event) world.events.push({ kind: "rest", t: world.t, where: where as "ground" });
+  if (where !== "away" && !event)
+    world.events.push({ kind: "rest", t: world.t, where: where as "ground" });
   world.phase = "done";
   world.outcome = outcome;
   world.restWhere = where;
@@ -905,14 +1165,20 @@ export function simulate(
   for (let i = 0; i < maxSteps && w.phase === "flying"; i++) {
     while (k < wings.length && wings[k].at <= i) setWings(w, wings[k++].open);
     step(w, course);
-    if (opts.trace && i % (opts.traceEvery ?? 6) === 0) opts.trace.push({ ...w.p });
+    if (opts.trace && i % (opts.traceEvery ?? 6) === 0)
+      opts.trace.push({ ...w.p });
   }
   if (opts.trace) opts.trace.push({ ...w.p });
   return w;
 }
 
 /** The first moments of a launch from this pull, for the aiming guide (no wind, no collisions). */
-export function previewArc(course: CourseDef, pull: V2, seconds = 0.32, points = 7): V2[] {
+export function previewArc(
+  course: CourseDef,
+  pull: V2,
+  seconds = 0.32,
+  points = 7
+): V2[] {
   const v0 = launchVelocity(pull);
   const out: V2[] = [];
   let p = { ...course.launch };
@@ -924,7 +1190,10 @@ export function previewArc(course: CourseDef, pull: V2, seconds = 0.32, points =
     const kL = LIFT_FOLDED;
     const kD = DRAG_FOLDED;
     const liftDir = s > 0 ? { x: -v.y / s, y: v.x / s } : { x: 0, y: 0 };
-    const a = add(add({ x: 0, y: -course.gravity }, mul(liftDir, kL * s * s)), mul(v, -kD * s));
+    const a = add(
+      add({ x: 0, y: -course.gravity }, mul(liftDir, kL * s * s)),
+      mul(v, -kD * s)
+    );
     v = add(v, mul(a, STEP));
     p = add(p, mul(v, STEP));
   }

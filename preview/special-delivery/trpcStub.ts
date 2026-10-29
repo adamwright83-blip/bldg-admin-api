@@ -52,7 +52,16 @@ function procedure(path: string): unknown {
           const run = queryHandlers[path];
           const enabled = opts?.enabled !== false;
           const data = run && enabled ? run(input) : undefined;
-          return { data, isLoading: false, isFetching: false, isFetched: true, isSuccess: true, isError: false, error: null, refetch: async () => ({ data }) };
+          return {
+            data,
+            isLoading: false,
+            isFetching: false,
+            isFetched: true,
+            isSuccess: true,
+            isError: false,
+            error: null,
+            refetch: async () => ({ data }),
+          };
         };
       }
       if (prop === "useMutation") {
@@ -67,10 +76,12 @@ function procedure(path: string): unknown {
           },
         });
       }
-      if (prop === "invalidate" || prop === "refetch" || prop === "cancel") return async () => undefined;
+      if (prop === "invalidate" || prop === "refetch" || prop === "cancel")
+        return async () => undefined;
       if (prop === "setData" || prop === "reset") return () => undefined;
       if (prop === "getData") return () => undefined;
-      if (prop === "fetch") return async (input: unknown) => queryHandlers[path]?.(input);
+      if (prop === "fetch")
+        return async (input: unknown) => queryHandlers[path]?.(input);
       return procedure(path ? `${path}.${prop}` : prop);
     },
   });
@@ -80,8 +91,10 @@ export const trpc = new Proxy(
   {},
   {
     get(_t, prop: string) {
-      if (prop === "useUtils" || prop === "useContext") return () => procedure("");
-      if (prop === "Provider") return ({ children }: { children: unknown }) => children;
+      if (prop === "useUtils" || prop === "useContext")
+        return () => procedure("");
+      if (prop === "Provider")
+        return ({ children }: { children: unknown }) => children;
       return procedure(prop);
     },
   }

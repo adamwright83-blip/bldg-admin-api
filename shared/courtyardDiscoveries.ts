@@ -20,10 +20,19 @@ export type DiscoveryId = (typeof DISCOVERY_IDS)[number];
 export const FAN_SETTING_IDS = ["up", "forward", "back"] as const;
 export type FanSettingId = (typeof FAN_SETTING_IDS)[number];
 
-export const BEAT_IDS = ["intro_seen", "orchestra_performed", "improvements_unveiled", "desk_offered"] as const;
+export const BEAT_IDS = [
+  "intro_seen",
+  "orchestra_performed",
+  "improvements_unveiled",
+  "desk_offered",
+] as const;
 export type BeatId = (typeof BEAT_IDS)[number];
 
-export type DiscoveryRecord = { firstAt: string; lastAt: string; count: number };
+export type DiscoveryRecord = {
+  firstAt: string;
+  lastAt: string;
+  count: number;
+};
 
 export type CourtyardDiscoveries = {
   version: 1;
@@ -82,7 +91,11 @@ export type CourtyardObservation =
   | { kind: "session" };
 
 /** Apply one observation. Idempotent for flights (by flightId) and beats (first time only). */
-export function applyObservation(state: CourtyardDiscoveries, obs: CourtyardObservation, nowIso: string): CourtyardDiscoveries {
+export function applyObservation(
+  state: CourtyardDiscoveries,
+  obs: CourtyardObservation,
+  nowIso: string
+): CourtyardDiscoveries {
   const next: CourtyardDiscoveries = {
     ...EMPTY_DISCOVERIES,
     ...state,
@@ -92,14 +105,21 @@ export function applyObservation(state: CourtyardDiscoveries, obs: CourtyardObse
   };
   if (obs.kind === "flight") {
     const f = obs.flight;
-    if (!/^[A-Za-z0-9_-]{6,64}$/.test(f.flightId) || next.recentFlights.includes(f.flightId)) return next;
+    if (
+      !/^[A-Za-z0-9_-]{6,64}$/.test(f.flightId) ||
+      next.recentFlights.includes(f.flightId)
+    )
+      return next;
     next.recentFlights.push(f.flightId);
-    if (next.recentFlights.length > 40) next.recentFlights.splice(0, next.recentFlights.length - 40);
+    if (next.recentFlights.length > 40)
+      next.recentFlights.splice(0, next.recentFlights.length - 40);
     next.attempts = (next.attempts ?? 0) + 1;
     if (f.delivered) next.deliveries = (next.deliveries ?? 0) + 1;
     for (const id of discoveriesFromFlight(f)) {
       const prev = next.discoveries[id];
-      next.discoveries[id] = prev ? { ...prev, lastAt: nowIso, count: prev.count + 1 } : { firstAt: nowIso, lastAt: nowIso, count: 1 };
+      next.discoveries[id] = prev
+        ? { ...prev, lastAt: nowIso, count: prev.count + 1 }
+        : { firstAt: nowIso, lastAt: nowIso, count: 1 };
     }
   } else if (obs.kind === "fan") {
     if (FAN_SETTING_IDS.includes(obs.setting) && obs.setting !== next.fan) {
@@ -107,7 +127,8 @@ export function applyObservation(state: CourtyardDiscoveries, obs: CourtyardObse
       next.fanChangedAt = nowIso;
     }
   } else if (obs.kind === "beat") {
-    if (BEAT_IDS.includes(obs.beat) && !next.beats[obs.beat]) next.beats[obs.beat] = nowIso;
+    if (BEAT_IDS.includes(obs.beat) && !next.beats[obs.beat])
+      next.beats[obs.beat] = nowIso;
   } else if (obs.kind === "session") {
     next.sessions = (next.sessions ?? 0) + 1;
   }
@@ -116,29 +137,54 @@ export function applyObservation(state: CourtyardDiscoveries, obs: CourtyardObse
 
 /** Read whatever was stored (older or partial shapes included) as a complete, valid state. */
 export function normalizeDiscoveries(raw: unknown): CourtyardDiscoveries {
-  if (!raw || typeof raw !== "object") return { ...EMPTY_DISCOVERIES, discoveries: {}, beats: {}, recentFlights: [] };
+  if (!raw || typeof raw !== "object")
+    return {
+      ...EMPTY_DISCOVERIES,
+      discoveries: {},
+      beats: {},
+      recentFlights: [],
+    };
   const r = raw as Partial<CourtyardDiscoveries>;
   const discoveries: CourtyardDiscoveries["discoveries"] = {};
   for (const id of DISCOVERY_IDS) {
     const d = r.discoveries?.[id];
-    if (d && typeof d.firstAt === "string" && typeof d.count === "number") discoveries[id] = { firstAt: d.firstAt, lastAt: typeof d.lastAt === "string" ? d.lastAt : d.firstAt, count: Math.max(1, Math.floor(d.count)) };
+    if (d && typeof d.firstAt === "string" && typeof d.count === "number")
+      discoveries[id] = {
+        firstAt: d.firstAt,
+        lastAt: typeof d.lastAt === "string" ? d.lastAt : d.firstAt,
+        count: Math.max(1, Math.floor(d.count)),
+      };
   }
   const beats: CourtyardDiscoveries["beats"] = {};
-  for (const id of BEAT_IDS) if (typeof r.beats?.[id] === "string") beats[id] = r.beats[id];
+  for (const id of BEAT_IDS)
+    if (typeof r.beats?.[id] === "string") beats[id] = r.beats[id];
   return {
     version: 1,
     discoveries,
     beats,
-    fan: FAN_SETTING_IDS.includes(r.fan as FanSettingId) ? (r.fan as FanSettingId) : "up",
+    fan: FAN_SETTING_IDS.includes(r.fan as FanSettingId)
+      ? (r.fan as FanSettingId)
+      : "up",
     fanChangedAt: typeof r.fanChangedAt === "string" ? r.fanChangedAt : null,
-    deliveries: Number.isFinite(r.deliveries) ? Math.max(0, Math.floor(r.deliveries!)) : 0,
-    attempts: Number.isFinite(r.attempts) ? Math.max(0, Math.floor(r.attempts!)) : 0,
-    sessions: Number.isFinite(r.sessions) ? Math.max(0, Math.floor(r.sessions!)) : 0,
-    recentFlights: Array.isArray(r.recentFlights) ? r.recentFlights.filter(x => typeof x === "string").slice(-40) : [],
+    deliveries: Number.isFinite(r.deliveries)
+      ? Math.max(0, Math.floor(r.deliveries!))
+      : 0,
+    attempts: Number.isFinite(r.attempts)
+      ? Math.max(0, Math.floor(r.attempts!))
+      : 0,
+    sessions: Number.isFinite(r.sessions)
+      ? Math.max(0, Math.floor(r.sessions!))
+      : 0,
+    recentFlights: Array.isArray(r.recentFlights)
+      ? r.recentFlights.filter(x => typeof x === "string").slice(-40)
+      : [],
   };
 }
 
 /** Was this remembered before the current visit began? (So a sign appears on the next visit, not mid-performance.) */
-export function rememberedBefore(iso: string | undefined | null, visitStartedAt: number) {
+export function rememberedBefore(
+  iso: string | undefined | null,
+  visitStartedAt: number
+) {
   return Boolean(iso) && new Date(iso!).getTime() < visitStartedAt;
 }

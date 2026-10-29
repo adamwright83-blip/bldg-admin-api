@@ -20,11 +20,18 @@ import {
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import type { RecallEntry } from "../../../shared/correspondenceDesk";
-import { COZY_REPLY_CLASSIFICATIONS, type CozyReplyClassification } from "../../../shared/cozyVillagerEvidence";
+import {
+  COZY_REPLY_CLASSIFICATIONS,
+  type CozyReplyClassification,
+} from "../../../shared/cozyVillagerEvidence";
 
 const OBSERVED_SOURCES = new Set(["provider_webhook", "device_observed"]);
 
-export async function loadSableRecall(input: { tenantId: string; operatorId: string; customerId: string }): Promise<{ entries: RecallEntry[] }> {
+export async function loadSableRecall(input: {
+  tenantId: string;
+  operatorId: string;
+  customerId: string;
+}): Promise<{ entries: RecallEntry[] }> {
   const db = await getDb();
   if (!db) return { entries: [] };
   const { tenantId, operatorId, customerId } = input;
@@ -57,7 +64,12 @@ export async function loadSableRecall(input: { tenantId: string; operatorId: str
           createdAt: scheduledOutreachRevisions.createdAt,
         })
         .from(scheduledOutreachRevisions)
-        .where(and(eq(scheduledOutreachRevisions.tenantId, tenantId), inArray(scheduledOutreachRevisions.outreachMessageId, ids)))
+        .where(
+          and(
+            eq(scheduledOutreachRevisions.tenantId, tenantId),
+            inArray(scheduledOutreachRevisions.outreachMessageId, ids)
+          )
+        )
     : [];
   const handoffs = ids.length
     ? await db
@@ -97,13 +109,32 @@ export async function loadSableRecall(input: { tenantId: string; operatorId: str
     )
     .orderBy(desc(personalOutreachReplies.reportedAt))
     .limit(10);
-  return { entries: recallEntriesFromRows({ messages, revisions, handoffs, replies }) };
+  return {
+    entries: recallEntriesFromRows({ messages, revisions, handoffs, replies }),
+  };
 }
 
 type Rows = {
-  messages: { id: string; status: string; externalMessageId: string | null; dispatchedAt: Date | null; createdAt: Date; currentMessageBody: string }[];
-  revisions: { messageId: string; revisionNumber: number; messageBody: string; createdAt: Date }[];
-  handoffs: { messageId: string; revisionCount: number; handoffState: string; invokedAt: Date }[];
+  messages: {
+    id: string;
+    status: string;
+    externalMessageId: string | null;
+    dispatchedAt: Date | null;
+    createdAt: Date;
+    currentMessageBody: string;
+  }[];
+  revisions: {
+    messageId: string;
+    revisionNumber: number;
+    messageBody: string;
+    createdAt: Date;
+  }[];
+  handoffs: {
+    messageId: string;
+    revisionCount: number;
+    handoffState: string;
+    invokedAt: Date;
+  }[];
   replies: {
     id: string;
     direction: string;
@@ -117,8 +148,12 @@ type Rows = {
 };
 
 /** The reply service's own reading of a reply, as stored; anything unknown is left for the desk to treat as unread. */
-function storedReplyClass(value: string | null | undefined): CozyReplyClassification | undefined {
-  return value && (COZY_REPLY_CLASSIFICATIONS as readonly string[]).includes(value) && value !== "outbound_sent"
+function storedReplyClass(
+  value: string | null | undefined
+): CozyReplyClassification | undefined {
+  return value &&
+    (COZY_REPLY_CLASSIFICATIONS as readonly string[]).includes(value) &&
+    value !== "outbound_sent"
     ? (value as CozyReplyClassification)
     : undefined;
 }
@@ -128,11 +163,15 @@ export function recallEntriesFromRows(rows: Rows): RecallEntry[] {
   const out: RecallEntry[] = [];
   const iso = (d: Date) => d.toISOString();
   const bodyAt = (messageId: string, revision: number) =>
-    rows.revisions.find(r => r.messageId === messageId && r.revisionNumber === revision)?.messageBody ??
+    rows.revisions.find(
+      r => r.messageId === messageId && r.revisionNumber === revision
+    )?.messageBody ??
     rows.messages.find(m => m.id === messageId)?.currentMessageBody ??
     null;
   for (const m of rows.messages) {
-    const revs = rows.revisions.filter(r => r.messageId === m.id).sort((a, b) => a.revisionNumber - b.revisionNumber);
+    const revs = rows.revisions
+      .filter(r => r.messageId === m.id)
+      .sort((a, b) => a.revisionNumber - b.revisionNumber);
     const last = revs[revs.length - 1];
     out.push({
       at: iso(last?.createdAt ?? m.createdAt),
@@ -143,12 +182,24 @@ export function recallEntriesFromRows(rows: Rows): RecallEntry[] {
     });
     if (m.status === "dispatched" && m.externalMessageId && m.dispatchedAt) {
       // a dispatched message is final: the words it went out with are its current body
-      out.push({ at: iso(m.dispatchedAt), kind: "observed_sent", text: m.currentMessageBody, authority: "observed", source: `Provider receipt ${m.externalMessageId}` });
+      out.push({
+        at: iso(m.dispatchedAt),
+        kind: "observed_sent",
+        text: m.currentMessageBody,
+        authority: "observed",
+        source: `Provider receipt ${m.externalMessageId}`,
+      });
     }
   }
   for (const h of rows.handoffs) {
     if (h.handoffState === "compose_opened") {
-      out.push({ at: iso(h.invokedAt), kind: "handoff_opened", text: bodyAt(h.messageId, h.revisionCount), authority: "record", source: `Opened in your messaging app (${h.messageId})` });
+      out.push({
+        at: iso(h.invokedAt),
+        kind: "handoff_opened",
+        text: bodyAt(h.messageId, h.revisionCount),
+        authority: "record",
+        source: `Opened in your messaging app (${h.messageId})`,
+      });
     } else if (h.handoffState === "operator_reported_sent") {
       out.push({
         at: iso(h.invokedAt),
@@ -162,7 +213,14 @@ export function recallEntriesFromRows(rows: Rows): RecallEntry[] {
   for (const r of rows.replies) {
     const observed = OBSERVED_SOURCES.has(r.source);
     if (r.direction === "outbound") {
-      if (observed) out.push({ at: iso(r.reportedAt), kind: "observed_sent", text: r.replyText, authority: "observed", source: `Observed send (${r.id})` });
+      if (observed)
+        out.push({
+          at: iso(r.reportedAt),
+          kind: "observed_sent",
+          text: r.replyText,
+          authority: "observed",
+          source: `Observed send (${r.id})`,
+        });
       continue;
     }
     out.push({
@@ -170,7 +228,9 @@ export function recallEntriesFromRows(rows: Rows): RecallEntry[] {
       kind: "reply",
       text: r.replyText,
       authority: observed ? "observed" : "operator_reported",
-      source: observed ? `Observed reply (${r.id})` : `Reply you recorded (${r.id})`,
+      source: observed
+        ? `Observed reply (${r.id})`
+        : `Reply you recorded (${r.id})`,
       replyClass: storedReplyClass(r.classification),
       optedOut: r.permissionEffect === "opted_out",
       preparedReply: r.preparedFollowUpDraft ?? null,

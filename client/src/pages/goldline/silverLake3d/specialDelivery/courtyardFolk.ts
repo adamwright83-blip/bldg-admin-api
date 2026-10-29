@@ -92,7 +92,13 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   group.name = "cleo";
   const pivot = new THREE.Group();
   group.add(pivot);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, toneMapped: false });
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    alphaTest: 0.08,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   mat.userData.outlineParameters = { visible: false };
   const cardW = (W / H) * CLEO_HEIGHT;
   const card = new THREE.Mesh(new THREE.PlaneGeometry(cardW, CLEO_HEIGHT), mat);
@@ -100,9 +106,17 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   // mirrored, so her rear and tail face Rook's station
   card.scale.x = -1;
   pivot.add(card);
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x2b3b1c, transparent: true, opacity: 0.24, depthWrite: false });
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x2b3b1c,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
   shadowMat.userData.outlineParameters = { visible: false };
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2), shadowMat);
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2),
+    shadowMat
+  );
   shadow.scale.set(1.2, 1, 0.7);
   shadow.position.y = 0.025;
   group.add(shadow);
@@ -146,9 +160,17 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   }
   const tailTex = new THREE.CanvasTexture(tailCanvas);
   tailTex.colorSpace = THREE.SRGBColorSpace;
-  const tailMat = new THREE.MeshBasicMaterial({ map: tailTex, side: THREE.DoubleSide, toneMapped: false });
+  const tailMat = new THREE.MeshBasicMaterial({
+    map: tailTex,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   tailMat.userData.outlineParameters = { visible: false };
-  const inkMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(`rgb(${meta.outline.join(",")})`), side: THREE.DoubleSide, toneMapped: false });
+  const inkMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(`rgb(${meta.outline.join(",")})`),
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   inkMat.userData.outlineParameters = { visible: false };
   const tail = new THREE.Mesh(tailGeo, tailMat);
   const tailInk = new THREE.Mesh(inkGeo, inkMat);
@@ -168,7 +190,11 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   zg.fillStyle = "#4a6fa5";
   zg.fillText("z", 32, 34);
   const zTex = new THREE.CanvasTexture(zCanvas);
-  const zMat = new THREE.SpriteMaterial({ map: zTex, transparent: true, depthWrite: false });
+  const zMat = new THREE.SpriteMaterial({
+    map: zTex,
+    transparent: true,
+    depthWrite: false,
+  });
   const zs = [0, 1].map(() => {
     const s = new THREE.Sprite(zMat.clone());
     s.scale.setScalar(0.22);
@@ -189,7 +215,13 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   bg.fillStyle = "#d9534f";
   bg.fillText("!", 32, 34);
   const bangTex = new THREE.CanvasTexture(bangCanvas);
-  const bang = new THREE.Sprite(new THREE.SpriteMaterial({ map: bangTex, transparent: true, depthWrite: false }));
+  const bang = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: bangTex,
+      transparent: true,
+      depthWrite: false,
+    })
+  );
   bang.visible = false;
   group.add(bang);
   // and the cross little vein of a cat who has been hit by the post, while she is grumpy about it
@@ -197,17 +229,31 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   veinCanvas.width = veinCanvas.height = 64;
   const vg = veinCanvas.getContext("2d")!;
   vg.lineCap = "round";
-  for (const [w, c] of [[13, "#ffffff"], [6.5, "#d9534f"]] as const) {
+  for (const [w, c] of [
+    [13, "#ffffff"],
+    [6.5, "#d9534f"],
+  ] as const) {
     vg.lineWidth = w;
     vg.strokeStyle = c;
-    for (const [cx, cy, a] of [[20, 20, 0], [44, 20, Math.PI / 2], [44, 44, Math.PI], [20, 44, -Math.PI / 2]] as const) {
+    for (const [cx, cy, a] of [
+      [20, 20, 0],
+      [44, 20, Math.PI / 2],
+      [44, 44, Math.PI],
+      [20, 44, -Math.PI / 2],
+    ] as const) {
       vg.beginPath();
       vg.arc(cx, cy, 12, a, a + Math.PI / 2);
       vg.stroke();
     }
   }
   const veinTex = new THREE.CanvasTexture(veinCanvas);
-  const vein = new THREE.Sprite(new THREE.SpriteMaterial({ map: veinTex, transparent: true, depthWrite: false }));
+  const vein = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: veinTex,
+      transparent: true,
+      depthWrite: false,
+    })
+  );
   vein.visible = false;
   group.add(vein);
 
@@ -222,14 +268,24 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
   let twitch = 0;
   let meowAt = -9;
 
-  function setTail(world: WorldState, depth: number, widen: number, geo: THREE.BufferGeometry) {
+  function setTail(
+    world: WorldState,
+    depth: number,
+    widen: number,
+    geo: THREE.BufferGeometry
+  ) {
     const seg = tailSegment(course, world.cat.tail);
     const root = toWorld(seg.a.x, seg.a.y, depth);
     const angle = world.cat.tail;
     const p = geo.attributes.position as THREE.BufferAttribute;
     const L = course.cat.tailLen;
     // the tail curls a little more toward its tip, and lifts its tip off the paving while she sleeps
-    const curl = world.cat.phase === "asleep" ? 0.55 : world.cat.phase === "grumpy" ? 0.9 + Math.sin(world.t * 6) * 0.3 : 0.25;
+    const curl =
+      world.cat.phase === "asleep"
+        ? 0.55
+        : world.cat.phase === "grumpy"
+          ? 0.9 + Math.sin(world.t * 6) * 0.3
+          : 0.25;
     let x = 0;
     let y = 0;
     for (let i = 0; i <= N; i++) {
@@ -239,12 +295,19 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
         x += Math.cos(a) * (L / N);
         y += Math.sin(a) * (L / N);
       }
-      const w = (0.05 * (1 - s) + 0.032 * s) * (s > 0.92 ? Math.sqrt(Math.max(0, (1 - s) / 0.08)) : 1) + widen;
+      const w =
+        (0.05 * (1 - s) + 0.032 * s) *
+          (s > 0.92 ? Math.sqrt(Math.max(0, (1 - s) / 0.08)) : 1) +
+        widen;
       // across the tail, in the plane: perpendicular to its direction
       const nx = -Math.sin(a);
       const ny = Math.cos(a);
       const c = toWorld(seg.a.x + x, seg.a.y + y, depth);
-      const off = toWorld(seg.a.x + x + nx * w, seg.a.y + y + ny * w, depth).sub(c);
+      const off = toWorld(
+        seg.a.x + x + nx * w,
+        seg.a.y + y + ny * w,
+        depth
+      ).sub(c);
       p.setXYZ(i * 2, c.x + off.x, c.y + off.y, c.z + off.z);
       p.setXYZ(i * 2 + 1, c.x - off.x, c.y - off.y, c.z - off.z);
     }
@@ -276,34 +339,60 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
     meow() {
       meowAt = clock;
     },
-    update(world: WorldState, dt: number, elapsed: number, now: number, camera: THREE.Camera) {
+    update(
+      world: WorldState,
+      dt: number,
+      elapsed: number,
+      now: number,
+      camera: THREE.Camera
+    ) {
       clock = now;
       const cs = world.cat;
       // eyes follow the cat's own state unless something just made her look
-      let want: CleoEyes = cs.phase === "asleep" ? "closed" : cs.phase === "grumpy" ? "open" : "wide";
+      let want: CleoEyes =
+        cs.phase === "asleep"
+          ? "closed"
+          : cs.phase === "grumpy"
+            ? "open"
+            : "wide";
       if (now < eyesUntil) want = eyes;
       draw(want);
       // paper cutout: square to the camera
-      group.rotation.y = Math.atan2(camera.position.x - group.position.x, camera.position.z - group.position.z);
+      group.rotation.y = Math.atan2(
+        camera.position.x - group.position.x,
+        camera.position.z - group.position.z
+      );
       // breathing while asleep; a roll when the tail lashes; bolt upright when offended
-      const breathe = cs.phase === "asleep" && !reduceMotion ? Math.sin(elapsed * 1.6) * 0.025 : 0;
+      const breathe =
+        cs.phase === "asleep" && !reduceMotion
+          ? Math.sin(elapsed * 1.6) * 0.025
+          : 0;
       if (now > uprightUntil) upright = Math.max(0, upright - dt * 2.5);
       twitch = Math.max(0, twitch - dt * 5);
       const slump = cs.phase === "asleep" ? 0.92 : 1;
-      const sy = slump + breathe + upright * 0.14 + (now - meowAt < 300 ? 0.08 : 0);
-      card.scale.set(-(1 + upright * 0.04 + (cs.phase === "swat" ? 0.06 : 0)), sy, 1);
+      const sy =
+        slump + breathe + upright * 0.14 + (now - meowAt < 300 ? 0.08 : 0);
+      card.scale.set(
+        -(1 + upright * 0.04 + (cs.phase === "swat" ? 0.06 : 0)),
+        sy,
+        1
+      );
       card.position.y = (CLEO_HEIGHT * sy) / 2;
       // she rolls away from the hit, onto her side, and back
       const roll = reduceMotion ? cs.roll * 0.4 : cs.roll;
       pivot.rotation.z = roll * 0.9 + Math.sin(elapsed * 55) * twitch * 0.05;
       jump = Math.max(0, jump - dt / 0.5);
-      pivot.position.y = roll * 0.08 + (jump > 0 ? Math.sin((1 - jump) * Math.PI) * 0.34 : 0);
+      pivot.position.y =
+        roll * 0.08 + (jump > 0 ? Math.sin((1 - jump) * Math.PI) * 0.34 : 0);
       // grumpy after a hit: the vein throbs by her ear
       const grumpy = cs.phase === "grumpy";
       vein.visible = grumpy;
       if (grumpy) {
         vein.position.set(0.24, 0.98 + pivot.position.y, 0.2);
-        vein.scale.setScalar(0.24 * (1 + (reduceMotion ? 0 : Math.max(0, Math.sin(elapsed * 9)) * 0.18)));
+        vein.scale.setScalar(
+          0.24 *
+            (1 + (reduceMotion ? 0 : Math.max(0, Math.sin(elapsed * 9)) * 0.18))
+        );
       }
       // the "!" while she is offended
       const startled = now < uprightUntil && upright > 0.5;
@@ -311,17 +400,21 @@ export async function loadCleo(course: CourseDef, reduceMotion: boolean) {
       if (startled) {
         const pop = Math.min(1, (now - startledAt) / 140);
         bang.position.set(0.05, 1.32 + pivot.position.y, 0.2);
-        bang.scale.setScalar(0.34 * (0.4 + 0.6 * pop) * (1 + Math.sin(pop * Math.PI) * 0.25));
+        bang.scale.setScalar(
+          0.34 * (0.4 + 0.6 * pop) * (1 + Math.sin(pop * Math.PI) * 0.25)
+        );
       }
       setTail(world, 0.03, 0, tailGeo);
       setTail(world, 0.04, 0.018, inkGeo);
       // z's drift up while she sleeps
       zs.forEach((z, i) => {
-        const k = ((elapsed * 0.35 + i * 0.5) % 1 + 1) % 1;
+        const k = (((elapsed * 0.35 + i * 0.5) % 1) + 1) % 1;
         const show = cs.phase === "asleep" && now > eyesUntil && !reduceMotion;
         z.visible = show;
         z.position.set(0, 0.95 + k * 0.6, 0.18 + Math.sin(k * 6 + i) * 0.08);
-        (z.material as THREE.SpriteMaterial).opacity = show ? Math.sin(k * Math.PI) * 0.9 : 0;
+        (z.material as THREE.SpriteMaterial).opacity = show
+          ? Math.sin(k * Math.PI) * 0.9
+          : 0;
         z.scale.setScalar(0.12 + k * 0.14);
       });
     },
@@ -352,8 +445,12 @@ export type CleoPuppet = Awaited<ReturnType<typeof loadCleo>>;
 export async function loadBella(course: CourseDef) {
   const loader = new THREE.TextureLoader();
   const poses: BellaPose[] = ["idle", "wave", "selected", "happy"];
-  const meta = (await fetch(`${CARDS}bella.json`).then(r => r.json())) as { poses: Record<BellaPose, [number, number]> };
-  const textures = await Promise.all(poses.map(p => loader.loadAsync(`${CARDS}bella-${p}.png`)));
+  const meta = (await fetch(`${CARDS}bella.json`).then(r => r.json())) as {
+    poses: Record<BellaPose, [number, number]>;
+  };
+  const textures = await Promise.all(
+    poses.map(p => loader.loadAsync(`${CARDS}bella-${p}.png`))
+  );
   textures.forEach(t => (t.colorSpace = THREE.SRGBColorSpace));
   const byPose = new Map(poses.map((p, i) => [p, textures[i]]));
   const group = new THREE.Group();
@@ -361,7 +458,13 @@ export async function loadBella(course: CourseDef) {
   // the card and anything she holds move together (her hop and sway); the card alone is scaled to the pose
   const rig = new THREE.Group();
   group.add(rig);
-  const mat = new THREE.MeshBasicMaterial({ map: textures[0], transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, toneMapped: false });
+  const mat = new THREE.MeshBasicMaterial({
+    map: textures[0],
+    transparent: true,
+    alphaTest: 0.08,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   mat.userData.outlineParameters = { visible: false };
   const card = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
   rig.add(card);
@@ -373,11 +476,20 @@ export async function loadBella(course: CourseDef) {
   const brass = new THREE.MeshToonMaterial({ color: 0xe0b34a });
   const wood = new THREE.MeshToonMaterial({ color: 0x8a5a34 });
   const bell = new THREE.Group();
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.024, 0.11, 8), wood);
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.02, 0.024, 0.11, 8),
+    wood
+  );
   handle.position.y = -0.05;
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), brass);
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    brass
+  );
   dome.position.y = -0.24;
-  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.128, 0.016, 6, 20), brass);
+  const lip = new THREE.Mesh(
+    new THREE.TorusGeometry(0.128, 0.016, 6, 20),
+    brass
+  );
   lip.rotation.x = Math.PI / 2;
   lip.position.y = -0.24;
   const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), wood);
@@ -390,10 +502,20 @@ export async function loadBella(course: CourseDef) {
   let ringT = -1;
   let ringBig = false;
   // a ring of sound for the big one, so the bell reads with the sound off
-  const waveMat = new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  const waveMat = new THREE.MeshBasicMaterial({
+    color: 0xfff1b8,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   waveMat.userData.outlineParameters = { visible: false };
   const waves = [0, 1].map(() => {
-    const m = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.235, 40), waveMat.clone());
+    const m = new THREE.Mesh(
+      new THREE.RingGeometry(0.17, 0.235, 40),
+      waveMat.clone()
+    );
     m.userData.outlineParameters = { visible: false };
     m.visible = false;
     rig.add(m);
@@ -408,7 +530,11 @@ export async function loadBella(course: CourseDef) {
     card.scale.set((w / h) * H, H, 1);
     card.position.y = H / 2;
     const wave = meta.poses.wave;
-    bell.position.set((PAW.u - 0.5) * (wave[0] / wave[1]) * H, (1 - PAW.v) * H, 0.04);
+    bell.position.set(
+      (PAW.u - 0.5) * (wave[0] / wave[1]) * H,
+      (1 - PAW.v) * H,
+      0.04
+    );
     if (p !== "wave") bell.visible = false;
   }
   setPose("idle");
@@ -434,9 +560,14 @@ export async function loadBella(course: CourseDef) {
       ringBig = big;
     },
     update(dt: number, elapsed: number, camera: THREE.Camera) {
-      group.rotation.y = Math.atan2(camera.position.x - group.position.x, camera.position.z - group.position.z);
+      group.rotation.y = Math.atan2(
+        camera.position.x - group.position.x,
+        camera.position.z - group.position.z
+      );
       hop = Math.max(0, hop - dt * 4);
-      rig.position.y = Math.sin((1 - hop) * Math.PI) * hop * 0.18 + Math.abs(Math.sin(elapsed * 2)) * 0.015;
+      rig.position.y =
+        Math.sin((1 - hop) * Math.PI) * hop * 0.18 +
+        Math.abs(Math.sin(elapsed * 2)) * 0.015;
       rig.rotation.z = Math.sin(elapsed * 1.2) * 0.03;
       if (ringT >= 0) {
         ringT += dt;

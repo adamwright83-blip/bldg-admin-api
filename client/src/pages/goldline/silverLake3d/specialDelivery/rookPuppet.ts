@@ -8,7 +8,14 @@ import * as THREE from "three";
  */
 
 type AtlasJson = {
-  frames: Record<string, { frame: { x: number; y: number; w: number; h: number }; spriteSourceSize: { x: number; y: number; w: number; h: number }; sourceSize: { w: number; h: number } }>;
+  frames: Record<
+    string,
+    {
+      frame: { x: number; y: number; w: number; h: number };
+      spriteSourceSize: { x: number; y: number; w: number; h: number };
+      sourceSize: { w: number; h: number };
+    }
+  >;
   animations: Record<string, string[]>;
   meta: { image: string; size: { w: number; h: number } };
 };
@@ -35,7 +42,10 @@ export type RookState =
   | "bow";
 export type RookFacing = "left" | "front" | "right";
 
-const SHEETS: Record<RookState, { dir: "overworld" | "airmail"; loop: boolean; fps: number }> = {
+const SHEETS: Record<
+  RookState,
+  { dir: "overworld" | "airmail"; loop: boolean; fps: number }
+> = {
   idle: { dir: "overworld", loop: true, fps: 8 },
   talk: { dir: "overworld", loop: true, fps: 10 },
   walk: { dir: "overworld", loop: true, fps: 12 },
@@ -64,10 +74,21 @@ const ANCHOR = { x: 144, y: 261.5 };
 const HEIGHT = 1.42;
 const PX = (2.35 * (HEIGHT / 1.75)) / SOURCE;
 
-type Frame = { u0: number; v0: number; u1: number; v1: number; w: number; h: number; ox: number; oy: number };
+type Frame = {
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
+  w: number;
+  h: number;
+  ox: number;
+  oy: number;
+};
 type Anim = { tex: THREE.Texture; frames: Frame[] };
 
-export async function loadRookPuppet(base = "/assets/goldline/companions/rook/") {
+export async function loadRookPuppet(
+  base = "/assets/goldline/companions/rook/"
+) {
   const loader = new THREE.TextureLoader();
   const anims = new Map<string, Anim>();
   const textures: THREE.Texture[] = [];
@@ -107,15 +128,29 @@ export async function loadRookPuppet(base = "/assets/goldline/companions/rook/")
 
   const group = new THREE.Group();
   group.name = "rook";
-  const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.06, side: THREE.DoubleSide, toneMapped: false, depthWrite: true });
+  const mat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    alphaTest: 0.06,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    depthWrite: true,
+  });
   mat.userData.outlineParameters = { visible: false };
   const geo = new THREE.PlaneGeometry(1, 1);
   const card = new THREE.Mesh(geo, mat);
   card.renderOrder = 2;
   group.add(card);
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x2b3b1c, transparent: true, opacity: 0.22, depthWrite: false });
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x2b3b1c,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+  });
   shadowMat.userData.outlineParameters = { visible: false };
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20).rotateX(-Math.PI / 2), shadowMat);
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.42, 20).rotateX(-Math.PI / 2),
+    shadowMat
+  );
   shadow.position.y = 0.03;
   group.add(shadow);
 
@@ -128,7 +163,12 @@ export async function loadRookPuppet(base = "/assets/goldline/companions/rook/")
   let frozen = false;
 
   function animFor(s: RookState, f: RookFacing): Anim | undefined {
-    return anims.get(`${s}-${f}`) ?? anims.get(`${s}-left`) ?? anims.get(`${s}-front`) ?? anims.get(`idle-${f}`);
+    return (
+      anims.get(`${s}-${f}`) ??
+      anims.get(`${s}-left`) ??
+      anims.get(`${s}-front`) ??
+      anims.get(`idle-${f}`)
+    );
   }
 
   function apply(frame: Frame, tex: THREE.Texture) {
@@ -156,7 +196,15 @@ export async function loadRookPuppet(base = "/assets/goldline/companions/rook/")
       return facing;
     },
     /** play a state; one-shot states hold their last frame (or call `then`) */
-    play(next: RookState, opts: { facing?: RookFacing; restart?: boolean; then?: () => void; hold?: boolean } = {}) {
+    play(
+      next: RookState,
+      opts: {
+        facing?: RookFacing;
+        restart?: boolean;
+        then?: () => void;
+        hold?: boolean;
+      } = {}
+    ) {
       const f = opts.facing ?? facing;
       if (next === state && f === facing && !opts.restart && !frozen) return;
       frozen = false;
@@ -218,7 +266,10 @@ export async function loadRookPuppet(base = "/assets/goldline/companions/rook/")
       }
       // paper cutout: always square to the camera, upright
       const cam = camera.position;
-      group.rotation.y = Math.atan2(cam.x - group.position.x, cam.z - group.position.z);
+      group.rotation.y = Math.atan2(
+        cam.x - group.position.x,
+        cam.z - group.position.z
+      );
     },
     dispose() {
       geo.dispose();

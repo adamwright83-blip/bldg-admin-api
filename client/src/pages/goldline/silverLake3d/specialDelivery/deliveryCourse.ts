@@ -34,7 +34,22 @@ export const COURSE: CourseDef = {
     { anchor: { x: 0.7, y: 0 }, length: 0.74, radius: 0.11 },
   ],
   // Cleo, asleep in the sun on the paving under the balcony, tail curled toward the launcher
-  cat: { x: 1.1, y: 0, rx: 0.38, ry: 0.34, head: { x: 0.1, y: 0.86 }, headR: 0.25, tailRoot: { x: -0.28, y: 0.16 }, tailLen: 0.72, rest: 3.3, swat: { windup: 3.3, follow: 1.95, duration: 0.14 }, fling: 14.5, flingAngle: 1.3, flingSpread: 1.2, rideMaxSpeed: 6 },
+  cat: {
+    x: 1.1,
+    y: 0,
+    rx: 0.38,
+    ry: 0.34,
+    head: { x: 0.1, y: 0.86 },
+    headR: 0.25,
+    tailRoot: { x: -0.28, y: 0.16 },
+    tailLen: 0.72,
+    rest: 3.3,
+    swat: { windup: 3.3, follow: 1.95, duration: 0.14 },
+    fling: 14.5,
+    flingAngle: 1.3,
+    flingSpread: 1.2,
+    rideMaxSpeed: 6,
+  },
   // Bella's big wicker basket stands on her balcony against the yellow cottage, whose wall makes a forgiving backboard;
   // the balcony sits low enough under the thatch that Bella stands clear of the eave, beside her basket
   basket: { x: 3.05, y: 2.75, width: 1.0, depth: 0.55 },

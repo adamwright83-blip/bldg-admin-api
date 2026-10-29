@@ -23,19 +23,33 @@ export function _resetCourtyardDiscoveriesTestStore() {
 function allowTestFallback() {
   return process.env.NODE_ENV === "test" && !process.env.DATABASE_URL;
 }
-const key = (tenantId: string, territoryId: string) => `${tenantId}::${territoryId}`;
+const key = (tenantId: string, territoryId: string) =>
+  `${tenantId}::${territoryId}`;
 
-export async function loadCourtyardDiscoveries(input: { tenantId: string; territoryId?: string }): Promise<CourtyardDiscoveries> {
+export async function loadCourtyardDiscoveries(input: {
+  tenantId: string;
+  territoryId?: string;
+}): Promise<CourtyardDiscoveries> {
   const territoryId = input.territoryId ?? "silver-lake";
   const db = await getDb();
   if (!db) {
-    if (allowTestFallback()) return normalizeDiscoveries(testStore.get(key(input.tenantId, territoryId)) ?? null);
-    throw new Error("Durable database connection unavailable for courtyard memory");
+    if (allowTestFallback())
+      return normalizeDiscoveries(
+        testStore.get(key(input.tenantId, territoryId)) ?? null
+      );
+    throw new Error(
+      "Durable database connection unavailable for courtyard memory"
+    );
   }
   const rows = await db
     .select({ json: lanternNeighborhoodMemories.courtyardDiscoveriesJson })
     .from(lanternNeighborhoodMemories)
-    .where(and(eq(lanternNeighborhoodMemories.tenantId, input.tenantId), eq(lanternNeighborhoodMemories.territoryId, territoryId)))
+    .where(
+      and(
+        eq(lanternNeighborhoodMemories.tenantId, input.tenantId),
+        eq(lanternNeighborhoodMemories.territoryId, territoryId)
+      )
+    )
     .limit(1);
   return normalizeDiscoveries(parse(rows[0]?.json));
 }
@@ -50,8 +64,17 @@ export async function recordCourtyardObservation(input: {
   const now = input.now ?? new Date();
   const db = await getDb();
   if (!db) {
-    if (!allowTestFallback()) throw new Error("Durable database connection unavailable for courtyard memory");
-    const next = applyObservation(normalizeDiscoveries(testStore.get(key(input.tenantId, territoryId)) ?? null), input.observation, now.toISOString());
+    if (!allowTestFallback())
+      throw new Error(
+        "Durable database connection unavailable for courtyard memory"
+      );
+    const next = applyObservation(
+      normalizeDiscoveries(
+        testStore.get(key(input.tenantId, territoryId)) ?? null
+      ),
+      input.observation,
+      now.toISOString()
+    );
     testStore.set(key(input.tenantId, territoryId), next);
     return next;
   }
@@ -59,15 +82,29 @@ export async function recordCourtyardObservation(input: {
     const rows = await tx
       .select({ json: lanternNeighborhoodMemories.courtyardDiscoveriesJson })
       .from(lanternNeighborhoodMemories)
-      .where(and(eq(lanternNeighborhoodMemories.tenantId, input.tenantId), eq(lanternNeighborhoodMemories.territoryId, territoryId)))
+      .where(
+        and(
+          eq(lanternNeighborhoodMemories.tenantId, input.tenantId),
+          eq(lanternNeighborhoodMemories.territoryId, territoryId)
+        )
+      )
       .limit(1)
       .for("update");
-    const next = applyObservation(normalizeDiscoveries(parse(rows[0]?.json)), input.observation, now.toISOString());
+    const next = applyObservation(
+      normalizeDiscoveries(parse(rows[0]?.json)),
+      input.observation,
+      now.toISOString()
+    );
     if (rows.length) {
       await tx
         .update(lanternNeighborhoodMemories)
         .set({ courtyardDiscoveriesJson: next, updatedAt: now })
-        .where(and(eq(lanternNeighborhoodMemories.tenantId, input.tenantId), eq(lanternNeighborhoodMemories.territoryId, territoryId)));
+        .where(
+          and(
+            eq(lanternNeighborhoodMemories.tenantId, input.tenantId),
+            eq(lanternNeighborhoodMemories.territoryId, territoryId)
+          )
+        );
     } else {
       await tx
         .insert(lanternNeighborhoodMemories)
@@ -81,7 +118,9 @@ export async function recordCourtyardObservation(input: {
           createdAt: now,
           updatedAt: now,
         })
-        .onDuplicateKeyUpdate({ set: { courtyardDiscoveriesJson: next, updatedAt: now } });
+        .onDuplicateKeyUpdate({
+          set: { courtyardDiscoveriesJson: next, updatedAt: now },
+        });
     }
     return next;
   });

@@ -22,14 +22,18 @@ import {
  * sim x maps to screen u = -x + OFFSET. three.js: x = PLANE_X + depth (away from the camera), y = height, z = u.
  */
 export const OFFSET = -1.62;
-export const toWorld = (x: number, y: number, depth = 0) => new THREE.Vector3(PLANE_X + depth, y, -x + OFFSET);
+export const toWorld = (x: number, y: number, depth = 0) =>
+  new THREE.Vector3(PLANE_X + depth, y, -x + OFFSET);
 /** sim direction to world (no depth) */
 const dirWorld = (x: number, y: number) => new THREE.Vector3(0, y, -x);
 
 export type AimView = { pull: V2; tension: number } | null;
 
-const mat = (name: string, color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
-  new THREE.MeshStandardMaterial({ name, color, roughness: 0.8, ...extra });
+const mat = (
+  name: string,
+  color: number,
+  extra: Partial<THREE.MeshStandardMaterialParameters> = {}
+) => new THREE.MeshStandardMaterial({ name, color, roughness: 0.8, ...extra });
 
 function box(w: number, h: number, d: number, m: THREE.Material) {
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
@@ -39,7 +43,13 @@ function cyl(rt: number, rb: number, h: number, m: THREE.Material, seg = 12) {
 }
 
 /** A painted plank sign: big hand-lettered title, small line under it. */
-function signTexture(title: string, sub: string, w = 512, h = 256, opts: { bg?: string; ink?: string } = {}) {
+function signTexture(
+  title: string,
+  sub: string,
+  w = 512,
+  h = 256,
+  opts: { bg?: string; ink?: string } = {}
+) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -53,7 +63,8 @@ function signTexture(title: string, sub: string, w = 512, h = 256, opts: { bg?: 
     g.beginPath();
     const y = 14 + i * (h / 9);
     g.moveTo(0, y);
-    for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x * 0.02 + i) * 3);
+    for (let x = 0; x <= w; x += 32)
+      g.lineTo(x, y + Math.sin(x * 0.02 + i) * 3);
     g.stroke();
   }
   g.strokeStyle = "rgba(90,55,25,0.85)";
@@ -62,7 +73,8 @@ function signTexture(title: string, sub: string, w = 512, h = 256, opts: { bg?: 
   g.fillStyle = opts.ink ?? "#7b2d1c";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  const titleFont = (px: number) => `900 ${px}px "Trebuchet MS", "Arial Rounded MT Bold", system-ui, sans-serif`;
+  const titleFont = (px: number) =>
+    `900 ${px}px "Trebuchet MS", "Arial Rounded MT Bold", system-ui, sans-serif`;
   let titlePx = Math.round(h * 0.3);
   g.font = titleFont(titlePx);
   // the whole title fits inside the frame, however the font measures on this device
@@ -95,12 +107,18 @@ function signTexture(title: string, sub: string, w = 512, h = 256, opts: { bg?: 
   return t;
 }
 
-export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef) {
+export function buildDeliveryScene(
+  api: CourtyardActivityApi,
+  course: CourseDef
+) {
   const root = new THREE.Group();
   root.name = "special-delivery";
   api.scene.add(root);
   const disposables: Array<{ dispose(): void }> = [];
-  const track = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+  const track = <T extends { dispose(): void }>(x: T) => (
+    disposables.push(x),
+    x
+  );
 
   const wood = mat("timber", 0xb07a4a);
   const darkWood = mat("timber", 0x7b5232);
@@ -176,7 +194,9 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   for (let i = 0; i < 4; i++) {
     const g = gliderMesh(paper);
     g.scale.setScalar(0.42);
-    g.position.copy(tray.position).add(new THREE.Vector3(0, 0.03 + i * 0.018, 0));
+    g.position
+      .copy(tray.position)
+      .add(new THREE.Vector3(0, 0.03 + i * 0.018, 0));
     g.rotation.set(0, Math.PI / 2 + i * 0.12, 0);
     station.add(g);
   }
@@ -190,7 +210,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   pennant.position.copy(toWorld(mastX - 0.22, course.line.a.y + 0.05, 0.02));
   station.add(pennant);
   const signTex = track(signTexture("ROOK'S AIRMAIL", "MOSTLY RELIABLE"));
-  const signMat = new THREE.MeshBasicMaterial({ map: signTex, toneMapped: false });
+  const signMat = new THREE.MeshBasicMaterial({
+    map: signTex,
+    toneMapped: false,
+  });
   api.noOutline(signMat);
   // the stall's sign, ROOK'S AIRMAIL, MOSTLY RELIABLE, hung on the front of the table under the brass dial
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.49), signMat);
@@ -204,7 +227,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const canSpout = cyl(0.025, 0.04, 0.34, teal, 8);
   canSpout.position.set(0, 0.08, 0.22);
   canSpout.rotation.x = Math.PI / 3.1;
-  const canHandle = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.022, 6, 14, Math.PI), teal);
+  const canHandle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.1, 0.022, 6, 14, Math.PI),
+    teal
+  );
   canHandle.position.set(0, 0.16, -0.04);
   canHandle.rotation.y = Math.PI / 2;
   can.add(canBody, canSpout, canHandle);
@@ -216,18 +242,47 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
 
   // ---------------------------------------------------------------- the elastic band
   const bandMat = rubber;
-  const band = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([posts[0], posts[1]]), 8, 0.018, 6, false), bandMat);
+  const band = new THREE.Mesh(
+    new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3([posts[0], posts[1]]),
+      8,
+      0.018,
+      6,
+      false
+    ),
+    bandMat
+  );
   root.add(band);
-  const band2 = new THREE.Mesh(band.geometry.clone(), mat("rubber_blue", 0x4f79b8));
+  const band2 = new THREE.Mesh(
+    band.geometry.clone(),
+    mat("rubber_blue", 0x4f79b8)
+  );
   band2.visible = false;
   root.add(band2);
   let bandPull = new THREE.Vector3();
-  function updateBand(mesh: THREE.Mesh, pullPoint: THREE.Vector3 | null, lift = 0) {
+  function updateBand(
+    mesh: THREE.Mesh,
+    pullPoint: THREE.Vector3 | null,
+    lift = 0
+  ) {
     const a = posts[0].clone().add(new THREE.Vector3(0, lift, 0));
     const b = posts[1].clone().add(new THREE.Vector3(0, lift, 0));
-    const pts = pullPoint ? [a, pullPoint.clone().add(new THREE.Vector3(-0.06, lift, 0)), pullPoint.clone().add(new THREE.Vector3(0.06, lift, 0)), b] : [a, a.clone().lerp(b, 0.5), b];
+    const pts = pullPoint
+      ? [
+          a,
+          pullPoint.clone().add(new THREE.Vector3(-0.06, lift, 0)),
+          pullPoint.clone().add(new THREE.Vector3(0.06, lift, 0)),
+          b,
+        ]
+      : [a, a.clone().lerp(b, 0.5), b];
     mesh.geometry.dispose();
-    mesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.1), 16, 0.016, 6, false);
+    mesh.geometry = new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.1),
+      16,
+      0.016,
+      6,
+      false
+    );
   }
 
   // ---------------------------------------------------------------- the fan
@@ -237,10 +292,16 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   crate.position.copy(toWorld(fx, 0.275));
   fan.add(crate);
   const fanHead = new THREE.Group();
-  const housing = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 8, 28), cream);
+  const housing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.4, 0.05, 8, 28),
+    cream
+  );
   housing.rotation.x = Math.PI / 2;
   const grilleMat = mat("grille", 0xe8dcc4);
-  const grille = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.4, 24, 1), grilleMat);
+  const grille = new THREE.Mesh(
+    new THREE.RingGeometry(0.06, 0.4, 24, 1),
+    grilleMat
+  );
   grille.rotation.x = -Math.PI / 2;
   grille.position.y = 0.08;
   (grilleMat as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
@@ -262,9 +323,16 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   fanHead.position.copy(toWorld(fx, course.fan.y));
   fan.add(fanHead);
   // a little cloth streamer tied to the grille shows the wind
-  const streamerMat = new THREE.MeshBasicMaterial({ color: 0xff8a73, side: THREE.DoubleSide, toneMapped: false });
+  const streamerMat = new THREE.MeshBasicMaterial({
+    color: 0xff8a73,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   api.noOutline(streamerMat);
-  const streamer = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.5, 1, 6), streamerMat);
+  const streamer = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.06, 0.5, 1, 6),
+    streamerMat
+  );
   streamer.geometry.translate(0, 0.25, 0);
   streamer.position.copy(toWorld(fx + 0.3, course.fan.y + 0.08, -0.05));
   fan.add(streamer);
@@ -274,11 +342,21 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const moteGeo = new THREE.BufferGeometry();
   const motePos = new Float32Array(MOTES * 3);
   moteGeo.setAttribute("position", new THREE.BufferAttribute(motePos, 3));
-  const moteMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.07, transparent: true, opacity: 0.7, depthWrite: false });
+  const moteMat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.07,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+  });
   api.noOutline(moteMat);
   const motes = new THREE.Points(moteGeo, moteMat);
   root.add(motes);
-  const moteSeed = Array.from({ length: MOTES }, (_, i) => ({ s: (i * 0.618) % 1, a: (i * 0.37) % 1, d: ((i * 0.73) % 1) - 0.5 }));
+  const moteSeed = Array.from({ length: MOTES }, (_, i) => ({
+    s: (i * 0.618) % 1,
+    a: (i * 0.37) % 1,
+    d: ((i * 0.73) % 1) - 0.5,
+  }));
 
   // ---------------------------------------------------------------- the washing line, its sheets, the cups
   const lineMesh = new THREE.Mesh(new THREE.BufferGeometry(), rope);
@@ -301,13 +379,35 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     if (Math.abs(sag - lastSag) < 0.0008) return;
     lastSag = sag;
     lineMesh.geometry.dispose();
-    lineMesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(linePts(sag)), 48, 0.014, 5, false);
+    lineMesh.geometry = new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3(linePts(sag)),
+      48,
+      0.014,
+      5,
+      false
+    );
   }
   updateLine(0);
 
-  type Cloth = { mesh: THREE.Mesh; base: Float32Array; w: number; h: number; x0: number; x1: number; depth: number; phase: number };
+  type Cloth = {
+    mesh: THREE.Mesh;
+    base: Float32Array;
+    w: number;
+    h: number;
+    x0: number;
+    x1: number;
+    depth: number;
+    phase: number;
+  };
   const cloths: Cloth[] = [];
-  function makeCloth(x0: number, x1: number, drop: number, color: number, depth: number, pattern: "stripe" | "dots" | "plain") {
+  function makeCloth(
+    x0: number,
+    x1: number,
+    drop: number,
+    color: number,
+    depth: number,
+    pattern: "stripe" | "dots" | "plain"
+  ) {
     const w = Math.abs(x1 - x0);
     const geo = new THREE.PlaneGeometry(w, drop, 8, 6);
     const c = document.createElement("canvas");
@@ -317,11 +417,20 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     g.fillStyle = `#${color.toString(16).padStart(6, "0")}`;
     g.fillRect(0, 0, 128, 128);
     g.fillStyle = "rgba(255,255,255,0.55)";
-    if (pattern === "stripe") for (let i = 0; i < 128; i += 22) g.fillRect(i, 0, 8, 128);
-    if (pattern === "dots") for (let y = 10; y < 128; y += 24) for (let x = 10 + ((y / 24) % 2) * 12; x < 128; x += 24) g.beginPath(), g.arc(x, y, 5, 0, Math.PI * 2), g.fill();
+    if (pattern === "stripe")
+      for (let i = 0; i < 128; i += 22) g.fillRect(i, 0, 8, 128);
+    if (pattern === "dots")
+      for (let y = 10; y < 128; y += 24)
+        for (let x = 10 + ((y / 24) % 2) * 12; x < 128; x += 24)
+          (g.beginPath(), g.arc(x, y, 5, 0, Math.PI * 2), g.fill());
     const tex = track(new THREE.CanvasTexture(c));
     tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.MeshStandardMaterial({ name: "cloth", map: tex, side: THREE.DoubleSide, roughness: 0.9 });
+    const m = new THREE.MeshStandardMaterial({
+      name: "cloth",
+      map: tex,
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+    });
     const mesh = new THREE.Mesh(geo, m);
     mesh.rotation.y = -Math.PI / 2;
     const mid = (x0 + x1) / 2;
@@ -343,15 +452,39 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     return cloth;
   }
   // the sheet in the glider's plane
-  course.sheets.forEach((sh, i) => makeCloth(sh.x0, sh.x1, sh.drop, i % 2 ? 0x8fc6ef : 0xf6d36b, 0, "stripe"));
+  course.sheets.forEach((sh, i) =>
+    makeCloth(sh.x0, sh.x1, sh.drop, i % 2 ? 0x8fc6ef : 0xf6d36b, 0, "stripe")
+  );
   // a nearer line with laundry that only sways: the glider passes behind it
   const nearDepth = -1.25;
   const nearA = toWorld(1.2, 3.25, nearDepth);
   const nearB = toWorld(-1.6, 3.05, nearDepth);
-  const nearLine = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([nearA, nearA.clone().lerp(nearB, 0.5).add(new THREE.Vector3(0, -0.22, 0)), nearB]), 24, 0.012, 5, false), rope);
+  const nearLine = new THREE.Mesh(
+    new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3([
+        nearA,
+        nearA
+          .clone()
+          .lerp(nearB, 0.5)
+          .add(new THREE.Vector3(0, -0.22, 0)),
+        nearB,
+      ]),
+      24,
+      0.012,
+      5,
+      false
+    ),
+    rope
+  );
   root.add(nearLine);
   const nearCloths: Cloth[] = [];
-  function nearCloth(x0: number, x1: number, drop: number, color: number, pattern: "stripe" | "dots" | "plain") {
+  function nearCloth(
+    x0: number,
+    x1: number,
+    drop: number,
+    color: number,
+    pattern: "stripe" | "dots" | "plain"
+  ) {
     const w = Math.abs(x1 - x0);
     const geo = new THREE.PlaneGeometry(w, drop, 6, 5);
     const c = document.createElement("canvas");
@@ -361,11 +494,20 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     g.fillStyle = `#${color.toString(16).padStart(6, "0")}`;
     g.fillRect(0, 0, 64, 64);
     g.fillStyle = "rgba(255,255,255,0.6)";
-    if (pattern === "dots") for (let y = 6; y < 64; y += 14) for (let x = 6 + ((y / 14) % 2) * 7; x < 64; x += 14) g.beginPath(), g.arc(x, y, 3, 0, Math.PI * 2), g.fill();
-    if (pattern === "stripe") for (let i = 0; i < 64; i += 12) g.fillRect(0, i, 64, 4);
+    if (pattern === "dots")
+      for (let y = 6; y < 64; y += 14)
+        for (let x = 6 + ((y / 14) % 2) * 7; x < 64; x += 14)
+          (g.beginPath(), g.arc(x, y, 3, 0, Math.PI * 2), g.fill());
+    if (pattern === "stripe")
+      for (let i = 0; i < 64; i += 12) g.fillRect(0, i, 64, 4);
     const tex = track(new THREE.CanvasTexture(c));
     tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.MeshStandardMaterial({ name: "cloth", map: tex, side: THREE.DoubleSide, roughness: 0.9 });
+    const m = new THREE.MeshStandardMaterial({
+      name: "cloth",
+      map: tex,
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+    });
     const mesh = new THREE.Mesh(geo, m);
     mesh.rotation.y = -Math.PI / 2;
     const mid = (x0 + x1) / 2;
@@ -374,7 +516,16 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     mesh.position.copy(toWorld(mid, topY - drop / 2, nearDepth));
     root.add(mesh);
     const base = (geo.attributes.position.array as Float32Array).slice();
-    const cl = { mesh, base, w, h: drop, x0, x1, depth: nearDepth, phase: x0 * 2.3 + 1 };
+    const cl = {
+      mesh,
+      base,
+      w,
+      h: drop,
+      x0,
+      x1,
+      depth: nearDepth,
+      phase: x0 * 2.3 + 1,
+    };
     nearCloths.push(cl);
     return cl;
   }
@@ -392,7 +543,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     const bandM = mat("cup_band", cupColors[i]);
     const bandMesh = cyl(r * 1.01, r * 0.95, r * 0.28, bandM, 16);
     bandMesh.position.y = r * 0.25;
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(r * 0.38, r * 0.1, 6, 12), china);
+    const handle = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.38, r * 0.1, 6, 12),
+      china
+    );
     handle.position.set(0, 0, r * 1.02);
     handle.rotation.y = Math.PI / 2;
     g.add(body, bandMesh, handle);
@@ -401,7 +555,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     const holder = new THREE.Group();
     holder.add(g);
     root.add(holder);
-    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 4), rope);
+    const string = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.004, 0.004, 1, 4),
+      rope
+    );
     root.add(string);
     return { holder, cup: g, string, ring: 0 };
   });
@@ -427,7 +584,9 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   balcony.add(railTop);
   for (let i = 0; i < 5; i++) {
     const baluster = box(0.04, bal.rail - bal.floor, 0.04, wood);
-    baluster.position.copy(toWorld(bal.x0, (bal.rail + bal.floor) / 2, -0.45 + i * 0.35));
+    baluster.position.copy(
+      toWorld(bal.x0, (bal.rail + bal.floor) / 2, -0.45 + i * 0.35)
+    );
     balcony.add(baluster);
   }
   const sideRail = box(0.07, 0.07, floorW, wood);
@@ -438,29 +597,64 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   flowerBox.position.copy(toWorld(bal.x0 - 0.02, bal.rail + 0.06, 0.75));
   balcony.add(flowerBox);
   for (let i = 0; i < 5; i++) {
-    const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), mat("bloom", [0xffd25e, 0xff8a73, 0xffffff][i % 3]));
-    bloom.position.copy(flowerBox.position).add(new THREE.Vector3((i % 2) * 0.05 - 0.02, 0.12 + (i % 3) * 0.02, -0.2 + i * 0.1));
+    const bloom = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 8, 6),
+      mat("bloom", [0xffd25e, 0xff8a73, 0xffffff][i % 3])
+    );
+    bloom.position
+      .copy(flowerBox.position)
+      .add(
+        new THREE.Vector3(
+          (i % 2) * 0.05 - 0.02,
+          0.12 + (i % 3) * 0.02,
+          -0.2 + i * 0.1
+        )
+      );
     balcony.add(bloom);
   }
   // the big wicker laundry basket
   const bk = course.basket;
   const basket = new THREE.Group();
   const wicker = mat("wicker", 0xd9a35c);
-  const basketBody = cyl(bk.width / 2, bk.width / 2 - 0.08, bk.depth, wicker, 20);
+  const basketBody = cyl(
+    bk.width / 2,
+    bk.width / 2 - 0.08,
+    bk.depth,
+    wicker,
+    20
+  );
   basketBody.scale.set(1, 1, 1);
   basketBody.position.y = bk.depth / 2;
-  const basketRim = new THREE.Mesh(new THREE.TorusGeometry(bk.width / 2, 0.035, 8, 24), mat("wicker_rim", 0xb07a3a));
+  const basketRim = new THREE.Mesh(
+    new THREE.TorusGeometry(bk.width / 2, 0.035, 8, 24),
+    mat("wicker_rim", 0xb07a3a)
+  );
   basketRim.rotation.x = Math.PI / 2;
   basketRim.position.y = bk.depth;
-  const cushion = cyl(bk.width / 2 - 0.05, bk.width / 2 - 0.05, 0.06, mat("cushion", 0xfbf6ec), 18);
+  const cushion = cyl(
+    bk.width / 2 - 0.05,
+    bk.width / 2 - 0.05,
+    0.06,
+    mat("cushion", 0xfbf6ec),
+    18
+  );
   cushion.position.y = bk.depth - 0.18;
   basket.add(basketBody, basketRim, cushion);
   basket.position.copy(toWorld(bk.x, bal.floor, 0.25));
   balcony.add(basket);
   // a soft glow ring that marks the basket as the target until the first delivery
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.0, depthWrite: false, toneMapped: false });
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0xffd36b,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    toneMapped: false,
+  });
   api.noOutline(glowMat);
-  const glow = new THREE.Mesh(new THREE.RingGeometry(bk.width / 2 + 0.05, bk.width / 2 + 0.16, 32), glowMat);
+  const glow = new THREE.Mesh(
+    new THREE.RingGeometry(bk.width / 2 + 0.05, bk.width / 2 + 0.16, 32),
+    glowMat
+  );
   glow.rotation.x = -Math.PI / 2;
   glow.position.copy(toWorld(bk.x, bk.y + 0.02, 0.25));
   balcony.add(glow);
@@ -469,15 +663,24 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const tyre = mat("tyre", 0x3b2a1e);
   const frameM = mat("bike_frame", 0x5fa8a0);
   for (const dz of [-0.36, 0.36]) {
-    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.025, 6, 24), tyre);
+    const wheel = new THREE.Mesh(
+      new THREE.TorusGeometry(0.23, 0.025, 6, 24),
+      tyre
+    );
     wheel.position.set(0, 0.25, dz);
     wheel.rotation.y = Math.PI / 2;
     bike.add(wheel);
   }
   const tube = (a: THREE.Vector3, b: THREE.Vector3) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, a.distanceTo(b), 6), frameM);
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.018, a.distanceTo(b), 6),
+      frameM
+    );
     m.position.copy(a).lerp(b, 0.5);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    m.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      b.clone().sub(a).normalize()
+    );
     bike.add(m);
   };
   tube(new THREE.Vector3(0, 0.25, -0.36), new THREE.Vector3(0, 0.5, -0.05));
@@ -502,7 +705,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const gliderBody = gliderMesh(paper);
   glider.add(gliderBody);
   const bellHolder = new THREE.Group();
-  const bellString = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.12, 4), rope);
+  const bellString = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 0.12, 4),
+    rope
+  );
   bellString.position.y = -0.06;
   const gliderBell = bellMesh(brass, 0.55);
   gliderBell.position.y = -0.14;
@@ -522,15 +728,18 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPos, 3));
   trailGeo.setAttribute("alpha", new THREE.BufferAttribute(trailAlpha, 1));
   const trailIdx: number[] = [];
-  for (let i = 0; i < TRAIL - 1; i++) trailIdx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  for (let i = 0; i < TRAIL - 1; i++)
+    trailIdx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
   trailGeo.setIndex(trailIdx);
   const trailMat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
     uniforms: { color: { value: new THREE.Color(0xffffff) } },
-    vertexShader: "attribute float alpha; varying float vA; void main(){ vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: "uniform vec3 color; varying float vA; void main(){ gl_FragColor = vec4(color, vA * 0.55); }",
+    vertexShader:
+      "attribute float alpha; varying float vA; void main(){ vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader:
+      "uniform vec3 color; varying float vA; void main(){ gl_FragColor = vec4(color, vA * 0.55); }",
   });
   api.noOutline(trailMat);
   const trail = new THREE.Mesh(trailGeo, trailMat);
@@ -539,7 +748,13 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const trailHist: V2[] = [];
   let trailFade = 0;
   // the aim guide: a few dots along the first moments of the launch
-  const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
+  const dotMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    toneMapped: false,
+  });
   api.noOutline(dotMat);
   const dots = Array.from({ length: 7 }, () => {
     const d = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), dotMat);
@@ -547,16 +762,70 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     root.add(d);
     return d;
   });
+  // a little note rises from a cup when it chimes, in its band's colour, so the courtyard orchestra reads with the
+  // sound off (drawn as a path, not a font glyph)
+  const noteCanvas = document.createElement("canvas");
+  noteCanvas.width = noteCanvas.height = 64;
+  const ng = noteCanvas.getContext("2d")!;
+  const drawNote = (style: string, grow: number) => {
+    ng.fillStyle = style;
+    ng.strokeStyle = style;
+    ng.lineCap = "round";
+    ng.lineJoin = "round";
+    ng.lineWidth = 6 + grow * 2;
+    ng.beginPath();
+    ng.ellipse(23, 47, 11 + grow, 8 + grow, -0.45, 0, Math.PI * 2);
+    ng.fill();
+    ng.beginPath();
+    ng.moveTo(33, 44);
+    ng.lineTo(33, 9);
+    ng.quadraticCurveTo(51, 15, 47, 31);
+    ng.stroke();
+  };
+  drawNote("#3b2a1e", 3);
+  drawNote("#ffffff", 0);
+  const noteTex = track(new THREE.CanvasTexture(noteCanvas));
+  noteTex.colorSpace = THREE.SRGBColorSpace;
+  const notes = Array.from({ length: 9 }, () => {
+    const m = track(
+      new THREE.SpriteMaterial({
+        map: noteTex,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      })
+    );
+    api.noOutline(m);
+    const sp = new THREE.Sprite(m);
+    sp.visible = false;
+    root.add(sp);
+    return { sp, m, age: -1, from: new THREE.Vector3(), drift: 0 };
+  });
+  let nextNote = 0;
+
   // a soft shadow under the glider so its height reads
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x2b3b1c, transparent: true, opacity: 0.2, depthWrite: false });
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x2b3b1c,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false,
+  });
   api.noOutline(shadowMat);
-  const gliderShadow = new THREE.Mesh(new THREE.CircleGeometry(0.25, 20).rotateX(-Math.PI / 2), shadowMat);
+  const gliderShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.25, 20).rotateX(-Math.PI / 2),
+    shadowMat
+  );
   root.add(gliderShadow);
 
   api.stylize(root);
   root.traverse(o => {
     const m = o as THREE.Mesh;
-    if (m.isMesh && m.material !== shadowMat && m.material !== dotMat && m.material !== glowMat) {
+    if (
+      m.isMesh &&
+      m.material !== shadowMat &&
+      m.material !== dotMat &&
+      m.material !== glowMat
+    ) {
       m.castShadow = true;
       m.receiveShadow = true;
     }
@@ -578,7 +847,10 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const q = new THREE.Quaternion();
   const qPitch = new THREE.Quaternion();
   const qBank = new THREE.Quaternion();
-  const baseYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+  const baseYaw = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    -Math.PI / 2
+  );
 
   function setGliderShape(open: number) {
     const span = 0.1 + 0.24 * open;
@@ -593,7 +865,18 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   }
 
   /** `small` (1 and up): how much to enlarge the glider and its aim guide when the course is drawn small (a phone) */
-  function sync(world: WorldState, dt: number, elapsed: number, aim: AimView, opts: { gliderHidden?: boolean; fan: FanSetting; showGlow: boolean; small?: number }) {
+  function sync(
+    world: WorldState,
+    dt: number,
+    elapsed: number,
+    aim: AimView,
+    opts: {
+      gliderHidden?: boolean;
+      fan: FanSetting;
+      showGlow: boolean;
+      small?: number;
+    }
+  ) {
     readScale += ((opts.small ?? 1) - readScale) * Math.min(1, dt * 4);
     // fan: blades spin, the head leans to its setting
     fanTarget = FAN_ANGLE[opts.fan];
@@ -629,7 +912,11 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
         const bx = cl.base[k];
         const by = cl.base[k + 1];
         const hang = (cl.h / 2 - by) / cl.h; // 0 at the pegs, 1 at the hem
-        const breeze = (api.reduceMotion ? 0.3 : 1) * Math.sin(elapsed * 1.7 + cl.phase + bx * 2) * 0.04 * hang;
+        const breeze =
+          (api.reduceMotion ? 0.3 : 1) *
+          Math.sin(elapsed * 1.7 + cl.phase + bx * 2) *
+          0.04 *
+          hang;
         const push = (st2?.push ?? 0) * hang * 0.9;
         arr[k + 2] = cl.base[k + 2] + breeze + push * 0.6;
         arr[k] = bx + push * 0.25 * Math.sin(by * 3);
@@ -642,7 +929,12 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
       for (let k = 0; k < arr.length; k += 3) {
         const by = cl.base[k + 1];
         const hang = (cl.h / 2 - by) / cl.h;
-        arr[k + 2] = cl.base[k + 2] + (api.reduceMotion ? 0.3 : 1) * Math.sin(elapsed * 1.3 + cl.phase + cl.base[k] * 3) * 0.05 * hang;
+        arr[k + 2] =
+          cl.base[k + 2] +
+          (api.reduceMotion ? 0.3 : 1) *
+            Math.sin(elapsed * 1.3 + cl.phase + cl.base[k] * 3) *
+            0.05 *
+            hang;
       }
       p.needsUpdate = true;
     });
@@ -652,39 +944,79 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
       c.holder.position.copy(toWorld(pos.x, pos.y));
       // swing in the plane: sim angle about the depth axis; mirrored on screen
       c.holder.rotation.x = world.cups[i].angle;
-      const s = (cup.anchor.x - course.line.a.x) / (course.line.b.x - course.line.a.x);
+      const s =
+        (cup.anchor.x - course.line.a.x) / (course.line.b.x - course.line.a.x);
       const anchor = linePoint(course, s, world.lineSag);
       const a = toWorld(anchor.x, anchor.y);
       const b = toWorld(pos.x, pos.y + cup.radius);
       c.string.position.copy(a).lerp(b, 0.5);
       c.string.scale.y = Math.max(0.01, a.distanceTo(b));
-      c.string.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      c.string.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        b.clone().sub(a).normalize()
+      );
       c.ring = Math.max(0, c.ring - dt * 3);
       const wobble = c.ring * Math.sin(elapsed * 60) * 0.06;
       c.cup.rotation.y = wobble;
     });
 
+    // the notes drift up and away
+    for (const n of notes) {
+      if (n.age < 0) continue;
+      n.age += dt;
+      const k = n.age / 1.4;
+      if (k >= 1) {
+        n.age = -1;
+        n.sp.visible = false;
+        continue;
+      }
+      n.sp.position.set(
+        n.from.x,
+        n.from.y + 0.25 + k * 0.9,
+        n.from.z + n.drift * k + Math.sin(k * 7) * 0.05
+      );
+      n.sp.scale.setScalar(0.32 * Math.min(1, 0.45 + k * 4) * readScale);
+      n.m.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    }
+
     // glider
-    const hidden = opts.gliderHidden || (world.phase === "done" && world.outcome === "caught");
+    const hidden =
+      opts.gliderHidden ||
+      (world.phase === "done" && world.outcome === "caught");
     glider.visible = !hidden;
     gliderShadow.visible = !hidden;
     let gp: V2 = world.p;
     if (world.phase === "ready") {
-      gp = aim ? { x: course.launch.x - aim.pull.x, y: course.launch.y - aim.pull.y } : course.launch;
+      gp = aim
+        ? { x: course.launch.x - aim.pull.x, y: course.launch.y - aim.pull.y }
+        : course.launch;
     }
     glider.position.copy(toWorld(gp.x, gp.y));
-    const angle = world.phase === "ready" ? (aim ? Math.atan2(aim.pull.y, aim.pull.x) : 0.25) : world.angle;
+    const angle =
+      world.phase === "ready"
+        ? aim
+          ? Math.atan2(aim.pull.y, aim.pull.x)
+          : 0.25
+        : world.angle;
     // nose along the sim direction (mirrored), banked toward the camera so the wings read
     const nose = dirWorld(Math.cos(angle), Math.sin(angle)).normalize();
     q.setFromUnitVectors(new THREE.Vector3(1, 0, 0), nose);
-    const bank = world.phase === "flying" ? -0.8 + Math.sin(elapsed * 2.1) * 0.06 + (world.tumble > 0 ? Math.sin(elapsed * 30) * 0.5 : 0) : -0.55;
+    const bank =
+      world.phase === "flying"
+        ? -0.8 +
+          Math.sin(elapsed * 2.1) * 0.06 +
+          (world.tumble > 0 ? Math.sin(elapsed * 30) * 0.5 : 0)
+        : -0.55;
     qBank.setFromAxisAngle(new THREE.Vector3(1, 0, 0), bank);
     qPitch.copy(q).multiply(qBank);
     glider.quaternion.copy(qPitch);
     void baseYaw;
     setGliderShape(world.phase === "ready" ? 0.2 : world.wing);
     // the bell swings under it and shivers when it rings
-    const ringShake = world.bellEnergy > 0.2 ? Math.sin(elapsed * 70) * world.bellEnergy * 0.5 : 0;
+    const ringShake =
+      world.bellEnergy > 0.2
+        ? Math.sin(elapsed * 70) * world.bellEnergy * 0.5
+        : 0;
     bellHolder.rotation.z = Math.sin(elapsed * 6) * 0.2 + ringShake;
     // the trail: where it has just been, thin and faint at the old end
     if (world.phase === "flying" && !hidden) {
@@ -728,11 +1060,19 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
 
     // aim: the elastic stretches to the glider's tail, the dial follows, dots show where it sets off
     if (world.phase === "ready" && aim && aim.tension > 0) {
-      bandPull = toWorld(gp.x - Math.cos(angle) * 0.25, gp.y - Math.sin(angle) * 0.25);
+      bandPull = toWorld(
+        gp.x - Math.cos(angle) * 0.25,
+        gp.y - Math.sin(angle) * 0.25
+      );
       updateBand(band, bandPull);
       if (band2.visible) updateBand(band2, bandPull, 0.05);
       // on a small view the guide reaches a little further and its dots are bigger, so the aim still reads
-      const arc = previewArc(course, aim.pull, 0.32 + (readScale - 1) * 0.22, dots.length);
+      const arc = previewArc(
+        course,
+        aim.pull,
+        0.32 + (readScale - 1) * 0.22,
+        dots.length
+      );
       dots.forEach((d, i) => {
         const p = arc[i];
         d.visible = Boolean(p) && i > 0;
@@ -749,15 +1089,26 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
       }
       dots.forEach(d => (d.visible = false));
     }
-    if (world.phase === "ready" && aim && aim.tension > 0) band.userData.rest = false;
+    if (world.phase === "ready" && aim && aim.tension > 0)
+      band.userData.rest = false;
     crank.rotation.x += dt * 0.0;
 
     // the target glows softly until it has been hit once
-    glowMat.opacity = opts.showGlow ? 0.35 + Math.sin(elapsed * 3) * 0.15 : Math.max(0, glowMat.opacity - dt);
+    glowMat.opacity = opts.showGlow
+      ? 0.35 + Math.sin(elapsed * 3) * 0.15
+      : Math.max(0, glowMat.opacity - dt);
   }
 
   function ringCup(i: number) {
-    if (cups[i]) cups[i].ring = 1;
+    const c = cups[i];
+    if (!c) return;
+    c.ring = 1;
+    const n = notes[nextNote++ % notes.length];
+    n.age = 0;
+    n.from.copy(c.holder.position);
+    n.drift = (i - 1) * 0.12 + (Math.random() - 0.5) * 0.1;
+    n.m.color.setHex(cupColors[i]);
+    n.sp.visible = true;
   }
 
   let pop = 1;
@@ -813,11 +1164,21 @@ function xz(v: THREE.Vector3): [number, number] {
 export function gliderMesh(material: THREE.Material) {
   const geo = new THREE.BufferGeometry();
   const verts = new Float32Array([
-    0.34, 0, 0, // 0 nose
-    -0.28, 0.0, 0, // 1 tail centre
-    -0.28, 0.06, -0.2, // 2 left tip
-    -0.28, 0.06, 0.2, // 3 right tip
-    -0.2, -0.07, 0, // 4 keel
+    0.34,
+    0,
+    0, // 0 nose
+    -0.28,
+    0.0,
+    0, // 1 tail centre
+    -0.28,
+    0.06,
+    -0.2, // 2 left tip
+    -0.28,
+    0.06,
+    0.2, // 3 right tip
+    -0.2,
+    -0.07,
+    0, // 4 keel
   ]);
   geo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
   geo.setIndex([0, 2, 1, 0, 1, 3, 0, 4, 1]);
@@ -830,10 +1191,19 @@ export function gliderMesh(material: THREE.Material) {
 /** A little brass bicycle bell: dome, rim and lever. */
 export function bellMesh(material: THREE.Material, scale = 1) {
   const g = new THREE.Group();
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), material);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.01, 6, 16), material);
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    material
+  );
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.058, 0.01, 6, 16),
+    material
+  );
   rim.rotation.x = Math.PI / 2;
-  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.016), material);
+  const lever = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.012, 0.016),
+    material
+  );
   lever.position.set(0.05, 0.015, 0);
   g.add(dome, rim, lever);
   g.scale.setScalar(scale);

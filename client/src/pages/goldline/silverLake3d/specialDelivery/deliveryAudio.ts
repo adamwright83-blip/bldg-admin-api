@@ -14,11 +14,19 @@ export type DeliveryAudio = ReturnType<typeof createDeliveryAudio>;
 
 export function createDeliveryAudio() {
   const Ctx: typeof AudioContext | undefined =
-    typeof window === "undefined" ? undefined : window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    typeof window === "undefined"
+      ? undefined
+      : (window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext);
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
   let noiseBuf: AudioBuffer | null = null;
-  let flutter: { src: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
+  let flutter: {
+    src: AudioBufferSourceNode;
+    gain: GainNode;
+    filter: BiquadFilterNode;
+  } | null = null;
   let hum: { osc: OscillatorNode; gain: GainNode } | null = null;
   let disposed = false;
 
@@ -46,7 +54,18 @@ export function createDeliveryAudio() {
     return ctx;
   }
 
-  function tone(freq: number, at: number, opts: { type?: OscillatorType; gain: number; attack?: number; decay: number; to?: number; detune?: number }) {
+  function tone(
+    freq: number,
+    at: number,
+    opts: {
+      type?: OscillatorType;
+      gain: number;
+      attack?: number;
+      decay: number;
+      to?: number;
+      detune?: number;
+    }
+  ) {
     const c = ctx!;
     // a bell's high partials can land above what the device can play: those are simply dropped
     const top = c.sampleRate / 2 - 200;
@@ -54,18 +73,36 @@ export function createDeliveryAudio() {
     const o = c.createOscillator();
     o.type = opts.type ?? "sine";
     o.frequency.setValueAtTime(freq, at);
-    if (opts.to) o.frequency.exponentialRampToValueAtTime(Math.min(opts.to, top), at + opts.decay);
+    if (opts.to)
+      o.frequency.exponentialRampToValueAtTime(
+        Math.min(opts.to, top),
+        at + opts.decay
+      );
     if (opts.detune) o.detune.value = opts.detune;
     const g = c.createGain();
     g.gain.setValueAtTime(0, at);
     g.gain.linearRampToValueAtTime(opts.gain, at + (opts.attack ?? 0.004));
-    g.gain.exponentialRampToValueAtTime(0.0001, at + (opts.attack ?? 0.004) + opts.decay);
+    g.gain.exponentialRampToValueAtTime(
+      0.0001,
+      at + (opts.attack ?? 0.004) + opts.decay
+    );
     o.connect(g).connect(master!);
     o.start(at);
     o.stop(at + (opts.attack ?? 0.004) + opts.decay + 0.05);
   }
 
-  function noise(at: number, opts: { gain: number; dur: number; type?: BiquadFilterType; freq: number; q?: number; to?: number; attack?: number }) {
+  function noise(
+    at: number,
+    opts: {
+      gain: number;
+      dur: number;
+      type?: BiquadFilterType;
+      freq: number;
+      q?: number;
+      to?: number;
+      attack?: number;
+    }
+  ) {
     const c = ctx!;
     const src = c.createBufferSource();
     src.buffer = noiseBuf;
@@ -74,7 +111,11 @@ export function createDeliveryAudio() {
     f.type = opts.type ?? "bandpass";
     const top = c.sampleRate / 2 - 200;
     f.frequency.setValueAtTime(Math.min(opts.freq, top), at);
-    if (opts.to) f.frequency.exponentialRampToValueAtTime(Math.min(opts.to, top), at + opts.dur);
+    if (opts.to)
+      f.frequency.exponentialRampToValueAtTime(
+        Math.min(opts.to, top),
+        at + opts.dur
+      );
     f.Q.value = opts.q ?? 1;
     const g = c.createGain();
     g.gain.setValueAtTime(0, at);
@@ -95,7 +136,12 @@ export function createDeliveryAudio() {
       [13.34, 0.06],
     ];
     for (const [ratio, amp] of partials) {
-      tone(base * ratio, at, { gain: gain * amp, attack: 0.002, decay: length / (1 + ratio * 0.35), detune: (ratio - 1) * 3 });
+      tone(base * ratio, at, {
+        gain: gain * amp,
+        attack: 0.002,
+        decay: length / (1 + ratio * 0.35),
+        detune: (ratio - 1) * 3,
+      });
     }
   }
 
@@ -109,7 +155,12 @@ export function createDeliveryAudio() {
       if (!c) return;
       const at = c.currentTime;
       // a rubbery creak, higher as it tightens
-      tone(90 + tension * 140, at, { type: "sawtooth", gain: 0.025 + tension * 0.03, attack: 0.01, decay: 0.09 });
+      tone(90 + tension * 140, at, {
+        type: "sawtooth",
+        gain: 0.025 + tension * 0.03,
+        attack: 0.01,
+        decay: 0.09,
+      });
       noise(at, { gain: 0.015, dur: 0.07, freq: 900 + tension * 1400, q: 6 });
     },
     launch(power: number) {
@@ -117,14 +168,30 @@ export function createDeliveryAudio() {
       if (!c) return;
       const at = c.currentTime;
       // the elastic snaps, the paper goes
-      tone(210 + power * 90, at, { type: "triangle", gain: 0.22, decay: 0.22, to: 60 });
+      tone(210 + power * 90, at, {
+        type: "triangle",
+        gain: 0.22,
+        decay: 0.22,
+        to: 60,
+      });
       tone(420, at, { type: "sine", gain: 0.06, decay: 0.08, to: 160 });
-      noise(at + 0.01, { gain: 0.12 + power * 0.1, dur: 0.45, freq: 700, to: 3200, q: 0.8 });
+      noise(at + 0.01, {
+        gain: 0.12 + power * 0.1,
+        dur: 0.45,
+        freq: 700,
+        to: 3200,
+        q: 0.8,
+      });
     },
     wings(open: boolean) {
       const c = ensure();
       if (!c) return;
-      noise(c.currentTime, { gain: open ? 0.06 : 0.04, dur: open ? 0.09 : 0.06, type: "highpass", freq: open ? 2400 : 3400 });
+      noise(c.currentTime, {
+        gain: open ? 0.06 : 0.04,
+        dur: open ? 0.09 : 0.06,
+        type: "highpass",
+        freq: open ? 2400 : 3400,
+      });
     },
     /** paper fluttering in the fan's updraft, continuous; level 0 stops it */
     flutter(level: number) {
@@ -154,7 +221,8 @@ export function createDeliveryAudio() {
         lfo.start();
         flutter = { src, gain, filter };
       }
-      if (flutter) flutter.gain.gain.setTargetAtTime(level * 0.09, c.currentTime, 0.05);
+      if (flutter)
+        flutter.gain.gain.setTargetAtTime(level * 0.09, c.currentTime, 0.05);
     },
     fanHum(on: boolean) {
       const c = ensure();
@@ -172,7 +240,8 @@ export function createDeliveryAudio() {
         osc.start();
         hum = { osc, gain };
       }
-      if (hum) hum.gain.gain.setTargetAtTime(on ? 0.018 : 0, c.currentTime, 0.3);
+      if (hum)
+        hum.gain.gain.setTargetAtTime(on ? 0.018 : 0, c.currentTime, 0.3);
     },
     /** the little bell on the glider, jostled */
     jingle(strength: number) {
@@ -180,7 +249,8 @@ export function createDeliveryAudio() {
       if (!c) return;
       const at = c.currentTime;
       bellVoice(at, 2350 + Math.random() * 120, 0.05 + strength * 0.09, 0.45);
-      if (strength > 0.5) bellVoice(at + 0.07, 2480, 0.04 + strength * 0.05, 0.3);
+      if (strength > 0.5)
+        bellVoice(at + 0.07, 2480, 0.04 + strength * 0.05, 0.3);
     },
     cup(i: number, strength = 1) {
       const c = ensure();
@@ -190,25 +260,51 @@ export function createDeliveryAudio() {
       // china: a clear note with a glassy overtone and a tiny click
       tone(f, at, { gain: 0.16 * strength, attack: 0.002, decay: 1.4 });
       tone(f * 2.01, at, { gain: 0.05 * strength, attack: 0.002, decay: 0.6 });
-      tone(f * 3.98, at, { gain: 0.025 * strength, attack: 0.001, decay: 0.25 });
-      noise(at, { gain: 0.04 * strength, dur: 0.03, type: "highpass", freq: 5000 });
+      tone(f * 3.98, at, {
+        gain: 0.025 * strength,
+        attack: 0.001,
+        decay: 0.25,
+      });
+      noise(at, {
+        gain: 0.04 * strength,
+        dur: 0.03,
+        type: "highpass",
+        freq: 5000,
+      });
     },
     rope(strength: number) {
       const c = ensure();
       if (!c) return;
       const at = c.currentTime;
-      tone(118, at, { type: "triangle", gain: 0.08 + strength * 0.04, decay: 0.35, to: 82 });
+      tone(118, at, {
+        type: "triangle",
+        gain: 0.08 + strength * 0.04,
+        decay: 0.35,
+        to: 82,
+      });
       noise(at, { gain: 0.03, dur: 0.12, freq: 600, q: 3 });
     },
     skim(on: boolean) {
       const c = ensure();
       if (!c || !on) return;
-      noise(c.currentTime, { gain: 0.05, dur: 0.5, freq: 2600, q: 0.7, to: 1900 });
+      noise(c.currentTime, {
+        gain: 0.05,
+        dur: 0.5,
+        freq: 2600,
+        q: 0.7,
+        to: 1900,
+      });
     },
     cloth(strength: number) {
       const c = ensure();
       if (!c) return;
-      noise(c.currentTime, { gain: 0.07 + strength * 0.03, dur: 0.22, type: "lowpass", freq: 1500, to: 500 });
+      noise(c.currentTime, {
+        gain: 0.07 + strength * 0.03,
+        dur: 0.22,
+        type: "lowpass",
+        freq: 1500,
+        to: 500,
+      });
     },
     clonk() {
       const c = ensure();
@@ -229,13 +325,23 @@ export function createDeliveryAudio() {
       const c = ensure();
       if (!c) return;
       const at = c.currentTime;
-      tone(140, at, { gain: 0.08 + Math.min(speed, 8) * 0.012, decay: 0.12, to: 70 });
+      tone(140, at, {
+        gain: 0.08 + Math.min(speed, 8) * 0.012,
+        decay: 0.12,
+        to: 70,
+      });
       noise(at, { gain: 0.06, dur: 0.1, type: "lowpass", freq: 1800 });
     },
     whoosh() {
       const c = ensure();
       if (!c) return;
-      noise(c.currentTime, { gain: 0.12, dur: 0.25, freq: 500, to: 2600, q: 1.4 });
+      noise(c.currentTime, {
+        gain: 0.12,
+        dur: 0.25,
+        freq: 500,
+        to: 2600,
+        q: 1.4,
+      });
     },
     splash() {
       const c = ensure();
@@ -253,7 +359,10 @@ export function createDeliveryAudio() {
       o.type = "sawtooth";
       const base = kind === "sleepy" ? 420 : 520;
       o.frequency.setValueAtTime(base, at);
-      o.frequency.linearRampToValueAtTime(base * (kind === "mrrp" ? 1.25 : 1.7), at + len * 0.35);
+      o.frequency.linearRampToValueAtTime(
+        base * (kind === "mrrp" ? 1.25 : 1.7),
+        at + len * 0.35
+      );
       o.frequency.linearRampToValueAtTime(base * 0.85, at + len);
       const f1 = c.createBiquadFilter();
       f1.type = "bandpass";
@@ -279,7 +388,12 @@ export function createDeliveryAudio() {
     pat() {
       const c = ensure();
       if (!c) return;
-      noise(c.currentTime, { gain: 0.08, dur: 0.06, type: "lowpass", freq: 900 });
+      noise(c.currentTime, {
+        gain: 0.08,
+        dur: 0.06,
+        type: "lowpass",
+        freq: 900,
+      });
     },
     whap() {
       const c = ensure();
@@ -306,14 +420,26 @@ export function createDeliveryAudio() {
       const c = ensure();
       if (!c) return;
       const at = c.currentTime;
-      for (let i = 0; i < 6; i++) noise(at + i * 0.07, { gain: 0.06, dur: 0.06, type: "lowpass", freq: 700 });
+      for (let i = 0; i < 6; i++)
+        noise(at + i * 0.07, {
+          gain: 0.06,
+          dur: 0.06,
+          type: "lowpass",
+          freq: 700,
+        });
       tone(3600, at + 0.1, { gain: 0.04, decay: 0.08, to: 4400 });
       tone(4100, at + 0.28, { gain: 0.035, decay: 0.07, to: 3300 });
     },
     flop() {
       const c = ensure();
       if (!c) return;
-      noise(c.currentTime, { gain: 0.09, dur: 0.14, type: "lowpass", freq: 1100, to: 300 });
+      noise(c.currentTime, {
+        gain: 0.09,
+        dur: 0.14,
+        type: "lowpass",
+        freq: 1100,
+        to: 300,
+      });
     },
     /** the little ding Rook makes testing the bell: already far too loud for its size */
     testDing() {
@@ -358,7 +484,9 @@ export function createDeliveryAudio() {
       const c = ensure();
       if (!c) return;
       const at = c.currentTime;
-      [65, 69, 72, 77].forEach((m, k) => tone(midiHz(m), at + k * 0.03, { gain: 0.09, decay: 2.4 }));
+      [65, 69, 72, 77].forEach((m, k) =>
+        tone(midiHz(m), at + k * 0.03, { gain: 0.09, decay: 2.4 })
+      );
     },
     dispose() {
       disposed = true;

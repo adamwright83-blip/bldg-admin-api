@@ -1,5 +1,8 @@
 import { LoaderUtils, TextureLoader, type LoadingManager } from "three";
-import { GLTFLoader as BaseGLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
+import {
+  GLTFLoader as BaseGLTFLoader,
+  type GLTF,
+} from "three/addons/loaders/GLTFLoader.js";
 
 /**
  * The preview build's GLTFLoader (vite.special-delivery-preview.config.ts aliases it in for `vite build` only; the
@@ -30,10 +33,17 @@ export class GLTFLoader extends BaseGLTFLoader {
     });
   }
 
-  load(url: string, onLoad: (gltf: GLTF) => void, onProgress?: (event: ProgressEvent) => void, onError?: (err: unknown) => void): void {
-    if (!/\.glb$/.test(url)) return super.load(url, onLoad, onProgress, onError);
+  load(
+    url: string,
+    onLoad: (gltf: GLTF) => void,
+    onProgress?: (event: ProgressEvent) => void,
+    onError?: (err: unknown) => void
+  ): void {
+    if (!/\.glb$/.test(url))
+      return super.load(url, onLoad, onProgress, onError);
     const base = LoaderUtils.extractUrlBase(url);
-    const fail = (err: unknown) => (onError ? onError(err) : console.error(err));
+    const fail = (err: unknown) =>
+      onError ? onError(err) : console.error(err);
     fetch(`${url}.parts.json`)
       .then(r => {
         if (!r.ok) throw new Error(`${url}.parts.json: ${r.status}`);
@@ -46,9 +56,18 @@ export class GLTFLoader extends BaseGLTFLoader {
           const r = await fetch(base + part);
           if (!r.ok) throw new Error(`${part}: ${r.status}`);
           at += decodeInto(whole, at, (await r.json()) as string);
-          onProgress?.(new ProgressEvent("progress", { lengthComputable: true, loaded: at, total: manifest.size }));
+          onProgress?.(
+            new ProgressEvent("progress", {
+              lengthComputable: true,
+              loaded: at,
+              total: manifest.size,
+            })
+          );
         }
-        if (at !== manifest.size) throw new Error(`${url} parts are ${at} bytes, expected ${manifest.size}`);
+        if (at !== manifest.size)
+          throw new Error(
+            `${url} parts are ${at} bytes, expected ${manifest.size}`
+          );
         this.parse(whole.buffer, base, onLoad, fail);
       })
       .catch(fail);

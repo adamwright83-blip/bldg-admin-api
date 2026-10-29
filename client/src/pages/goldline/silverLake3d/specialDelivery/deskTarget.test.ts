@@ -21,17 +21,33 @@ describe("Rook's desk shows one real situation", () => {
       target("blocked", { communicationState: "consent_blocked" }),
     ];
     expect(pickDeskTarget(targets, null)).toBeNull();
-    expect(pickDeskTarget([...targets, target("ok")], null)?.customerId).toBe("ok");
+    expect(pickDeskTarget([...targets, target("ok")], null)?.customerId).toBe(
+      "ok"
+    );
   });
 
   it("keeps the letter saved at the desk first, then one already under way, then the mission's next", () => {
-    const targets = [target("first"), target("underway", { silverLakeStatus: { message: "compose_handoff_opened" } }), target("saved")];
-    expect(pickDeskTarget(targets, { customerId: "saved" })?.customerId).toBe("saved");
+    const targets = [
+      target("first"),
+      target("underway", {
+        silverLakeStatus: { message: "compose_handoff_opened" },
+      }),
+      target("saved"),
+    ];
+    expect(pickDeskTarget(targets, { customerId: "saved" })?.customerId).toBe(
+      "saved"
+    );
     expect(pickDeskTarget(targets, null)?.customerId).toBe("underway");
-    expect(pickDeskTarget([target("first"), target("second")], null)?.customerId).toBe("first");
+    expect(
+      pickDeskTarget([target("first"), target("second")], null)?.customerId
+    ).toBe("first");
   });
 
   it("does not bring back a saved letter for someone who can no longer be contacted", () => {
-    expect(pickDeskTarget([target("saved", { hasConsent: false }), target("next")], { customerId: "saved" })?.customerId).toBe("next");
+    expect(
+      pickDeskTarget([target("saved", { hasConsent: false }), target("next")], {
+        customerId: "saved",
+      })?.customerId
+    ).toBe("next");
   });
 });

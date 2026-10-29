@@ -18,18 +18,41 @@ export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   root: path.resolve(import.meta.dirname, "preview/special-delivery"),
   publicDir: path.resolve(import.meta.dirname, "client/public"),
-  cacheDir: path.resolve(import.meta.dirname, "tmp/special-delivery-preview-vite-cache"),
+  cacheDir: path.resolve(
+    import.meta.dirname,
+    "tmp/special-delivery-preview-vite-cache"
+  ),
   base: "./",
   resolve: {
     alias: [
       // the artifact build only: textures through <img> (the artifact CSP blocks blob: fetches) and the courtyard
       // reassembled from parts (one artifact file may be at most 15 MB)
       ...(command === "build"
-        ? [{ find: /^three\/examples\/jsm\/loaders\/GLTFLoader\.js$/, replacement: path.resolve(import.meta.dirname, "preview/special-delivery/artifactGltfLoader.ts") }]
+        ? [
+            {
+              find: /^three\/examples\/jsm\/loaders\/GLTFLoader\.js$/,
+              replacement: path.resolve(
+                import.meta.dirname,
+                "preview/special-delivery/artifactGltfLoader.ts"
+              ),
+            },
+          ]
         : []),
-      { find: /^@\/lib\/trpc$/, replacement: path.resolve(import.meta.dirname, "preview/special-delivery/trpcStub.ts") },
-      { find: "@shared", replacement: path.resolve(import.meta.dirname, "shared") },
-      { find: "@", replacement: path.resolve(import.meta.dirname, "client/src") },
+      {
+        find: /^@\/lib\/trpc$/,
+        replacement: path.resolve(
+          import.meta.dirname,
+          "preview/special-delivery/trpcStub.ts"
+        ),
+      },
+      {
+        find: "@shared",
+        replacement: path.resolve(import.meta.dirname, "shared"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(import.meta.dirname, "client/src"),
+      },
     ],
   },
   server: {
@@ -46,7 +69,10 @@ export default defineConfig(({ command }) => ({
     },
   },
   build: {
-    outDir: path.resolve(import.meta.dirname, "tmp/special-delivery-preview-build"),
+    outDir: path.resolve(
+      import.meta.dirname,
+      "tmp/special-delivery-preview-build"
+    ),
     emptyOutDir: true,
     chunkSizeWarningLimit: 2000,
   },
