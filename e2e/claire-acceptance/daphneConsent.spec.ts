@@ -31,7 +31,7 @@ test("Claire Desk: Daphne presentation consent is off by default, separately aff
     const pageErrors: string[] = [];
     page.on("pageerror", e => pageErrors.push(e.message));
     await login(page, owner);
-    await page.goto("/claire", { waitUntil: "domcontentloaded" });
+    await page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
     const card = page.getByTestId("daphne-presentation-consent");
     const adaptation = card.getByTestId("consent-adaptation");
     const experimentation = card.getByTestId("consent-experimentation");

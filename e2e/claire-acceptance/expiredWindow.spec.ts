@@ -102,7 +102,7 @@ test.describe("work whose execution window has passed", () => {
     const e = await eveningBusiness(browser, "Expired window: visible");
     try {
       const p = await e.publish([{ title: "Ordinary mission due today" }]);
-      await e.page.goto("/claire", { waitUntil: "domcontentloaded" });
+      await e.page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
       const runway = e.page.getByTestId("claire-desk-runway");
       await expect(runway).toContainText("Ordinary mission due today");
       await expect(runway).toContainText("Time passed — reschedule");
@@ -148,7 +148,7 @@ test.describe("work whose execution window has passed", () => {
     const e = await eveningBusiness(browser, "Expired window: reschedule");
     try {
       await e.publish([{ title: "Ordinary mission due today" }]);
-      await e.page.goto("/claire", { waitUntil: "domcontentloaded" });
+      await e.page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
       const item = panelItem(e.page, "Ordinary mission due today");
       await expect(item).toContainText("time passed — reschedule");
       const target = (await item.getByRole("combobox").locator("option").allTextContents())[0]!;
@@ -183,7 +183,7 @@ test.describe("work whose execution window has passed", () => {
         { title: "Meeting the operator set for 23:30", timeWindow: operatorTime("23:30") },
         { title: "Meeting the operator set for 18:00", timeWindow: operatorTime("18:00") },
       ]);
-      await e.page.goto("/claire", { waitUntil: "domcontentloaded" });
+      await e.page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
       const later = panelItem(e.page, "Meeting the operator set for 23:30");
       const passed = panelItem(e.page, "Meeting the operator set for 18:00");
       await expect(passed).toContainText("time passed — reschedule");
@@ -208,7 +208,7 @@ test.describe("work whose execution window has passed", () => {
         { title: "Win back lapsed customers (desk fixture)", objective, timeWindow: { window: "evening", time: "23:59", reason: "Desk acceptance fixture: an explicit time tonight.", sourceObservationId: "acceptance_fixture" } },
         { title: "Win back lapsed customers (no time)", objective },
       ]);
-      await e.page.goto("/claire", { waitUntil: "domcontentloaded" });
+      await e.page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
       const primary = e.page.getByTestId("claire-desk-primary-mission");
       await expect(primary).toContainText("Win back lapsed customers (desk fixture)");
       await expect(primary).toContainText("Needs your approval");

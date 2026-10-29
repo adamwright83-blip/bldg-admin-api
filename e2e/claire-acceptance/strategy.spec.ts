@@ -63,7 +63,7 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
     const pageErrors: string[] = [];
     page.on("pageerror", error => pageErrors.push(error.message));
     await login(page, owner);
-    await page.goto("/claire",{waitUntil:"domcontentloaded"});
+    await page.goto("/claire?desk=open",{waitUntil:"domcontentloaded"});
     const panel = page.getByTestId("claire-strategic-proposal");
     await expect(panel).toBeVisible();
     await panel
@@ -172,7 +172,7 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
       canonicalId: saved[0].id,
       approvedItemIds: state.approvedItemIds,
     });
-    await page.goto("/claire",{waitUntil:"domcontentloaded"});
+    await page.goto("/claire?desk=open",{waitUntil:"domcontentloaded"});
     const full = await fixture("full");
     await panel
       .getByRole("button", { name: "Approve plan", exact: true })
@@ -271,7 +271,7 @@ test("real authenticated Claire Desk decisions, consent reload, stale browser fe
       storageState: staleState,
     });
     const second = await tabContext.newPage();
-    await second.goto("/claire");
+    await second.goto("/claire?desk=open");
     await expect(second.getByTestId("claire-strategic-proposal")).toContainText(
       stale.items[0]!.title
     );

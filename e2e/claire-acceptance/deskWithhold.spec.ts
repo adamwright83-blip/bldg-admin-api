@@ -41,7 +41,7 @@ test("Claire Desk withholds the call sheet when the CleanCloud import failed", a
     const pageErrors: string[] = [];
     page.on("pageerror", error => pageErrors.push(error.message));
     await login(page, owner);
-    await page.goto("/claire", { waitUntil: "domcontentloaded" });
+    await page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
 
     const gate = page.getByRole("button", { name: "Sign in", exact: true });
     if (await gate.isVisible().catch(() => false)) {

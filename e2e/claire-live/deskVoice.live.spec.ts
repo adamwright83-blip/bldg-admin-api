@@ -36,7 +36,7 @@ test("real data: sales mission approval, OPEN COMMS voice turns, interruptions, 
   const shot = (path: string) => page.screenshot({ path, timeout: 20_000 }).catch(() => undefined);
   const login = await page.request.post("/api/auth/login", { data: { password: process.env.DESK_LIVE_ADMIN_PASSWORD } });
   expect(login.status()).toBe(200);
-  await page.goto("/claire", { waitUntil: "domcontentloaded" });
+  await page.goto("/claire?desk=open", { waitUntil: "domcontentloaded" });
 
   // The sales opportunity and the five-customer call sheet are visible at once.
   await expect(page.getByTestId("claire-desk-opportunity")).toContainText("lapsed Silver Lake customers");
