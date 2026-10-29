@@ -96,41 +96,6 @@
   transform: translate(-50%, 3px);
 }
 
-.sidewaysTip {
-  position: absolute;
-  left: 50%;
-  top: max(150px, calc(env(safe-area-inset-top) + 140px));
-  transform: translateX(-50%);
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: max-content;
-  max-width: calc(100% - 32px);
-  padding: 8px 8px 8px 14px;
-  border-radius: 14px;
-  border: 2.5px solid #5a3a24;
-  background: #fffaf0;
-  box-shadow: 0 3px 0 #5a3a24;
-  color: #3b2a1e;
-  font-weight: 800;
-  font-size: 14px;
-  line-height: 1.25;
-}
-
-.sidewaysTip button {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 2px solid #5a3a24;
-  background: #ffe7a8;
-  color: #3b2a1e;
-  font: inherit;
-  font-weight: 900;
-  cursor: pointer;
-}
-
 .envelopeChip {
   margin-left: auto;
   padding: 9px 15px;
@@ -145,6 +110,27 @@
 }
 
 /* Rook's speech: a storybook bubble that follows his head (created by the game, styled here) */
+/* the wings hint on the first flights of a visit: above the HUD, never in the way of a thumb */
+:global(.sd-hint) {
+  position: absolute;
+  left: 50%;
+  bottom: max(84px, calc(env(safe-area-inset-bottom) + 76px));
+  transform: translateX(-50%);
+  z-index: 5;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(59, 42, 30, 0.86);
+  color: #fffaf0;
+  font-family: "Nunito", "Baloo 2", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
 :global(.sd-bubble) {
   position: absolute;
   left: 0;
@@ -337,6 +323,22 @@
   font-size: 15px;
 }
 
+.sable blockquote + blockquote {
+  margin-top: 10px;
+}
+
+/* words that never left: a draft or an opened message, never quoted as "you said" */
+.sable blockquote.unsent {
+  padding-left: 10px;
+  border-left: 3px dashed #b9c2cf;
+  color: #4a5566;
+}
+
+.sable blockquote.reply {
+  padding-left: 10px;
+  border-left: 3px solid #5fa8a0;
+}
+
 .sable cite,
 .recallList cite {
   display: block;
@@ -452,8 +454,27 @@
   }
 }
 
+/* a touch screen: the courtyard's Hop button owns the bottom-right corner and the neighbours' roster sits above it,
+   so the way into the airmail goes beside Hop in the bottom row; there is no E key to show */
+@media (pointer: coarse) {
+  .stationPill,
+  .stationPrompt {
+    left: auto;
+    right: calc(20px + 76px + 12px);
+    bottom: max(38px, calc(env(safe-area-inset-bottom) + 30px));
+    transform: none;
+  }
+  .stationPrompt:active {
+    transform: translateY(3px);
+  }
+  .stationPrompt kbd {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :global(.sd-bubble) {
+  :global(.sd-bubble),
+  :global(.sd-hint) {
     transition: none;
   }
 }

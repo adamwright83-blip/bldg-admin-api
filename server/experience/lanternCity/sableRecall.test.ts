@@ -44,6 +44,39 @@ describe("Sable's recall from the existing records", () => {
   it("Sable quotes the promise from what was reported sent, and sees the reply", () => {
     const recall = buildSableRecall(recallEntriesFromRows(rows));
     expect(recall.promise?.quote).toBe("I'll follow up next week about a pickup.");
+    expect(recall.promise?.heard).toBe("reported");
     expect(recall.replyRecorded).toBe(true);
+  });
+
+  it("a saved message that was never opened or reported is only a draft: no promise is quoted from it", () => {
+    const recall = buildSableRecall(recallEntriesFromRows({ ...rows, handoffs: [], replies: [] }));
+    expect(recall.promise).toBeNull();
+    expect(recall.unsentPromise?.state).toBe("draft");
+    expect(recall.lastSent).toBeNull();
+  });
+
+  it("carries the reply service's reading of each reply, and its opt-out, without re-guessing it", () => {
+    const entries = recallEntriesFromRows({
+      ...rows,
+      replies: [
+        { id: "por_1", direction: "inbound", source: "operator_reported", replyText: "Maybe later", reportedAt: d("2026-10-24T09:00:00Z"), classification: "not_now", permissionEffect: "none", preparedFollowUpDraft: null },
+        { id: "por_2", direction: "inbound", source: "provider_webhook", replyText: "stop", reportedAt: d("2026-10-25T09:00:00Z"), classification: "opt_out", permissionEffect: "opted_out", preparedFollowUpDraft: null },
+        { id: "por_3", direction: "inbound", source: "operator_reported", replyText: "hmm", reportedAt: d("2026-10-26T09:00:00Z"), classification: "something_new", permissionEffect: "none", preparedFollowUpDraft: null },
+      ],
+    });
+    const replies = entries.filter(e => e.kind === "reply");
+    expect(replies.map(e => e.replyClass)).toEqual(["not_now", "opt_out", undefined]);
+    expect(replies.map(e => e.optedOut)).toEqual([false, true, false]);
+    expect(buildSableRecall(entries).optedOut).toBe(true);
+  });
+
+  it("a provider-receipted send carries the words it went out with, so a promise in it counts as heard", () => {
+    const withReceipt = recallEntriesFromRows({
+      ...rows,
+      handoffs: [],
+      messages: [{ ...rows.messages[0], status: "dispatched", externalMessageId: "SM123", dispatchedAt: d("2026-10-21T18:03:00Z") }],
+    });
+    expect(withReceipt.find(e => e.kind === "observed_sent")?.text).toBe("Hi Rae, I'll follow up next week about a pickup.");
+    expect(buildSableRecall(withReceipt).promise?.heard).toBe("observed");
   });
 });

@@ -8,7 +8,8 @@ import {
   type CourtyardObservation,
 } from "@shared/courtyardDiscoveries";
 import type { SilverLakeHandle } from "../silverLakeRuntime";
-import type { ControlMode, SpecialDeliveryController } from "./specialDelivery";
+import { mountSpecialDelivery, type ControlMode, type SpecialDeliveryController } from "./specialDelivery";
+import type { FanSetting } from "./deliveryPhysics";
 import { CorrespondenceDesk, type UnfinishedDeskDraft } from "./CorrespondenceDesk";
 import { pickDeskTarget } from "./deskTarget";
 import { useSpecialDeliveryFlag } from "./useSpecialDeliveryFlag";
@@ -24,6 +25,9 @@ import styles from "./special-delivery.module.css";
  */
 
 const LOCAL_KEY = (tenant: string) => `silverLake.courtyard.${tenant}`;
+// the course runs right to left on screen: "forward" leans toward Bella's balcony (left), "back" toward Rook (right)
+const FAN_ARROWS: Record<FanSetting, string> = { up: "↑", forward: "↖", back: "↗" };
+const FAN_WORDS: Record<FanSetting, string> = { up: "blowing straight up", forward: "leaning toward Bella", back: "leaning toward Rook" };
 
 function readLocal(tenant: string): CourtyardDiscoveries {
   try {
@@ -77,22 +81,7 @@ export default function SpecialDeliveryLayer(props: SpecialDeliveryLayerProps) {
   const [near, setNear] = useState(false);
   const [engaged, setEngaged] = useState(false);
   const [showcase, setShowcase] = useState(false);
-  // a phone held upright sees the course small; it gets one gentle tip, which stays dismissed on this device
-  const [portrait, setPortrait] = useState(() => typeof window !== "undefined" && window.matchMedia?.("(orientation: portrait)").matches === true);
-  const [sidewaysTipDismissed, setSidewaysTipDismissed] = useState(() => {
-    try {
-      return window.localStorage.getItem("silverLake.airmail.sidewaysTip") === "dismissed";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    const mq = window.matchMedia?.("(orientation: portrait)");
-    if (!mq) return;
-    const onChange = () => setPortrait(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const [fan, setFan] = useState<{ setting: FanSetting; unlocked: boolean } | null>(null);
   const [envelopeVisible, setEnvelopeVisible] = useState(false);
   const [deskOpen, setDeskOpen] = useState(false);
   const [offer, setOffer] = useState(false);
@@ -124,13 +113,13 @@ export default function SpecialDeliveryLayer(props: SpecialDeliveryLayerProps) {
   const observeRef = useRef(observe);
   observeRef.current = observe;
 
-  // mount the game once the courtyard is up and the flag is on; it is its own lazily loaded chunk
+  // mount the game once the courtyard is up and the flag is on. Its code is part of the Silver Lake 3D page (itself
+  // lazy, and the only place three.js may load); none of it runs while the flag is off
   useEffect(() => {
     if (!ready || !runtime || !enabled) return;
     let cancelled = false;
     let controller: SpecialDeliveryController | null = null;
-    void import("./specialDelivery").then(async ({ mountSpecialDelivery }) => {
-      if (cancelled) return;
+    void (async () => {
       const deepLinked = new URLSearchParams(window.location.search).has("customer");
       controller = await mountSpecialDelivery(runtime, {
         memory: memoryRef.current,
@@ -146,6 +135,7 @@ export default function SpecialDeliveryLayer(props: SpecialDeliveryLayerProps) {
             if (!v) setOffer(false);
           },
           onShowcase: v => !cancelled && setShowcase(v),
+          onFan: v => !cancelled && setFan(v),
           onEnvelope: v => !cancelled && setEnvelopeVisible(v),
           onOpenEnvelope: () => !cancelled && setOffer(true),
         },
@@ -156,7 +146,7 @@ export default function SpecialDeliveryLayer(props: SpecialDeliveryLayerProps) {
       }
       controllerRef.current = controller;
       setMounted(true);
-    });
+    })();
     return () => {
       cancelled = true;
       controller?.dispose();
@@ -227,30 +217,23 @@ export default function SpecialDeliveryLayer(props: SpecialDeliveryLayerProps) {
           >
             Wings: {controlMode === "hold" ? "hold" : "tap"}
           </button>
+          {fan ? (
+            <button
+              type="button"
+              className={styles.hudButton}
+              onClick={() => controllerRef.current?.turnFan()}
+              aria-label={`Turn the fan. Now ${FAN_WORDS[fan.setting]}${fan.unlocked ? "" : "; it turns after your first delivery"}.`}
+              title={fan.unlocked ? `Now ${FAN_WORDS[fan.setting]}` : "It turns after your first delivery"}
+              data-testid="airmail-fan"
+            >
+              Fan {FAN_ARROWS[fan.setting]}
+            </button>
+          ) : null}
           {envelopeVisible ? (
             <button type="button" className={styles.envelopeChip} onClick={() => setOffer(true)} data-testid="airmail-envelope">
               ✉ Your business
             </button>
           ) : null}
-        </div>
-      ) : null}
-      {engaged && portrait && !sidewaysTipDismissed && !deskOpen ? (
-        <div className={styles.sidewaysTip} role="note" data-testid="airmail-sideways-tip">
-          <span>Turn your phone sideways to see the whole courtyard.</span>
-          <button
-            type="button"
-            aria-label="Dismiss tip"
-            onClick={() => {
-              setSidewaysTipDismissed(true);
-              try {
-                window.localStorage.setItem("silverLake.airmail.sidewaysTip", "dismissed");
-              } catch {
-                /* shown again next time */
-              }
-            }}
-          >
-            ✕
-          </button>
         </div>
       ) : null}
       {engaged && offer && !deskOpen ? (

@@ -513,6 +513,7 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   const gliderGeo = gliderBody.geometry as THREE.BufferGeometry;
   // a cartoon-sized glider: big enough to read across the courtyard and on a phone
   const GLIDER_SCALE = 1.55;
+  let readScale = 1;
   // a soft paper-white trail of where it has just been, so its swoop and speed read at a glance
   const TRAIL = 26;
   const trailPos = new Float32Array(TRAIL * 2 * 3);
@@ -591,7 +592,9 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     gliderGeo.computeVertexNormals();
   }
 
-  function sync(world: WorldState, dt: number, elapsed: number, aim: AimView, opts: { gliderHidden?: boolean; fan: FanSetting; showGlow: boolean }) {
+  /** `small` (1 and up): how much to enlarge the glider and its aim guide when the course is drawn small (a phone) */
+  function sync(world: WorldState, dt: number, elapsed: number, aim: AimView, opts: { gliderHidden?: boolean; fan: FanSetting; showGlow: boolean; small?: number }) {
+    readScale += ((opts.small ?? 1) - readScale) * Math.min(1, dt * 4);
     // fan: blades spin, the head leans to its setting
     fanTarget = FAN_ANGLE[opts.fan];
     fanAngle += (fanTarget - fanAngle) * (1 - Math.exp(-dt * 6));
@@ -728,12 +731,13 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
       bandPull = toWorld(gp.x - Math.cos(angle) * 0.25, gp.y - Math.sin(angle) * 0.25);
       updateBand(band, bandPull);
       if (band2.visible) updateBand(band2, bandPull, 0.05);
-      const arc = previewArc(course, aim.pull, 0.32, dots.length);
+      // on a small view the guide reaches a little further and its dots are bigger, so the aim still reads
+      const arc = previewArc(course, aim.pull, 0.32 + (readScale - 1) * 0.22, dots.length);
       dots.forEach((d, i) => {
         const p = arc[i];
         d.visible = Boolean(p) && i > 0;
         if (p) d.position.copy(toWorld(p.x, p.y));
-        d.scale.setScalar(1 - i * 0.09);
+        d.scale.setScalar((1 - i * 0.09) * readScale);
       });
       dotMat.opacity = 0.35 + 0.55 * aim.tension;
       needle.rotation.x = -(angle - 0.6);
@@ -760,6 +764,9 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
   return {
     root,
     fanGroup: fan,
+    get readScale() {
+      return readScale;
+    },
     /** a fresh glider appears on the rail with a little pop */
     popGlider() {
       pop = 0;
@@ -767,7 +774,7 @@ export function buildDeliveryScene(api: CourtyardActivityApi, course: CourseDef)
     tickPop(dt: number) {
       pop = Math.min(1, pop + dt * 4);
       const k = pop < 1 ? 0.3 + 0.7 * pop + Math.sin(pop * Math.PI) * 0.25 : 1;
-      glider.scale.setScalar(k * GLIDER_SCALE);
+      glider.scale.setScalar(k * GLIDER_SCALE * readScale);
     },
     sync,
     ringCup,

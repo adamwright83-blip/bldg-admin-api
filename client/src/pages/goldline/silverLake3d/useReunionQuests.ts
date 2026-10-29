@@ -3,7 +3,6 @@ import { trpc } from "@/lib/trpc";
 import type { CozyProjectedTarget } from "@shared/cozyVillagerEvidence";
 import { projectReunionProgress, type ReunionEventKind } from "@shared/silverLakeReunionEvents";
 import {
-  REUNION_QUEST_TEMPLATES,
   assignReunionQuests,
   fillLine,
   hasRealDecision,
@@ -60,10 +59,8 @@ export function useReunionQuests(input: {
   territoryId: string;
   targets: readonly CozyProjectedTarget[];
   spots: readonly QuestSpot[];
-  /** neighbours busy elsewhere this visit (Rook's airmail has Bella and Cleo): their errands are not handed out */
-  excludeGivers?: readonly string[];
 }) {
-  const { enabled, synthetic, territoryId, targets, spots, excludeGivers } = input;
+  const { enabled, synthetic, territoryId, targets, spots } = input;
   const [chain, setChain] = useState<QuestAssignment[] | null>(null);
   // this visit's own progress; for real customers the server's events are merged in below
   const [localPasses, setLocalPasses] = useState<ReadonlySet<string>>(() => new Set());
@@ -88,13 +85,9 @@ export function useReunionQuests(input: {
 
   // the chain is assigned once per visit, from the targets as first projected; saved progress keeps its errand
   useEffect(() => {
-    if (enabled && progressReady && !chain && targets.length > 0 && spots.length > 0) {
-      const templates = excludeGivers?.length
-        ? REUNION_QUEST_TEMPLATES.filter(t => !excludeGivers.includes(t.giver.name))
-        : REUNION_QUEST_TEMPLATES;
-      setChain(assignReunionQuests(targets, passes, templates, server?.templateByCustomer));
-    }
-  }, [enabled, progressReady, chain, targets, spots, passes, server, excludeGivers]);
+    if (enabled && progressReady && !chain && targets.length > 0 && spots.length > 0)
+      setChain(assignReunionQuests(targets, passes, undefined, server?.templateByCustomer));
+  }, [enabled, progressReady, chain, targets, spots, passes, server]);
 
   const record = useCallback(
     (customerId: string, kind: ReunionEventKind) => {

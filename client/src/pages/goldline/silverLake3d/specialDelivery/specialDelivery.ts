@@ -53,6 +53,8 @@ export type SpecialDeliveryCallbacks = {
   onLine?(line: { who: "rook"; text: string } | null): void;
   /** the first-visit establishing look at the course is on screen (the page keeps its panels out of the way) */
   onShowcase?(on: boolean): void;
+  /** the fan's setting, and whether it can be turned yet (after the first delivery) */
+  onFan?(fan: { setting: FanSetting; unlocked: boolean }): void;
 };
 
 export type SpecialDeliveryController = {
@@ -62,6 +64,8 @@ export type SpecialDeliveryController = {
   setMemory(memory: CourtyardDiscoveries): void;
   setEnvelope(kind: EnvelopeKind): void;
   setControlMode(mode: ControlMode): void;
+  /** the same as tapping the fan (or F): turns it, once there has been a delivery */
+  turnFan(): void;
   /** keyboard and accessibility: a launch at an angle (deg) and a pull from 0..1 */
   aimBy(deltaAngleDeg: number, deltaPower: number): void;
   launchNow(): void;
@@ -72,8 +76,15 @@ export type SpecialDeliveryController = {
 const STATION_REACH = 3.4;
 /** the plaza's east lamp post (three.js x, z): it stands between the delivery camera and the course */
 const EAST_LAMP = { x: 8.9, z: 0 };
+/** the neighbours the airmail borrows for its course */
+const STAGED_CAST = new Set(["Bella", "Cleo"]);
+/** while the course is on screen: no neighbour stands in the flight plane, and Bella and Cleo are at the airmail */
+const courseHides = (p: THREE.Vector3, view: { name: string }) =>
+  STAGED_CAST.has(view.name) || (p.x > PLANE_X - 2.8 && p.x < PLANE_X + 1.2 && Math.abs(p.z - OFFSET) < 8);
 /** Rook, his station, the fan and the watering can (sim x, y), for his own moments */
 const STATION_SHOT = { x0: COURSE.station.x1 + 2.6, x1: COURSE.rook.x - 1.3, y0: -0.3, y1: 3.4 };
+/** a phone held upright, waiting to throw: Rook and his stall, the fan and the first cup, readable */
+const STATION_SHOT_PORTRAIT = { x0: COURSE.fan.x + 0.75, x1: COURSE.rook.x - 0.7, y0: -0.3, y1: 4.2 };
 // in portrait the camera has to stand far back across the plaza: the fountain and the bench by it step aside
 const PLAZA_FOUNTAIN = { x: 0.3, z: -0.6, r: 3.4, match: /water|stone|fountain/i };
 const PLAZA_BENCH = { x: 4.7, z: -1.6, r: 1.8, match: /bench/i };
@@ -106,6 +117,16 @@ export async function mountSpecialDelivery(
   function createActivity() {
     const scene3d = buildDeliveryScene(api, COURSE);
     scene3d.root.add(rook.group, cleo.group, cleo.tail, cleo.tailInk, bella.group);
+    // Bella and Cleo live in the courtyard (their errands, their doorsteps). The airmail borrows them: while you are at
+    // the station (or watching its first establishing look) the course has them and the courtyard's pair steps out;
+    // otherwise the course is just the stall, the line and an empty balcony.
+    const stageCast = (on: boolean) => {
+      cleo.group.visible = on;
+      cleo.tail.visible = on;
+      cleo.tailInk.visible = on;
+      bella.group.visible = on;
+    };
+    stageCast(false);
     // in front of his table and just right of it, so the station never hides him from the raised camera
     const rookHome = toWorld(COURSE.rook.x - 0.1, 0, -0.62);
     rook.group.position.copy(rookHome);
@@ -200,6 +221,18 @@ export async function mountSpecialDelivery(
     bubble.setAttribute("aria-live", "polite");
     bubble.style.opacity = "0";
     api.container.appendChild(bubble);
+    // a one-line hint for the wings on the first flights of a visit, until you've used them
+    const hint = document.createElement("div");
+    hint.className = "sd-hint";
+    hint.setAttribute("role", "status");
+    hint.style.opacity = "0";
+    api.container.appendChild(hint);
+    let wingsUsed = false;
+    let lastInput: "touch" | "mouse" | "key" = "mouse";
+    function showHint(text: string | null) {
+      if (text) hint.textContent = text;
+      hint.style.opacity = text ? "1" : "0";
+    }
     let bubbleUntil = 0;
     function say(text: string, ms = 2400) {
       bubble.textContent = text;
@@ -227,17 +260,22 @@ export async function mountSpecialDelivery(
     // ------------------------------------------------------------ input
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    const planeHit = new THREE.Vector3();
-    const plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), PLANE_X);
     let pointerId: number | null = null;
-    let pressAt: V2 | null = null;
+    let pressAt: { x: number; y: number } | null = null;
 
-    function toSim(e: PointerEvent | { clientX: number; clientY: number }): V2 | null {
-      const rect = api.canvas.getBoundingClientRect();
-      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-      raycaster.setFromCamera(ndc, api.camera);
-      if (!raycaster.ray.intersectPlane(plane, planeHit)) return null;
-      return { x: -(planeHit.z - OFFSET), y: planeHit.y };
+    /**
+     * The elastic's full stretch, in screen pixels: a share of the screen's short side, the same on any camera. Aiming
+     * is a drag on the screen, not on the course, so a phone held upright (where the course is drawn small) gets as much
+     * finger travel as a laptop, and the camera can widen while you aim without the pull drifting under your finger.
+     */
+    function fullPullPx() {
+      const r = api.canvas.getBoundingClientRect();
+      return Math.max(110, Math.min(240, Math.min(r.width, r.height) * 0.3));
+    }
+    /** screen drag to pull: the course runs right to left on screen, so dragging right and down pulls the elastic back */
+    function pullOfDrag(dx: number, dy: number): V2 {
+      const k = MAX_PULL / fullPullPx();
+      return { x: dx * k, y: dy * k };
     }
     function hitObject(e: PointerEvent, objects: THREE.Object3D[]) {
       const rect = api.canvas.getBoundingClientRect();
@@ -248,6 +286,7 @@ export async function mountSpecialDelivery(
 
     const onPointerDown = (e: PointerEvent) => {
       if (disposed) return;
+      lastInput = e.pointerType === "touch" ? "touch" : "mouse";
       audio.unlock();
       if (showcasing || showcaseAt) endShowcase();
       if (!engaged) {
@@ -272,11 +311,9 @@ export async function mountSpecialDelivery(
         return;
       }
       if (phase === "ready") {
-        const p = toSim(e);
-        if (!p) return;
         pointerId = e.pointerId;
         api.canvas.setPointerCapture?.(e.pointerId);
-        pressAt = p;
+        pressAt = { x: e.clientX, y: e.clientY };
         aim = { pull: { x: 0, y: 0 } };
         phase = "aiming";
         rook.play("brace", { facing: "left", hold: true });
@@ -297,10 +334,8 @@ export async function mountSpecialDelivery(
     };
     const onPointerMove = (e: PointerEvent) => {
       if (phase !== "aiming" || e.pointerId !== pointerId || !pressAt) return;
-      const p = toSim(e);
-      if (!p) return;
       // drag back from where you pressed: the pull is the reverse of the drag, held to the elastic's reach
-      let pull = { x: pressAt.x - p.x, y: pressAt.y - p.y };
+      let pull = pullOfDrag(e.clientX - pressAt.x, e.clientY - pressAt.y);
       const l = Math.hypot(pull.x, pull.y);
       if (l > MAX_PULL) pull = { x: (pull.x / l) * MAX_PULL, y: (pull.y / l) * MAX_PULL };
       // the rail aims across the courtyard, never back at Rook or down into the table
@@ -337,6 +372,7 @@ export async function mountSpecialDelivery(
     const onKey = (e: KeyboardEvent, down: boolean) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "BUTTON" || t.isContentEditable)) return;
+      if (down && (e.code === "Space" || e.code === "Enter")) lastInput = "key";
       if (!engaged) {
         if (down && (showcasing || showcaseAt)) endShowcase();
         if (down && (e.code === "KeyE" || e.code === "Enter") && nearStation) {
@@ -398,6 +434,10 @@ export async function mountSpecialDelivery(
       setWings(world, open);
       flightInput.wings.push({ at: world.step - launchStep, open });
       audio.wings(open);
+      if (open) {
+        wingsUsed = true;
+        showHint(null);
+      }
     }
 
     function doLaunch(pull: V2, fromRest = false) {
@@ -429,6 +469,20 @@ export async function mountSpecialDelivery(
       rook.play(power > 0.8 ? "brace" : "point", { facing: "left", restart: true });
       if (wingsHeldByPointer || wingsHeldByKey) applyWings(true);
       rookEagerCountdown--;
+      // the first flights of a visit say how the wings work, until they have been used
+      if (!wingsUsed && flightNo <= 3 && !replayWings.length) {
+        showHint(
+          controlMode === "toggle"
+            ? lastInput === "key"
+              ? "Space opens the wings · Space again folds them"
+              : "Tap to open the wings · tap again to fold"
+            : lastInput === "key"
+              ? "Hold Space to open the wings"
+              : lastInput === "touch"
+                ? "Hold your finger down to open the wings"
+                : "Hold the mouse button to open the wings"
+        );
+      }
     }
 
     function resetGlider() {
@@ -448,6 +502,9 @@ export async function mountSpecialDelivery(
       scene3d.popGlider();
     }
 
+    function reportFan() {
+      cb.onFan?.({ setting: world.fan, unlocked: Boolean(memory.discoveries.first_delivery || discoveredThisVisit.has("first_delivery")) });
+    }
     function turnFan() {
       if (!memory.discoveries.first_delivery && !discoveredThisVisit.has("first_delivery")) {
         sayLine("fan_locked", 2000);
@@ -459,6 +516,7 @@ export async function mountSpecialDelivery(
       memory = { ...memory, fan: next };
       audio.click();
       cb.onObserve({ kind: "fan", setting: next });
+      reportFan();
       sayLine(next === "up" ? "fan_up" : next === "forward" ? "fan_forward" : "fan_back", 1700);
     }
 
@@ -553,6 +611,7 @@ export async function mountSpecialDelivery(
     }
 
     function flightFinished() {
+      showHint(null);
       const outcome = world.outcome ?? "missed";
       resultKind = outcome;
       resultAt = now;
@@ -564,6 +623,7 @@ export async function mountSpecialDelivery(
       const proved = discoveriesFromFlight(observed);
       const firstTimes = proved.filter(id => !memory.discoveries[id] && !discoveredThisVisit.has(id));
       proved.forEach(id => discoveredThisVisit.add(id));
+      if (proved.includes("first_delivery")) reportFan();
       const cupsInOrder = world.cupSequence.join(",").includes("0,1,2");
 
       if (outcome === "delivered") {
@@ -618,6 +678,7 @@ export async function mountSpecialDelivery(
       bellTaken = false;
       bella.holdBell(false);
       if (bella.pose !== "idle") setTimeout(() => !disposed && phase !== "payoff" && bella.setPose("idle"), 1600);
+      if (engaged) audio.fanHum(true);
       resetGlider();
       if (line) sayLine(line);
       offerEnvelopeIfAny();
@@ -663,6 +724,9 @@ export async function mountSpecialDelivery(
         bellTaken = true;
         bella.holdBell(true);
         bella.hop();
+        // the courtyard goes quiet while she holds it up: even the fan stops humming, so the ring lands
+        audio.fanHum(false);
+        audio.flutter(0);
       };
       const ringOnce = (big: boolean) => {
         bella.ringBell(big);
@@ -793,6 +857,15 @@ export async function mountSpecialDelivery(
     /** a closer box (sim coordinates) a sequence holds, e.g. Bella's balcony while the bell is rung; null is the course */
     let camFocus: { x0: number; x1: number; y0: number; y1: number } | null = null;
     let walkHeroBefore: { position: THREE.Vector3; heading: number } | null = null;
+    const ppmA = new THREE.Vector3();
+    const ppmB = new THREE.Vector3();
+    /** screen pixels per metre of the course plane, at the launch rail */
+    function pixelsPerMetre() {
+      const rect = api.container.getBoundingClientRect();
+      ppmA.copy(toWorld(COURSE.launch.x, COURSE.launch.y)).project(api.camera);
+      ppmB.copy(toWorld(COURSE.launch.x + 1, COURSE.launch.y)).project(api.camera);
+      return Math.hypot(((ppmA.x - ppmB.x) / 2) * rect.width, ((ppmA.y - ppmB.y) / 2) * rect.height);
+    }
     function framing(out: { pos: THREE.Vector3; look: THREE.Vector3 }, follow: V2 | null) {
       const cam = api.camera;
       const aspect = cam.aspect || 1.6;
@@ -802,10 +875,16 @@ export async function mountSpecialDelivery(
       let y0 = -0.2;
       let y1 = 5.2;
       const portrait = aspect < 1;
-      // a phone held upright: just the station to Bella, no spare cottage either side
+      // A phone held upright can't show the whole lawn at a readable size, so it doesn't try to all the time: Rook's
+      // stall, close, while you wait; the whole course from the stall to Bella's basket while you aim (so you can see
+      // where it's going); the glider while it flies.
       if (portrait) {
         x0 = COURSE.basket.x + 1.25;
-        x1 = COURSE.rook.x - 0.7;
+        // (Rook and his stall stand in front of the course plane, so they spread toward the edge: more room that side)
+        x1 = COURSE.rook.x - 1.3;
+        if (engaged && phase !== "aiming" && phase !== "flying" && !camFocus) {
+          ({ x0, x1, y0, y1 } = STATION_SHOT_PORTRAIT);
+        }
       }
       if (camFocus && !follow) ({ x0, x1, y0, y1 } = camFocus);
       if (follow) {
@@ -829,7 +908,9 @@ export async function mountSpecialDelivery(
       // (in portrait the fountain is ghosted, so the camera can stay lower and look at the course square on)
       const lift = portrait ? Math.max(0, d - 8.5) * 0.18 : Math.max(Math.max(0, d - 8.5) * 0.42, Math.abs(camX) < 2.8 ? 1.3 : 0);
       const cx = (x0 + x1) / 2;
-      const cy = (y0 + y1) / 2 - (portrait ? 0.4 : 0);
+      // a phone held upright has its controls top and bottom: the course sits a little low, between them, with sky
+      // under the courtyard's header rather than empty paving above the airmail's buttons
+      const cy = (y0 + y1) / 2 + (portrait ? 2 * d * t * 0.12 : 0);
       const center = toWorld(cx, cy);
       out.look.copy(center);
       out.pos.set(PLANE_X - d, cy + 0.6 + lift, center.z);
@@ -873,9 +954,10 @@ export async function mountSpecialDelivery(
       camLook.copy(api.camera.position).addScaledVector(dir, 10);
       camBlend = 0;
       api.overrideCamera(placeCamera);
-      api.setVillagersHiddenWhere(p => p.x > PLANE_X - 2.8 && p.x < PLANE_X + 1.2 && Math.abs(p.z - OFFSET) < 8);
+      api.setVillagersHiddenWhere(courseHides);
       api.setVillagerLabelsHidden(true);
       api.ghostProps(EAST_LAMP.x, EAST_LAMP.z, 0.9, true);
+      stageCast(true);
       rook.play("fold", { facing: "left" });
     }
     function endShowcase() {
@@ -888,6 +970,7 @@ export async function mountSpecialDelivery(
       api.setVillagersHiddenWhere(null);
       api.setVillagerLabelsHidden(false);
       api.ghostProps(EAST_LAMP.x, EAST_LAMP.z, 0.9, false);
+      stageCast(false);
     }
 
     function update(dt: number, elapsed: number) {
@@ -989,10 +1072,14 @@ export async function mountSpecialDelivery(
       shutters.update(dt);
       birds.update(dt, world);
       const aimView: AimView = aim ? { pull: aim.pull, tension: Math.hypot(aim.pull.x, aim.pull.y) / MAX_PULL } : null;
+      // how big the course is drawn: on a small or far view the glider and its aim guide grow so they still read
+      const ppm = pixelsPerMetre();
+      const small = THREE.MathUtils.clamp(78 / Math.max(1, ppm), 1, 1.9);
       scene3d.sync(world, dt, elapsed, aimView, {
         fan: world.fan,
         showGlow: engaged && !memory.discoveries.first_delivery && !discoveredThisVisit.has("first_delivery"),
         gliderHidden: (phase === "intro" && (sequence ? now - sequence.start < 9.1 : false)) || bellTaken,
+        small,
       });
       envGroup.rotation.y = Math.sin(elapsed * 2) * 0.04;
 
@@ -1055,10 +1142,12 @@ export async function mountSpecialDelivery(
         cb.onObserve({ kind: "session" });
         api.lockWalking(true);
         api.setVillagerLabelsHidden(true);
-        // the two doorstep neighbours in front of the course step out of the shot, and the plaza's east lamp post
-        // (between the camera and the course) turns see-through, while the airmail is open
-        api.setVillagersHiddenWhere(p => p.x > PLANE_X - 2.8 && p.x < PLANE_X + 1.2 && Math.abs(p.z - OFFSET) < 8);
+        // the doorstep neighbours in front of the course step out of the shot, Bella and Cleo come over to it, and the
+        // plaza's east lamp post (between the camera and the course) turns see-through, while the airmail is open
+        api.setVillagersHiddenWhere(courseHides);
         api.ghostProps(EAST_LAMP.x, EAST_LAMP.z, 0.9, true);
+        stageCast(true);
+        reportFan();
         walkHeroBefore = api.hero();
         // the hero steps to the side of the station, just out of the shot, watching the course with Rook
         api.placeHero(toWorld(COURSE.rook.x - 2.2, 0, -1.6), -Math.PI / 2 - 0.4);
@@ -1119,6 +1208,7 @@ export async function mountSpecialDelivery(
         api.setVillagerLabelsHidden(false);
         api.setVillagersHiddenWhere(null);
         api.ghostProps(EAST_LAMP.x, EAST_LAMP.z, 0.9, false);
+        stageCast(false);
         if (walkHeroBefore) api.placeHero(walkHeroBefore.position, walkHeroBefore.heading);
         audio.fanHum(false);
         audio.flutter(0);
@@ -1131,6 +1221,7 @@ export async function mountSpecialDelivery(
       setMemory(m) {
         memory = m;
         applyMemory();
+        reportFan();
       },
       setEnvelope(kind) {
         envelope = kind;
@@ -1141,6 +1232,9 @@ export async function mountSpecialDelivery(
       },
       setControlMode(mode) {
         controlMode = mode;
+      },
+      turnFan() {
+        if (engaged && phase === "ready") turnFan();
       },
       aimBy(dAngle, dPower) {
         if (!engaged || (phase !== "ready" && phase !== "aiming")) return;
@@ -1197,12 +1291,10 @@ export async function mountSpecialDelivery(
       /** capture: the screen points of a drag that makes this pull, so a capture can use the real pointer */
       dragFor(pull: V2) {
         const rect = api.canvas.getBoundingClientRect();
-        const at = (x: number, y: number) => {
-          const v = toWorld(x, y).project(api.camera);
-          return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
-        };
-        const from = { x: COURSE.launch.x + 0.4, y: COURSE.launch.y + 1.4 };
-        return { from: at(from.x, from.y), to: at(from.x - pull.x, from.y - pull.y) };
+        const k = fullPullPx() / MAX_PULL;
+        // press a little left of the middle (clear of the fan, the stall and the HUD); the drag is screen-relative
+        const from = { x: rect.left + rect.width * 0.42, y: rect.top + rect.height * 0.38 };
+        return { from, to: { x: from.x + pull.x * k, y: from.y + pull.y * k } };
       },
     };
 
@@ -1221,6 +1313,7 @@ export async function mountSpecialDelivery(
         window.removeEventListener("keydown", onKeyDown);
         window.removeEventListener("keyup", onKeyUp);
         bubble.remove();
+        hint.remove();
         scene3d.dispose();
         rook.dispose();
         cleo.dispose();

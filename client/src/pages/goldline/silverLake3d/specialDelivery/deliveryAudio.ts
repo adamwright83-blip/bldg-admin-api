@@ -138,14 +138,18 @@ export function createDeliveryAudio() {
         filter.type = "bandpass";
         filter.frequency.value = 1800;
         filter.Q.value = 1.2;
-        const gain = c.createGain();
-        gain.gain.value = 0;
+        // the paper's flutter: a tremolo stage the LFO swings between 0.5 and 1, then the level, which can reach
+        // silence (an LFO wired straight into the level would keep it sounding at "off")
+        const trem = c.createGain();
+        trem.gain.value = 0.75;
         const lfo = c.createOscillator();
         lfo.frequency.value = 23;
         const lfoGain = c.createGain();
-        lfoGain.gain.value = 0.5;
-        lfo.connect(lfoGain).connect(gain.gain);
-        src.connect(filter).connect(gain).connect(master!);
+        lfoGain.gain.value = 0.25;
+        lfo.connect(lfoGain).connect(trem.gain);
+        const gain = c.createGain();
+        gain.gain.value = 0;
+        src.connect(filter).connect(trem).connect(gain).connect(master!);
         src.start();
         lfo.start();
         flutter = { src, gain, filter };

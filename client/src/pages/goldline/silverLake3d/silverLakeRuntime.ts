@@ -70,7 +70,8 @@ export type CourtyardActivityApi = {
   overrideCamera(place: ((camera: THREE.PerspectiveCamera, dt: number) => void) | null): void;
   setVillagerLabelsHidden(hidden: boolean): void;
   /** while set, neighbours this returns true for step out of the shot (their cards hide); null brings them back */
-  setVillagersHiddenWhere(where: ((position: THREE.Vector3) => boolean) | null): void;
+  /** hide neighbours by where they stand or who they are (an activity can borrow one for its own scene) */
+  setVillagersHiddenWhere(where: ((position: THREE.Vector3, view: VillagerView) => boolean) | null): void;
   /**
    * Courtyard props standing between a camera and an activity, e.g. a lamp post in front of the airmail course:
    * the part of the courtyard's merged meshes within `radius` of (x, z) becomes a see-through ghost while `ghosted`.
@@ -791,7 +792,7 @@ export async function createSilverLake(
   let walkLocked = false;
   let cameraOverride: ((camera: THREE.PerspectiveCamera, dt: number) => void) | null = null;
   let labelsHidden = false;
-  let villagerHideWhere: ((position: THREE.Vector3) => boolean) | null = null;
+  let villagerHideWhere: ((position: THREE.Vector3, view: VillagerView) => boolean) | null = null;
   const activities = new Set<CourtyardActivity>();
   /** `floor` is how see-through a fully ghosted prop gets (0 is gone) */
   type Ghost = { meshes: THREE.Mesh[]; amount: number; target: number; floor: number };
@@ -1139,7 +1140,8 @@ export async function createSilverLake(
     const w = container.clientWidth;
     const h = container.clientHeight;
     villagers.forEach(v => {
-      v.group.visible = !(villagerHideWhere && villagerHideWhere(v.group.position));
+      const hiddenHere = Boolean(villagerHideWhere && villagerHideWhere(v.group.position, v.view));
+      v.group.visible = !hiddenHere;
       const near = v.view.key === nearKey;
       const yawToCam = Math.atan2(camera.position.x - v.group.position.x, camera.position.z - v.group.position.z);
       v.card.rotation.y = yawToCam - v.group.rotation.y;
@@ -1156,7 +1158,7 @@ export async function createSilverLake(
       v.ring.scale.setScalar(near ? 1 + Math.sin(elapsed * 5) * 0.06 : 1);
       // label
       proj.set(v.group.position.x, v.group.position.y + 2.55 + bob, v.group.position.z).project(camera);
-      const visible = !labelsHidden && intro.t >= intro.dur && proj.z < 1 && Math.hypot(v.base.x - camera.position.x, v.base.z - camera.position.z) < 34;
+      const visible = !labelsHidden && !hiddenHere && intro.t >= intro.dur && proj.z < 1 && Math.hypot(v.base.x - camera.position.x, v.base.z - camera.position.z) < 34;
       v.label.style.opacity = visible ? (near ? "1" : "0.86") : "0";
       v.label.style.transform = `translate(-50%, -100%) translate(${((proj.x + 1) / 2) * w}px, ${((1 - proj.y) / 2) * h}px) scale(${near ? 1.08 : 0.92})`;
       v.label.classList.toggle("is-near", near);

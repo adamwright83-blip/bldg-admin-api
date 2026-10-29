@@ -29,7 +29,6 @@ import { useSpecialDeliveryFlag } from "./specialDelivery/useSpecialDeliveryFlag
 import styles from "./silver-lake-3d.module.css";
 
 /** Rook's airmail has these two neighbours on its course; while it runs they are not also on a doorstep. */
-const AIRMAIL_CAST = ["Bella", "Cleo"] as const;
 
 /**
  * Silver Lake, walkable. Every Silver Lake entry lands here (see silverLakeEntry.ts); the painted 2D encounter is
@@ -146,19 +145,18 @@ export default function SilverLake3D({
 
   const o = useSilverLakeOutreach(territoryId);
   const { targets, selectedTarget, setSelectedSlotId } = o;
-  // Rook's airmail (SPECIAL DELIVERY) is server-flagged per business; the quests wait for the answer so Bella and
-  // Cleo are never handed an errand while they are on the airmail course.
-  const { on: airmailOn, resolved: airmailResolved } = useSpecialDeliveryFlag(territoryId);
+  // Rook's airmail (SPECIAL DELIVERY) is server-flagged per business. Bella and Cleo keep their errands here; the
+  // airmail borrows them only while you are at the station.
+  const { on: airmailOn } = useSpecialDeliveryFlag(territoryId);
   const [airmailEngaged, setAirmailEngaged] = useState(false);
   const [deskHandoff, setDeskHandoff] = useState<{ customerId: string; draft: string } | null>(null);
   // Reunion quests: real customers keep their progress and passes on the server; the synthetic preview never writes.
   const rq = useReunionQuests({
-    enabled: ready && airmailResolved,
+    enabled: ready,
     synthetic: o.isSyntheticPreview,
     territoryId,
     targets,
     spots: questSpots,
-    excludeGivers: airmailOn ? AIRMAIL_CAST : undefined,
   });
 
   // ---------------------------------------------------------------- villagers in the world
@@ -213,9 +211,8 @@ export default function SilverLake3D({
         done: isDone(t),
       });
     }
-    // an ambient neighbour never duplicates a quest giver (Bella can't be on two doorsteps), nor the airmail's cast
+    // an ambient neighbour never duplicates a quest giver (Bella can't be on two doorsteps)
     const taken = new Set(out.filter(v => v.key.startsWith("quest:")).map(v => v.name));
-    if (airmailOn) AIRMAIL_CAST.forEach(name => taken.add(name));
     COZY_SLOT_IDS.forEach((_, slot) => {
       if (used.has(slot)) return;
       const variant =
@@ -235,7 +232,7 @@ export default function SilverLake3D({
       });
     });
     return out;
-  }, [targets, rq.on, rq.quest, rq.reunited, airmailOn]);
+  }, [targets, rq.on, rq.quest, rq.reunited]);
 
   const viewByKey = useMemo(() => new Map(views.map(v => [v.key, v])), [views]);
   const targetByKey = useMemo(
