@@ -84,6 +84,8 @@ export type DayPlanEditOutcome = {
   changed: boolean;
   /** The day's challenge is now the operator's (created, updated, or already so). */
   missionSet: boolean;
+  /** The challenge row written on this turn, so "I'll do it tomorrow" can move it. Removals are never here. */
+  savedMission: { id: string; title: string; businessDate: string } | null;
 };
 
 const EDIT_CUE =
@@ -217,22 +219,42 @@ export function titleGroundedInOperatorWords(title: string, operatorText: string
  * in the title, so "Visit customer to collect laundry" (operations) is never a sales stop. A row the
  * operator NAMED can be any kind; they said which one.
  */
-export function rowsToRemove(reading: DayPlanEditReading, rows: DayPlanRow[]): DayPlanRow[] {
+export function rowsToRemove(
+  reading: DayPlanEditReading,
+  rows: DayPlanRow[]
+): { remove: DayPlanRow[]; ambiguous: Array<{ named: string; rows: DayPlanRow[] }> } {
   const candidates = rows.filter(row => row.status === "open" && !row.operatorPrimary);
   const chosen = new Map<string, DayPlanRow>();
+  const ambiguous: Array<{ named: string; rows: DayPlanRow[] }> = [];
   if (reading.removeSales) {
     for (const row of candidates) if (row.kind === "growth") chosen.set(row.id, row);
   }
   for (const named of reading.removeTitles) {
-    const want = tokens(named);
-    if (!want.length) continue;
-    for (const row of candidates) {
-      const have = new Set(tokens(row.title));
-      const hits = want.filter(word => have.has(word)).length;
-      if (hits >= Math.max(1, Math.ceil(want.length / 2))) chosen.set(row.id, row);
-    }
+    const matches = namedMatches(named, candidates);
+    // One name, one row. Two rows that both fit is a question, never two removals.
+    if (matches.length === 1) chosen.set(matches[0]!.id, matches[0]!);
+    else if (matches.length > 1) ambiguous.push({ named, rows: matches });
   }
-  return [...chosen.values()];
+  return { remove: [...chosen.values()], ambiguous };
+}
+
+/**
+ * Action words every task shares. "Follow up with The Louise" must match on Louise, not on "follow":
+ * the account follow-up writer titles every follow-up that way (Codex review on #764).
+ */
+const ACTION_WORDS = new Set([
+  "follow", "call", "visit", "pitch", "send", "email", "text", "pick", "drop", "check", "meet", "stop",
+  "sales", "person", "office", "leasing", "task", "item", "thing",
+]);
+
+/** Rows whose title contains EVERY identifying word the operator used. Verbs alone identify nothing. */
+function namedMatches(named: string, candidates: DayPlanRow[]): DayPlanRow[] {
+  const identifying = [...new Set(tokens(named).filter(word => !ACTION_WORDS.has(word)).map(stem))];
+  if (!identifying.length) return [];
+  return candidates.filter(row => {
+    const have = new Set(tokens(row.title).map(stem));
+    return identifying.every(word => have.has(word));
+  });
 }
 
 function list(items: string[]): string {
@@ -286,14 +308,20 @@ export async function applyDayPlanEdit(input: {
   const mutationReceipts: DayPlanEditOutcome["mutationReceipts"] = [];
   const actionIds: string[] = [];
   let missionSet = false;
+  let savedMission: DayPlanEditOutcome["savedMission"] = null;
 
   if (reading.removeSales || reading.removeTitles.length) {
     const rows = await deps.readDay(businessDate).catch(() => null);
     if (!rows) {
       sentences.push(`I couldn't read ${dayPossessive(day)} line, so I didn't take anything off.`);
     } else {
-      const targets = rowsToRemove(reading, rows);
-      if (!targets.length) {
+      const { remove: targets, ambiguous } = rowsToRemove(reading, rows);
+      for (const unclear of ambiguous) {
+        sentences.push(`More than one item fits ${unclear.named}: ${list(unclear.rows.slice(0, 3).map(row => spokenTitle(row.title)))}. I left them; tell me which.`);
+      }
+      if (!targets.length && ambiguous.length) {
+        // Nothing unambiguous to take off; the question above is the answer.
+      } else if (!targets.length) {
         sentences.push(reading.removeSales ? `There were no sales stops on ${dayPossessive(day)} line.` : `I didn't find that on ${dayPossessive(day)} line.`);
       } else {
         const removed = await deps
@@ -322,6 +350,7 @@ export async function applyDayPlanEdit(input: {
     if (mission.ok) {
       missionSet = true;
       if (mission.outcome !== "already") {
+        savedMission = { id: mission.commitmentId, title: mission.title, businessDate };
         actionIds.push(mission.commitmentId);
         mutationReceipts.push({
           claimedState: mission.outcome === "updated" ? "updated" : "created",
@@ -337,7 +366,7 @@ export async function applyDayPlanEdit(input: {
     }
   }
 
-  return { speak: sentences.join(" ").trim(), mutationReceipts, actionIds, changed: actionIds.length > 0, missionSet };
+  return { speak: sentences.join(" ").trim(), mutationReceipts, actionIds, changed: actionIds.length > 0, missionSet, savedMission };
 }
 
 function capitalize(text: string): string {

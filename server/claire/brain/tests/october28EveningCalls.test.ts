@@ -317,13 +317,56 @@ describe("2. Adam's choice for tomorrow becomes the day's challenge; the sales s
       // Growth by kind with no sales word in the title: still a sales stop.
       { id: "g", title: "Coffee with the OPUS LA manager", kind: "growth", status: "open", operatorPrimary: false },
     ];
-    expect(rowsToRemove({ ...challengeReading(true, true), primaryTitle: null }, rows).map(row => row.id)).toEqual(["p", "g"]);
+    expect(rowsToRemove({ ...challengeReading(true, true), primaryTitle: null }, rows).remove.map(row => row.id)).toEqual(["p", "g"]);
   });
 
   it("a row the operator names comes off whatever its kind", () => {
     const rows: DayPlanRow[] = [{ id: "v", title: "Visit customer to collect laundry", kind: "operations", status: "open", operatorPrimary: false }];
     const reading = { ...challengeReading(true, false), primaryTitle: null, removeTitles: ["the customer laundry visit"] };
-    expect(rowsToRemove(reading, rows).map(row => row.id)).toEqual(["v"]);
+    expect(rowsToRemove(reading, rows).remove.map(row => row.id)).toEqual(["v"]);
+  });
+
+  it("a named follow-up matches on its account, not on the shared word 'follow' (Codex review)", () => {
+    const rows: DayPlanRow[] = [
+      { id: "louise", title: "Follow up with The Louise", kind: "operations", status: "open", operatorPrimary: false },
+      { id: "opus", title: "Follow up with OPUS LA", kind: "operations", status: "open", operatorPrimary: false },
+    ];
+    const reading = { ...challengeReading(true, false), primaryTitle: null, removeTitles: ["Follow up with The Louise"] };
+    expect(rowsToRemove(reading, rows)).toEqual({ remove: [rows[0]], ambiguous: [] });
+    // A verb alone names nothing.
+    expect(rowsToRemove({ ...reading, removeTitles: ["the follow-up"] }, rows).remove).toEqual([]);
+  });
+
+  it("two rows that both fit a name are a question, not two removals", async () => {
+    const h = harness({
+      "Take the Louise off today.": { applies: true, explicit: true, day: "today", primaryTitle: null, removeSales: false, removeTitles: ["the Louise"] },
+    });
+    h.line.set(TODAY, [
+      { id: "l1", title: "Follow up with The Louise", kind: "operations", status: "open", operatorPrimary: false },
+      { id: "l2", title: "Send The Louise the pricing sheet", kind: "operations", status: "open", operatorPrimary: false },
+    ]);
+    const result = await runClaireV2PrimaryTurn(turnInput(afterOpening(), "Take the Louise off today."), h.deps);
+    expect(h.removed).toEqual([]);
+    expect(result.speak).toBe(
+      "More than one item fits the Louise: Follow up with The Louise and Send The Louise the pricing sheet. I left them; tell me which."
+    );
+  });
+
+  it("a challenge saved for today is what a following 'I'll do it tomorrow' moves (Codex review)", async () => {
+    const say = "Make publishing the landing page today's challenge.";
+    const h = harness({ [say]: { ...challengeReading(true, false), day: "today" } });
+    const moved: Array<{ commitmentIds: string[]; toBusinessDate: string }> = [];
+    h.deps.moveDayLineCommitments = async input => {
+      moved.push(input);
+      return input.commitmentIds;
+    };
+    const state = afterOpening();
+    state.history!.push({ speaker: "operator", text: "I need to publish the Instagram landing page.", at: 8 });
+    await runClaireV2PrimaryTurn(turnInput(state, say), h.deps);
+    expect(h.designated).toEqual([{ businessDate: TODAY, title: CHALLENGE }]);
+    const later = await runClaireV2PrimaryTurn(turnInput(state, "Actually I'll do it tomorrow."), h.deps);
+    expect(moved).toEqual([{ commitmentIds: ["challenge-1"], toBusinessDate: TOMORROW }]);
+    expect(later.speak).toBe(`Moved to tomorrow: ${CHALLENGE}.`);
   });
 });
 

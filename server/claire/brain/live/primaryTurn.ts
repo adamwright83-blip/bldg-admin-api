@@ -961,6 +961,15 @@ export async function runClaireV2PrimaryTurn(
           state.heldBriefingItems = [];
           state.pendingBriefingAskedAtTurn = null;
         }
+        // "I'll do it tomorrow" right after must find the challenge Claire just saved (Codex review on #764).
+        if (outcome.savedMission) {
+          state.recentDayLineCommits = rememberDayLineCommit(state.recentDayLineCommits, {
+            ids: [outcome.savedMission.id],
+            title: outcome.savedMission.title,
+            businessDate: outcome.savedMission.businessDate,
+            atMs: nowMs,
+          });
+        }
         if (outcome.changed || outcome.missionSet) {
           return finish(
             { speak: "", receiptBackedCommit: outcome.speak, mutationReceipts: outcome.mutationReceipts, kind: "briefing_saved", actionIds: outcome.actionIds },
