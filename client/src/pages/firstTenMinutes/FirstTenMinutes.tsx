@@ -41,6 +41,12 @@ function newRequestId(): string {
   return crypto.randomUUID();
 }
 
+/** The server said this draft no longer exists or isn't a first-ten draft (requireJourney's NOT_FOUND / BAD_REQUEST). */
+export function draftIsGone(error: unknown): boolean {
+  const code = (error as { data?: { code?: string } } | null)?.data?.code;
+  return code === "NOT_FOUND" || code === "BAD_REQUEST";
+}
+
 export default function FirstTenMinutes({ availability }: { availability: FirstTenAvailability }) {
   const [credentials, setCredentials] = useState<FirstTenCredentials | null>(() => readFirstTenCredentials());
   const [returned] = useState<ReturnNotice>(() => readReturn());
@@ -51,7 +57,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
 
   const journey = trpc.system.firstTenMinutes.journey.useQuery(credentials!, {
     enabled: Boolean(credentials),
-    retry: false,
+    // a network blip or a server hiccup is retried; only the server saying the draft is gone ends it
+    retry: (failures, error) => !draftIsGone(error) && failures < 3,
   });
   const start = trpc.system.firstTenMinutes.start.useMutation();
   const beginConnect = trpc.system.firstTenMinutes.beginConnect.useMutation();
@@ -64,12 +71,13 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     if (returned.connected) captureProductEvent("onboarding_source_connected", { kind: returned.connected, funnel_step: "first_ten" });
   }, [returned.connected]);
 
-  // An expired or foreign draft is forgotten; the visitor starts again from the invitation.
+  // An expired or foreign draft is forgotten; the visitor starts again from the invitation. Any other failure keeps the
+  // credentials, so the journey (and its connections) can still be reached once the network or server is back.
   useEffect(() => {
-    if (!journey.isError) return;
+    if (!journey.isError || !draftIsGone(journey.error)) return;
     clearFirstTenCredentials();
     setCredentials(null);
-  }, [journey.isError]);
+  }, [journey.isError, journey.error]);
 
   async function startJourney(kind: "own" | "example"): Promise<FirstTenCredentials> {
     const result = await start.mutateAsync({ requestId: newRequestId(), kind });
@@ -125,8 +133,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           example={example}
           connections={view.connections}
           busy={busy}
+          googleReady={availability.google}
           slackReady={availability.slack}
-          onAddSlack={() => void connect("slack")}
+          onConnect={provider => void connect(provider)}
           onDisconnect={provider => void removeConnection(provider)}
         />
       );

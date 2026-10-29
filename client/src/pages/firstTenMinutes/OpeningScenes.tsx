@@ -150,8 +150,9 @@ export function Connected(props: {
   example: boolean;
   connections: ConnectionView[];
   busy: boolean;
+  googleReady: boolean;
   slackReady: boolean;
-  onAddSlack: () => void;
+  onConnect: (provider: ConnectionProvider) => void;
   onDisconnect: (provider: ConnectionProvider) => void;
 }) {
   const google = props.connections.find(connection => connection.provider === "google");
@@ -171,9 +172,17 @@ export function Connected(props: {
         ) : (
           <div className={styles.actions}>
             <p className={styles.quiet}>
+              {!google ? (
+                <>
+                  <button type="button" disabled={props.busy || !props.googleReady} onClick={() => props.onConnect("google")} data-testid="first-ten-connect-google">
+                    Connect Google
+                  </button>
+                  <span className={styles.dot} aria-hidden="true">·</span>
+                </>
+              ) : null}
               {!slack ? (
                 <>
-                  <button type="button" disabled={props.busy || !props.slackReady} onClick={props.onAddSlack}>
+                  <button type="button" disabled={props.busy || !props.slackReady} onClick={() => props.onConnect("slack")}>
                     Add Slack
                   </button>
                   <span className={styles.dot} aria-hidden="true">·</span>

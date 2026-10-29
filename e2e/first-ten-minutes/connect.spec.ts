@@ -82,10 +82,28 @@ test("an unticked Gmail box or a cancelled consent says so plainly and keeps not
   await expect(page.getByRole("alert")).toContainText("You didn't finish connecting. Nothing was shared.");
 });
 
-test("Slack can be added too", async ({ page }) => {
+test("Slack and Google can be connected in either order", async ({ page }) => {
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-add-slack").click();
   await expect(page.getByTestId("first-ten-connected")).toContainText("Slack · First Ten Workspace");
+  await page.getByTestId("first-ten-connect-google").click();
+  await expect(page.getByTestId("first-ten-google-account")).toHaveText("owner@first-ten.example · Gmail, Calendar and Drive");
+  await expect(page.getByTestId("first-ten-connected")).toContainText("Slack · First Ten Workspace");
+});
+
+test("a failed request keeps the draft; only an expired draft is forgotten", async ({ page }) => {
+  await page.getByRole("button", { name: "Let's find out" }).click();
+  await page.getByTestId("first-ten-connect-google").click();
+  await expect(page.getByTestId("first-ten-google-account")).toBeVisible();
+  const saved = await page.evaluate(() => localStorage.getItem("joystick_first_ten_credentials"));
+  // the server is unreachable for a moment: the journey request fails, and the draft is kept
+  await page.route("**/api/trpc/system.firstTenMinutes.journey**", route => route.abort("connectionreset"));
+  await page.reload();
+  await page.waitForTimeout(4000);
+  expect(await page.evaluate(() => localStorage.getItem("joystick_first_ten_credentials"))).toBe(saved);
+  await page.unroute("**/api/trpc/system.firstTenMinutes.journey**");
+  await page.reload();
+  await expect(page.getByTestId("first-ten-google-account")).toBeVisible();
 });
 
 test("the example is labelled on screen and can be left for your own world", async ({ page }, testInfo) => {
