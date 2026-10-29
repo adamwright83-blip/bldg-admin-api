@@ -81,7 +81,8 @@ A Stripe return for a draft that belongs to today's funnel always lands on today
 | Contracts (flag, scopes, "what connecting includes", journey shape) | `shared/firstTenMinutes.ts` |
 | Nina's labelled example | `shared/firstTenMinutesExample.ts` |
 | Server | `server/firstTenMinutes/` (`router.ts` is `system.firstTenMinutes`, `oauthRoutes.ts` the callbacks) |
-| Tables | `drizzle/0152_first_ten_journeys.sql` (journeys, connections), applied by `scripts/migrate.mjs` |
+| Tables | `drizzle/0152_first_ten_journeys.sql` (journeys, connections), `drizzle/0153_first_ten_findings.sql` (readings, findings), applied by `scripts/migrate.mjs` |
+| The example's invented sources and readings | `shared/firstTenMinutesExampleCorpus.json`, `shared/firstTenMinutesExampleExtraction.json` |
 | Page | `client/src/pages/firstTenMinutes/`, mounted at `/joystick-start` by `JoystickStartRoute.tsx` |
 | End to end | `scripts/first-ten-e2e.sh`, `e2e/first-ten-minutes/`, CI workflow `first-ten-minutes.yml` |
 
@@ -99,12 +100,50 @@ way. The callback never echoes a code, token or provider message.
 on every screen ("Example: Nina's flower studio, invented. Nothing here is yours.") with "Bring your own" one tap
 away. It cannot connect accounts, and (later slices) cannot activate or send.
 
+## The crew's reading (slice 2)
+
+`server/firstTenMinutes/understanding/`. One reading per journey, in this server process, in three stages. Each
+stage's line is shown only while that work runs:
+
+| Stage | Line (Astra's) | The work |
+|---|---|---|
+| `people` | Meeting the people you write to. | Sent and received Gmail (last twelve months, at most 160 sent and 240 received). People by correspondence, Rook's habit (how the person ends their own mail), Luma's image (a picture attached to two or more sent messages). No model. |
+| `conversations` | Following the conversations you keep coming back to. | One Claude call over the person's own mail and mail from people they write to: the business, rules, promises, requests, replies, services, places, a contrast between two kinds of request. |
+| `work` | Finding the work already in motion. | Calendar (last 90 days, next 30), Drive (recent files, the text of up to 12 documents), Slack (the person's own messages and messages to them, last 90 days). Orren's route (a weekday the calendar repeats, with places), a second Claude call over documents and Slack, coordinates for places and stops, and Ilex's opportunity. |
+
+**What the model may do.** It proposes; `extract.ts` decides. Every item cites its source and copies the exact words.
+An item is dropped when the words aren't in that source (case, curly quotes and spacing aside), or when it comes from
+the wrong person: a rule or service the owner didn't write, a request the owner made, a reply that doesn't answer the
+person who asked. A contrast line with a number is dropped. Dates and people always come from the item itself. What is
+shown is the source's own characters, never the model's copy.
+
+**Opportunities.** Kept only when the chain holds in the verified findings: someone asked, the person declined and
+said what was missing, and a later service offers it (`became_possible`), whoever proposed it. The model's proposals
+are checked against the same chain. Ranked by type, then whether the person's route meets the asker's place (same
+street, or a stop within 600 m), then whether the place is known. Never a travel time.
+
+**What is kept.** Findings with short quotes and their sources (`first_ten_findings`), and the reading's progress
+(`first_ten_readings`, migration 0153). Not the person's mail, calendar or files. Where an image's bytes live (a Gmail
+attachment id) is kept server-side only, to show the person their own picture later.
+
+**When things fail.** A source that can't be read is left out and the reading carries on. A failed model call becomes a
+plain note ("Some of your conversations couldn't be read closely just now."), and the reading finishes with what it
+could count. A reading whose server went away shows as failed and can be started again; finding ids are stable per
+journey, so nothing the person said about a finding is lost.
+
+**AI spend** is attributed per journey (`first_ten:<journey id>`), under the default per-tenant limits
+(`AI_WARNING_LIMIT_CENTS`, `AI_HARD_LIMIT_CENTS`). A reading makes two calls.
+
+**Configuration.** `ANTHROPIC_API_KEY` (already set for Claire). For pins on Mara's map and Orren's route,
+`GOOGLE_GEOCODING_API_KEY` or `GOOGLE_PLACES_API_KEY` (already used by the geocoder); without either, places keep their
+names and no pins.
+
 ## Slices
 
 | # | Slice | State |
 |---|---|---|
-| 1 | Connect: Google and Slack OAuth, what connecting includes, the labelled example | this PR |
-| 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | next |
+| 1 | Connect: Google and Slack OAuth, what connecting includes, the labelled example | merged |
+| 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | this PR |
 | 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | |
 | 4 | Claire's portrait: "That sounds like me / Let me change something" | |
 | 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | |

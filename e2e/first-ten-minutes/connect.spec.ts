@@ -54,8 +54,7 @@ test("connecting Google comes back connected, survives a reload, and disconnects
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-connect-google").click();
   await expect(page).toHaveURL(/\/joystick-start$/);
-  const connected = page.getByTestId("first-ten-connected");
-  await expect(connected.getByRole("heading")).toHaveText("Your world is here.");
+  await expect(page.getByTestId("first-ten-understanding")).toBeVisible();
   await expect(page.getByTestId("first-ten-google-account")).toHaveText("owner@first-ten.example · Gmail, Calendar and Drive");
   await shots("04-connected", page, testInfo);
 
@@ -75,7 +74,7 @@ test("an unticked Gmail box or a cancelled consent says so plainly and keeps not
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-connect-google").click();
   await expect(page.getByRole("alert")).toContainText("without Gmail");
-  await expect(page.getByTestId("first-ten-connected")).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-understanding")).toHaveCount(0);
 
   await request.post(`${FAKE}/__control`, { data: { deny: true } });
   await page.getByTestId("first-ten-connect-google").click();
@@ -85,10 +84,10 @@ test("an unticked Gmail box or a cancelled consent says so plainly and keeps not
 test("Slack and Google can be connected in either order", async ({ page }) => {
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-add-slack").click();
-  await expect(page.getByTestId("first-ten-connected")).toContainText("Slack · First Ten Workspace");
+  await expect(page.getByTestId("first-ten-connections")).toContainText("Slack · First Ten Workspace");
   await page.getByTestId("first-ten-connect-google").click();
   await expect(page.getByTestId("first-ten-google-account")).toHaveText("owner@first-ten.example · Gmail, Calendar and Drive");
-  await expect(page.getByTestId("first-ten-connected")).toContainText("Slack · First Ten Workspace");
+  await expect(page.getByTestId("first-ten-connections")).toContainText("Slack · First Ten Workspace");
 });
 
 test("a failed request keeps the draft; only an expired draft is forgotten", async ({ page }) => {
@@ -110,8 +109,7 @@ test("the example is labelled on screen and can be left for your own world", asy
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-example").click();
   await expect(page.getByTestId("first-ten-example-label")).toContainText("Example: Nina's flower studio, invented. Nothing here is yours.");
-  await expect(page.getByTestId("first-ten-connected").getByRole("heading")).toHaveText("Nina's world is here.");
-  await expect(page.getByTestId("first-ten-google-account")).toContainText("nina@wildrootflowers.example");
+  await expect(page.getByTestId("first-ten-understanding")).toBeVisible();
   await shots("05-example", page, testInfo);
 
   await page.getByRole("button", { name: "Bring your own" }).click();

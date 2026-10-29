@@ -14,7 +14,10 @@ import {
   saveFirstTenCredentials,
   type FirstTenCredentials,
 } from "./draftStorage";
-import { BringYourWorld, Connected, ConnectionIncludesSheet, Invitation } from "./OpeningScenes";
+import { BringYourWorld, ConnectionIncludesSheet, ConnectionsStrip, Invitation } from "./OpeningScenes";
+import { UnderstandingScene } from "./UnderstandingScene";
+import { FindingsSheet } from "./FindingsSheet";
+import { useReading } from "./useReading";
 import styles from "./firstTen.module.css";
 
 /**
@@ -124,20 +127,38 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const view = journey.data ?? null;
   const example = view?.kind === "example";
   const hasConnection = Boolean(view?.connections.length);
+  const reading = useReading(credentials, hasConnection);
+  const [closer, setCloser] = useState(false);
+
+  // Slack added after the reading finished: read again, so the crew sees it too.
+  const readingConnections = useRef<number | null>(null);
+  useEffect(() => {
+    if (!view || reading.view?.status !== "complete") return;
+    if (readingConnections.current === null) readingConnections.current = view.connections.length;
+    else if (view.connections.length > readingConnections.current) {
+      readingConnections.current = view.connections.length;
+      reading.again();
+    }
+  }, [view, reading]);
 
   function renderScene() {
     if (credentials && journey.isLoading) return null;
     if (view && hasConnection) {
       return (
-        <Connected
-          example={example}
-          connections={view.connections}
-          busy={busy}
-          googleReady={availability.google}
-          slackReady={availability.slack}
-          onConnect={provider => void connect(provider)}
-          onDisconnect={provider => void removeConnection(provider)}
-        />
+        <>
+          {!example ? (
+            <ConnectionsStrip
+              connections={view.connections}
+              busy={busy}
+              googleReady={availability.google}
+              slackReady={availability.slack}
+              onConnect={provider => void connect(provider)}
+              onDisconnect={provider => void removeConnection(provider)}
+            />
+          ) : null}
+          <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
+          {closer && reading.view ? <FindingsSheet findings={reading.view.findings} onClose={() => setCloser(false)} /> : null}
+        </>
       );
     }
     if (!opened && !view) return <Invitation onBegin={() => setOpened(true)} />;
