@@ -143,7 +143,7 @@ export function changesOutsideOffer(lastClaireText: string | null, titles: reado
 const REFERENT = /\b(that|it|those|them|this|these|the (?:first|second|third|last) one|both|all three|all of (?:it|them|those))\b/i;
 const REMOVE_ACTION = /\b(take|pull|get|knock|scratch|strike|cross|drop|remove|delete|cancel|clear|kill|skip|leave) (?:\w+ ){0,6}?(?:off|out|it|that|them)\b|\b(?:off|out of) (?:the )?(?:list|line|day line|schedule|tomorrow|today|\w+day)\b|\b(remove|delete|cancel|scratch|skip|drop) (?:the |that |it|them)?/i;
 const COMPLETE_ACTION = /\b(done|finished|complete|completed|did (?:it|that|the|them|this)|already did|handled|took care|wrapped|knocked out|mark (?:it|that|them|the)|marked|is in|went fine|went well|got it done|is over with|crossed off)\b/i;
-const MOVE_ACTION = /\b(move|push|bump|shift|reschedule|slide|switch|swap|instead|defer|postpone|do (?:it|that|them|those|this) (?:tomorrow|tonight|on |next |the day after|\w+day)|(?:to|for|on) (?:tomorrow|tonight|today|next \w+|the day after tomorrow|\w+day)\b|tomorrow instead|another day|later this week)/i;
+const MOVE_ACTION = /\b(move|push|bump|shift|reschedule|slide|switch|swap|instead|defer|postpone|put (?:it|that|them|those|this) back|back where (?:it|that|they) (?:was|were)|back to (?:where|its|the)|undo (?:that|it|the move)|do (?:it|that|them|those|this) (?:tomorrow|tonight|on |next |the day after|\w+day)|(?:to|for|on) (?:tomorrow|tonight|today|next \w+|the day after tomorrow|\w+day)\b|tomorrow instead|another day|later this week)/i;
 
 export type ExistingRowOp = "move" | "remove" | "complete";
 

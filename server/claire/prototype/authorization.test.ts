@@ -122,6 +122,12 @@ describe("authorizeExistingRowChange: conservative about work that predates the 
     expect(authorizeExistingRowChange({ op: "remove", ...panic, quote: "Lindqvist master key quote tomorrow. The property manager cancelled. Take it off tomorrow entirely.", lastClaireText: "What's the second change?" }).ok).toBe(false);
   });
 
+  it("'put it back where it was' after Claire moved the item is a move of that item (run 22)", () => {
+    const louise = { rowId: "r-dt", rowTitle: "Regulate the dryer timers at The Louise laundry room" };
+    expect(authorizeExistingRowChange({ op: "move", ...louise, quote: "Hmm, no, wait. Put it back where it was.", lastClaireText: "Done. The Louise dryer timer job moved from Saturday to tomorrow, Friday the 30th.", toDay: "Saturday" })).toEqual({ ok: true });
+    expect(authorizeExistingRowChange({ op: "move", ...louise, quote: "Undo that.", lastClaireText: "Done. The Louise dryer timer job moved from Saturday to tomorrow.", toDay: "Saturday" })).toEqual({ ok: true });
+  });
+
   it("a question about an existing item is not an instruction to change it", () => {
     expect(authorizeExistingRowChange({ op: "remove", rowId: "r-l", rowTitle: "Interview with the Whole Dog magazine writer", quote: "What's the deal with the magazine interview?", lastClaireText: null }).ok).toBe(false);
   });
