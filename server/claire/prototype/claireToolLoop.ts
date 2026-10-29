@@ -126,11 +126,11 @@ export async function openClaireSession(
       messages.push({ role: "assistant", content: response.content });
       const text = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text.trim()).filter(Boolean);
       const uses = response.content.filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
-      if (!uses.length) {
-        spoken = text.length ? text : spoken;
-        break;
-      }
-      // Text alongside tool calls is narration ("one moment"); only the final text is spoken.
+      // Everything Claire writes in this turn is spoken, in order: an answer given in the same
+      // message as a tool call (e.g. a capabilities answer alongside end_call) must not be lost.
+      // Run 8 (2026-10-29) dropped exactly that and spoke only the post-tool "Goodnight".
+      for (const line of text) if (!spoken.includes(line)) spoken.push(line);
+      if (!uses.length) break;
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const use of uses) {
         const toolStarted = Date.now();

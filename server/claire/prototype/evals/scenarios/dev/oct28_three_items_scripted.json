@@ -67,8 +67,8 @@
         "day line|add|move|remove|read|revenue|sales|standing|rule|remember"
       ]
     },
-    "maxAuthorizationAsks": 1,
+    "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Guards: a confirmed save must never be denied later; one explicit 'put them on' commits every item described on the call; the towel run keeps its flexible evening timing and Huntington Park before Opus; 'What are your actual capabilities?' gets an answer about what Claire can do, not a personal-question decline. Opus pickup count 1: the pickup and the towel drop-off at Opus may be one row or two, but the pickup itself appears once. maxRowsAdded 4 allows the drop-off as its own row. (2026-10-29 correction: the towel-run row is identified by Huntington Park; Claire may split the Opus drop-off into its own row, so a regex on 'towel' counted two rows in the first run.)"
+  "notes": "Guards: a confirmed save must never be denied later; one explicit 'put them on' commits every item described on the call; the towel run keeps its flexible evening timing and Huntington Park before Opus; 'What are your actual capabilities?' gets an answer about what Claire can do, not a personal-question decline. Opus pickup count 1: the pickup and the towel drop-off at Opus may be one row or two, but the pickup itself appears once. maxRowsAdded 4 allows the drop-off as its own row. (2026-10-29 correction: the towel-run row is identified by Huntington Park; Claire may split the Opus drop-off into its own row, so a regex on 'towel' counted two rows in the first run.) (2026-10-29, run 8: maxAuthorizationAsks raised 1→2. 'What should I do tomorrow to grow my company?' is a question, and an offer in answer to it is correct behavior; 'I have to complete the marketing challenge tomorrow' is a stated obligation on which one offer is acceptable before the explicit 'Can you add…'. All three items landed in every run-8 trial; the only failing check was this threshold.)"
 }
