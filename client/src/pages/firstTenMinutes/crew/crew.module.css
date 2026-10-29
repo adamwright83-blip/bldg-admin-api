@@ -591,6 +591,19 @@
   color: rgba(251, 245, 232, 0.8);
 }
 
+/* what the reading couldn't do, said plainly once the crew has had its say */
+.readingNotes {
+  max-width: 460px;
+  text-align: center;
+}
+
+.readingNotes p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(251, 245, 232, 0.66);
+}
+
 /* ------------------------------------------------------------------ Ilex's thread */
 
 .threadLayer {

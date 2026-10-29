@@ -332,6 +332,13 @@ export function CrewScene({
               </motion.form>
             ) : null}
             {!current && !final ? <p className={styles.waiting}>{view.stage ? UNDERSTANDING_COPY[view.stage] : null}</p> : null}
+            {!current && view.notes.length ? (
+              <div className={styles.readingNotes} data-testid="first-ten-reading-notes">
+                {view.notes.map(note => (
+                  <p key={note}>{note}</p>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className={styles.side} data-side="right">
             {settled.filter(key => SIDE[key] === "right").map(key => (
