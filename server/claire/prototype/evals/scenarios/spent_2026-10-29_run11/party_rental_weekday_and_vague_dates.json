@@ -1,0 +1,42 @@
+{
+  "id": "party_rental_weekday_and_vague_dates",
+  "title": "Organized party-rental owner books by weekday, says 'next Saturday' and means next week, and leaves one errand undated until asked",
+  "provenance": "authored",
+  "localTime": "09:40",
+  "seed": {
+    "operatorName": "Lorena",
+    "dayLine": [
+      { "title": "Return the broken generator to the equipment yard", "businessDate": "today" },
+      { "title": "Tent takedown at the Quinteros quinceañera", "businessDate": "tomorrow", "detailNote": "Crew of three, noon" },
+      { "title": "Deliver 40 chairs to Grace Chapel", "businessDate": "coming_sunday", "detailNote": "By 8 a.m." }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Lorena, 39, owns Fiesta Forward Party Rentals in El Monte: tents, tables, chairs, bounce houses. It is a weekday morning and she is cheerful, organized and specific. She schedules everything by weekday name and never says calendar dates. When she says 'next Saturday' she means the Saturday of next week, not the one coming up this week, and she will say so plainly if asked. She does not use software vocabulary and does not care how Claire works. If Claire asks the same thing twice she answers again, a little more slowly.",
+    "goals": [
+      "Add the bounce house delivery for the Ibarra school carnival on Tuesday, meaning the coming Tuesday, the next one.",
+      "Add the big tent setup for the Delgadillo wedding on next Saturday. She says the words 'next Saturday' and means the Saturday of next week; if Claire asks whether she means this coming Saturday, she says 'No, not this Saturday, the one after.'",
+      "Add the chair and linen count at the warehouse for the day after tomorrow.",
+      "She also wants to swing by the propane place for the heater tanks 'sometime soon' but has not picked a day. If Claire asks which day, she says Friday, meaning the coming Friday. If Claire puts it on a day without asking, she corrects it to Friday.",
+      "Nothing else should be added, moved or discussed; decline extra offers. Hang up when done, saying exactly: 'Perfect, thank you Claire. Bye bye.'"
+    ],
+    "opening": "Hi Claire, it's Lorena. I've got a few jobs to get on the books for the next couple of weeks, okay?",
+    "maxTurns": 16
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "coming_tuesday", "titleMatches": "ibarra|bounce|carnival", "count": 1 },
+      { "businessDate": "next_saturday", "titleMatches": "delgadillo|wedding|big tent", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "linen|chair count|warehouse|inventory", "count": 1 },
+      { "businessDate": "coming_friday", "titleMatches": "propane|heater", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "quinteros|takedown" },
+      { "businessDate": "coming_sunday", "titleMatches": "grace chapel" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 4,
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "Guards relative-date resolution from the call's calendar. 'Tuesday' and 'Friday' with no qualifier are the coming occurrence strictly after today (coming_tuesday, coming_friday); the operator actually says 'next Saturday' and means the Saturday of next week, Monday-start (next_saturday), and will correct Claire if she treats it as this week's; 'the day after tomorrow' is today+2. The operator never speaks a calendar date. The propane errand has no day until Claire asks, so one clarifying question is legitimate (it is not an authorization ask by the grader's definition, but a second ask for a batch confirmation is tolerated, hence maxAuthorizationAsks 2). Four new rows, each exactly once, plus the three seeded rows untouched; no absent checks are used because on some run days a weekday coincides with tomorrow or the day after, so wrong-day writes are caught by each row's required placement plus maxRowsAdded 4. Persona consistency: on a Saturday run, 'Saturday' and 'next Saturday' resolve to the same date under the format's rule, and the persona's 'not this Saturday, the one after' is still consistent because there is no 'this Saturday' left after today; the Delgadillo row is identified by title, not by distance from the Ibarra row."
+}

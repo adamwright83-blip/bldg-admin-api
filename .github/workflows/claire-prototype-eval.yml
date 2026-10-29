@@ -1,0 +1,105 @@
+name: Claire prototype evaluation (real models, disposable MySQL)
+# Spends Anthropic credit from the capped testing key
+# (CLAIRE_TEST_ANTHROPIC_API_KEY), never the production key. Runs the
+# native-tool prototype and, when asked, production Brain V2 on the same
+# scenarios, three trials each, and uploads traces + report as artifacts.
+# Explicit trigger only: a manual dispatch, or a push to the prototype branch
+# whose commit message contains [paid-eval] (GitHub does not register a new
+# workflow for manual dispatch until it exists on main). Ordinary pushes spend
+# nothing. The job fails unless every scenario passes every trial.
+on:
+  push:
+    branches: [claude/pre-launch-ai-harness-review-h52nrt]
+    paths: ['server/claire/prototype/**', '.github/workflows/claire-prototype-eval.yml']
+  workflow_dispatch:
+    inputs:
+      systems:
+        description: "Which systems to run: prototype, v2, or prototype,v2"
+        required: true
+        default: "prototype"
+      sets:
+        description: "Scenario sets: dev, sealed, or dev,sealed"
+        required: true
+        default: "dev"
+      trials:
+        description: "Trials per scenario"
+        required: true
+        default: "3"
+      only:
+        description: "Optional single scenario id"
+        required: false
+        default: ""
+      mode:
+        description: "eval (scenario sets) or smoke (live phone path: production inbound open + relay turn, real model, Day Line write and read-back)"
+        required: false
+        default: "eval"
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paid-eval]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only
+          MYSQL_DATABASE: claire_eval
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-only"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      NODE_ENV: ci
+      DATABASE_URL: mysql://root:test-only@127.0.0.1:3306/claire_eval
+      ALLOW_TEST_DB: '1'
+      ANTHROPIC_API_KEY: ${{ secrets.CLAIRE_TEST_ANTHROPIC_API_KEY }}
+      CLAIRE_PAID_REPLAY_AUTHORIZED: '1'
+      CLAIRE_REPLAY_KEY_IS_TESTING: '1'
+      JWT_SECRET: claire-prototype-eval-ci-disposable-000000000000000000000
+    steps:
+      - name: Require the testing key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo '::error::BLOCKED: add CLAIRE_TEST_ANTHROPIC_API_KEY (capped testing workspace key) as a repository Actions secret.'
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migrate the disposable database
+        run: node scripts/migrate.mjs
+      - name: Live-path smoke test (native-tool Claire through the production call functions)
+        if: github.event.inputs.mode == 'smoke'
+        run: pnpm tsx server/claire/prototype/evals/liveSmoke.ts
+      - name: Run the evaluation
+        if: github.event.inputs.mode != 'smoke'
+        run: |
+          pnpm tsx server/claire/prototype/evals/runEvals.ts \
+            --systems "${{ github.event.inputs.systems || 'prototype' }}" \
+            --sets "${{ github.event.inputs.sets || 'dev,sealed' }}" \
+            --trials "${{ github.event.inputs.trials || '3' }}" \
+            --only "${{ github.event.inputs.only || '' }}" \
+            --out eval-output
+      - name: Print the report
+        if: always() && github.event.inputs.mode != 'smoke'
+        run: cat eval-output/REPORT.md || true
+      - name: Print the re-gradeable trial records
+        if: always() && github.event.inputs.mode != 'smoke'
+        run: |
+          echo "===TRIALS.JSONL BEGIN==="
+          cat eval-output/trials.jsonl || true
+          echo
+          echo "===TRIALS.JSONL END==="
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event.inputs.mode != 'smoke'
+        with:
+          name: claire-prototype-eval
+          path: eval-output

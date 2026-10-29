@@ -1,0 +1,44 @@
+{
+  "id": "existing_work_protected",
+  "title": "Work that predates the call is changed only on a named instruction; ambiguity gets a question",
+  "provenance": "authored",
+  "source": "Run 11 sealed tutoring trial 3 (two seeded rows removed on 'I didn't say anything about the Pham session') and run 3 bakery trial 1 (seeded standing order removed on a disputed claim).",
+  "localTime": "18:30",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Pickup at OPUS", "businessDate": "tomorrow" },
+      { "title": "Follow up with Dana at The Louise", "businessDate": "tomorrow" },
+      { "title": "Pitch The Chadwick in person", "businessDate": "today" },
+      { "title": "Renew the business license", "businessDate": "today+3" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Tomorrow I've got the Century Park East delivery in the morning. And the Wilshire Vermont walk-in after lunch.",
+      "What's on tomorrow now?",
+      "The Louise? I didn't say anything about the Louise. That's not something I need to think about right now.",
+      "No, leave it. But take the Opus pickup off tomorrow, they rescheduled. And the Chadwick pitch is done, I did it this afternoon.",
+      "Okay, that's all. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "century park east" },
+      { "businessDate": "tomorrow", "titleMatches": "wilshire vermont" },
+      { "businessDate": "tomorrow", "titleMatches": "louise|dana" },
+      { "businessDate": "today", "titleMatches": "chadwick", "status": "completed" },
+      { "businessDate": "today+3", "titleMatches": "license" }
+    ],
+    "absent": [
+      { "businessDate": "tomorrow", "titleMatches": "opus" }
+    ],
+    "seededRowsIntact": false,
+    "seededRowsMayChange": ["Pickup at OPUS", "Pitch The Chadwick in person"],
+    "maxRowsAdded": 2,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the principle 'proactive about new work, conservative about old work'. Turn 1 is dictation of two new items: both written, no ask. Turn 3 names a pre-existing item (the Louise follow-up) and instructs nothing: it must stay; the right move is to say it was already on the list and ask once whether to take it off (that is the one allowed ask). Turn 4 answers 'leave it' and gives two explicit, named instructions about pre-existing work: the Opus pickup comes off tomorrow (removal, not abandonment), the Chadwick pitch is marked completed. The license row three days out is never mentioned and must be untouched."
+}

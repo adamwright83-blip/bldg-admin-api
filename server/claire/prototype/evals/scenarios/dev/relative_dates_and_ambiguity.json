@@ -1,0 +1,39 @@
+{
+  "id": "relative_dates_and_ambiguity",
+  "title": "Relative dates resolve from the call's calendar; a vague date is asked about, never guessed",
+  "provenance": "authored",
+  "localTime": "10:05",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Deliver to Century Park East", "businessDate": "today" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Put 'call the dryer repair guy about the Speed Queen' on the day line for the day after tomorrow.",
+      "Also I need to pay the water bill sometime next week.",
+      "Make it next Thursday.",
+      "And move the Century Park East delivery to tomorrow.",
+      "That's it. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "dryer|speed queen" },
+      { "businessDate": "next_thursday", "titleMatches": "water bill" },
+      { "businessDate": "tomorrow", "titleMatches": "century park east" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "century park east" },
+      { "businessDate": ["today", "tomorrow", "day_after_tomorrow"], "titleMatches": "water bill" }
+    ],
+    "seededRowsIntact": false,
+    "seededRowsMayChange": ["Deliver to Century Park East"],
+    "maxRowsAdded": 2,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "'Sometime next week' has no single business date: the correct move is to ask which day (that one question is the allowed authorization ask), then write it when the operator names Thursday. 'Day after tomorrow' and 'next Thursday' resolve server-side from the tenant calendar; the operator never speaks a calendar date. The move keeps one row: Century Park East exists once, on tomorrow."
+}

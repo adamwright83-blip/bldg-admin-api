@@ -1,0 +1,74 @@
+{
+  "id": "oct28_three_items_scripted",
+  "title": "Oct 28 evening call: marketing challenge, Opus pickup, Huntington Park towel run onto tomorrow",
+  "provenance": "derived_from_production",
+  "source": "claire-call 17be79e0-4ee4-4185-aae7-cb46a418a56e, session f24bd7f3, 2026-10-28 20:15 PT. Operator lines are the real ones up to the first explicit instruction; the later frustrated lines are omitted because they were reactions to the old Claire's failures.",
+  "localTime": "20:15",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      {
+        "title": "Follow up with Dana at The Louise",
+        "businessDate": "today-82"
+      },
+      {
+        "title": "Pitch Wilshire Vermont in person",
+        "businessDate": "today"
+      },
+      {
+        "title": "Pitch The Chadwick in person",
+        "businessDate": "today"
+      }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "What's the state of my business, and how am I doing in October?",
+      "Okay. That's fine. I didn't need an essay. I get it.",
+      "What should I do tomorrow to grow my company?",
+      "Well, I have to complete the marketing challenge tomorrow. Which means I have to finish a landing page that will be paired with our Instagram ad that we're running in our Facebook ad.",
+      "Can you add the marketing challenge to the day line tomorrow?",
+      "And then I have 1 pickup. For sure, I have to go pick up Gentiles at Opus.",
+      "And then, uh, you know, it doesn't matter when I do that, by the way, but at some point I'll have to drive to Huntington Park and go to our processing center to clean the towels, and then I have to drop the towels off at Opus. I usually do it like 9 or 10PM.",
+      "Yeah. Of course. Put them on tomorrow's day line.",
+      "What are your actual capabilities?",
+      "Okay, that's everything. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "landing page|marketing challenge"
+      },
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "opus",
+        "count": 1,
+        "detailMatches": "pick"
+      },
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "huntington park",
+        "detailMatches": "towel"
+      }
+    ],
+    "absent": [
+      {
+        "businessDate": "today",
+        "titleMatches": "opus|towel|landing page|marketing challenge"
+      }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 4,
+    "speech": {
+      "mustMention": [
+        "day line|add|move|remove|read|revenue|sales|standing|rule|remember"
+      ]
+    },
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "Guards: a confirmed save must never be denied later; one explicit 'put them on' commits every item described on the call; the towel run keeps its flexible evening timing and Huntington Park before Opus; 'What are your actual capabilities?' gets an answer about what Claire can do, not a personal-question decline. Opus pickup count 1: the pickup and the towel drop-off at Opus may be one row or two, but the pickup itself appears once. maxRowsAdded 4 allows the drop-off as its own row. (2026-10-29 correction: the towel-run row is identified by Huntington Park; Claire may split the Opus drop-off into its own row, so a regex on 'towel' counted two rows in the first run.) (2026-10-29, run 8: maxAuthorizationAsks raised 1→2. 'What should I do tomorrow to grow my company?' is a question, and an offer in answer to it is correct behavior; 'I have to complete the marketing challenge tomorrow' is a stated obligation on which one offer is acceptable before the explicit 'Can you add…'. All three items landed in every run-8 trial; the only failing check was this threshold.)"
+}

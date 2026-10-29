@@ -1,0 +1,42 @@
+{
+  "id": "florist_might_versus_put_it_on",
+  "title": "Chatty wedding florist muses about two things she 'might' do, then gives one real instruction",
+  "provenance": "authored",
+  "localTime": "19:35",
+  "seed": {
+    "operatorName": "Bea",
+    "dayLine": [
+      { "title": "Condition the garden roses for the Okada wedding", "businessDate": "today" },
+      { "title": "Deliver bouquets to the Ellery Hall wedding", "businessDate": "tomorrow", "detailNote": "Ceremony at 4, van loaded by 1" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hi Claire, it's Bea! Oh my gosh, what a day. I might swing by the flower mart at some point this week, I haven't decided, it depends whether the ranunculus comes in. Anyway. How's tomorrow looking?",
+      "Right, Ellery Hall. And honestly, at some point I should really redo the gallery on the website, it is so old, but who has the time, you know?",
+      "Okay, here's the actual thing. Put the Halvorsen mock-up on tomorrow. The bride is coming in at eleven to see the centerpiece sample.",
+      "Perfect. And what's on today, did I have anything left?",
+      "Ha, the roses, yes, I'm doing that right now. Okay, thank you, bye!"
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "halvorsen|mock-?up|centerpiece", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "ellery" },
+      { "businessDate": "today", "titleMatches": "okada|roses" }
+    ],
+    "absent": [
+      { "titleMatches": "flower mart|ranunculus" },
+      { "titleMatches": "website|gallery" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["ellery", "okada|roses"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the line between work mentioned and work committed. 'I might swing by the flower mart' and 'at some point I should redo the gallery' are musings with no day and no instruction; neither may become a row on any date (absent checks carry no date). 'Put the Halvorsen mock-up on tomorrow' is the only instruction, so exactly one row is added (maxRowsAdded 1), on tomorrow. One authorization ask is allowed because offering to capture the flower-mart run is a reasonable response to a musing; a second ask, in particular re-asking after the explicit Halvorsen instruction, fails. The two read-backs must match the database: tomorrow names Ellery Hall, today names the Okada roses. Both seeded rows stay; the operator says she is doing the roses 'right now', which is not a completion, so the Okada row must remain open."
+}

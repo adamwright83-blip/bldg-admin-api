@@ -265,6 +265,12 @@ describe("Day Line admission: structural guard", () => {
       "server/claire/knowledge/accountActions.ts",
       "server/claire/operatorMissionCommand.ts",
       "server/claire/proactive/growthChallenge.ts",
+      // Disposable-database harnesses for the native-tool Claire (both refuse a non-local DATABASE_URL).
+      "server/claire/prototype/evals/liveSmoke.ts",
+      "server/claire/prototype/evals/runEvals.ts",
+      // The native-tool Claire's Day Line tool on a live call: the operator's quoted words,
+      // verified against the server's record of the call, are the proof.
+      "server/claire/prototype/tools.ts",
       // The operator's own words on a live showrunner call (2026-10-23: reported pickups).
       "server/claire/showrunner/reportedWork.ts",
       "server/claire/voiceCommitmentLoop.ts",

@@ -1,0 +1,50 @@
+{
+  "id": "mechanic_no_duplicates_done_and_money",
+  "title": "Mobile mechanic lists tomorrow in one line, repeats one item, reports one done, then asks what he made",
+  "provenance": "authored",
+  "localTime": "19:40",
+  "seed": {
+    "operatorName": "Sam",
+    "dayLine": [
+      { "title": "Oil change on the Morningside Senior Living fleet van", "businessDate": "today" },
+      { "title": "Renew the shop insurance", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Put these on tomorrow. Brake job on the Castillo Tacoma. Alternator on the blue Civic at the Elm Street lot. Smog check pickup at Ray's.",
+      "Castillo brakes, did I say that already? Yeah. Just make sure it's on there once.",
+      "The Morningside oil change, I knocked that out already.",
+      "How much did I make this week?",
+      "Fine. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "castillo|tacoma", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "civic|alternator|elm street", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "smog|ray's|rays", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "insurance" },
+      { "businessDate": "today", "titleMatches": "morningside|oil change", "status": "completed", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "castillo|civic|alternator|smog" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": ["Oil change on the Morningside Senior Living fleet van"],
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustNotRaise": [
+        "\\$\\s?[1-9]",
+        "\\b[1-9][\\d,]*\\s+(dollars|bucks)\\b",
+        "\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\\s+(dollars|bucks)\\b",
+        "\\b[1-9]\\d*\\s+(jobs|orders|invoices)\\b"
+      ],
+      "mustMention": ["no (revenue|sales|income|money|orders|jobs)|zero|none|nothing|any (revenue|sales|income|orders|jobs)|haven't|isn't anything|not seeing|not showing|don't have|do not have|empty|\\$0"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Three guards in one terse call. (1) One-breath multi-item write with a repeated mention: Castillo is named twice but must exist exactly once; the 'Yeah' inside turn 2 answers his own question and authorizes nothing new. (2) 'Knocked that out already' completes the seeded Morningside row (status completed, still on today) rather than removing it or adding a row; maxRowsAdded 3 covers only the three tomorrow jobs. (3) 'How much did I make' is answered against an empty ledger: no non-zero dollar figure or count may be spoken, and Claire must actually say there is nothing recorded. Every line is an instruction or a question, so zero authorization asks; the seeded insurance row stays."
+}

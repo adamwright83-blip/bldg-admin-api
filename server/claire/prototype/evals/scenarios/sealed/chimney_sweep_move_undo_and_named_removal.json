@@ -1,0 +1,48 @@
+{
+  "id": "chimney_sweep_move_undo_and_named_removal",
+  "title": "Brisk chimney sweep moves a job without saying its day, undoes the move a breath later, and takes a cancelled job off by name",
+  "provenance": "authored",
+  "localTime": "17:20",
+  "seed": {
+    "operatorName": "Dermot",
+    "dayLine": [
+      { "title": "Pick up the new rotary rods from the supply house", "businessDate": "today" },
+      { "title": "Level 2 camera inspection for the Thackeray sale", "businessDate": "tomorrow", "detailNote": "Realtor meets you at 9, bring the report forms" },
+      { "title": "Replace the rain cap on the Ostrander chimney", "businessDate": "today+3" },
+      { "title": "Sweep and inspect both fireplaces at the Pellegrino house", "businessDate": "today+4", "detailNote": "Gate code 4471, they're home after 4" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Claire, it's Dermot. Move the Pellegrino sweep to tomorrow, the Thackeray inspection is two blocks from them.",
+      "Hmm. No, actually, undo that. Put it back where it was. They said after four and I won't be done with Thackeray in time.",
+      "The Ostrander rain cap. House sold, the new owners went with somebody else. Take it off.",
+      "So what's tomorrow now?",
+      "Right. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today+4", "titleMatches": "pellegrino", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "thackeray|camera inspection", "count": 1 },
+      { "businessDate": "today", "titleMatches": "rotary rod|supply house", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "tomorrow", "titleMatches": "pellegrino" },
+      { "titleMatches": "ostrander|rain cap" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": [
+      "Sweep and inspect both fireplaces at the Pellegrino house",
+      "Replace the rain cap on the Ostrander chimney"
+    ],
+    "maxRowsAdded": 0,
+    "speech": {
+      "mustMention": ["thackeray|camera inspection"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards three things about work that predates the call. (1) Turn 1 names an existing job (the Pellegrino sweep) and a new day but never says which day it is on now (it is four days out): Claire must find the row by name and move it, not add a new one. (2) Turn 2 is an immediate reversal ('undo that, put it back where it was'): the same row must go back to today+4, so the final state is the original placement, exactly one Pellegrino row, none on tomorrow (tomorrow and today+4 never coincide). The row is listed in seededRowsMayChange because it legitimately moved twice; count 1 plus maxRowsAdded 0 fail a Claire that re-creates it instead of moving it, and the absent check fails one that leaves the first move in place. (3) Turn 3 names the Ostrander rain cap and gives the instruction in the same breath ('take it off'): the row must be gone from every date (the absent check carries no date), without a confirming question. Nothing new is authorized, so maxRowsAdded is 0. Every line is a named instruction or a question, so zero authorization asks; a 'should I move it back?' or 'want me to take it off?' is the friction this guards. Turn 4 is a question and must get a real answer naming the surviving Thackeray inspection (mustMention), which must match the database. The rods pickup on today is never mentioned and must be untouched."
+}

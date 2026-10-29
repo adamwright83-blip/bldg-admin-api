@@ -3,6 +3,8 @@ import { getUserByOpenId } from "../db";
 export type PersistedOperatorIdentity = {
   userId: number;
   tenantId: string;
+  /** The persisted display name, if any. Spoken by Claire as a first name. */
+  name: string | null;
 };
 
 export async function loadPersistedOperatorIdentity(
@@ -20,5 +22,6 @@ export async function loadPersistedOperatorIdentity(
   return {
     userId,
     tenantId: user.tenantId?.trim() || "default",
+    name: typeof user.name === "string" && user.name.trim() ? user.name.trim() : null,
   };
 }

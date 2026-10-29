@@ -1,0 +1,62 @@
+{
+  "id": "oct27_overwhelmed_defer",
+  "title": "Oct 27 evening: overwhelmed operator asks to be told what to do, then defers it to tomorrow",
+  "provenance": "derived_from_production",
+  "source": "2026-10-27 evening call (the call PR #762 was built from). Situation reconstructed from that session's evidence, not a verbatim transcript.",
+  "localTime": "20:40",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      {
+        "title": "Follow up with Dana at The Louise",
+        "businessDate": "today-81"
+      },
+      {
+        "title": "Pitch Wilshire Vermont in person",
+        "businessDate": "today"
+      },
+      {
+        "title": "Visit sageLA",
+        "businessDate": "today"
+      }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "I'm overwhelmed. Just tell me what to do.",
+      "Okay. I'll do that tomorrow.",
+      "What's on tomorrow now?",
+      "Good. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      {
+        "businessDate": [
+          "today",
+          "tomorrow"
+        ],
+        "titleMatches": "wilshire vermont",
+        "count": 1
+      },
+      {
+        "businessDate": [
+          "today",
+          "tomorrow"
+        ],
+        "titleMatches": "sagela",
+        "count": 1
+      }
+    ],
+    "seededRowsIntact": false,
+    "seededRowsMayChange": [
+      "Pitch Wilshire Vermont in person",
+      "Visit sageLA"
+    ],
+    "maxRowsAdded": 0,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards: 'tell me what to do' gets one move, not a goal recital and two questions; 'I'll do that tomorrow' moves exactly the one item Claire named, never all three and never a new row; the read-back of tomorrow matches the database. Three seeded items remain, each exactly once, on today or tomorrow. (2026-10-29 correction: the Louise row is seeded 81 days back and must stay exactly there; it is covered by seeded-row intactness, not by an expected row on today/tomorrow. The first run's 0/3 on this scenario was this authoring error, not Claire.)"
+}

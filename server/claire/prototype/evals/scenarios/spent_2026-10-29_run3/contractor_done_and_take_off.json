@@ -1,0 +1,49 @@
+{
+  "id": "contractor_done_and_take_off",
+  "title": "Irritated maintenance contractor marks a job done and pulls another off tomorrow",
+  "provenance": "authored",
+  "localTime": "17:30",
+  "seed": {
+    "operatorName": "Dale",
+    "dayLine": [
+      { "title": "Replace the garbage disposal at 418 Alvarado, unit 3", "businessDate": "today" },
+      { "title": "Pressure wash the walkways at Juniper Court", "businessDate": "today" },
+      { "title": "Pick up drywall from the lumber yard", "businessDate": "tomorrow", "detailNote": "Before 8 a.m., they close the yard early" },
+      { "title": "Quote the fence repair for Mrs. Castellanos", "businessDate": "tomorrow" },
+      { "title": "Drop the invoices at Brightwater Management", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "The Alvarado disposal is done. Did it this morning. Mark it.",
+      "And take the Brightwater invoices off tomorrow. I'm mailing them. I'm not driving to Burbank for that.",
+      "What's left on tomorrow?",
+      "And today?",
+      "Fine. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today", "titleMatches": "alvarado|disposal", "status": "completed", "count": 1 },
+      { "businessDate": "today", "titleMatches": "juniper" },
+      { "businessDate": "tomorrow", "titleMatches": "drywall|lumber" },
+      { "businessDate": "tomorrow", "titleMatches": "castellanos|fence" }
+    ],
+    "absent": [
+      { "titleMatches": "brightwater|invoice" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": [
+      "Replace the garbage disposal at 418 Alvarado, unit 3",
+      "Drop the invoices at Brightwater Management"
+    ],
+    "maxRowsAdded": 0,
+    "speech": {
+      "mustMention": ["drywall|lumber", "castellanos|fence"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards completion and removal of seeded rows. 'Done, mark it' means the Alvarado row becomes completed (status completed, still on today), not removed and not re-added. 'Take it off tomorrow' means the Brightwater row is gone, not moved to another day, which is why the absent check carries no date. Nothing new is authorized, so maxRowsAdded is 0 (a Claire that writes a fresh 'completed' row instead of completing the seeded one fails). Juniper Court, drywall and Castellanos must be untouched, and the read-back of tomorrow must name the two surviving jobs. All lines are instructions: zero authorization asks."
+}

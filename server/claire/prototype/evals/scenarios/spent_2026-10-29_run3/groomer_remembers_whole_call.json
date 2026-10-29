@@ -1,0 +1,44 @@
+{
+  "id": "groomer_remembers_whole_call",
+  "title": "Chatty mobile dog groomer scatters three tasks through the call, then says 'put all that on tomorrow'",
+  "provenance": "authored",
+  "localTime": "20:25",
+  "seed": {
+    "operatorName": "Renee",
+    "dayLine": [
+      { "title": "Buy a new clipper blade", "businessDate": "today" },
+      { "title": "Groom Pepper and Olive at the Westridge house", "businessDate": "tomorrow", "detailNote": "9 a.m., two standard poodles" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Renee, 51, runs Muddy Paws Mobile Grooming out of a van in the San Fernando Valley. It is 8:25 PM and she is tired but warm and chatty. She rambles, drifts between topics, and mentions things she needs to do in passing without saying when. She says 'sweetie' and 'anyway'. She does not use software vocabulary and does not know how Claire works.",
+    "goals": [
+      "Early in the call, mention in passing that she is out of the oatmeal shampoo and needs to swing by the supply place in Van Nuys. Do not say when.",
+      "Chat for a bit about the van's generator cutting out twice today and how tired she is. She wants nothing done about that.",
+      "Find out what is already on tomorrow.",
+      "Later, mention two more things in passing, still without saying when: she owes Mrs. Abernathy a callback about her goldendoodle's matting, and Biscuit the Yorkie on Larchmont is due for a nail grind.",
+      "Near the end, in one line, tell Claire to put all of that on tomorrow. She means every task she mentioned on the call and expects them to land without re-listing them. If Claire asks her to repeat the list, she sighs and repeats it once.",
+      "Hang up when done, saying exactly: 'Okay sweetie, that's it. Night.'"
+    ],
+    "opening": "Hi Claire, it's Renee. Long day. Oh, before I forget, I'm completely out of the oatmeal shampoo, I've got to swing by the supply place in Van Nuys. Anyway. How'd tomorrow end up looking?",
+    "maxTurns": 14
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "shampoo|van nuys|supply", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "abernathy|doodle", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "biscuit|yorkie|nail", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "westridge|pepper" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "shampoo|van nuys|abernathy|doodle|biscuit|yorkie|nail" },
+      { "titleMatches": "generator" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "Guards memory across the call: the shampoo run is mentioned in the opening and buried under small talk before the single 'put all that on tomorrow' arrives many turns later. All three mentioned tasks must land on tomorrow exactly once; the generator complaint is not a task and must not become a row. Nothing may land on today. maxAuthorizationAsks is 2 because an interactive operator drops items over several turns and Claire may reasonably offer once before the instruction, and may once ask what 'all that' covers if she truly lost track, but re-asking after the instruction is the failure this guards. The seeded Westridge groom must survive and be read back when she asks about tomorrow."
+}

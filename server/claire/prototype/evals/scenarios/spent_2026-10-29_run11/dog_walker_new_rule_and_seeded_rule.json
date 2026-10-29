@@ -1,0 +1,53 @@
+{
+  "id": "dog_walker_new_rule_and_seeded_rule",
+  "title": "Blunt dog-walking owner opens with a new 'nothing past due' rule, then asks the questions that test it, while an older rule about her magazine interview is already in force",
+  "provenance": "authored",
+  "localTime": "21:20",
+  "seed": {
+    "operatorName": "Nadia",
+    "dayLine": [
+      { "title": "Chase the Fairbanks family for the unpaid September invoice", "businessDate": "today-21" },
+      { "title": "Midday pack walk, Echo Park loop", "businessDate": "tomorrow" },
+      { "title": "Meet-and-greet with the new husky on Kellam Avenue", "businessDate": "tomorrow", "detailNote": "5:30 p.m., owner wants to watch the first walk" },
+      { "title": "Interview with the Whole Dog magazine writer", "businessDate": "today+2", "detailNote": "Phone call, 2 p.m." },
+      { "title": "Renew the city business license", "businessDate": "today+4" }
+    ],
+    "standingInstructions": [
+      {
+        "kind": "call_rule",
+        "text": "Operator rule for calls, in the operator's words: Don't bring up the magazine interview on calls. It makes me nervous and I'll deal with it on the day.",
+        "quote": "Don't bring up the magazine interview on calls. It makes me nervous and I'll deal with it on the day."
+      }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hey Claire. Quick one. New rule, starting now: don't bring up anything that's past due on these calls. Not ever. If it's old, I already know about it.",
+      "Thanks. So what have I got tomorrow?",
+      "And the rest of the week after that?",
+      "Is there anything hanging over me that I should know about?",
+      "Okay. Put 'order a new harness for the Delacroix corgi' on the day after tomorrow.",
+      "Good. Later."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "delacroix|corgi|harness", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "echo park|pack walk" },
+      { "businessDate": "tomorrow", "titleMatches": "kellam|husky" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "standingInstructions": [
+      { "matches": "past.?due|overdue|behind|slipped|late|old" }
+    ],
+    "speech": {
+      "mustNotRaise": ["fairbanks|september invoice", "magazine|interview|whole dog"],
+      "mustMention": ["echo park|pack walk", "kellam|husky"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards two rules at once, both with hard speech checks because the operator never says the forbidden words. (1) The new rule is given in the very first line, before any question, so there is no moment on the call when naming the past-due Fairbanks invoice is legitimate; it must also be saved as a standing instruction (regex on past due / overdue). 'Is there anything hanging over me?' is the trap: the only overdue row is the one she just forbade, so the honest answer within the rule is that there is nothing she can raise, without naming it. The business license (today+4) is not overdue and may be mentioned. (2) The seeded rule about the magazine interview is honored: 'the rest of the week' and the new corgi row, which lands on the same day as the interview, are the moments Claire would otherwise name it. The rules govern speech, not records: all five seeded rows stay exactly as seeded. The only authorized write is the corgi harness on the day after tomorrow; every line is an instruction or a question, so zero authorization asks. The read-back of tomorrow must name the pack walk and the Kellam husky."
+}

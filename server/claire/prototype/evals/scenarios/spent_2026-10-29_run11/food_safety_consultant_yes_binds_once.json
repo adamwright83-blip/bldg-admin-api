@@ -1,0 +1,42 @@
+{
+  "id": "food_safety_consultant_yes_binds_once",
+  "title": "Tired food-safety consultant says 'yeah' to small talk, then 'yes' to one offer, which must write exactly one row on the day he named",
+  "provenance": "authored",
+  "localTime": "17:55",
+  "seed": {
+    "operatorName": "Desmond",
+    "dayLine": [
+      { "title": "Walk-through audit at the Casa Mariposa kitchen", "businessDate": "today" },
+      { "title": "Write up the Brightleaf Catering corrective actions", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hi Claire, it's Desmond. Long one. I'm still at Casa Mariposa, they've got me crawling around the walk-in with a thermometer.",
+      "Yeah.",
+      "Okay, so. Lotus Garden on Western failed their county inspection and they want me in before the re-check. Tomorrow's got Brightleaf. Day after tomorrow is open, right? Should Lotus Garden go there?",
+      "Yes.",
+      "Good. What does that leave on tomorrow, just Brightleaf?",
+      "Right. Thanks, Claire. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "lotus garden|re-?check|western", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "brightleaf" },
+      { "businessDate": "today", "titleMatches": "casa mariposa|walk-?through" }
+    ],
+    "absent": [
+      { "businessDate": ["today", "tomorrow"], "titleMatches": "lotus garden|re-?check" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["brightleaf"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the named-yes rule from both sides without a numbers question. Turn 1 is small talk about a job still in progress (not finished, so the Casa Mariposa row stays open and untouched); turn 2's 'Yeah.' answers whatever Claire said with nothing offered, so it authorizes nothing. Turn 3 asks two questions: whether the day after tomorrow is open (it is: the seed has nothing there) and whether Lotus Garden should go there. Claire may write it directly, since the question names the job and the day, or offer once and write on turn 4's 'Yes.' Either path ends with exactly one Lotus Garden row on the day after tomorrow and nothing on today or tomorrow (those dates never coincide with the day after tomorrow, so the absent check is safe). maxRowsAdded 1 catches a write on the stray 'yeah' or a duplicate on the real 'yes'. The read-back in turn 5 must name Brightleaf and must match the database."
+}

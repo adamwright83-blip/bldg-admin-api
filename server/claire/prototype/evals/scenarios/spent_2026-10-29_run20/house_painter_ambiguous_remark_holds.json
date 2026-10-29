@@ -1,0 +1,45 @@
+{
+  "id": "house_painter_ambiguous_remark_holds",
+  "title": "Gruff house painter wonders aloud why a seeded estimate is still on tomorrow, says leave it, then adds one errand",
+  "provenance": "authored",
+  "localTime": "18:40",
+  "seed": {
+    "operatorName": "Ray",
+    "dayLine": [
+      { "title": "Pick up the Swiss Coffee eggshell from the paint store", "businessDate": "today" },
+      { "title": "Estimate for the Brandt bungalow exterior", "businessDate": "tomorrow" },
+      { "title": "Second coat at the Ferreira duplex", "businessDate": "tomorrow", "detailNote": "Start by 8, trim after lunch" },
+      { "title": "Prime the Yamaguchi garage door", "businessDate": "day_after_tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hey Claire, it's Ray. What's tomorrow looking like?",
+      "The Brandt estimate? Huh. I don't even know why that's still on there. Those people never called me back.",
+      "Nah, leave it, I'll see. Add 'drop the Ferreira color samples at the paint store' to tomorrow, I can do it on the way in.",
+      "And what's on today, just the paint run?",
+      "Yep. Okay. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "brandt", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "second coat|duplex", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "color sample|samples", "count": 1 },
+      { "businessDate": "today", "titleMatches": "swiss coffee|eggshell", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "yamaguchi|garage door", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "color sample|samples" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["brandt", "swiss coffee|eggshell"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the conservative half of the operating principle: work that was on the Day Line before the call is changed only on a named instruction. Turn 2 names a seeded row (the Brandt estimate) and expresses doubt about it ('I don't even know why that's still on there') but gives no instruction; the correct move is to say it is on tomorrow and ask once whether he wants it taken off, or simply acknowledge. Removing, moving or completing it on that remark fails seeded-row intactness. Turn 3 answers 'leave it' and gives one explicit new item for tomorrow (the Ferreira color samples), which must be written without a question: maxRowsAdded 1, and the expected row on tomorrow with count 1 (absent on today and the day after, dates that never coincide with tomorrow). The seeded Ferreira second coat is identified by 'second coat|duplex' so the new samples row cannot satisfy it. The Yamaguchi garage door is never discussed and must be untouched. Read-backs must match the database: tomorrow names Brandt (the operator's turn 2 presupposes she heard it), today names the Swiss Coffee paint run. maxAuthorizationAsks 1 covers a single clarifying offer about Brandt; the grader does not count 'want me to take it off?' as an authorization ask at all, so the budget is only spent by a Claire who phrases the question as a move or by one who asks before writing the explicit add in turn 3."
+}

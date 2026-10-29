@@ -1,0 +1,49 @@
+{
+  "id": "wedding_dj_dictated_list_readback",
+  "title": "Fast-talking wedding DJ drops three dated jobs one at a time, never says 'add', then wants everything read back before he goes",
+  "provenance": "authored",
+  "localTime": "22:05",
+  "seed": {
+    "operatorName": "Dom",
+    "dayLine": [
+      { "title": "Final invoice for the Bellamy wedding", "businessDate": "today" },
+      { "title": "Sound check at the Arroyo Vista ballroom", "businessDate": "tomorrow", "detailNote": "Load in 3 p.m." }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Dom, 33, runs Lumen Sound Co., a one-man wedding and event DJ outfit in Burbank. It is late and he is wired after a gig. He talks fast and upbeat, says 'boom', 'love it' and 'so', and tells Claire things in the order he thinks of them rather than all at once. He treats telling Claire about a job as the same thing as having her keep track of it and never uses the words add, put, save or write. He does not use software vocabulary and does not care how Claire works. He does not comment on or question anything already on his list that he did not bring up.",
+    "goals": [
+      "Over the course of the call, one per turn, tell Claire about three things with their days attached: tomorrow, pick up the rented uplights from the AV warehouse in North Hollywood before the Arroyo Vista sound check; the day after tomorrow, the planning call with the Nguyen-Reyes couple about their do-not-play list; and Sunday, the Harrington fortieth anniversary party at the Elks lodge.",
+      "He never says add, put, save or write. If Claire asks whether he wants something written down, he says 'yeah, obviously' once and carries on; he does not repeat an item unless Claire says she missed it.",
+      "If Claire asks which Sunday he means, it is the coming Sunday, the next one on the calendar.",
+      "After all three are out, ask Claire to read back everything she has for him, and listen to it. If one is on the wrong day, correct it once.",
+      "Nothing else is to be added or changed; if Claire offers anything extra, he declines briefly.",
+      "Hang up when the read-back is right, saying exactly: 'Boom. Love it. Later, Claire.'"
+    ],
+    "opening": "Claire! It's Dom. Okay, so, tomorrow I gotta grab the rented uplights from the AV warehouse in North Hollywood before the Arroyo Vista sound check.",
+    "maxTurns": 12
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "uplight|av warehouse|north hollywood", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "nguyen|reyes|do.not.play|planning call", "count": 1 },
+      { "businessDate": "coming_sunday", "titleMatches": "harrington|anniversary|elks", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "arroyo vista|sound check", "count": 1 },
+      { "businessDate": "today", "titleMatches": "bellamy|invoice", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "uplight|av warehouse|nguyen|reyes|do.not.play|harrington|anniversary|elks" },
+      { "businessDate": "tomorrow", "titleMatches": "nguyen|reyes|do.not.play" },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "uplight|av warehouse" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustMention": ["uplight|av warehouse|north hollywood", "nguyen|reyes|do.not.play|planning call", "harrington|anniversary|elks"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the dictated list with no magic word, delivered across several turns rather than in one breath. Each item arrives with its day attached, framed as 'tomorrow I gotta...' rather than as a command; the proactive half of the operating principle says this is new work being dictated and it should be recorded. Correct final state: all three rows exist exactly once on their spoken days, nothing lands on today, and the seeded Bellamy invoice and Arroyo Vista sound check are untouched. 'Sunday' with no qualifier is the coming Sunday strictly after today (coming_sunday); on some run days that is tomorrow or the day after, so no absent check is placed on the Harrington row and wrong-day writes there are caught by its required placement plus maxRowsAdded 3. Absent checks use only date pairs that can never coincide (today vs tomorrow vs day after). maxAuthorizationAsks 1 tolerates a single 'want me to put these on?' at some point, since the operator never gives a command; the persona says yes once, so re-asking after that, or asking per item, is the failure guarded. The read-back request must be answered with the three items by name (mustMention) and must match the database."
+}

@@ -1,0 +1,51 @@
+{
+  "id": "wedding_cake_baker_dictated_week_readback",
+  "title": "Precise wedding-cake baker puts down four things across the call, says 'next Saturday' and means next week, leaves one errand undated until asked, and wants everything read back",
+  "provenance": "authored",
+  "localTime": "21:15",
+  "seed": {
+    "operatorName": "Marguerite",
+    "dayLine": [
+      { "title": "Pay the sugar-flower supplier", "businessDate": "today" },
+      { "title": "Bake and freeze the sponge layers for the Ferrante wedding", "businessDate": "tomorrow", "detailNote": "Four tiers, lemon elderflower" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Marguerite, 46, owns Sugarline Cakes, a wedding and celebration cake studio in Monrovia. It is 9:15 PM after a long day of piping. She is precise, courteous and a little formal, schedules everything by weekday name and never says calendar dates. When she says 'next Saturday' she means the Saturday of next week, not the one coming up, and she will say so plainly if asked. She gives her items one or two per turn rather than all at once. She does not use software vocabulary and does not care how Claire works. She does not question or comment on anything already on her list that she did not bring up. If Claire asks the same thing twice, she answers again, a little more slowly.",
+    "goals": [
+      "Put down the Oyelaran couple's tasting appointment for tomorrow at two.",
+      "Put down the delivery of the Whitlock anniversary cake to the Grandview Terrace clubhouse for the day after tomorrow.",
+      "Put down the Brightman wedding setup at Hilltop Chapel for next Saturday. She says the words 'next Saturday' and means the Saturday of next week; if Claire asks whether she means this coming Saturday, she says 'No, not this coming one, the Saturday of next week.'",
+      "She also needs to collect the acrylic cake stands from the rental place but has not picked a day; she first says 'at some point soon'. If Claire asks which day, she says Thursday, meaning the coming Thursday, the next one on the calendar. If Claire puts it on a day without asking, she corrects it to Thursday.",
+      "After all four are out, ask Claire to read back everything she has for her and listen. If one is on the wrong day, correct it once.",
+      "Nothing else is to be added or changed; decline any extra offers briefly. Hang up when the read-back is right, saying exactly: 'Lovely. Thank you, Claire. Goodnight.'"
+    ],
+    "opening": "Good evening, Claire. It's Marguerite. I have a few things to put down for the coming week, if you're ready.",
+    "maxTurns": 16
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "oyelaran|tasting", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "whitlock|grandview|anniversary cake", "count": 1 },
+      { "businessDate": "next_saturday", "titleMatches": "brightman|hilltop", "count": 1 },
+      { "businessDate": "coming_thursday", "titleMatches": "cake stand|acrylic|stands", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "ferrante|sponge", "count": 1 },
+      { "businessDate": "today", "titleMatches": "sugar.?flower|supplier", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "oyelaran|tasting" },
+      { "businessDate": ["today", "tomorrow"], "titleMatches": "whitlock|grandview|anniversary cake" },
+      { "businessDate": ["today", "tomorrow", "day_after_tomorrow"], "titleMatches": "brightman|hilltop" },
+      { "businessDate": "today", "titleMatches": "cake stand|acrylic|stands" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 4,
+    "speech": {
+      "mustMention": ["oyelaran|tasting", "whitlock|grandview|anniversary cake", "brightman|hilltop", "cake stand|acrylic|stands"]
+    },
+    "maxAuthorizationAsks": 2,
+    "falseClaimFails": true
+  },
+  "notes": "Guards a dictated multi-item list delivered across turns, with relative-date resolution from the call's calendar and a read-back before goodbye. The opening says 'put down', so the items are instructions as they arrive. Four new rows, each exactly once: tomorrow; the day after tomorrow; 'next Saturday', which the operator actually says and means the Saturday of next week, Monday-start (next_saturday, which is never today, tomorrow or the day after on any run day, so those absent checks are safe); and the cake stands, which have no day until Claire asks, so one clarifying question is legitimate and the persona then says Thursday, the coming Thursday strictly after today (coming_thursday). On some run days the coming Thursday is tomorrow or the day after, so that row carries no absent check beyond today and is guarded by its placement plus maxRowsAdded 4. A Claire that guesses a day for the stands is still graded on final state after the persona's correction: exactly one row, on Thursday. maxAuthorizationAsks 2: one for the vague-date question if phrased as an offer, one for a single batch confirmation; asking per item fails. The read-back must name all four (mustMention) and match the database. Both seeded rows are untouched. Persona consistency: on a Saturday or Sunday run, 'this coming Saturday' and 'the Saturday of next week' are the same date under the format's rule, and the persona's answer is still consistent because there is no earlier Saturday left; the Brightman row is identified by title, not by distance."
+}

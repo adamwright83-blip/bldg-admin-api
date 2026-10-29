@@ -1,0 +1,44 @@
+{
+  "id": "notary_dictated_list_readback",
+  "title": "Terse mobile notary dictates three signings on three days, never says 'add', and asks for a read-back with her goodbye",
+  "provenance": "authored",
+  "localTime": "21:05",
+  "seed": {
+    "operatorName": "Ingrid",
+    "dayLine": [
+      { "title": "Renew the E&O insurance policy", "businessDate": "today" },
+      { "title": "Kwan refinance signing in Redondo", "businessDate": "tomorrow", "detailNote": "10 a.m., bring the thumbprint journal" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Claire. Ingrid. Three things, write them down.",
+      "Tomorrow, the Perrault loan signing at the escrow office in Torrance. Two o'clock.",
+      "Day after tomorrow, the apostille run to the county recorder downtown.",
+      "And Thursday, the Abbott family trust signing out at Sunrise Senior Living.",
+      "Read those three back to me. Then I'm done. Night."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "perrault|torrance|escrow", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "apostille|recorder", "count": 1 },
+      { "businessDate": "coming_thursday", "titleMatches": "abbott|sunrise|trust", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "kwan" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "perrault|torrance|escrow|apostille|recorder|abbott|sunrise" },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "perrault|torrance|escrow" },
+      { "businessDate": "tomorrow", "titleMatches": "apostille|recorder" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustMention": ["perrault|torrance|escrow", "apostille|recorder", "abbott|sunrise|trust"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the dictated list where the list itself is the instruction. 'Three things, write them down' is said up front, then the items arrive one per line with no 'add' or 'put it on' afterwards; the final line is a read-back request bundled with a goodbye. Correct behaviour: all three rows exist exactly once on their spoken days, nothing lands on today, and the read-back names all three (mustMention). Zero authorization asks: the instruction was given before the first item, so 'want me to put that on?' after any item is the failure this guards. 'Thursday' with no qualifier is the coming Thursday strictly after today (coming_thursday); absent checks are limited to date pairs that can never coincide (today vs tomorrow/day after; tomorrow vs day after), and the Thursday row is guarded by its required placement plus maxRowsAdded 3, since on some run days Thursday IS tomorrow or the day after. The two seeded rows (E&O today, Kwan tomorrow) must be untouched; Kwan should also appear in any read-back of tomorrow but is not required to, since the operator asked only for the three."
+}

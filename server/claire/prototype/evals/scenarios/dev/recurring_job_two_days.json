@@ -1,0 +1,38 @@
+{
+  "id": "recurring_job_two_days",
+  "title": "The same job on a second day is legitimate when the operator says so; a near-duplicate on another day is resolved, not silently created",
+  "provenance": "authored",
+  "source": "Round 4 requirement: conservative duplicate prevention that does not merge recurring work.",
+  "localTime": "09:10",
+  "seed": {
+    "operatorName": "Adam",
+    "dayLine": [
+      { "title": "Pickup at OPUS", "businessDate": "tomorrow" },
+      { "title": "Restock the Century Park East supply closet", "businessDate": "today+3" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Put the Opus pickup on the day after tomorrow as well, they want two runs this week.",
+      "Also add restocking the Century Park East closet for tomorrow.",
+      "No, same closet, it's the one you already have. Just move it up to tomorrow.",
+      "Okay, bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": ["tomorrow", "day_after_tomorrow"], "titleMatches": "opus", "count": 2 },
+      { "businessDate": "tomorrow", "titleMatches": "century park east|closet", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today+3", "titleMatches": "century park east|closet" }
+    ],
+    "seededRowsIntact": false,
+    "seededRowsMayChange": ["Restock the Century Park East supply closet"],
+    "maxRowsAdded": 1,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Turn 1 says explicitly that the second Opus pickup is a second run: a second row on the day after tomorrow is correct (count 2 across the two days), either written straight away with confirm_new or after one confirming question (the one allowed ask). Turn 2 looks like existing work on another day: the right move is to resolve it (ask, or surface the existing row), not to create a duplicate; turn 3 settles it as a move. Final state: Opus twice, the closet restock exactly once on tomorrow, one row added in total."
+}

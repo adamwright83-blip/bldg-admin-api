@@ -1,0 +1,45 @@
+{
+  "id": "bike_shop_correction_and_scratch",
+  "title": "Distracted bike-shop owner lists three jobs, moves one to the day after tomorrow and scratches another before saying 'put those on'",
+  "provenance": "authored",
+  "localTime": "18:10",
+  "seed": {
+    "operatorName": "Theo",
+    "dayLine": [
+      { "title": "Order 700c tubes from the distributor", "businessDate": "today" },
+      { "title": "True the rear wheel on Ms. Park's cruiser", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hey Claire, hang on, let me look at the board. Okay. Stuff for tomorrow.",
+      "Tandem rebuild for the Mendez couple. Brake bleed on the gray Trek. And the Courier Collective fleet tune-up, that's six bikes.",
+      "Wait, no. The Courier fleet is day after tomorrow, not tomorrow. They're dropping the bikes off tomorrow night.",
+      "And scratch the Trek. Guy literally just walked in and took it. Going somewhere else, fine by me.",
+      "So tandem tomorrow, Courier the day after. Put those on.",
+      "Read me tomorrow real quick.",
+      "Cool. Later."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "mendez|tandem", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "courier|fleet", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "park|cruiser|rear wheel" }
+    ],
+    "absent": [
+      { "titleMatches": "trek|brake bleed" },
+      { "businessDate": "tomorrow", "titleMatches": "courier|fleet" },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "mendez|tandem" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 2,
+    "speech": {
+      "mustMention": ["mendez|tandem", "park|cruiser|rear wheel"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards corrections made while the list is still being dictated. The operator lists three jobs for tomorrow, then changes Courier to the day after tomorrow and scratches the Trek, and only then says 'put those on'. Final state is what counts: Mendez tandem on tomorrow exactly once, Courier fleet on the day after tomorrow exactly once and not on tomorrow, and no Trek row on any date. maxRowsAdded 2 is the authorized count; a Claire that wrote all three as they were spoken still passes if the Trek row ends cancelled and Courier was moved rather than duplicated, because cancelled rows do not count as added or present. One authorization ask is allowed because turn 2 lists items without an instruction (turn 1 says only 'stuff for tomorrow'), so offering once before turn 5 is reasonable; asking again after 'put those on' fails. The read-back of tomorrow must name the tandem and the seeded Park cruiser. Seeded rows are untouched."
+}
