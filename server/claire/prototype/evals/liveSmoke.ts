@@ -50,11 +50,21 @@ async function main(): Promise<number> {
   const tomorrow = addDaysYmd(today, 1);
   await sql.query("DELETE FROM day_director_commitments WHERE tenantId = ? AND actorId = ?", [TENANT, actorId]);
   await sql.query("DELETE FROM claire_operator_instructions WHERE tenantId = ? AND canonicalOperatorId = ?", [TENANT, resolved.identity.canonicalOperatorId]);
-  const keyId = randomUUID();
-  await sql.query(
-    "INSERT INTO day_director_commitments (id,tenantId,actorId,businessDate,idempotencyKey,title,kind,provenance,status,sourceText,metadataJson) VALUES (?,?,?,?,?,?,'operations','manual','open',?,?)",
-    [keyId, TENANT, actorId, tomorrow, `seed:${keyId}`, KEY_ROW, KEY_ROW, JSON.stringify({ detailState: "COMPLETE" })]
-  );
+  // The pre-call row goes in through the same admission-gated writer as every Day Line row.
+  const { acceptProposalWithReceipt } = await import("../../../planning/dayDirector/dayDirectorService");
+  const { operatorInstructionAdmission } = await import("../../../planning/dayDirector/dayLineAdmission");
+  const seeded = await acceptProposalWithReceipt({
+    tenantId: TENANT,
+    actorId,
+    businessDate: tomorrow,
+    proposal: {
+      promptKey: `smoke-seed:${randomUUID()}`, title: KEY_ROW, kind: "operations", quantity: null, sourceText: KEY_ROW, prerequisites: [], question: null,
+      intelligence: "manual_fallback", detailState: "COMPLETE", missingDetails: [], detailNote: null, references: [], targetBusinessDate: tomorrow,
+    },
+    admission: operatorInstructionAdmission({ operatorUserId: OPERATOR, surface: "day_line_ui", sourceRef: "smoke-seed" }),
+  });
+  const keyId = String((seeded as { stored?: { id?: string } }).stored?.id ?? "");
+  if (!keyId) throw new Error("smoke seed did not land");
 
   const { openAuthorizedInboundClaireConversation, runRelayAuthoritativeTurn, CLAIRE_INBOUND_GREETING } = await import("../../claireTwilio");
   const callSid = `CA${randomUUID().replace(/-/g, "").slice(0, 32)}`;

@@ -11,7 +11,7 @@
  */
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import { ENV } from "../../_core/env";
+import { anthropicMessagesClient, createAnthropicMessage } from "../../_core/anthropicMessages";
 import { modelRequestShape } from "../../_core/modelCapabilities";
 import { buildStandingInstructionsView, drizzleStandingInstructionStore } from "../../agents/daphne/standingInstructions";
 import { CLAIRE_PROTOTYPE_TOOLS, executeTool, readDayLineRows, type ToolContext, type ToolEvent } from "./tools";
@@ -115,7 +115,7 @@ export type ClaireToolTurnSession = {
 };
 
 export function anthropicClient(): Anthropic {
-  return new Anthropic({ apiKey: ENV.anthropicApiKey });
+  return anthropicMessagesClient();
 }
 
 /**
@@ -147,7 +147,7 @@ export async function runClaireToolTurn(session: ClaireToolTurnSession, utteranc
 
   try {
     for (let round = 0; round < 8; round += 1) {
-      const response = await client.messages.create({
+      const response = await createAnthropicMessage(client, {
         model,
         max_tokens: 600,
         ...(shape as Record<string, unknown>),
@@ -197,7 +197,7 @@ export async function runClaireToolTurn(session: ClaireToolTurnSession, utteranc
     messages.push({ role: "user", content: `[speech check] ${restateInstruction(problems)}` });
     let restated = speak;
     try {
-      const response = await client.messages.create({ model, max_tokens: 400, ...(shape as Record<string, unknown>), system: systemPrompt, messages });
+      const response = await createAnthropicMessage(client, { model, max_tokens: 400, ...(shape as Record<string, unknown>), system: systemPrompt, messages });
       modelCalls += 1;
       inputTokens += response.usage.input_tokens;
       outputTokens += response.usage.output_tokens;

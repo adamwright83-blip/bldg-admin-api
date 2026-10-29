@@ -7,7 +7,7 @@
  * works. It ends the call by saying a goodbye line and emitting [END].
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { ENV } from "../../../_core/env";
+import { anthropicMessagesClient, createAnthropicMessage } from "../../../_core/anthropicMessages";
 import { modelRequestShape } from "../../../_core/modelCapabilities";
 import type { SimulatedOperator } from "./scenario";
 
@@ -20,7 +20,7 @@ export type OperatorSimulator = {
 };
 
 export function openOperatorSimulator(spec: SimulatedOperator, input: { client?: Anthropic; model?: string } = {}): OperatorSimulator {
-  const client = input.client ?? new Anthropic({ apiKey: ENV.anthropicApiKey });
+  const client = input.client ?? anthropicMessagesClient();
   const model = input.model ?? SIMULATED_OPERATOR_MODEL;
   const shape = modelRequestShape(model, {});
   const system = [
@@ -39,7 +39,7 @@ export function openOperatorSimulator(spec: SimulatedOperator, input: { client?:
     async next(claireSaid) {
       turns += 1;
       messages.push({ role: "user", content: `Claire: "${claireSaid}"${turns >= spec.maxTurns ? "\n\n(You are out of time: say goodbye now and end with [END].)" : ""}` });
-      const response = await client.messages.create({ model, max_tokens: 200, ...(shape as Record<string, unknown>), system, messages });
+      const response = await createAnthropicMessage(client, { model, max_tokens: 200, ...(shape as Record<string, unknown>), system, messages });
       const text = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text).join(" ").trim();
       messages.push({ role: "assistant", content: text });
       const end = /\[END\]/.test(text) || turns >= spec.maxTurns;

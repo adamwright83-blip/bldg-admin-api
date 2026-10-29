@@ -19,7 +19,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "../../_core/env";
-import { getUserByOpenId } from "../../db";
+import { loadPersistedOperatorIdentity } from "../../identity/operatorIdentityReadService";
 import { loadTenantBusinessIdentity } from "../../saas/tenantIdentityService";
 import { resolveCanonicalOperatorIdentity } from "../../agents/persistentOperator/identity";
 import {
@@ -135,11 +135,11 @@ async function prepare(input: NativeToolVoiceTurnInput): Promise<NonNullable<Nat
     subsystem: "claire_native_tool_voice",
   });
   if (!resolved.ok) throw new Error(`native-tool Claire: operator identity unresolved (${resolved.reason})`);
-  const [user, business] = await Promise.all([
-    getUserByOpenId(input.operatorUserId).catch(() => undefined),
+  const [persisted, business] = await Promise.all([
+    loadPersistedOperatorIdentity(input.operatorUserId).catch(() => null),
     loadTenantBusinessIdentity(input.tenantId).catch(() => null),
   ]);
-  const operatorName = firstName(user?.name);
+  const operatorName = firstName(persisted?.name);
   const businessName = business?.businessName?.trim() || business?.brandName?.trim() || "the business";
   const ctx = toolContext(input, resolved.identity.canonicalOperatorId);
   const { prompt, heldTopics } = await buildSystemPromptWithRules(ctx, { operatorName, businessName });
