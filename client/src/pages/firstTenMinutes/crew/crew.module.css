@@ -743,3 +743,27 @@
     background: linear-gradient(to top, rgba(20, 15, 11, 0.97) 40%, rgba(20, 15, 11, 0));
   }
 }
+
+/* the chapter's crossing: a paper plank from the route to the hotel */
+.crossingPlank {
+  fill: #f6ead0;
+  stroke: #8a6a44;
+  stroke-width: 1.5;
+}
+
+.crossingSign path {
+  stroke: #6b4b2e;
+  stroke-width: 2;
+}
+
+.crossingSign rect {
+  fill: #fbf5e8;
+  stroke: #8e2f22;
+  stroke-width: 1.5;
+}
+
+.crossingSign text {
+  font: 700 9.5px "DM Sans", sans-serif;
+  letter-spacing: 0.08em;
+  fill: #8e2f22;
+}
