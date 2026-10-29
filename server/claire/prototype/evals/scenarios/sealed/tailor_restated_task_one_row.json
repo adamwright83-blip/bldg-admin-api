@@ -1,0 +1,37 @@
+{
+  "id": "tailor_restated_task_one_row",
+  "title": "Soft-spoken tailor puts one suit job on Thursday and restates it as its two parts, which must land as a single row",
+  "provenance": "authored",
+  "localTime": "19:20",
+  "seed": {
+    "operatorName": "Noor",
+    "dayLine": [
+      { "title": "Pick up the wool bolts from the fabric wholesaler", "businessDate": "today" },
+      { "title": "Hem the Kaplan bridesmaid dresses, all four", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hi Claire, it's Noor. Put the Okonjo suit on Thursday. I need to finish it, which basically means taking in the jacket and hemming the trousers. Same job, one fitting.",
+      "Thank you. What have I got tomorrow?",
+      "Good. And is Thursday clear otherwise, just the suit?",
+      "Perfect. Night."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "coming_thursday", "titleMatches": "okonjo|suit|jacket|trouser", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "kaplan|bridesmaid", "count": 1 },
+      { "businessDate": "today", "titleMatches": "wool|bolt|wholesaler", "count": 1 }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["kaplan|bridesmaid", "okonjo|suit"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards against splitting one task into several rows. The operator states one job ('finish the Okonjo suit') and then restates it as its parts ('which basically means taking in the jacket and hemming the trousers'), and says outright that it is the same job. The correct result is exactly one row on Thursday matching any of the distinctive nouns: count 1 on a regex that covers the suit, the jacket and the trousers fails a Claire that writes 'take in jacket' and 'hem trousers' as two rows, or 'finish suit' plus a parts row, and maxRowsAdded 1 fails any other duplication. 'Thursday' with no qualifier is the coming Thursday strictly after today (coming_thursday); if the run day is a Thursday that is next week's, by the format's rule. The instruction is explicit ('put it on Thursday'), so zero authorization asks. Both read-backs must match the database: tomorrow names the Kaplan dresses, Thursday names the suit. Seeded rows are untouched; nothing else is authorized."
+}

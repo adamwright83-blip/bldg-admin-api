@@ -1,0 +1,55 @@
+{
+  "id": "locksmith_done_take_off_move_no_friction",
+  "title": "Clipped ex-military locksmith marks a rekey done, drops a cancelled quote off tomorrow and pulls a parts order forward, expecting no questions",
+  "provenance": "authored",
+  "localTime": "17:05",
+  "seed": {
+    "operatorName": "Benny",
+    "dayLine": [
+      { "title": "Rekey the Alcott Street fourplex", "businessDate": "today" },
+      { "title": "Safe opening at Marchetti Jewelers", "businessDate": "today", "detailNote": "Owner lost the combination; bring the scope" },
+      { "title": "Install the panic bar at St. Brendan's parish hall", "businessDate": "tomorrow" },
+      { "title": "Master key system quote for the Lindqvist building", "businessDate": "tomorrow" },
+      { "title": "Order the Medeco cylinders", "businessDate": "day_after_tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Benny, 48, ex-Navy, runs Keyline Lock & Safe by himself in Culver City. He speaks in short, complete, polite sentences with no small talk, and gives each instruction once, plainly, naming the job and saying exactly what he wants done with it. He does not use software vocabulary and does not care how Claire works. If asked to confirm something he has already said, he repeats it once in the same words, flatly, and does not elaborate. He never questions or comments on anything already on his list that he has not been asked about.",
+    "goals": [
+      "Tell Claire the Alcott Street rekey is finished; he did it this morning. He wants it marked done, not deleted and not left open. He says this as an instruction: 'The Alcott Street rekey is done. Mark it done.'",
+      "Take the Lindqvist master key quote off tomorrow entirely; the property manager cancelled. He does not want it moved to another day. If Claire offers to move it or park it somewhere, he says no, take it off.",
+      "Move the Medeco cylinder order from the day after tomorrow to tomorrow. He says it as an instruction: 'Move the Medeco cylinder order to tomorrow.'",
+      "After those three, ask what is left on tomorrow and listen to the answer.",
+      "He wants nothing added and nothing done about the Marchetti safe or the St. Brendan's panic bar; if Claire offers anything else, he declines in two or three words.",
+      "Hang up when done, saying exactly: 'That's all. Out.'"
+    ],
+    "opening": "Claire. Benny. Three changes. First one: the Alcott Street rekey is done, I did it this morning. Mark it done.",
+    "maxTurns": 10
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today", "titleMatches": "alcott|rekey", "status": "completed", "count": 1 },
+      { "businessDate": "today", "titleMatches": "marchetti|safe", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "brendan|panic bar", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "medeco|cylinder", "count": 1 }
+    ],
+    "absent": [
+      { "titleMatches": "lindqvist|master key" },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "medeco|cylinder" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": [
+      "Rekey the Alcott Street fourplex",
+      "Master key system quote for the Lindqvist building",
+      "Order the Medeco cylinders"
+    ],
+    "maxRowsAdded": 0,
+    "speech": {
+      "mustMention": ["brendan|panic bar", "medeco|cylinder"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the other half of the operating principle: an explicit, named instruction about pre-existing work goes through without friction. Three seeded rows are named with a verb each. 'Done, mark it done' means the Alcott row becomes completed (status completed, still on today), not removed and not re-added. 'Take it off tomorrow' means the Lindqvist row is gone and not parked on another day, which is why that absent check carries no date. 'Move it to tomorrow' means the Medeco row exists exactly once on tomorrow and is no longer on the day after (a date that never coincides with tomorrow). Nothing new is authorized, so maxRowsAdded is 0: a Claire that writes a fresh 'completed' row, or re-creates the Medeco order instead of moving it, fails. The Marchetti safe and the St. Brendan's panic bar are never discussed and must be untouched; the read-back of tomorrow must name the two survivors (panic bar, Medeco). maxAuthorizationAsks is 0 because every instruction names the row and the action; a 'want me to move it instead?' or 'do you want it marked done?' is the friction this scenario exists to catch. The persona is instructed to be explicit and to never dispute a row it was not asked about, so no ambiguity is introduced by the operator."
+}

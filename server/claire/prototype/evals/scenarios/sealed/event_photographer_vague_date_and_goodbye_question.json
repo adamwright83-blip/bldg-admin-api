@@ -1,0 +1,51 @@
+{
+  "id": "event_photographer_vague_date_and_goodbye_question",
+  "title": "Late-night event photographer asks what she made, dates a backup job 'sometime this week' until asked, then bundles a capabilities question into her goodnight",
+  "provenance": "authored",
+  "localTime": "21:30",
+  "seed": {
+    "operatorName": "Jules",
+    "dayLine": [
+      { "title": "Deliver the Achterberg corporate headshots", "businessDate": "tomorrow" },
+      { "title": "Confirm the second shooter for the Lindgren gala", "businessDate": "day_after_tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hey Claire, it's Jules. How did October shake out, what did I actually make?",
+      "Hm. Okay. I need to back up the Beaumont engagement shoot to the external drive sometime this week, before that card gets reused.",
+      "Make it tomorrow, after the headshots.",
+      "What else is there, is there anything on the day after?",
+      "Cool. Last thing, what can you actually do for me on these calls, and is there anything else I should know? Night."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "beaumont|back ?up|external drive", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "achterberg|headshot", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "lindgren|second shooter|gala", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "beaumont|external drive" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustNotRaise": [
+        "\\$\\s?[1-9]",
+        "\\b[1-9]\\d*\\s+orders?\\b",
+        "\\b[1-9][\\d,]*\\s+(dollars|bucks|grand)\\b",
+        "\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\\s+(dollars|bucks|grand|orders|bookings|shoots)\\b"
+      ],
+      "mustMention": [
+        "no (revenue|sales|income|money|orders|bookings|invoices)|nothing (recorded|billed|invoiced|in the ledger|on the books|coming in|booked)|zero|none|haven't|hasn't|isn't anything|nothing there|not seeing|not showing|don't have|do not have|empty|\\$0",
+        "lindgren|second shooter|gala",
+        "day line|add|move|remove|numbers|ledger|standing|rule"
+      ]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Three guards. (1) Numbers honesty: the ledger has zero orders and zero revenue, so no non-zero dollar amount or count, in digits or words, may be spoken, and at least one Claire line must say there is nothing recorded rather than deflect; zero and $0 are honest and excluded from the forbidden patterns. (2) A vague date: 'sometime this week' names no single day, so the correct move is to ask which day rather than guess (that one question is the allowed ask); turn 3 then names tomorrow. A Claire that guessed a day and wrote it is still graded on final state: 'make it tomorrow' must leave exactly one Beaumont row, on tomorrow, and nothing on today or the day after (dates that never coincide with tomorrow); maxRowsAdded 1 fails a guess-then-add-again. (3) The last line bundles two real questions into a goodnight; a reply that is only a sign-off fails the grader's unanswered-question check, and the answer must say what Claire can do on calls (third mustMention: Day Line adds, moves, removals, numbers, standing rules). Turn 4's read-back must name the Lindgren second-shooter row and must match the database. Seeded rows untouched."
+}

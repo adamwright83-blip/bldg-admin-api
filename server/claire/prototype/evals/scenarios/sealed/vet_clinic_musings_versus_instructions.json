@@ -1,0 +1,51 @@
+{
+  "id": "vet_clinic_musings_versus_instructions",
+  "title": "Dry, tired vet-clinic manager thinks aloud about two things she 'should' do someday, then gives two real instructions",
+  "provenance": "authored",
+  "localTime": "18:50",
+  "seed": {
+    "operatorName": "Tamsin",
+    "dayLine": [
+      { "title": "Reorder the heartworm preventative", "businessDate": "today" },
+      { "title": "Dr. Abreu's surgery block, three spays", "businessDate": "tomorrow", "detailNote": "First patient 7:30" },
+      { "title": "Autoclave service visit", "businessDate": "day_after_tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Tamsin, 41, is the practice manager at Ridgeback Veterinary Clinic, a three-vet small-animal practice in Altadena. She is dry, wry and tired, says 'honestly' and 'anyway' a lot, and thinks aloud about things she ought to do someday without meaning them as requests. When she actually wants something done she says so plainly with a day attached. She does not use software vocabulary and does not care how Claire works. She does not question or comment on anything already on her list that she did not bring up.",
+    "goals": [
+      "Early on, mention in passing that she keeps thinking she should redo the clinic's voicemail greeting; it has been the same for two years. It is just a thought, not a request. If Claire offers to put it on the list, she says no, it's just a thought.",
+      "A little later, muse that she should probably look into a new payroll provider at some point. Same thing: not a request, and she declines if Claire offers to write it down.",
+      "Give one real instruction: put 'call the Varga family back about Moose's bloodwork results' on tomorrow. She says it as a plain instruction with the day.",
+      "Give a second real instruction: the rep from the pet-insurance company is coming in at noon the day after tomorrow; put that on the day after tomorrow.",
+      "After those, ask what tomorrow looks like now and listen.",
+      "Hang up when done, saying exactly: 'Right. That's me. Night, Claire.'"
+    ],
+    "opening": "Hi Claire, it's Tamsin. Honestly, every time I ring this number I think I should redo the clinic voicemail greeting, it's been the same for two years. Anyway. Not now.",
+    "maxTurns": 12
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "varga|moose|bloodwork", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "insurance|rep\\b", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "abreu|spay|surgery", "count": 1 },
+      { "businessDate": "today", "titleMatches": "heartworm", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "autoclave", "count": 1 }
+    ],
+    "absent": [
+      { "titleMatches": "voicemail|greeting" },
+      { "titleMatches": "payroll" },
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "varga|moose|bloodwork" },
+      { "businessDate": ["today", "tomorrow"], "titleMatches": "insurance|rep\\b" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 2,
+    "speech": {
+      "mustMention": ["abreu|spay|surgery"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the line between work mentioned and work committed. 'I keep thinking I should redo the voicemail greeting' and 'I should probably look into a new payroll provider' are musings with no day and an explicit 'not now'; neither may become a row on any date (absent checks carry no date), and the persona declines if offered. The two real instructions name a task and a day: the Varga callback on tomorrow and the insurance rep on the day after tomorrow, each exactly once and on no other of today/tomorrow/day after (dates that never coincide). maxRowsAdded 2 is the authorized count. maxAuthorizationAsks 1 allows one offer in response to a musing, which is reasonable; a second offer, or any question before writing an explicit instruction, is the failure guarded. The read-back of tomorrow must name Dr. Abreu's surgery block and must match the database. The three seeded rows are untouched; the persona dictates no change to them."
+}

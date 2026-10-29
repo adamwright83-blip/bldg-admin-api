@@ -1,0 +1,43 @@
+{
+  "id": "piano_tuner_correction_put_it_back",
+  "title": "Precise piano technician moves a job to tomorrow, reverses herself a breath later, muses that an estimate is pointless, and books a string order for next Friday",
+  "provenance": "authored",
+  "localTime": "17:10",
+  "seed": {
+    "operatorName": "Elspeth",
+    "dayLine": [
+      { "title": "Replace the damper felts on the Whitaker baby grand", "businessDate": "today" },
+      { "title": "Tune the Steinway at the Hollis conservatory", "businessDate": "tomorrow" },
+      { "title": "Regulate the action on Mr. Dubois's upright", "businessDate": "day_after_tomorrow", "detailNote": "He's home after 3" },
+      { "title": "Voicing estimate for the Rialto theater grand", "businessDate": "today+4" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hi Claire, it's Elspeth. Move the Dubois regulation to tomorrow, I'll be two streets over for the Hollis tuning anyway.",
+      "Hmm, no, wait. His wife works from home tomorrow and it's noisy work. Put it back on the day after tomorrow.",
+      "And the Rialto estimate, that's probably pointless, honestly. They haven't got the budget. Anyway.",
+      "No, no, leave it where it is. Put 'order a set of bass strings for the Whitaker' on next Friday.",
+      "That's everything. Thanks, bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "dubois|regulat", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "hollis|steinway", "count": 1 },
+      { "businessDate": "today+4", "titleMatches": "rialto|voicing", "count": 1 },
+      { "businessDate": "today", "titleMatches": "damper|felt", "count": 1 },
+      { "businessDate": "next_friday", "titleMatches": "bass string|strings", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "tomorrow", "titleMatches": "dubois|regulat" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": ["Regulate the action on Mr. Dubois's upright"],
+    "maxRowsAdded": 1,
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards a correction given right after an explicit change: final state is what the operator last said. Turn 1 is a named move (Dubois to tomorrow) and should be done at once; turn 2 reverses it ('put it back on the day after tomorrow'). The Dubois row must end exactly once on the day after tomorrow and not on tomorrow (two dates that never coincide); the row is listed in seededRowsMayChange because it legitimately moved twice, and count 1 plus maxRowsAdded 1 fail a Claire that re-creates it instead of moving it. Turn 3 is an ambiguous remark about a different seeded row (the Rialto estimate is 'probably pointless') with no instruction; the right response is to leave it and ask once, which is the one allowed authorization ask, and turn 4 answers 'leave it where it is'. Removing or moving Rialto fails seeded-row intactness. Turn 4 also gives the only new item: the bass-string order on 'next Friday', which under the format's rule is the Friday of next week (next_friday), never this week's; it is identified by 'bass string|strings' so the seeded Whitaker felts row on today (identified by 'damper|felt') cannot stand in for it. Hollis stays on tomorrow untouched. The operator never speaks a calendar date."
+}
