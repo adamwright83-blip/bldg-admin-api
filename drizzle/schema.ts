@@ -10679,6 +10679,8 @@ export const lanternNeighborhoodMemories = mysqlTable(
     villagerRelationshipsJson: json("villager_relationships_json"),
     unfinishedActivitiesJson: json("unfinished_activities_json"),
     celebratedEventsJson: json("celebrated_events_json"),
+    /** Rook's airmail: authored discoveries and the fan's setting (shared/courtyardDiscoveries.ts). Fiction only. */
+    courtyardDiscoveriesJson: json("courtyard_discoveries_json"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   },

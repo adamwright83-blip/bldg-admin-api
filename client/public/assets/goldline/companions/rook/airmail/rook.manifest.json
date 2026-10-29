@@ -1,0 +1,118 @@
+{
+ "states": {
+  "fold": {
+   "sheet": "rook-fold.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 10,
+   "size": [
+    2036,
+    429
+   ]
+  },
+  "hide": {
+   "sheet": "rook-hide.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 8,
+   "size": [
+    2002,
+    438
+   ]
+  },
+  "toss": {
+   "sheet": "rook-toss.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 8,
+   "size": [
+    1978,
+    445
+   ]
+  },
+  "catch": {
+   "sheet": "rook-catch.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 8,
+   "size": [
+    2034,
+    242
+   ]
+  },
+  "lunge": {
+   "sheet": "rook-lunge.json",
+   "facings": [
+    "left"
+   ],
+   "frames": 10,
+   "size": [
+    1728,
+    220
+   ]
+  },
+  "flick": {
+   "sheet": "rook-flick.json",
+   "facings": [
+    "left"
+   ],
+   "frames": 6,
+   "size": [
+    978,
+    221
+   ]
+  },
+  "conduct": {
+   "sheet": "rook-conduct.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 12,
+   "size": [
+    1928,
+    457
+   ]
+  },
+  "ears": {
+   "sheet": "rook-ears.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 8,
+   "size": [
+    1932,
+    414
+   ]
+  },
+  "bow": {
+   "sheet": "rook-bow.json",
+   "facings": [
+    "left",
+    "front"
+   ],
+   "frames": 10,
+   "size": [
+    1953,
+    360
+   ]
+  }
+ },
+ "frameSize": [
+  288,
+  288
+ ],
+ "anchor": [
+  0.5,
+  0.9079861111111112
+ ]
+}

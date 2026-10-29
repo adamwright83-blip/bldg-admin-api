@@ -53,6 +53,24 @@ import {
   SMS_COMPOSE_APPROVAL_CONFIRMATION,
   SMS_COMPOSE_REPORTED_SENT_CONFIRMATION,
 } from "../experience/lanternCity/personalNumber/smsComposeHandoff";
+import { TRPCError } from "@trpc/server";
+import { BEAT_IDS, FAN_SETTING_IDS } from "../../shared/courtyardDiscoveries";
+
+/** One observed courtyard fact from Rook's airmail. Fiction only; the server keeps it, it never reads it as evidence. */
+const courtyardObservation = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("flight"),
+    flight: z.object({
+      flightId: z.string().regex(/^[A-Za-z0-9_-]{6,64}$/),
+      delivered: z.boolean(),
+      via: z.array(z.string().max(32)).max(64),
+      cups: z.array(z.number().int().min(0).max(2)).max(16),
+    }),
+  }),
+  z.object({ kind: z.literal("fan"), setting: z.enum(FAN_SETTING_IDS) }),
+  z.object({ kind: z.literal("beat"), beat: z.enum(BEAT_IDS) }),
+  z.object({ kind: z.literal("session") }),
+]);
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -107,6 +125,33 @@ export const goldlineWorldRouter = router({
         templateId: input.templateId,
         kind: input.kind,
       });
+    }),
+  /** Rook's airmail in Silver Lake: whether it is on for this business, and what the courtyard remembers (fiction). */
+  specialDelivery: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake") }).optional())
+    .query(async ({ ctx, input }) => {
+      const { isSpecialDeliveryEnabled } = await import("../experience/lanternCity/specialDeliveryFlag");
+      if (!isSpecialDeliveryEnabled(ctx.tenantId)) return { enabled: false as const, memory: null };
+      const { loadCourtyardDiscoveries } = await import("../experience/lanternCity/courtyardDiscoveriesService");
+      return { enabled: true as const, memory: await loadCourtyardDiscoveries({ tenantId: ctx.tenantId, territoryId: input?.territoryId }) };
+    }),
+  /** One observed courtyard fact (a flight's contacts, the fan's setting, an authored beat). Idempotent per flight. */
+  recordSpecialDelivery: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake"), observation: courtyardObservation }))
+    .mutation(async ({ ctx, input }) => {
+      const { isSpecialDeliveryEnabled } = await import("../experience/lanternCity/specialDeliveryFlag");
+      if (!isSpecialDeliveryEnabled(ctx.tenantId)) throw new TRPCError({ code: "FORBIDDEN", message: "special_delivery_disabled" });
+      const { recordCourtyardObservation } = await import("../experience/lanternCity/courtyardDiscoveriesService");
+      return recordCourtyardObservation({ tenantId: ctx.tenantId, territoryId: input.territoryId, observation: input.observation });
+    }),
+  /** Sable at Rook's desk: what the existing records hold about one customer for this operator (read-only). */
+  sableRecall: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ territoryId: z.string().default("silver-lake"), customerId: z.string().min(1).max(191) }))
+    .query(async ({ ctx, input }) => {
+      const { isSpecialDeliveryEnabled } = await import("../experience/lanternCity/specialDeliveryFlag");
+      if (!isSpecialDeliveryEnabled(ctx.tenantId)) return { entries: [] };
+      const { loadSableRecall } = await import("../experience/lanternCity/sableRecall");
+      return loadSableRecall({ tenantId: ctx.tenantId, operatorId: ctx.user.openId, customerId: input.customerId });
     }),
   /** Lantern City's Beverly Hills level: the selected business's real commercial prospects there (read-only). */
   beverlyHillsProspects: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {

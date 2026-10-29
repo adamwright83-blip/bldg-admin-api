@@ -10,6 +10,7 @@ vi.mock("./useReunionQuests", () => ({
   customerIdFromQuestKey: () => null,
   useReunionQuests: () => ({ on: false, passing: false, chain: [], phases: new Map(), quest: () => null, items: [], pickItem: () => {}, startReunion: () => [], pass: async () => {}, isPassed: () => false, activeCustomerId: null, reunited: new Set(), decided: () => false }),
 }));
+vi.mock("./specialDelivery/useSpecialDeliveryFlag", () => ({ useSpecialDeliveryFlag: () => ({ on: false, resolved: true, memory: undefined }) }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/PlayableLetterDesk", () => ({ PlayableLetterDesk: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/CozyMessageComposer", () => ({ CozyMessageComposer: () => null }));
 vi.mock("@/components/admin/control-room/LanternCitySceneV6/NeighborhoodCourtyardFeature", () => ({ NeighborhoodCourtyardFeature: () => null }));

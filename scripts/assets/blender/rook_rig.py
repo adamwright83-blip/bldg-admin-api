@@ -403,6 +403,148 @@ def pose_point(arm, t):
     rot(arm, "jaw", x=-22 * speak)
 
 
+# ---------------------------------------------------------------- Special Delivery (Silver Lake airmail)
+# Added for Rook's airmail station. Same mesh, rig and lighting; every new state is a real pose, never a transform
+# trick. Props (the crumpled paper, the baton) ride the left wing tip like the letter does.
+
+def pose_fold(arm, t):
+    """Folding paper at chest height, very seriously: wings forward and in, head bowed over the work."""
+    ph = t * math.tau
+    pose_idle(arm, t * 0.4)
+    rot(arm, "wing.L", x=-82 + 10 * math.sin(ph * 2), y=26 + 8 * math.sin(ph * 2 + 1.0), z=30)
+    rot(arm, "wing.R", x=-82 - 10 * math.sin(ph * 2), y=-26 - 8 * math.sin(ph * 2 + 1.0), z=-30)
+    rot(arm, "chest", x=14 + 3 * math.sin(ph))
+    rot(arm, "neck", x=12)
+    rot(arm, "head", x=24 + 4 * math.sin(ph * 2), z=6 * math.sin(ph))
+    return {"paper": True}
+
+
+def pose_hide(arm, t):
+    """The paper goes behind his back. Chin up, eyes on you, innocent. Nothing to see."""
+    k = smooth(0.0, 0.4, t)
+    pose_idle(arm, t * 0.3)
+    rot(arm, "wing.L", x=-82 * (1 - k) + 62 * k, y=26 * (1 - k) + 18 * k, z=30 * (1 - k))
+    rot(arm, "wing.R", x=-82 * (1 - k) + 30 * k, y=-26 * (1 - k) - 10 * k, z=-30 * (1 - k))
+    rot(arm, "chest", x=14 * (1 - k) - 10 * k)
+    rot(arm, "neck", x=12 * (1 - k) - 6 * k)
+    rot(arm, "head", x=24 * (1 - k) - 14 * k, z=-14 * k, y=-10 * k)
+    return {"paper": True}
+
+
+def pose_toss(arm, t):
+    """Over the shoulder without looking: a big wind-up, the throw, the paper gone at the top of the swing."""
+    wind = smooth(0.0, 0.25, t) * (1 - smooth(0.25, 0.45, t))
+    swing = smooth(0.25, 0.45, t)
+    settle = smooth(0.6, 1.0, t)
+    pose_idle(arm, t * 0.3)
+    rot(arm, "wing.L", x=60 * wind - 160 * swing + 70 * settle, y=20 * wind - 40 * swing + 30 * settle)
+    rot(arm, "chest", x=-10 * swing, z=14 * wind - 16 * swing + 8 * settle)
+    rot(arm, "hips", z=8 * wind - 8 * swing)
+    rot(arm, "head", x=-8, z=-24 + 12 * settle)
+    return {"paper": t < 0.42}
+
+
+def pose_catch(arm, t):
+    """Both wings flung up at something falling. Up on the toes, chest back, beak open."""
+    k = smooth(0.0, 0.3, t)
+    wob = math.sin(t * math.tau * 2.5) * (1 - smooth(0.6, 1.0, t))
+    move(arm, "hips", dz=0.05 * k)
+    for side in ("L", "R"):
+        rot(arm, f"foot.{side}", x=-28 * k)
+        rot(arm, f"thigh.{side}", x=-6 * k)
+    rot(arm, "chest", x=-22 * k + 4 * wob)
+    rot(arm, "neck", x=-14 * k)
+    rot(arm, "head", x=-30 * k + 6 * wob)
+    rot(arm, "wing.L", x=-40 * k, y=-150 * k + 10 * wob)
+    rot(arm, "wing.R", x=-40 * k, y=150 * k - 10 * wob)
+    rot(arm, "tail1", x=-22 * k)
+    rot(arm, "jaw", x=-28 * k)
+
+
+def pose_lunge(arm, t):
+    """Overcommitted: a huge reach, a leg flung back, then the long wobble of someone deciding not to fall over."""
+    k = smooth(0.0, 0.28, t)
+    wob = math.sin((t - 0.28) * math.tau * 2.4) * smooth(0.28, 0.42, t) * (1 - smooth(0.88, 1.0, t))
+    move(arm, "hips", dy=-0.2 * k, dz=-0.1 * k)
+    rot(arm, "hips", x=26 * k)
+    rot(arm, "chest", x=40 * k + 12 * wob, y=10 * wob)
+    rot(arm, "neck", x=-10 * k)
+    rot(arm, "head", x=-26 * k, z=12 * wob)
+    rot(arm, "thigh.L", x=42 * k)
+    rot(arm, "shin.L", x=-40 * k)
+    rot(arm, "thigh.R", x=-50 * k)
+    rot(arm, "shin.R", x=-20 * k)
+    rot(arm, "foot.R", x=24 * k)
+    rot(arm, "wing.L", x=-120 * k + 40 * wob, y=-20 * k)
+    rot(arm, "wing.R", x=-20 * k - 50 * wob, y=110 * k)
+    rot(arm, "tail1", x=-40 * k + 14 * wob)
+    rot(arm, "tail2", x=-20 * k)
+    rot(arm, "jaw", x=-26 * k)
+
+
+def pose_flick(arm, t):
+    """A backhand wing flick: across the body, then out, fast, like batting a fly away."""
+    back = smooth(0.0, 0.25, t) * (1 - smooth(0.25, 0.45, t))
+    out = smooth(0.25, 0.45, t) * (1 - smooth(0.65, 1.0, t))
+    pose_idle(arm, t * 0.3)
+    rot(arm, "wing.L", x=-90 * back - 100 * out, y=50 * back - 90 * out, z=-20 * back)
+    rot(arm, "chest", z=16 * back - 18 * out, x=6 * out)
+    rot(arm, "hips", z=8 * back - 8 * out)
+    rot(arm, "head", z=-12 * out, x=-6)
+    rot(arm, "jaw", x=-18 * out)
+
+
+def pose_conduct(arm, t):
+    """Conducting three cups with a baton far too small for anyone to see. Two beats a bar, chin up, eyes half shut."""
+    ph = t * math.tau
+    beat = math.sin(ph * 2)
+    lift = max(0.0, -math.cos(ph * 2))
+    pose_idle(arm, t * 0.5)
+    move(arm, "hips", dz=0.02 * lift)
+    rot(arm, "chest", x=-12 - 3 * beat, z=6 * math.sin(ph))
+    rot(arm, "neck", x=-8)
+    rot(arm, "head", x=-16 + 6 * beat, y=10 * math.sin(ph), z=8 * math.sin(ph))
+    rot(arm, "wing.L", x=-105 + 40 * beat, y=-50 - 12 * beat, z=10)
+    rot(arm, "wing.R", x=-60 - 16 * math.sin(ph * 2 + 0.6), y=70 + 14 * math.sin(ph * 2 + 0.6))
+    rot(arm, "tail1", z=10 * math.sin(ph * 2), x=-10)
+    rot(arm, "tail2", z=12 * math.sin(ph * 2 - 0.5))
+    return {"baton": True}
+
+
+def pose_ears(arm, t):
+    """Covering where his ears would be, delighted: both wings up beside the head, a happy wince and a shake."""
+    ph = t * math.tau
+    pose_idle(arm, t * 0.5)
+    shake = math.sin(ph * 3)
+    move(arm, "hips", dz=-0.05)
+    for side in ("L", "R"):
+        rot(arm, f"thigh.{side}", x=16)
+        rot(arm, f"shin.{side}", x=-26)
+    rot(arm, "chest", x=16, y=4 * shake)
+    rot(arm, "neck", x=10)
+    rot(arm, "head", x=6, z=7 * shake, y=6 * math.sin(ph * 2))
+    rot(arm, "wing.L", x=-30, y=-165, z=10)
+    rot(arm, "wing.R", x=-30, y=165, z=-10)
+    rot(arm, "jaw", x=-22 - 8 * math.sin(ph * 2))
+
+
+def pose_bow(arm, t):
+    """A deep theatrical bow to an audience that isn't there: one wing across the chest, one flung out wide."""
+    k = smooth(0.0, 0.4, t) * (1 - smooth(0.78, 1.0, t))
+    move(arm, "hips", dy=0.06 * k)
+    rot(arm, "hips", x=30 * k)
+    rot(arm, "chest", x=44 * k)
+    rot(arm, "neck", x=14 * k)
+    rot(arm, "head", x=20 * k)
+    rot(arm, "thigh.L", x=-14 * k)
+    rot(arm, "thigh.R", x=26 * k)
+    rot(arm, "shin.R", x=-20 * k)
+    rot(arm, "wing.L", x=-80 * k, y=40 * k, z=-30 * k)
+    rot(arm, "wing.R", x=-20 * k, y=120 * k)
+    rot(arm, "tail1", x=-34 * k)
+    rot(arm, "tail2", x=-16 * k)
+
+
 # state: (pose fn, frames, looping, facings)
 POSES = {
     "idle": (pose_idle, 12, True, ("front", "back", "left", "right")),
@@ -415,6 +557,16 @@ POSES = {
     "shrug": (pose_shrug, 8, False, ("front", "left", "right")),
     "brace": (pose_brace, 6, False, ("front", "back", "left", "right")),
     "point": (pose_point, 6, False, ("back", "left", "right")),
+    # Special Delivery
+    "fold": (pose_fold, 10, True, ("front", "left")),
+    "hide": (pose_hide, 8, False, ("front", "left")),
+    "toss": (pose_toss, 8, False, ("front", "left")),
+    "catch": (pose_catch, 8, False, ("front", "left")),
+    "lunge": (pose_lunge, 10, False, ("left",)),
+    "flick": (pose_flick, 6, False, ("left",)),
+    "conduct": (pose_conduct, 12, True, ("front", "left")),
+    "ears": (pose_ears, 8, True, ("front", "left")),
+    "bow": (pose_bow, 10, False, ("front", "left")),
 }
 LOOPING = {k for k, v in POSES.items() if v[2]}
 
@@ -480,7 +632,52 @@ def add_letter(arm):
     return (scroll, seal)
 
 
-def render_state(arm, obj, state, dirs, out_dir, res, frames_override=None, props=None):
+def add_wingtip_prop(arm, kind):
+    """Small props for the airmail states, held in the left wing tip like the letter."""
+    def mat(name, rgba, rough):
+        m = bpy.data.materials.new(name); m.use_nodes = True
+        b = m.node_tree.nodes["Principled BSDF"]; b.inputs["Base Color"].default_value = rgba; b.inputs["Roughness"].default_value = rough
+        return m
+    objs = []
+    if kind == "paper":
+        # an impossibly crumpled paper ball: a lumpy icosphere
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.06)
+        ball = bpy.context.active_object; ball.name = "paper_ball"
+        for i, v in enumerate(ball.data.vertices):
+            v.co *= 0.82 + 0.36 * ((i * 7919) % 13) / 12.0
+        ball.data.materials.append(mat("paper", (0.95, 0.93, 0.86, 1), 0.95))
+        ball.location = (0.0, -0.05, -0.02)
+        objs.append(ball)
+    else:
+        # a conductor's baton, absurdly small: dark handle, white shaft
+        bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.008, depth=0.2)
+        shaft = bpy.context.active_object; shaft.name = "baton"
+        shaft.data.materials.append(mat("baton_white", (0.96, 0.95, 0.9, 1), 0.5))
+        bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.016, depth=0.05)
+        grip = bpy.context.active_object; grip.name = "baton_grip"
+        grip.data.materials.append(mat("baton_wood", (0.25, 0.13, 0.06, 1), 0.6))
+        grip.parent = shaft; grip.location = (0, 0, -0.1)
+        shaft.location = (0.0, -0.09, -0.02)
+        shaft.rotation_euler = (math.radians(70), 0, math.radians(10))
+        objs.extend([shaft, grip])
+    root = objs[0]
+    root.parent = arm; root.parent_type = "BONE"; root.parent_bone = "wing.L"
+    for o in objs:
+        o.hide_render = True
+    return objs
+
+
+def wing_tip_pixel(arm, res):
+    """Where the left wing tip lands in the frame (pixels, origin top-left), for attaching scene props at runtime."""
+    from bpy_extras.object_utils import world_to_camera_view
+    pb = arm.pose.bones["wing.L"]
+    world = arm.matrix_world @ pb.tail
+    scn = bpy.context.scene
+    co = world_to_camera_view(scn, scn.camera, world)
+    return [round(co.x * res, 1), round((1 - co.y) * res, 1)]
+
+
+def render_state(arm, obj, state, dirs, out_dir, res, frames_override=None, props=None, anchors=None):
     fn, frames, looping, facings = POSES[state]
     if frames_override:
         frames = frames_override
@@ -493,9 +690,16 @@ def render_state(arm, obj, state, dirs, out_dir, res, frames_override=None, prop
             reset(arm)
             t = i / frames if looping else (i / max(1, frames - 1))
             extra = fn(arm, t) or {}
-            for p in (props or ()):
-                p.hide_render = not extra.get("letter", False)
+            if isinstance(props, dict):
+                for name, objs in props.items():
+                    for p in objs:
+                        p.hide_render = not extra.get(name, False)
+            else:
+                for p in (props or ()):
+                    p.hide_render = not extra.get("letter", False)
             bpy.context.view_layer.update()
+            if anchors is not None:
+                anchors.setdefault(state, {}).setdefault(d, []).append(wing_tip_pixel(arm, res))
             path = os.path.join(out_dir, f"rook-{state}-{d}-{i + 1:02d}.png")
             bpy.context.scene.render.filepath = path
             bpy.ops.render.render(write_still=True)
@@ -547,14 +751,18 @@ def main():
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=a.blend)
     props = add_letter(arm)
+    airmail = {"paper": add_wingtip_prop(arm, "paper"), "baton": add_wingtip_prop(arm, "baton")}
+    anchors = {}
     result = {}
     states = list(POSES) if a.states == "all" else [s for s in a.states.split(",") if s]
     for state in states:
+        state_props = props if state == "letter" else airmail if state in ("fold", "hide", "toss", "conduct") else None
         result[state] = render_state(arm, obj, state, [d for d in a.dirs.split(",") if d], a.out, a.res,
-                                     a.frames or None, props if state == "letter" else None)
-        for p in props:
+                                     a.frames or None, state_props, anchors)
+        for p in list(props) + [o for objs in airmail.values() for o in objs]:
             p.hide_render = True
     json.dump(result, open(os.path.join(a.out, "render-index.json"), "w"), indent=1)
+    json.dump(anchors, open(os.path.join(a.out, "anchors.json"), "w"))
     print("RENDERED", json.dumps({k: {d: len(v) for d, v in s.items()} for k, s in result.items()}))
 
 

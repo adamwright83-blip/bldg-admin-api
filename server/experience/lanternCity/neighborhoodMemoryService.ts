@@ -192,6 +192,7 @@ export async function loadNeighborhoodWorldMemory(
       villagerRelationshipsJson: row?.villagerRelationshipsJson ?? villagerMemories,
       unfinishedActivitiesJson: row?.unfinishedActivitiesJson ?? unfinishedActivity,
       celebratedEventsJson: row?.celebratedEventsJson ?? celebratedMilestones,
+      courtyardDiscoveriesJson: row?.courtyardDiscoveriesJson ?? null,
       createdAt: row?.createdAt ?? now,
       updatedAt: now,
     };
@@ -269,6 +270,7 @@ export async function saveNeighborhoodFeature(
     villagerRelationshipsJson: current.villagerMemories ?? {},
     unfinishedActivitiesJson: current.unfinishedActivity,
     celebratedEventsJson: celebratedMilestones,
+    courtyardDiscoveriesJson: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -427,6 +429,7 @@ export async function recordVillagerInteraction(
     villagerRelationshipsJson: updatedVillagerMemories,
     unfinishedActivitiesJson: updatedUnfinished,
     celebratedEventsJson: celebratedMilestones,
+    courtyardDiscoveriesJson: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -505,6 +508,7 @@ export async function saveUnfinishedLetterDraft(
     villagerRelationshipsJson: current.villagerMemories ?? {},
     unfinishedActivitiesJson: unfinishedActivity,
     celebratedEventsJson: current.celebratedMilestones ?? [],
+    courtyardDiscoveriesJson: null,
     createdAt: now,
     updatedAt: now,
   };
