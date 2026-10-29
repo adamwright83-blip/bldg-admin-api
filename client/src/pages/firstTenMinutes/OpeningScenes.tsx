@@ -145,9 +145,8 @@ export function productList(products: readonly GoogleProduct[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** Until the crew's reading is built (the next slice), a connection is shown plainly and can be undone. */
-export function Connected(props: {
-  example: boolean;
+/** What is connected, quietly in a corner: connect what isn't, or disconnect, at any point. */
+export function ConnectionsStrip(props: {
   connections: ConnectionView[];
   busy: boolean;
   googleReady: boolean;
@@ -158,53 +157,35 @@ export function Connected(props: {
   const google = props.connections.find(connection => connection.provider === "google");
   const slack = props.connections.find(connection => connection.provider === "slack");
   return (
-    <Settle tilt={0.4}>
-      <article className={styles.sheet} style={{ textAlign: "center" }} data-testid="first-ten-connected">
-        <h1 className={styles.line}>{props.example ? "Nina's world is here." : "Your world is here."}</h1>
-        {google ? (
-          <p className={styles.account} data-testid="first-ten-google-account">
-            {google.account} · {productList(google.products)}
-          </p>
+    <div className={styles.connectionsStrip} data-testid="first-ten-connections">
+      {google ? (
+        <span data-testid="first-ten-google-account">
+          {google.account} · {productList(google.products)}
+        </span>
+      ) : null}
+      {slack ? <span>Slack · {slack.account ?? "workspace"}</span> : null}
+      <span className={styles.stripActions}>
+        {!google ? (
+          <button type="button" disabled={props.busy || !props.googleReady} onClick={() => props.onConnect("google")} data-testid="first-ten-connect-google">
+            Connect Google
+          </button>
         ) : null}
-        {slack ? <p className={styles.account}>Slack · {slack.account ?? "workspace"}</p> : null}
-        {props.example ? (
-          <p className={styles.sub}>Her email, calendar and files, all invented for this example.</p>
-        ) : (
-          <div className={styles.actions}>
-            <p className={styles.quiet}>
-              {!google ? (
-                <>
-                  <button type="button" disabled={props.busy || !props.googleReady} onClick={() => props.onConnect("google")} data-testid="first-ten-connect-google">
-                    Connect Google
-                  </button>
-                  <span className={styles.dot} aria-hidden="true">·</span>
-                </>
-              ) : null}
-              {!slack ? (
-                <>
-                  <button type="button" disabled={props.busy || !props.slackReady} onClick={() => props.onConnect("slack")}>
-                    Add Slack
-                  </button>
-                  <span className={styles.dot} aria-hidden="true">·</span>
-                </>
-              ) : null}
-              {google ? (
-                <button type="button" disabled={props.busy} onClick={() => props.onDisconnect("google")} data-testid="first-ten-disconnect-google">
-                  Disconnect Google
-                </button>
-              ) : null}
-              {slack ? (
-                <>
-                  <span className={styles.dot} aria-hidden="true">·</span>
-                  <button type="button" disabled={props.busy} onClick={() => props.onDisconnect("slack")}>
-                    Disconnect Slack
-                  </button>
-                </>
-              ) : null}
-            </p>
-          </div>
-        )}
-      </article>
-    </Settle>
+        {!slack ? (
+          <button type="button" disabled={props.busy || !props.slackReady} onClick={() => props.onConnect("slack")} data-testid="first-ten-add-slack">
+            Add Slack
+          </button>
+        ) : null}
+        {google ? (
+          <button type="button" disabled={props.busy} onClick={() => props.onDisconnect("google")} data-testid="first-ten-disconnect-google">
+            Disconnect Google
+          </button>
+        ) : null}
+        {slack ? (
+          <button type="button" disabled={props.busy} onClick={() => props.onDisconnect("slack")}>
+            Disconnect Slack
+          </button>
+        ) : null}
+      </span>
+    </div>
   );
 }

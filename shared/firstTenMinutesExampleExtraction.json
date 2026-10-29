@@ -1,0 +1,52 @@
+{
+  "note": "What the email and document readings return for Nina's invented example (shared/firstTenMinutesExampleCorpus.json). The server verifies every quote against the corpus exactly as it does for a real account; opportunities are left to the server's own chain check.",
+  "conversations": {
+    "business": { "name": "Wildroot Flowers", "offering": "flowers", "sourceId": "nina-m02", "quote": "Wildroot Flowers · Silver Lake" },
+    "rules": [
+      { "sourceId": "nina-m14", "quote": "No more Sunday deliveries.", "statement": "No Sunday deliveries" }
+    ],
+    "promises": [
+      { "sourceId": "nina-m17", "quote": "I'll send the final counts on the 19th", "statement": "Final counts to Jules by the 19th" }
+    ],
+    "requests": [
+      { "sourceId": "nina-m01", "quote": "We want the day to feel spectacular. Can you do something big for the arch?", "wants": "A spectacular arch for the wedding", "recurring": false },
+      { "sourceId": "nina-m05", "quote": "Could you do fresh arrangements every Friday?", "wants": "Fresh arrangements every Friday", "recurring": true },
+      { "sourceId": "nina-m07", "quote": "We need something we can count on every week for the lobby.", "wants": "Weekly flowers for the lobby", "recurring": true },
+      { "sourceId": "nina-m09", "quote": "Would you be able to do a standing order for the hotel restaurant?", "wants": "A standing order for the restaurant", "recurring": true },
+      { "sourceId": "nina-m11", "quote": "Spectacular, but not stiff.", "wants": "A wild garden wedding", "recurring": false },
+      { "sourceId": "nina-m16", "quote": "send me the final counts by the 20th", "wants": "Final counts by the 20th", "recurring": false },
+      { "sourceId": "nina-m19", "quote": "Can it arrive before 10?", "wants": "Delivery before 10", "recurring": false }
+    ],
+    "replies": [
+      { "sourceId": "nina-m02", "quote": "Jules can build the arch frame and I'll do the florals.", "requestSourceId": "nina-m01", "declined": false, "missing": null },
+      { "sourceId": "nina-m06", "quote": "We're only doing events at the moment. Ask me again once we have a Friday delivery.", "requestSourceId": "nina-m05", "declined": true, "missing": "Friday delivery" },
+      { "sourceId": "nina-m08", "quote": "Not yet, but it's on my list.", "requestSourceId": "nina-m07", "declined": true, "missing": "weekly hotel flowers" },
+      { "sourceId": "nina-m10", "quote": "I'd love to, once our weekday deliveries are running.", "requestSourceId": "nina-m09", "declined": true, "missing": "weekday deliveries" },
+      { "sourceId": "nina-m12", "quote": "Shall I bring two?", "requestSourceId": "nina-m11", "declined": false, "missing": null },
+      { "sourceId": "nina-m17", "quote": "I'll send the final counts on the 19th", "requestSourceId": "nina-m16", "declined": false, "missing": null },
+      { "sourceId": "nina-m20", "quote": "Before 10 it is.", "requestSourceId": "nina-m19", "declined": false, "missing": null }
+    ],
+    "services": [
+      { "sourceId": "nina-m18", "quote": "Wildroot has a weekly Friday delivery", "service": "Weekly Friday delivery" }
+    ],
+    "places": [
+      { "name": "The Larkspur Hotel", "category": "hotel", "sourceId": "nina-m05", "quote": "The Larkspur Hotel", "address": "2304 Hyperion Ave, Los Angeles, CA 90027" },
+      { "name": "Hotel Wren", "category": "hotel", "sourceId": "nina-m07", "quote": "General Manager, Hotel Wren", "address": "3150 Sunset Blvd, Los Angeles, CA 90026" },
+      { "name": "The Alder House", "category": "hotel", "sourceId": "nina-m09", "quote": "Food & Beverage, The Alder House", "address": "2810 Rowena Ave, Los Angeles, CA 90039" }
+    ],
+    "contrast": {
+      "a": { "sourceId": "nina-m01", "quote": "We want the day to feel spectacular.", "line": "Your wedding clients ask for a spectacular day." },
+      "b": { "sourceId": "nina-m07", "quote": "We need something we can count on every week for the lobby.", "line": "The hotels keep asking for something they can count on every week." }
+    }
+  },
+  "work": {
+    "services": [
+      { "sourceId": "drv-weekly-sheet", "quote": "Friday delivery, every week.", "service": "Weekly Friday delivery" }
+    ],
+    "rules": [
+      { "sourceId": "drv-weekly-sheet", "quote": "No Sunday deliveries.", "statement": "No Sunday deliveries" }
+    ],
+    "promises": [],
+    "opportunities": []
+  }
+}

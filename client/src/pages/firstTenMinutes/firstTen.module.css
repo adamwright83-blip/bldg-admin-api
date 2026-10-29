@@ -333,3 +333,426 @@
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------ the crew's reading (0:30) */
+
+.readingScene {
+  position: relative;
+  width: min(1120px, 100%);
+  min-height: min(720px, calc(100dvh - 140px));
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.objects {
+  position: relative;
+  min-height: 520px;
+}
+
+.deskObject {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: default;
+}
+
+.deskObject:not(:disabled) {
+  cursor: pointer;
+}
+
+.deskObject:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+
+.objectName {
+  display: block;
+  font-family: Caveat, "Segoe Print", cursive;
+  font-weight: 600;
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.objectBlank {
+  display: block;
+  height: 0.9em;
+  margin-top: 0.3em;
+  border-bottom: 1.5px dotted rgba(42, 33, 25, 0.35);
+}
+
+/* the folded map */
+.obj_map {
+  composes: paper;
+  left: 2%;
+  top: 22%;
+  width: 31%;
+  aspect-ratio: 5 / 3.4;
+  rotate: -4deg;
+  padding: 0;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0) 32.6%, rgba(96, 72, 40, 0.12) 33.3%, rgba(255, 255, 255, 0.5) 33.7%, rgba(0, 0, 0, 0) 34.4%,
+      rgba(0, 0, 0, 0) 65.6%, rgba(96, 72, 40, 0.12) 66.3%, rgba(255, 255, 255, 0.5) 66.7%, rgba(0, 0, 0, 0) 67.4%),
+    radial-gradient(130% 90% at 18% 0%, #fffdf7 0%, #f6edd8 60%, #eadcbc 100%);
+}
+
+.obj_map .objectName {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 9%;
+  padding: 4px 10px;
+  background: rgba(251, 245, 232, 0.92);
+  border: 1px solid rgba(106, 90, 72, 0.25);
+  text-align: center;
+}
+
+.mapLines {
+  position: absolute;
+  inset: 8% 6% 30%;
+  width: 88%;
+  height: 62%;
+}
+
+.mapLines path {
+  fill: none;
+  stroke: rgba(106, 90, 72, 0.42);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.mapLines .mapRoad {
+  stroke: rgba(201, 138, 53, 0.55);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+}
+
+/* the notebook */
+.obj_notebook {
+  right: 4%;
+  top: 18%;
+  width: 21%;
+  aspect-ratio: 3 / 4;
+  rotate: 5deg;
+  border-radius: 6px 10px 10px 6px;
+  background:
+    linear-gradient(to right, rgba(0, 0, 0, 0.35) 0 7%, rgba(255, 255, 255, 0.06) 7% 8%, rgba(0, 0, 0, 0) 8%),
+    linear-gradient(to right, rgba(0, 0, 0, 0) 84%, #1b120c 84% 87%, rgba(0, 0, 0, 0) 87%),
+    radial-gradient(120% 90% at 30% 10%, #a32b55 0%, #7d1d40 60%, #5f1530 100%);
+  box-shadow: 0 30px 60px -26px rgba(0, 0, 0, 0.75), 0 10px 20px -10px rgba(0, 0, 0, 0.5);
+}
+
+.obj_notebook .objectName {
+  position: absolute;
+  left: 18%;
+  right: 22%;
+  top: 30%;
+  padding: 10px 10px;
+  background: #fbf5e8;
+  border-radius: 2px;
+  font-size: clamp(18px, 1.9vw, 24px);
+  text-align: center;
+}
+
+/* the folder */
+.obj_folder {
+  left: 31%;
+  bottom: 2%;
+  width: 27%;
+  aspect-ratio: 5 / 3.2;
+  rotate: 2deg;
+  border-radius: 4px;
+  background: linear-gradient(170deg, #e2c487 0%, #d4b06c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 26px 50px -24px rgba(0, 0, 0, 0.75);
+}
+
+.obj_folder .objectName {
+  position: absolute;
+  bottom: 100%;
+  left: 7%;
+  max-width: 86%;
+  min-width: 34%;
+  min-height: 26px;
+  padding: 6px 12px 2px;
+  border-radius: 7px 7px 0 0;
+  background: #e2c487;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 500;
+  font-size: clamp(11px, 1vw, 13px);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.obj_folder .objectBlank {
+  margin-top: 0;
+  width: 60px;
+}
+
+/* the photograph */
+.obj_photograph {
+  right: 27%;
+  top: 0;
+  width: 16%;
+  rotate: -6deg;
+  padding: 10px 10px 4px;
+  background: #fffdf8;
+  box-shadow: 0 24px 46px -22px rgba(0, 0, 0, 0.8), 0 6px 12px -6px rgba(0, 0, 0, 0.5);
+}
+
+.photoBlank {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(160deg, #d9dfe2, #b7c1c6);
+}
+
+.obj_photograph .objectName {
+  padding: 6px 2px 0;
+  font-size: clamp(16px, 1.6vw, 21px);
+  text-align: center;
+}
+
+/* the line in the lamplight */
+.lampLine {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(520px, 90%);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.lampLine button,
+.lampLine a {
+  pointer-events: auto;
+}
+
+.workLine {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(19px, 2.4vw, 26px);
+  line-height: 1.3;
+  color: rgba(251, 245, 232, 0.86);
+}
+
+.deskLink {
+  margin-top: 14px;
+  border: 0;
+  background: none;
+  padding: 6px 4px;
+  font-size: 16px;
+  color: rgba(251, 245, 232, 0.9);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: rgba(251, 245, 232, 0.4);
+}
+
+.readingNotes {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(251, 245, 232, 0.55);
+}
+
+/* the crew, small, along the bottom edge */
+.crewRow {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 108px;
+  padding: 0 2%;
+  pointer-events: none;
+}
+
+.crewSlot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: clamp(64px, 8vw, 104px);
+}
+
+.crewMember {
+  width: clamp(64px, 8vw, 104px);
+  height: auto;
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.45));
+  user-select: none;
+}
+
+/* where it came from */
+.sourceNote {
+  composes: paper;
+  width: min(460px, calc(100vw - 32px));
+  padding: 22px 24px 18px;
+  display: grid;
+  gap: 16px;
+  transform: rotate(-0.6deg);
+}
+
+.sourceItem blockquote {
+  margin: 6px 0 6px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.sourceItem a {
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-underline-offset: 3px;
+}
+
+.sourceLabel {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.sourceClose {
+  justify-self: end;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  color: var(--ink-soft) !important;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 720px) {
+  .readingScene {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .objects {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 30px 12px;
+    padding: 8px 2px 120px;
+  }
+  .deskObject {
+    position: relative;
+    inset: auto;
+    width: auto;
+    min-width: 0;
+  }
+  .obj_map {
+    grid-column: 1 / -1;
+    aspect-ratio: 5 / 3;
+  }
+  .obj_notebook .objectName {
+    left: 14%;
+    right: 18%;
+    padding: 6px 4px;
+    font-size: 15px;
+  }
+  .obj_photograph .objectName {
+    font-size: 15px;
+  }
+  .obj_folder {
+    align-self: end;
+  }
+  .obj_folder .objectName {
+    font-size: 10px;
+    padding: 5px 7px 1px;
+    max-width: 100%;
+  }
+  .lampLine {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
+    margin: 4px auto 18px;
+    order: -1;
+  }
+  .crewRow {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 0;
+    padding: 18px 10px 6px;
+    background: linear-gradient(to top, rgba(20, 15, 11, 0.96) 55%, rgba(20, 15, 11, 0));
+  }
+}
+
+/* what is connected, in a corner */
+.connectionsStrip {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 14px;
+  max-width: calc(100% - 140px);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: rgba(251, 245, 232, 0.5);
+}
+
+.stripActions {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.stripActions button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: rgba(251, 245, 232, 0.72) !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.findingList {
+  list-style: none;
+  padding: 0 !important;
+  margin: 18px 0 0;
+  display: grid;
+  gap: 14px !important;
+}
+
+.findingList li p {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.findingList li small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 720px) {
+  .connectionsStrip {
+    position: relative;
+    top: auto;
+    right: auto;
+    max-width: 100%;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+}

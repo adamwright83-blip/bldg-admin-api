@@ -1,0 +1,64 @@
+import { GoogleGeocoder } from "../../geography/googleGeocoder";
+import { providerUrl } from "../providerFetch";
+import { connectionSecrets, updateAccessToken, type JourneyRow } from "../store";
+import { exampleGeocoder, exampleReaders } from "./exampleReaders";
+import { claudeExtractor, exampleExtractor } from "./extractors";
+import { calendarReader, driveReader, gmailReader, type GoogleAccess } from "./googleReaders";
+import type { ReadingDeps } from "./run";
+import { slackReader } from "./slackReader";
+import { READ_LIMITS, type Geocoder, type SourceReaders } from "./sources";
+
+/** A geocoder for real journeys: Google's, through the same provider seam (a local stand-in outside production). */
+function googleGeocoder(): Geocoder {
+  const geocoder = new GoogleGeocoder(undefined, (input, init) => fetch(providerUrl(String(input)), init));
+  return {
+    async geocode(address) {
+      const result = await geocoder.geocode(address);
+      return result.status === "success"
+        ? { lat: result.latitude, lng: result.longitude, formatted: result.canonicalAddress }
+        : null;
+    },
+  };
+}
+
+/** Readers for a journey's own connections. A provider that isn't connected reads as nothing, with no error. */
+export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> {
+  if (journey.kind === "example") {
+    return { readers: exampleReaders(), extractor: exampleExtractor(), geocoder: exampleGeocoder() };
+  }
+  const google = await connectionSecrets(journey.id, "google");
+  const slack = await connectionSecrets(journey.id, "slack");
+  const ownerEmail = google?.row.accountLabel ?? "";
+  const access: GoogleAccess | null = google
+    ? {
+        accessToken: google.accessToken,
+        refreshToken: google.refreshToken,
+        accessExpiresAt: google.accessExpiresAt,
+        grantedScopes: google.grantedScopes,
+        ownerEmail,
+        onRefreshed: (accessToken, expiresAt) =>
+          updateAccessToken({ journeyId: journey.id, provider: "google", accessToken, accessExpiresAt: expiresAt }),
+      }
+    : null;
+  const gmail = access ? gmailReader(access) : null;
+  const calendar = access ? calendarReader(access) : null;
+  const drive = access ? driveReader(access) : null;
+  const slackRead = slack ? slackReader({ accessToken: slack.accessToken, userId: slack.row.accountSubject }) : null;
+  const nothing = { items: [], unavailable: null };
+
+  const readers: SourceReaders = {
+    async owner() {
+      return gmail ? gmail.owner() : { name: null, email: ownerEmail };
+    },
+    sentMail: async limit => (gmail ? gmail.sentMail(limit) : nothing),
+    receivedMail: async limit => (gmail ? gmail.receivedMail(limit) : nothing),
+    calendar: async window => (calendar ? calendar(window) : nothing),
+    drive: async limit =>
+      drive
+        ? drive.drive(limit, READ_LIMITS.driveDocs, new Date(Date.now() - 365 * 24 * 60 * 60 * 1000))
+        : nothing,
+    slack: async limit => (slackRead ? slackRead(limit) : nothing),
+    now: () => new Date(),
+  };
+  return { readers, extractor: claudeExtractor(journey.id), geocoder: googleGeocoder() };
+}

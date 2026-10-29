@@ -1,5 +1,14 @@
-import { int, mysqlTable, text, timestamp, uniqueIndex, index, varchar } from "drizzle-orm/mysql-core";
+import { int, json, mysqlTable, text, timestamp, uniqueIndex, index, varchar } from "drizzle-orm/mysql-core";
 import type { ConnectionProvider, JourneyKind, JourneyStage } from "../../shared/firstTenMinutes";
+import type {
+  CompanionId,
+  FindingKind,
+  FindingPayload,
+  FindingStatus,
+  SourceRef,
+  UnderstandingStage,
+  UnderstandingView,
+} from "../../shared/firstTenMinutesFindings";
 
 /** drizzle/0152_first_ten_journeys.sql, applied by scripts/migrate.mjs. */
 export const firstTenJourneys = mysqlTable(
@@ -47,3 +56,47 @@ export const firstTenConnections = mysqlTable(
     provider: uniqueIndex("uq_first_ten_connections_provider").on(table.journeyId, table.provider),
   })
 );
+
+/** drizzle/0153_first_ten_findings.sql: the crew's reading of a journey's sources (one per journey). */
+export const firstTenReadings = mysqlTable("first_ten_readings", {
+  journeyId: varchar("journey_id", { length: 36 }).primaryKey(),
+  runId: varchar("run_id", { length: 36 }).notNull(),
+  status: varchar("status", { length: 16 }).$type<"running" | "complete" | "failed">().notNull(),
+  stage: varchar("stage", { length: 24 }).$type<UnderstandingStage | null>(),
+  finishedJson: json("finished_json").$type<UnderstandingStage[]>(),
+  countsJson: json("counts_json").$type<UnderstandingView["counts"]>(),
+  notesJson: json("notes_json").$type<string[]>(),
+  leaseUntil: timestamp("lease_until"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  finishedAt: timestamp("finished_at"),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+/** What the reading found, each with its sources. `origin_json` is server-only (where an image's bytes live). */
+export const firstTenFindings = mysqlTable(
+  "first_ten_findings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    journeyId: varchar("journey_id", { length: 36 }).notNull(),
+    runId: varchar("run_id", { length: 36 }).notNull(),
+    kind: varchar("kind", { length: 24 }).$type<FindingKind>().notNull(),
+    companion: varchar("companion", { length: 16 }).$type<CompanionId | null>(),
+    rank: int("rank").notNull().default(0),
+    payloadJson: json("payload_json").$type<FindingPayload>().notNull(),
+    sourcesJson: json("sources_json").$type<SourceRef[]>().notNull(),
+    status: varchar("status", { length: 16 }).$type<FindingStatus>().notNull(),
+    correctionText: text("correction_text"),
+    originJson: json("origin_json").$type<FindingOrigin | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    journey: index("idx_first_ten_findings_journey").on(table.journeyId, table.kind),
+  })
+);
+
+/** Where a finding's media can be fetched again, for the person who owns it. Never sent to a browser. */
+export type FindingOrigin =
+  | { provider: "gmail"; messageId: string; attachmentId: string }
+  | { provider: "drive"; fileId: string }
+  | { provider: "example"; asset: string };
