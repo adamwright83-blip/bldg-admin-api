@@ -27,6 +27,7 @@ const ZONE = "America/Los_Angeles";
 const PITCH = "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)";
 const PICKUP = "Pick up laundry at Century Park East";
 const CHALLENGE = "Publish the Instagram landing page";
+const CUSTOMER_VISIT = "Visit customer to collect laundry";
 
 // Adam's words on the call (claire_conversation_turns, session cb980810).
 const CONVERTING =
@@ -156,6 +157,8 @@ describeMysql("2026-10-28 call B — the operator's choice for tomorrow, real ph
     // What production held for 10-29 after the wrong "Yes." saved the pitch, plus fixed work.
     const pitchId = await seed(PITCH, "growth");
     const pickupId = await seed(PICKUP, "operations");
+    // An obligation with a "visit" in its title: the kind, not the word, says it is not a sales stop.
+    const customerVisitId = await seed(CUSTOMER_VISIT, "operations");
 
     const { openAuthorizedInboundClaireConversation, runRelayAuthoritativeTurn } = await import("../../claireTwilio");
     const opened = await openAuthorizedInboundClaireConversation({
@@ -184,7 +187,7 @@ describeMysql("2026-10-28 call B — the operator's choice for tomorrow, real ph
     const offer = await say(PRIORITY);
     transcript.push(offer.speak);
     expect(offer.speak).toBe("Want me to set tomorrow's challenge to publish the Instagram landing page?");
-    expect((await rowsFor(tomorrow)).length).toBe(2);
+    expect((await rowsFor(tomorrow)).length).toBe(3);
 
     // Yes to THAT offer: the challenge is saved for tomorrow and read back through the Daily Command.
     const yes = await say("Yes.");
@@ -215,9 +218,11 @@ describeMysql("2026-10-28 call B — the operator's choice for tomorrow, real ph
     expect(pitchOverlay.notPursuing).toBe(false);
     expect(pitchOverlay.cancelledAt ?? null).toBeNull();
     expect(pitch.status).toBe("open");
-    const pickup = final.find(row => row.id === pickupId)!;
-    expect((pickup.metadataJson as Record<string, any>).goldlineDayLine ?? null).toBeNull();
-    expect((await visibleTomorrow()).sort()).toEqual([CHALLENGE, PICKUP].sort());
+    for (const id of [pickupId, customerVisitId]) {
+      const kept = final.find(row => row.id === id)!;
+      expect((kept.metadataJson as Record<string, any>).goldlineDayLine ?? null).toBeNull();
+    }
+    expect((await visibleTomorrow()).sort()).toEqual([CHALLENGE, PICKUP, CUSTOMER_VISIT].sort());
 
     // A later generic yes binds to nothing and writes nothing.
     const stray = await say("Yes.");
@@ -225,7 +230,7 @@ describeMysql("2026-10-28 call B — the operator's choice for tomorrow, real ph
     expect(stray.speak).not.toMatch(/Wilshire|Chadwick|Saved|Added/);
     const afterStray = await rowsFor(tomorrow);
     expect(afterStray.length).toBe(final.length);
-    expect((await visibleTomorrow()).sort()).toEqual([CHALLENGE, PICKUP].sort());
+    expect((await visibleTomorrow()).sort()).toEqual([CHALLENGE, PICKUP, CUSTOMER_VISIT].sort());
 
     // The Daily Command for tomorrow is the operator's challenge.
     const { loadDailyCommand } = await import("../../dailyCommandContract");

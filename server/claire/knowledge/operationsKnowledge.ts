@@ -21,6 +21,11 @@ export type DayWorkItem = {
   title: string;
   status: "open" | "completed";
   source: "day_line" | "route";
+  /**
+   * What kind of work the source says this is: a Day Director kind (growth / prep / operations)
+   * or a route entry kind (pickup, delivery, commercial_visit…). Absent on older readers.
+   */
+  workKind?: string | null;
   timing: string | null;
   completedAt: string | null;
 };
@@ -103,6 +108,7 @@ export async function loadDayWork(
       title: commitment.title,
       status: commitment.status === "completed" ? "completed" : "open",
       source: "day_line",
+      workKind: commitment.kind,
       timing: timingOf(commitment.detailNote),
       completedAt: commitment.completedAt,
     };
@@ -114,7 +120,7 @@ export async function loadDayWork(
     const timing = entry.scheduledAt
       ? new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.scheduledAt))
       : null;
-    open.push({ id: entry.id, title: entry.title, status: "open", source: "route", timing: timing ? `at ${timing}` : null, completedAt: null });
+    open.push({ id: entry.id, title: entry.title, status: "open", source: "route", workKind: entry.kind, timing: timing ? `at ${timing}` : null, completedAt: null });
   }
   let currentDayLine: CurrentDayLine | null = null;
   try {

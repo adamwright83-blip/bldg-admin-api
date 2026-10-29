@@ -71,6 +71,13 @@ function operatorChallengeFor(evidence: readonly EvidenceItem[], businessDate: s
   return null;
 }
 
+/**
+ * Discretionary sales work, by what the source says it is, never by its title: Day Director growth
+ * rows and the route's commercial visits, calls and sales follow-ups. Pickups, deliveries, payment
+ * blockers and operations rows are obligations and always stay.
+ */
+const SALES_WORK_KINDS = new Set(["growth", "commercial_visit", "commercial_call", "follow_up"]);
+
 function dayWorkFor(evidence: readonly EvidenceItem[], businessDate: string): { item: EvidenceItem; work: DayWork } | null {
   const chosen = evidence.find(
     item =>
@@ -120,9 +127,12 @@ export function buildLeadPlan(input: {
   const dayWork = dayWorkFor(input.evidence, businessDate);
   const challenge = operatorChallengeFor(input.evidence, businessDate);
   const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  // On a day the operator chose, the plan says the challenge and the obligations, not more sales work.
   const open = dedupeTitles([
     ...(challenge ? [challenge.title] : []),
-    ...(dayWork?.work.open ?? []).map(item => item.title).filter(title => !challenge || !sameTitle(title, challenge.title)),
+    ...(dayWork?.work.open ?? [])
+      .filter(item => !challenge || (!sameTitle(item.title, challenge.title) && !SALES_WORK_KINDS.has(item.workKind ?? "")))
+      .map(item => item.title),
   ]);
 
   const gameItem = input.evidence.find(item => item.type === "game_state" && item.authoritativeFor.includes("current_business_truth"));

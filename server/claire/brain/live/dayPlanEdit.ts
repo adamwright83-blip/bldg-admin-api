@@ -211,14 +211,17 @@ export function titleGroundedInOperatorWords(title: string, operatorText: string
   return hits >= Math.max(1, Math.ceil(wanted.length * 0.6));
 }
 
-const SALES_ROW = /\b(?:pitch|pitches|pitching|visit|visits|door|doors|knock|walk[- ]?in|prospect|canvass|sales|leasing office)\b/i;
-
-/** Rows this edit takes off the day. Operator missions and completed history are never candidates. */
+/**
+ * Rows this edit takes off the day. Operator missions and completed history are never candidates.
+ * "The sales stops" means rows the Day Director filed as growth work: the kind decides, never a word
+ * in the title, so "Visit customer to collect laundry" (operations) is never a sales stop. A row the
+ * operator NAMED can be any kind; they said which one.
+ */
 export function rowsToRemove(reading: DayPlanEditReading, rows: DayPlanRow[]): DayPlanRow[] {
   const candidates = rows.filter(row => row.status === "open" && !row.operatorPrimary);
   const chosen = new Map<string, DayPlanRow>();
   if (reading.removeSales) {
-    for (const row of candidates) if (SALES_ROW.test(row.title)) chosen.set(row.id, row);
+    for (const row of candidates) if (row.kind === "growth") chosen.set(row.id, row);
   }
   for (const named of reading.removeTitles) {
     const want = tokens(named);

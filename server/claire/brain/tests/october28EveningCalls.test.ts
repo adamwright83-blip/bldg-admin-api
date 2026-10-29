@@ -109,6 +109,8 @@ function tomorrowLine(): DayPlanRow[] {
   return [
     { id: "830992c0", title: PITCH, kind: "growth", status: "open", operatorPrimary: false },
     { id: "pickup-1", title: "Pick up laundry at Century Park East", kind: "operations", status: "open", operatorPrimary: false },
+    // An obligation whose title carries a "sales" word. The kind says what it is.
+    { id: "visit-1", title: "Visit customer to collect laundry", kind: "operations", status: "open", operatorPrimary: false },
   ];
 }
 
@@ -290,7 +292,7 @@ describe("2. Adam's choice for tomorrow becomes the day's challenge; the sales s
     const result = await runClaireV2PrimaryTurn(turnInput(state, B.remove), h.deps);
     expect(h.removed).toEqual([{ businessDate: TOMORROW, ids: ["830992c0"] }]);
     expect(h.designated).toEqual([{ businessDate: TOMORROW, title: CHALLENGE }]);
-    expect(h.line.get(TOMORROW)!.map(row => row.title)).toEqual(["Pick up laundry at Century Park East", CHALLENGE]);
+    expect(h.line.get(TOMORROW)!.map(row => row.title)).toEqual(["Pick up laundry at Century Park East", "Visit customer to collect laundry", CHALLENGE]);
     expect(result.speak).toBe(
       `I took Pitch Wilshire Vermont and The Chadwick in person off tomorrow's line. It stays on record; only tomorrow changed. Saved. Tomorrow's challenge: publish the Instagram landing page. It counts when the Instagram landing page is published.`
     );
@@ -305,13 +307,23 @@ describe("2. Adam's choice for tomorrow becomes the day's challenge; the sales s
     expect(h.removed).toEqual([]);
   });
 
-  it("the operator's mission and completed history are never taken off", () => {
+  it("the operator's mission, completed history and operational work are never sales stops", () => {
     const rows: DayPlanRow[] = [
       { id: "m", title: "Pitch The Pearl in person", kind: "growth", status: "open", operatorPrimary: true },
       { id: "c", title: "Visit Avana", kind: "growth", status: "completed", operatorPrimary: false },
       { id: "p", title: PITCH, kind: "growth", status: "open", operatorPrimary: false },
+      { id: "v", title: "Visit customer to collect laundry", kind: "operations", status: "open", operatorPrimary: false },
+      { id: "w", title: "Walk-in drop-off at the shop", kind: "prep", status: "open", operatorPrimary: false },
+      // Growth by kind with no sales word in the title: still a sales stop.
+      { id: "g", title: "Coffee with the OPUS LA manager", kind: "growth", status: "open", operatorPrimary: false },
     ];
-    expect(rowsToRemove({ ...challengeReading(true, true), primaryTitle: null }, rows).map(row => row.id)).toEqual(["p"]);
+    expect(rowsToRemove({ ...challengeReading(true, true), primaryTitle: null }, rows).map(row => row.id)).toEqual(["p", "g"]);
+  });
+
+  it("a row the operator names comes off whatever its kind", () => {
+    const rows: DayPlanRow[] = [{ id: "v", title: "Visit customer to collect laundry", kind: "operations", status: "open", operatorPrimary: false }];
+    const reading = { ...challengeReading(true, false), primaryTitle: null, removeTitles: ["the customer laundry visit"] };
+    expect(rowsToRemove(reading, rows).map(row => row.id)).toEqual(["v"]);
   });
 });
 
@@ -330,8 +342,13 @@ describe("2b. a day the operator chose gets no discretionary Greystar offer", ()
       payload: {
         businessDate: TOMORROW,
         open: [
-          ...(withChallenge ? [{ id: "day-director:challenge-1", title: CHALLENGE, status: "open", source: "day_line", timing: null, completedAt: null }] : []),
-          { id: "day-director:pickup-1", title: "Pick up laundry at Century Park East", status: "open", source: "day_line", timing: null, completedAt: null },
+          ...(withChallenge ? [{ id: "day-director:challenge-1", title: CHALLENGE, status: "open", source: "day_line", workKind: "growth", timing: null, completedAt: null }] : []),
+          // The sales work Adam turned down on the call, as the Day Director and the route file it.
+          { id: "day-director:louise", title: "Follow up with The Louise", status: "open", source: "day_line", workKind: "growth", timing: null, completedAt: null },
+          { id: "route:wv", title: "Rise Koreatown leasing office visit", status: "open", source: "route", workKind: "commercial_visit", timing: null, completedAt: null },
+          // Real obligations, one with a "visit" in its title.
+          { id: "day-director:pickup-1", title: "Pick up laundry at Century Park East", status: "open", source: "day_line", workKind: "operations", timing: null, completedAt: null },
+          { id: "route:visit", title: "Visit customer to collect laundry", status: "open", source: "route", workKind: "pickup", timing: "at 9:00 AM", completedAt: null },
         ],
         completed: [],
         routeAvailable: true,
@@ -394,13 +411,18 @@ describe("2b. a day the operator chose gets no discretionary Greystar offer", ()
     expect(plan.dayLineMove?.title).toBe(PITCH);
   });
 
-  it("with the challenge chosen: it leads, the pickup stays, no offer, no Colosseum pitch", () => {
+  it("with the challenge chosen: it leads, the obligations stay, no sales work, no offer, no Colosseum pitch", () => {
     const plan = buildLeadPlan({ evidence: evidence(true), horizon: "tomorrow", today: TODAY });
     expect(plan.operatorChallenge).toBe(CHALLENGE);
     expect(plan.dayLineMove).toBeNull();
     expect(plan.text).toMatch(/Tomorrow is your challenge: publish the Instagram landing page\./);
-    expect(plan.text).toMatch(/After that: pick up laundry at Century Park East\./);
-    expect(plan.text).not.toMatch(/Wilshire|Chadwick|Colosseum/);
+    expect(plan.text).toMatch(/After that: pick up laundry at Century Park East and visit customer to collect laundry\./);
+    expect(plan.text).not.toMatch(/Louise|Rise Koreatown|Wilshire|Chadwick|Colosseum/);
+  });
+
+  it("without a choice the sales work is still in the plan", () => {
+    const plan = buildLeadPlan({ evidence: evidence(false), horizon: "tomorrow", today: TODAY });
+    expect(plan.text).toMatch(/follow up with The Louise/);
   });
 });
 
