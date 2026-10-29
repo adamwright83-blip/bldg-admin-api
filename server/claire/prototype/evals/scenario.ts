@@ -25,6 +25,8 @@ export type DateRef =
   | "day_after_tomorrow"
   | `today+${number}`
   | `today-${number}`
+  /** The next such weekday strictly after today: what a bare "Saturday" means on a call. */
+  | "coming_monday" | "coming_tuesday" | "coming_wednesday" | "coming_thursday" | "coming_friday" | "coming_saturday" | "coming_sunday"
   /** The weekday of NEXT week (Monday-start), the same rule the prototype applies to "next Friday". */
   | "next_monday" | "next_tuesday" | "next_wednesday" | "next_thursday" | "next_friday" | "next_saturday" | "next_sunday";
 
@@ -152,11 +154,11 @@ export function resolveDateRef(ref: DateRef, today: string): string {
   if (ref === "day_after_tomorrow") return addDays(today, 2);
   const offset = /^today([+-]\d+)$/.exec(ref);
   if (offset) return addDays(today, Number(offset[1]));
-  const weekday = /^next_(\w+)$/.exec(ref);
+  const weekday = /^(next|coming)_(\w+)$/.exec(ref);
   if (weekday) {
-    const target = WEEKDAYS.indexOf(weekday[1] as (typeof WEEKDAYS)[number]);
+    const target = WEEKDAYS.indexOf(weekday[2] as (typeof WEEKDAYS)[number]);
     if (target < 0) throw new Error(`unknown weekday in DateRef: ${ref}`);
-    return resolveWeekday(today, target, "next");
+    return resolveWeekday(today, target, weekday[1] === "next" ? "next" : "coming");
   }
   throw new Error(`unknown DateRef: ${ref}`);
 }

@@ -26,10 +26,10 @@
   },
   "expect": {
     "dayLine": [
-      { "businessDate": "next_tuesday", "titleMatches": "pinecrest|dental", "count": 1 },
-      { "businessDate": "next_saturday", "titleMatches": "marlowe", "count": 1 },
+      { "businessDate": "coming_tuesday", "titleMatches": "pinecrest|dental", "count": 1 },
+      { "businessDate": "coming_saturday", "titleMatches": "marlowe", "count": 1 },
       { "businessDate": "day_after_tomorrow", "titleMatches": "whitcomb|gutter", "count": 1 },
-      { "businessDate": "next_friday", "titleMatches": "ashford|lobby", "count": 1 },
+      { "businessDate": "coming_friday", "titleMatches": "ashford|lobby", "count": 1 },
       { "businessDate": "tomorrow", "titleMatches": "aldana" }
     ],
     "seededRowsIntact": true,
@@ -38,5 +38,5 @@
     "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Guards relative-date resolution from the call's calendar: Tuesday, Saturday and Friday resolve to the next occurrence strictly after today (the persona confirms 'the next one coming up' if asked), 'the day after tomorrow' resolves to today+2, and the operator never speaks a calendar date. Whitcomb must exist exactly once on the day after tomorrow (moved, not copied; on a Monday run that is the same day it was seeded on, which is still correct). Ashford has no date until Claire asks, so one clarifying question is legitimate; a second ask is allowed for a batch confirmation, nothing beyond that. No absent checks are used because on some run days a weekday coincides with tomorrow or the day after, so wrong-day writes are caught instead by each row's required placement plus maxRowsAdded 3 (three new rows, one move)."
+  "notes": "(2026-10-29 correction: these weekday refs were written when next_<weekday> meant the next occurrence after today; the DateRef rule changed to next week's weekday before the first run, so they now use coming_<weekday>, which is what the author meant. The first run's 0/3 here was this harness drift, not Claire.) Guards relative-date resolution from the call's calendar: Tuesday, Saturday and Friday resolve to the next occurrence strictly after today (the persona confirms 'the next one coming up' if asked), 'the day after tomorrow' resolves to today+2, and the operator never speaks a calendar date. Whitcomb must exist exactly once on the day after tomorrow (moved, not copied; on a Monday run that is the same day it was seeded on, which is still correct). Ashford has no date until Claire asks, so one clarifying question is legitimate; a second ask is allowed for a batch confirmation, nothing beyond that. No absent checks are used because on some run days a weekday coincides with tomorrow or the day after, so wrong-day writes are caught instead by each row's required placement plus maxRowsAdded 3 (three new rows, one move)."
 }

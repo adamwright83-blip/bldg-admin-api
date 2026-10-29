@@ -83,6 +83,13 @@ jobs:
       - name: Print the report
         if: always()
         run: cat eval-output/REPORT.md || true
+      - name: Print the re-gradeable trial records
+        if: always()
+        run: |
+          echo "===TRIALS.JSONL BEGIN==="
+          cat eval-output/trials.jsonl || true
+          echo
+          echo "===TRIALS.JSONL END==="
       - uses: actions/upload-artifact@v4
         if: always()
         with:

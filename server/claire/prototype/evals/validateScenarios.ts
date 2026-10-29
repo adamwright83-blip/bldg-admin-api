@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { validateScenario, type Scenario } from "./scenario";
 
-export function loadScenarioSet(set: "dev" | "sealed"): Scenario[] {
+export function loadScenarioSet(set: string): Scenario[] {
   const dir = path.resolve(import.meta.dirname, "scenarios", set);
   return readdirSync(dir)
     .filter(file => file.endsWith(".json"))
@@ -17,8 +17,8 @@ export function loadScenarioSet(set: "dev" | "sealed"): Scenario[] {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-  const which = (process.argv[2] ?? "all") as "dev" | "sealed" | "all";
-  const sets = which === "all" ? (["dev", "sealed"] as const) : ([which] as const);
+  const which = process.argv[2] ?? "all";
+  const sets = which === "all" ? ["dev", "sealed"] : [which];
   let failed = 0;
   for (const set of sets) {
     const scenarios = loadScenarioSet(set);

@@ -62,7 +62,7 @@ async function main() {
   if (!DATABASE_URL) throw new Error("DATABASE_URL (local disposable MySQL) is required");
   requireLocal(DATABASE_URL);
   const systems = arg("systems", "prototype").split(",").map(s => s.trim()).filter(Boolean) as SystemName[];
-  const sets = arg("sets", "dev").split(",").map(s => s.trim()).filter(Boolean) as Array<"dev" | "sealed">;
+  const sets = arg("sets", "dev").split(",").map(s => s.trim()).filter(Boolean);
   const trials = Number(arg("trials", "3"));
   const only = arg("only", "").trim();
   // Strict (the default): the process exits non-zero unless EVERY scenario passes every
@@ -215,7 +215,7 @@ async function main() {
         const today = businessDateToday(realNow, ZONE);
         const now = scenario.localTime ? () => fromZonedTime(`${today}T${scenario.localTime}:00`, ZONE) : () => new Date();
         const record: TrialRecord = {
-          system, scenarioId: scenario.id, trial, today, startedAt: realNow.toISOString(), grade: { pass: false, checks: [], counts: { rowsAdded: 0, unauthorizedRows: 0, authorizationAsks: 0, falseClaims: 0, deniedSaves: 0 } },
+          system, scenarioId: scenario.id, trial, today, startedAt: realNow.toISOString(), grade: { pass: false, checks: [], counts: { rowsAdded: 0, unauthorizedRows: 0, seededMoved: 0, seededRemoved: 0, seededCompleted: 0, authorizationAsks: 0, falseClaims: 0, deniedSaves: 0, unansweredQuestions: 0 } },
           transcript: [], before: [], after: [], standingInstructions: [], latencyMs: { total: 0, perClaireTurn: [] }, tokens: null, error: null,
         };
         const trialStarted = Date.now();
@@ -276,6 +276,21 @@ async function main() {
   const verdict = acceptance(summary, records);
   writeFileSync(path.join(out, "REPORT.md"), renderReport(records, { trials, sets, systems, verdict }));
   writeFileSync(path.join(out, "summary.json"), JSON.stringify({ verdict, scenarios: summary }, null, 2));
+  // Compact, re-gradeable record of every trial (transcript + rows, no tool payloads): one JSON per line,
+  // so a run can be re-graded from the CI log alone when the artifact is out of reach.
+  writeFileSync(
+    path.join(out, "trials.jsonl"),
+    records
+      .map(record =>
+        JSON.stringify({
+          system: record.system, scenarioId: record.scenarioId, trial: record.trial, today: record.today, error: record.error ? record.error.split("\n")[0] : null,
+          before: record.before, after: record.after, standingInstructions: record.standingInstructions,
+          transcript: record.transcript.map(turn => ({ speaker: turn.speaker, text: turn.text, confirmedWrite: turn.confirmedWrite, failedWrite: turn.failedWrite, latencyMs: turn.latencyMs })),
+          tokens: record.tokens,
+        })
+      )
+      .join("\n")
+  );
   await sql.end();
   console.log(`\nHARNESS: ran ${records.length} trials, ${verdict.errors} errored.`);
   for (const system of systems) {
@@ -324,7 +339,9 @@ function summarize(records: TrialRecord[]) {
       falseClaims: trials.reduce((a, t) => a + t.grade.counts.falseClaims, 0),
       deniedSaves: trials.reduce((a, t) => a + t.grade.counts.deniedSaves, 0),
       unauthorizedRows: trials.reduce((a, t) => a + t.grade.counts.unauthorizedRows, 0),
+      seededMutations: trials.reduce((a, t) => a + t.grade.counts.seededMoved + t.grade.counts.seededRemoved + t.grade.counts.seededCompleted, 0),
       authorizationAsks: trials.reduce((a, t) => a + t.grade.counts.authorizationAsks, 0),
+      unansweredQuestions: trials.reduce((a, t) => a + t.grade.counts.unansweredQuestions, 0),
       errors: trials.filter(t => t.error).length,
     };
   });
@@ -341,10 +358,10 @@ function renderReport(records: TrialRecord[], meta: { trials: number; sets: stri
     lines.push(`- **Claire (${system}):** ${row.scenariosPassingAllTrials}/${row.scenarios} scenarios pass all trials; ${row.trialsPassed}/${row.trials} trials pass.`);
   }
   lines.push(`- **Acceptance:** ${meta.verdict.accepted ? "ACCEPTED — every scenario passed every trial" : "NOT ACCEPTED"}.`, ``);
-  lines.push(`## Summary`, ``, `| system | scenario | pass | mean turn ms | max turn ms | tokens in/out | est. cost | false claims | denied saves | unauthorized rows | auth asks | errors |`, `|---|---|---|---|---|---|---|---|---|---|---|---|`);
+  lines.push(`## Summary`, ``, `| system | scenario | pass | mean turn ms | max turn ms | tokens in/out | est. cost | false claims | denied saves | unauthorized additions | seeded rows moved/removed/completed | auth asks | unanswered questions | errors |`, `|---|---|---|---|---|---|---|---|---|---|---|---|---|---|`);
   for (const row of summary) {
     const cost = row.tokens ? `$${((row.tokens.input * priceIn + row.tokens.output * priceOut) / 1_000_000).toFixed(3)}` : "n/a";
-    lines.push(`| ${row.system} | ${row.scenarioId} | ${row.passes}/${row.trials}${row.passAll ? " ✓" : ""} | ${row.meanTurnLatencyMs} | ${row.maxTurnLatencyMs} | ${row.tokens ? `${row.tokens.input}/${row.tokens.output}` : "not captured"} | ${cost} | ${row.falseClaims} | ${row.deniedSaves} | ${row.unauthorizedRows} | ${row.authorizationAsks} | ${row.errors} |`);
+    lines.push(`| ${row.system} | ${row.scenarioId} | ${row.passes}/${row.trials}${row.passAll ? " ✓" : ""} | ${row.meanTurnLatencyMs} | ${row.maxTurnLatencyMs} | ${row.tokens ? `${row.tokens.input}/${row.tokens.output}` : "not captured"} | ${cost} | ${row.falseClaims} | ${row.deniedSaves} | ${row.unauthorizedRows} | ${row.seededMutations} | ${row.authorizationAsks} | ${row.unansweredQuestions} | ${row.errors} |`);
   }
   for (const system of meta.systems) {
     const rows = summary.filter(row => row.system === system);

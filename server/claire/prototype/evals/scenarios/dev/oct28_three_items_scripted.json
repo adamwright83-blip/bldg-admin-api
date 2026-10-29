@@ -7,9 +7,18 @@
   "seed": {
     "operatorName": "Adam",
     "dayLine": [
-      { "title": "Follow up with Dana at The Louise", "businessDate": "today-82" },
-      { "title": "Pitch Wilshire Vermont in person", "businessDate": "today" },
-      { "title": "Pitch The Chadwick in person", "businessDate": "today" }
+      {
+        "title": "Follow up with Dana at The Louise",
+        "businessDate": "today-82"
+      },
+      {
+        "title": "Pitch Wilshire Vermont in person",
+        "businessDate": "today"
+      },
+      {
+        "title": "Pitch The Chadwick in person",
+        "businessDate": "today"
+      }
     ]
   },
   "operator": {
@@ -29,20 +38,37 @@
   },
   "expect": {
     "dayLine": [
-      { "businessDate": "tomorrow", "titleMatches": "landing page|marketing challenge" },
-      { "businessDate": "tomorrow", "titleMatches": "opus", "count": 1, "detailMatches": "pick" },
-      { "businessDate": "tomorrow", "titleMatches": "huntington park|towel" }
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "landing page|marketing challenge"
+      },
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "opus",
+        "count": 1,
+        "detailMatches": "pick"
+      },
+      {
+        "businessDate": "tomorrow",
+        "titleMatches": "huntington park",
+        "detailMatches": "towel"
+      }
     ],
     "absent": [
-      { "businessDate": "today", "titleMatches": "opus|towel|landing page|marketing challenge" }
+      {
+        "businessDate": "today",
+        "titleMatches": "opus|towel|landing page|marketing challenge"
+      }
     ],
     "seededRowsIntact": true,
     "maxRowsAdded": 4,
     "speech": {
-      "mustMention": ["day line|add|move|remove|read|revenue|sales|standing|rule|remember"]
+      "mustMention": [
+        "day line|add|move|remove|read|revenue|sales|standing|rule|remember"
+      ]
     },
     "maxAuthorizationAsks": 1,
     "falseClaimFails": true
   },
-  "notes": "Guards: a confirmed save must never be denied later; one explicit 'put them on' commits every item described on the call; the towel run keeps its flexible evening timing and Huntington Park before Opus; 'What are your actual capabilities?' gets an answer about what Claire can do, not a personal-question decline. Opus pickup count 1: the pickup and the towel drop-off at Opus may be one row or two, but the pickup itself appears once. maxRowsAdded 4 allows the drop-off as its own row."
+  "notes": "Guards: a confirmed save must never be denied later; one explicit 'put them on' commits every item described on the call; the towel run keeps its flexible evening timing and Huntington Park before Opus; 'What are your actual capabilities?' gets an answer about what Claire can do, not a personal-question decline. Opus pickup count 1: the pickup and the towel drop-off at Opus may be one row or two, but the pickup itself appears once. maxRowsAdded 4 allows the drop-off as its own row. (2026-10-29 correction: the towel-run row is identified by Huntington Park; Claire may split the Opus drop-off into its own row, so a regex on 'towel' counted two rows in the first run.)"
 }

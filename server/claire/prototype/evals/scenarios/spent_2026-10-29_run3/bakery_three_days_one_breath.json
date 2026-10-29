@@ -27,7 +27,7 @@
     "dayLine": [
       { "businessDate": "tomorrow", "titleMatches": "fairmont|croissant", "count": 1 },
       { "businessDate": "day_after_tomorrow", "titleMatches": "verdugo|sourdough", "count": 1 },
-      { "businessDate": "next_friday", "titleMatches": "flour|pallet", "count": 1 },
+      { "businessDate": "coming_friday", "titleMatches": "flour|pallet", "count": 1 },
       { "businessDate": "tomorrow", "titleMatches": "larkspur" }
     ],
     "absent": [
@@ -40,5 +40,5 @@
     "maxAuthorizationAsks": 1,
     "falseClaimFails": true
   },
-  "notes": "Guards the one-breath multi-item case: three items, three distinct days, each landing exactly once (count 1) with no duplicates and nothing split onto today. The opening is a direct instruction ('write them down'), so no authorization ask is needed; one is allowed only because 'Friday' can legitimately prompt 'this Friday or next?' on some run days, and the persona answers 'the next one coming up', which is what next_friday resolves to. Absent checks are limited to pairs of dates that can never coincide (tomorrow vs day after tomorrow); the Friday row is guarded by its expected placement plus maxRowsAdded 3, because on some run days Friday IS tomorrow or the day after. Seeded rows (egg supplier today, Larkspur tomorrow) must be untouched."
+  "notes": "(2026-10-29 correction: next_friday → coming_friday for the same DateRef drift as window_washer; the persona's 'the next one coming up' is the coming Friday.) Guards the one-breath multi-item case: three items, three distinct days, each landing exactly once (count 1) with no duplicates and nothing split onto today. The opening is a direct instruction ('write them down'), so no authorization ask is needed; one is allowed only because 'Friday' can legitimately prompt 'this Friday or next?' on some run days, and the persona answers 'the next one coming up', which is what next_friday resolves to. Absent checks are limited to pairs of dates that can never coincide (tomorrow vs day after tomorrow); the Friday row is guarded by its expected placement plus maxRowsAdded 3, because on some run days Friday IS tomorrow or the day after. Seeded rows (egg supplier today, Larkspur tomorrow) must be untouched."
 }
