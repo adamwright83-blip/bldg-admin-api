@@ -1,4 +1,4 @@
-# Claire native-tool prototype (non-production experiment)
+# Claire native-tool prototype (on the phone for allowlisted operators since 2026-10-29)
 
 Built 2026-10-29 after the Oct 27 and Oct 28 production calls. **Not wired into
 production Claire, the phone transport, or `invokeLLM`.** It exists to test one
@@ -44,3 +44,31 @@ CI: `.github/workflows/claire-prototype-eval.yml` (manual, `CLAIRE_TEST_ANTHROPI
 
 A scenario passes when all trials pass (pass^k). Passing the dev and sealed sets
 justifies a larger evaluation and a design review, not a production swap.
+
+## On the phone (production seam)
+
+`voiceEngine.ts` is the seam between the Twilio call (`server/claire/claireTwilio.ts`:
+identity, token, transcription, speech, call ledger) and this tool loop. Nothing else about
+the call changed: same number, same greeting, same Conversation Relay socket, same
+transcript ledger.
+
+- **Who.** `CLAIRE_NATIVE_TOOL_OPERATOR_IDS` (comma list). `owner` = `OWNER_OPEN_ID`;
+  `tenant:operator` scopes to one tenant; a bare id matches that operator anywhere.
+  Unset: nobody, everyone stays on Brain V2. Inbound calls only; Claire's scheduled
+  outbound calls stay on V2.
+- **Rollback.** `CLAIRE_NATIVE_TOOL_KILL_SWITCH=1` (or emptying the list) puts the NEXT
+  call back on V2. Railway restarts the service on a variable change (same build, no code
+  deploy). A call already in progress never changes engine: the engine is chosen at pickup
+  and persisted in the call state (`PreDriveConversation.nativeTool`).
+- **No silent fallback.** A model failure mid-turn is spoken as a failure
+  (`NATIVE_TOOL_FAILURE_LINE`), the model thread is restored to before the turn, and the
+  call stays on this engine.
+- **Logs.** `[ClaireNativeTool]` carries `engine_selected`, `turn` (latency, model calls,
+  tokens, tool names, receipt statuses and row ids) and `turn_failed`. Transcript text goes
+  through the existing scoped `[ClaireTranscript]` mirror only. Each Claire ledger turn
+  carries `providerMetadata.engine = "native_tool"` and the tool summary.
+- **Tests.** `voiceEngine.test.ts` (switch), `voiceEngine.mysql.integration.test.ts` (the
+  production open and relay-turn functions against a disposable MySQL with a scripted
+  model: write, singular-vs-plural completion, forged quote refused, failure spoken, end
+  of call, ledger rows). `evals/liveSmoke.ts` runs the same path with a real model
+  (workflow dispatch, `mode: smoke`).

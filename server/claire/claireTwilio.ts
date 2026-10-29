@@ -111,6 +111,17 @@ import { runWithLlmObservability } from "../_core/llmObservability";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { loadPersistedOperatorIdentity } from "../identity/operatorIdentityReadService";
+import {
+  ClaireToolTurnError,
+  NATIVE_TOOL_FAILURE_AFTER_WRITE_LINE,
+  NATIVE_TOOL_FAILURE_LINE,
+  NATIVE_TOOL_LOG,
+  nativeToolClaireEnabledFor,
+  newNativeToolCallState,
+  runNativeToolVoiceTurn,
+  toolEventSummary,
+  type NativeToolCallState,
+} from "./prototype/voiceEngine";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
 import {
@@ -218,6 +229,11 @@ type PreDriveConversation = ClaireTurnState & {
   voicemailDetected?: boolean;
   /** CallSid observed on the Relay socket or the Connect action callback. */
   relayCallSid?: string | null;
+  /**
+   * Set at pickup when this operator is on the native-tool Claire. Every turn of the call then
+   * runs on that engine (prototype/voiceEngine.ts); Brain V2 never sees the call. Absent: Brain V2.
+   */
+  nativeTool?: NativeToolCallState | null;
 };
 
 const SCHEDULED_OUTBOUND_KINDS = new Set<string>([
@@ -794,6 +810,119 @@ function latestOperatorUtterance(
 }
 
 /**
+ * One turn of a call on the native-tool Claire. Same bookkeeping as the Brain V2
+ * path (history, turn count, persisted state, ledger turns, related-action links,
+ * end of call); the thinking is the prototype tool loop. A failed turn is spoken
+ * as a failure and the call stays on this engine; the next call may land on V2
+ * if the switch was flipped meanwhile, this one never does.
+ */
+async function runNativeToolCallTurn(input: {
+  conversationId: string;
+  conversation: PreDriveConversation;
+  utterance: string;
+  rawTranscript: string | null;
+  callSid?: string;
+  token: string;
+}): Promise<AuthoritativeClaireVoiceTurnResult> {
+  const { conversationId, conversation, token } = input;
+  const state = conversation.nativeTool!;
+  const utterance = input.utterance.trim();
+  const startedAt = Date.now();
+  const turnNumber = conversation.turns + 1;
+  const remember = (speaker: "operator" | "claire", text: string) => {
+    if (!text.trim()) return;
+    conversation.history = [...(conversation.history ?? []), { speaker, text: text.slice(0, 1_200), at: Date.now() }].slice(-60);
+  };
+  if (!utterance) {
+    return voiceTurnDocument({ speak: "", token, hints: conversation.hints, listenOnly: true });
+  }
+  try {
+    const result = await runNativeToolVoiceTurn({
+      conversationId,
+      tenantId: conversation.tenantId,
+      operatorUserId: conversation.actorId,
+      dayDirectorActorId: conversation.dayDirectorActorId,
+      timeZone: conversation.appointmentTimeZone || getDashboardTimeZone(),
+      state,
+      utterance,
+    });
+    const speak = result.speak || (result.endCall ? "Bye." : "Go ahead.");
+    remember("operator", utterance);
+    remember("claire", speak);
+    conversation.nativeTool = result.state;
+    conversation.turns = turnNumber;
+    conversation.touchedAt = Date.now();
+    await saveCall(conversationId, conversation);
+    console.info(NATIVE_TOOL_LOG, JSON.stringify({
+      event: "turn",
+      conversationId,
+      callSid: input.callSid ?? conversation.relayCallSid ?? null,
+      turn: turnNumber,
+      latencyMs: result.latencyMs,
+      totalMs: Date.now() - startedAt,
+      modelCalls: result.modelCalls,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      stopReason: result.stopReason,
+      endCall: result.endCall,
+      speechChars: speak.length,
+      tools: toolEventSummary(result.toolEvents),
+    }));
+    await persistOperatorAndClaire({
+      callSid: input.callSid,
+      claireConversationId: conversationId,
+      operatorText: input.rawTranscript ?? utterance,
+      claireText: speak,
+      turnKey: turnNumber,
+      claireMetadata: {
+        engine: "native_tool",
+        model: state.model,
+        modelCalls: result.modelCalls,
+        tools: toolEventSummary(result.toolEvents),
+      },
+    });
+    if (result.actionIds.length) {
+      await linkClaireActionIds({ callSid: input.callSid, claireConversationId: conversationId, actionIds: result.actionIds });
+    }
+    if (result.endCall) {
+      await dropCall(conversationId);
+      await finalizeClaireCallLedger({ callSid: input.callSid, claireConversationId: conversationId, reason: "native_tool_end_call" });
+      return { speak, endCall: true, listenOnly: false, gatherTwiml: speakAndHangUp(speak) };
+    }
+    return voiceTurnDocument({ speak, token, hints: conversation.hints });
+  } catch (error) {
+    // Hard truth rule: a failure is never spoken as success, and never silently handed to another engine.
+    const wrote = error instanceof ClaireToolTurnError && error.wrote;
+    const speak = wrote ? NATIVE_TOOL_FAILURE_AFTER_WRITE_LINE : NATIVE_TOOL_FAILURE_LINE;
+    state.turnsFailed += 1;
+    remember("operator", utterance);
+    remember("claire", speak);
+    conversation.turns = turnNumber;
+    conversation.touchedAt = Date.now();
+    await saveCall(conversationId, conversation).catch(() => undefined);
+    console.error(NATIVE_TOOL_LOG, JSON.stringify({
+      event: "turn_failed",
+      conversationId,
+      callSid: input.callSid ?? conversation.relayCallSid ?? null,
+      turn: turnNumber,
+      totalMs: Date.now() - startedAt,
+      wroteBeforeFailure: wrote,
+      reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+      tools: error instanceof ClaireToolTurnError ? toolEventSummary(error.toolEvents) : [],
+    }));
+    await persistOperatorAndClaire({
+      callSid: input.callSid,
+      claireConversationId: conversationId,
+      operatorText: input.rawTranscript ?? utterance,
+      claireText: speak,
+      turnKey: turnNumber,
+      claireMetadata: { engine: "native_tool", failed: true, wroteBeforeFailure: wrote },
+    });
+    return voiceTurnDocument({ speak, token, hints: conversation.hints });
+  }
+}
+
+/**
  * The one Claire voice-turn orchestration. Gather and Conversation Relay both
  * call this. Relay passes allowFragmentWait false so a final provider prompt
  * is not held as a Gather pause fragment.
@@ -814,6 +943,11 @@ export function runAuthoritativeClaireVoiceTurn(input: {
   const { conversationId, conversation, token } = input;
   const daphneSourceId=input.sourceEventId ?? `voice:${conversationId}:${conversation.turns+1}`;
   return (async () => {
+    // A call opened on the native-tool Claire stays on it. Nothing below (voicemail logic, the
+    // work ledger, Brain V2, V1) runs for such a call; its own failure handling speaks failures.
+    if (conversation.nativeTool) {
+      return runNativeToolCallTurn({ conversationId, conversation, utterance: input.utterance, rawTranscript: input.rawTranscript, callSid: input.callSid, token });
+    }
     try {
       /**
        * A voicemail greeting or menu is not the operator. Recognised on an outbound call,
@@ -1672,6 +1806,7 @@ async function persistClaireVoiceConversation(input: {
   strategicProposalId?: string | null;
   strategicProposalRevision?: string | null;
   appointmentTimeZone?: string | null;
+  nativeTool?: NativeToolCallState | null;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -1699,6 +1834,7 @@ async function persistClaireVoiceConversation(input: {
     hints,
     inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
+    nativeTool: input.nativeTool ?? null,
   });
   const token = issueClaireToken({
     kind: "pre_drive_conversation",
@@ -1877,7 +2013,10 @@ export async function openAuthorizedInboundClaireConversation(operator: {
   dayDirectorActorId: string;
   tenantId: string;
   callSid?: string | null;
-}): Promise<{ conversationId: string; token: string; hints: string }> {
+}): Promise<{ conversationId: string; token: string; hints: string; engine: "native_tool" | "brain_v2" }> {
+  // The engine is decided here, once, from the switch as it stands at pickup, and travels with
+  // the call. Changing the switch affects the next call; this call never changes engine.
+  const nativeTool = nativeToolClaireEnabledFor({ tenantId: operator.tenantId, operatorUserId: operator.operatorUserId });
   const opened = await persistClaireVoiceConversation({
     tenantId: operator.tenantId,
     actorId: operator.operatorUserId,
@@ -1886,14 +2025,26 @@ export async function openAuthorizedInboundClaireConversation(operator: {
     context: inboundClaireCallBootstrapContext(operator.operatorUserId),
     spokenOpening: CLAIRE_INBOUND_GREETING,
     loadVocabulary: false,
-    inboundContextReady: false,
+    inboundContextReady: !nativeTool ? false : true,
+    nativeTool: nativeTool ? newNativeToolCallState() : null,
   });
-  beginInboundContextPrefetch({
-    conversationId: opened.conversationId,
-    tenantId: operator.tenantId,
-    actorId: operator.operatorUserId,
-    dayDirectorActorId: operator.dayDirectorActorId,
-  });
+  if (nativeTool) {
+    console.info(NATIVE_TOOL_LOG, JSON.stringify({
+      event: "engine_selected",
+      engine: "native_tool",
+      conversationId: opened.conversationId,
+      tenantId: operator.tenantId,
+      operatorUserId: operator.operatorUserId,
+      callSid: operator.callSid ?? null,
+    }));
+  } else {
+    beginInboundContextPrefetch({
+      conversationId: opened.conversationId,
+      tenantId: operator.tenantId,
+      actorId: operator.operatorUserId,
+      dayDirectorActorId: operator.dayDirectorActorId,
+    });
+  }
   await safeClaireLedger(async () => {
     if (operator.callSid) {
       await attachCallSid({ claireConversationId: opened.conversationId, callSid: operator.callSid });
@@ -1906,7 +2057,7 @@ export async function openAuthorizedInboundClaireConversation(operator: {
       turnKey: 0,
     });
   });
-  return opened;
+  return { ...opened, engine: nativeTool ? "native_tool" : "brain_v2" };
 }
 
 async function answerInboundClaireCall(req: Request): Promise<{ status: number; twiml: string }> {

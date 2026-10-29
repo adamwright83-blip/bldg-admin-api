@@ -95,37 +95,57 @@ Work described across the call belongs to one batch: when the authorization come
   return { prompt, heldTopics };
 }
 
-export async function openClaireSession(
-  baseCtx: Omit<ToolContext, "operatorTurns" | "lastClaireText" | "callRowIds">,
-  input: { operatorName: string; businessName: string; model?: string; client?: Anthropic }
-): Promise<ClaireSession> {
-  const client = input.client ?? new Anthropic({ apiKey: ENV.anthropicApiKey });
-  const model = input.model ?? CLAIRE_PROTOTYPE_MODEL;
-  // The server, not the model, keeps the record of what the operator said and what
-  // Claire last asked; authorization quotes are checked against that record.
-  const operatorTurns: string[] = [];
-  let lastClaireText: string | null = null;
-  const ctx: ToolContext = { ...baseCtx, operatorTurns: () => operatorTurns, lastClaireText: () => lastClaireText, callRowIds: new Set<string>() };
-  const { prompt: systemPrompt, heldTopics } = await buildSystemPromptWithRules(ctx, input);
-  const messages: Anthropic.MessageParam[] = [];
+/**
+ * Everything one turn needs besides the utterance. The voice seam persists
+ * `messages`, `operatorTurns`, `lastClaireText` and `callRowIds` between turns
+ * (a call survives a restart or a replica change); the eval harness keeps them
+ * in memory. Either way the server, not the model, holds the record of what the
+ * operator said and what Claire last asked; authorization quotes are checked
+ * against that record.
+ */
+export type ClaireToolTurnSession = {
+  client: Anthropic;
+  model: string;
+  systemPrompt: string;
+  heldTopics: HeldTopic[];
+  ctx: ToolContext;
+  messages: Anthropic.MessageParam[];
+  operatorTurns: string[];
+  lastClaireText: { value: string | null };
+};
+
+export function anthropicClient(): Anthropic {
+  return new Anthropic({ apiKey: ENV.anthropicApiKey });
+}
+
+/**
+ * One operator turn through the tool loop. Mutates `session.messages`,
+ * `session.operatorTurns` and `session.lastClaireText`. If the model call
+ * throws, the messages are restored to their pre-turn state so the next turn
+ * does not start from a dangling tool_use; the utterance is dropped from
+ * the record as well, because nothing was done with it.
+ */
+export async function runClaireToolTurn(session: ClaireToolTurnSession, utterance: string): Promise<ClaireTurnResult> {
+  const { client, model, systemPrompt, heldTopics, ctx, messages, operatorTurns } = session;
   const shape = modelRequestShape(model, {});
+  const startedAt = Date.now();
+  const messagesBefore = messages.length;
+  const turnsBefore = operatorTurns.length;
+  operatorTurns.push(utterance);
+  messages.push({ role: "user", content: utterance });
+  const toolEvents: ToolEvent[] = [];
+  let endCall = false;
+  let modelCalls = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let stopReason: string | null = null;
+  // Text per model round. The last round is what Claire says; earlier rounds are usually
+  // planning narration before a tool call and are spoken only when the last round said
+  // nothing of substance (run 8 lost a capabilities answer that way; run 11 then spoke
+  // "This is dictation, so I'll write all three now").
+  const rounds: string[][] = [];
 
-  async function turn(utterance: string): Promise<ClaireTurnResult> {
-    const startedAt = Date.now();
-    operatorTurns.push(utterance);
-    messages.push({ role: "user", content: utterance });
-    const toolEvents: ToolEvent[] = [];
-    let endCall = false;
-    let modelCalls = 0;
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let stopReason: string | null = null;
-    // Text per model round. The last round is what Claire says; earlier rounds are usually
-    // planning narration before a tool call and are spoken only when the last round said
-    // nothing of substance (run 8 lost a capabilities answer that way; run 11 then spoke
-    // "This is dictation, so I'll write all three now").
-    const rounds: string[][] = [];
-
+  try {
     for (let round = 0; round < 8; round += 1) {
       const response = await client.messages.create({
         model,
@@ -163,33 +183,71 @@ export async function openClaireSession(
       }
       messages.push({ role: "user", content: results });
     }
-    let speak = assembleSpeech(rounds);
-    // Held topics in speech: ask the model once to restate; strip only if it still breaks the rule.
-    const problems = checkSpeech(speak, { heldTopics, operatorTurns });
-    if (problems.length) {
-      const guardStarted = Date.now();
-      messages.push({ role: "user", content: `[speech check] ${restateInstruction(problems)}` });
-      let restated = speak;
-      try {
-        const response = await client.messages.create({ model, max_tokens: 400, ...(shape as Record<string, unknown>), system: systemPrompt, messages });
-        modelCalls += 1;
-        inputTokens += response.usage.input_tokens;
-        outputTokens += response.usage.output_tokens;
-        messages.push({ role: "assistant", content: response.content });
-        restated = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text.trim()).filter(Boolean).join(" ") || speak;
-      } catch (error) {
-        toolEvents.push({ name: "speech_check", input: { problems }, output: { status: "restate_failed", reason: error instanceof Error ? error.message : String(error) }, wrote: false, latencyMs: Date.now() - guardStarted });
-      }
-      const remaining = checkSpeech(restated, { heldTopics, operatorTurns });
-      const finalSpeech = remaining.length ? withoutOffendingSentences(restated, remaining) : restated;
-      toolEvents.push({ name: "speech_check", input: { problems: problems.map(p => p.kind), original: speak }, output: { restated, status: remaining.length ? "stripped_after_restate" : "restated" }, wrote: false, latencyMs: Date.now() - guardStarted });
-      speak = finalSpeech;
-    }
-    lastClaireText = speak || lastClaireText;
-    return { speak, endCall, toolEvents, modelCalls, latencyMs: Date.now() - startedAt, inputTokens, outputTokens, stopReason };
+  } catch (error) {
+    const wrote = toolEvents.some(event => event.wrote);
+    messages.length = messagesBefore;
+    operatorTurns.length = turnsBefore;
+    throw new ClaireToolTurnError(error instanceof Error ? error.message : String(error), { toolEvents, wrote, modelCalls, inputTokens, outputTokens });
   }
+  let speak = assembleSpeech(rounds);
+  // Held topics in speech: ask the model once to restate; strip only if it still breaks the rule.
+  const problems = checkSpeech(speak, { heldTopics, operatorTurns });
+  if (problems.length) {
+    const guardStarted = Date.now();
+    messages.push({ role: "user", content: `[speech check] ${restateInstruction(problems)}` });
+    let restated = speak;
+    try {
+      const response = await client.messages.create({ model, max_tokens: 400, ...(shape as Record<string, unknown>), system: systemPrompt, messages });
+      modelCalls += 1;
+      inputTokens += response.usage.input_tokens;
+      outputTokens += response.usage.output_tokens;
+      messages.push({ role: "assistant", content: response.content });
+      restated = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text.trim()).filter(Boolean).join(" ") || speak;
+    } catch (error) {
+      // The restate request stays unanswered in the thread; drop it so the record stays well-formed.
+      messages.pop();
+      toolEvents.push({ name: "speech_check", input: { problems }, output: { status: "restate_failed", reason: error instanceof Error ? error.message : String(error) }, wrote: false, latencyMs: Date.now() - guardStarted });
+    }
+    const remaining = checkSpeech(restated, { heldTopics, operatorTurns });
+    const finalSpeech = remaining.length ? withoutOffendingSentences(restated, remaining) : restated;
+    toolEvents.push({ name: "speech_check", input: { problems: problems.map(p => p.kind), original: speak }, output: { restated, status: remaining.length ? "stripped_after_restate" : "restated" }, wrote: false, latencyMs: Date.now() - guardStarted });
+    speak = finalSpeech;
+  }
+  session.lastClaireText.value = speak || session.lastClaireText.value;
+  return { speak, endCall, toolEvents, modelCalls, latencyMs: Date.now() - startedAt, inputTokens, outputTokens, stopReason };
+}
 
-  return { conversationId: ctx.conversationId, model, systemPrompt, messages, turn };
+/** A model call failed mid-turn. `wrote` says whether a tool had already changed the Day Line this turn. */
+export class ClaireToolTurnError extends Error {
+  readonly toolEvents: ToolEvent[];
+  readonly wrote: boolean;
+  readonly modelCalls: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  constructor(message: string, detail: { toolEvents: ToolEvent[]; wrote: boolean; modelCalls: number; inputTokens: number; outputTokens: number }) {
+    super(message);
+    this.name = "ClaireToolTurnError";
+    this.toolEvents = detail.toolEvents;
+    this.wrote = detail.wrote;
+    this.modelCalls = detail.modelCalls;
+    this.inputTokens = detail.inputTokens;
+    this.outputTokens = detail.outputTokens;
+  }
+}
+
+export async function openClaireSession(
+  baseCtx: Omit<ToolContext, "operatorTurns" | "lastClaireText" | "callRowIds">,
+  input: { operatorName: string; businessName: string; model?: string; client?: Anthropic }
+): Promise<ClaireSession> {
+  const client = input.client ?? anthropicClient();
+  const model = input.model ?? CLAIRE_PROTOTYPE_MODEL;
+  const operatorTurns: string[] = [];
+  const lastClaireText = { value: null as string | null };
+  const ctx: ToolContext = { ...baseCtx, operatorTurns: () => operatorTurns, lastClaireText: () => lastClaireText.value, callRowIds: new Set<string>() };
+  const { prompt: systemPrompt, heldTopics } = await buildSystemPromptWithRules(ctx, input);
+  const messages: Anthropic.MessageParam[] = [];
+  const session: ClaireToolTurnSession = { client, model, systemPrompt, heldTopics, ctx, messages, operatorTurns, lastClaireText };
+  return { conversationId: ctx.conversationId, model, systemPrompt, messages, turn: utterance => runClaireToolTurn(session, utterance) };
 }
 
 const CLOSING_ONLY = /^(?:(?:good ?night|goodbye|bye|take care|talk (?:to you )?(?:soon|later|tomorrow)|get some rest|sleep well|have a good (?:one|night|evening)|you're welcome|anytime|thanks|thank you|later)[,.!]*\s*(?:[A-Z][a-z]+[,.!]*\s*)?)+$/i;

@@ -79,12 +79,25 @@ export function identifyingTokens(title: string): string[] {
   return distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token));
 }
 
+/**
+ * One word form for comparing names: "Bergstroms" / "Bergstrom's" / "Bergstrom" are the
+ * same family (sealed run 27 refused "the Bergstrom key" against "the Bergstroms").
+ * Only a trailing plural s is folded, and only on words long enough that the fold
+ * cannot turn one short name into another.
+ */
+export function nameForm(token: string): string {
+  const base = token.replace(/'s$/, "").replace(/'$/, "");
+  if (base.length >= 5 && /ies$/.test(base)) return `${base.slice(0, -3)}y`;
+  if (base.length >= 5 && /[^s]s$/.test(base)) return base.slice(0, -1);
+  return base;
+}
+
 /** Whether `text` names the work `title` describes: shares one of its identifying words. */
 export function namesWork(text: string, title: string): boolean {
-  const words = new Set(normalizeWords(text).split(" ").map(token => token.replace(/'s$/, "")));
+  const words = new Set(normalizeWords(text).split(" ").map(nameForm));
   const identifying = identifyingTokens(title);
   const pool = identifying.length ? identifying : distinctiveTokens(title);
-  return pool.some(token => words.has(token));
+  return pool.some(token => words.has(nameForm(token)));
 }
 
 export function isBareAck(text: string): boolean {

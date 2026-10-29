@@ -128,6 +128,22 @@ describe("authorizeExistingRowChange: conservative about work that predates the 
     expect(authorizeExistingRowChange({ op: "move", ...louise, quote: "Undo that.", lastClaireText: "Done. The Louise dryer timer job moved from Saturday to tomorrow.", toDay: "Saturday" })).toEqual({ ok: true });
   });
 
+  it("a family name said in the singular names the row titled in the plural (sealed run 27, Bergstrom key)", async () => {
+    const { namesWork, nameForm } = await import("./authorization");
+    const key = { rowId: "r-key", rowTitle: "Pick up the spare key from the Bergstroms" };
+    expect(namesWork("Right, the Bergstrom key. I did that this afternoon, mark it done.", key.rowTitle)).toBe(true);
+    expect(authorizeExistingRowChange({ op: "complete", ...key, quote: "Right, the Bergstrom key. I did that this afternoon, mark it done.", lastClaireText: null })).toEqual({ ok: true });
+    // The other direction too: a plural in speech against a singular title.
+    expect(namesWork("Take the Kesslers off tomorrow", "Mow and edge at the Kessler residence")).toBe(true);
+    // Short words are never folded, so one name cannot become another.
+    expect(nameForm("bergstroms")).toBe("bergstrom");
+    expect(nameForm("bergstrom's")).toBe("bergstrom");
+    expect(nameForm("opus")).toBe("opus");
+    expect(nameForm("gentiles'")).toBe("gentile");
+    expect(nameForm("class")).toBe("class");
+    expect(namesWork("mark the Berg job done", key.rowTitle)).toBe(false);
+  });
+
   it("a question about an existing item is not an instruction to change it", () => {
     expect(authorizeExistingRowChange({ op: "remove", rowId: "r-l", rowTitle: "Interview with the Whole Dog magazine writer", quote: "What's the deal with the magazine interview?", lastClaireText: null }).ok).toBe(false);
   });

@@ -29,6 +29,10 @@ on:
         description: "Optional single scenario id"
         required: false
         default: ""
+      mode:
+        description: "eval (scenario sets) or smoke (live phone path: production inbound open + relay turn, real model, Day Line write and read-back)"
+        required: false
+        default: "eval"
 permissions:
   contents: read
 jobs:
@@ -72,7 +76,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Migrate the disposable database
         run: node scripts/migrate.mjs
+      - name: Live-path smoke test (native-tool Claire through the production call functions)
+        if: github.event.inputs.mode == 'smoke'
+        run: pnpm tsx server/claire/prototype/evals/liveSmoke.ts
       - name: Run the evaluation
+        if: github.event.inputs.mode != 'smoke'
         run: |
           pnpm tsx server/claire/prototype/evals/runEvals.ts \
             --systems "${{ github.event.inputs.systems || 'prototype' }}" \
@@ -81,17 +89,17 @@ jobs:
             --only "${{ github.event.inputs.only || '' }}" \
             --out eval-output
       - name: Print the report
-        if: always()
+        if: always() && github.event.inputs.mode != 'smoke'
         run: cat eval-output/REPORT.md || true
       - name: Print the re-gradeable trial records
-        if: always()
+        if: always() && github.event.inputs.mode != 'smoke'
         run: |
           echo "===TRIALS.JSONL BEGIN==="
           cat eval-output/trials.jsonl || true
           echo
           echo "===TRIALS.JSONL END==="
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event.inputs.mode != 'smoke'
         with:
           name: claire-prototype-eval
           path: eval-output
