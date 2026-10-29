@@ -448,8 +448,10 @@ describeMysql(
           else if (utterance.startsWith("No,"))
             expect(decisions.map(r => r.action)).toEqual(["reject"]);
           else if (utterance.startsWith("Actually")) {
+            // Only while Thursday is still ahead: on Thursday itself, whether the move stands depends on the hour
+            // (the server refuses a day whose time has passed), so the outcome isn't fixed.
             if (
-              base.businessDate <=
+              base.businessDate <
               new Date(Date.parse(base.weekStart + "T00:00:00Z") + 3 * 86400000)
                 .toISOString()
                 .slice(0, 10)
@@ -584,7 +586,8 @@ describeMysql(
           webhookReceivedAtMs: Date.now(),
         });
       }
-      if (base.businessDate <= new Date(Date.parse(base.weekStart + "T00:00:00Z") + 3 * 86400000).toISOString().slice(0,10)) {
+      // as above: only while Thursday is still ahead, never on Thursday itself, when the hour decides
+      if (base.businessDate < new Date(Date.parse(base.weekStart + "T00:00:00Z") + 3 * 86400000).toISOString().slice(0,10)) {
         const untouched = await fresh("untouched date-only objective");
         const call = await voiceFixture(untouched);
         await say(call, "move item 2 to Thursday");
