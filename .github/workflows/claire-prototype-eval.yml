@@ -62,10 +62,10 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10
-      - uses: actions/setup-node@v4
+          version: 10.4.1
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
