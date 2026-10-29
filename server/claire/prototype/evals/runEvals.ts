@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical storage table literals only (disposable-database tenant tables); canonical product is JOYSTICK. */
 /**
  * Claire evaluation runner.
  *
@@ -19,7 +20,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { fromZonedTime } from "date-fns-tz";
-import { readDayLineOverlay } from "../../../../shared/goldlineDayLine";
+import { isHiddenFromDayLine, readDayLineOverlay } from "../../../../shared/goldlineDayLine";
 import { gradeTrial, type Grade, type GradedRow, type TranscriptTurn } from "./grade";
 import { resolveDateRef, validateScenario, type Scenario } from "./scenario";
 import { loadScenarioSet } from "./validateScenarios";
@@ -64,6 +65,9 @@ async function main() {
   const sets = arg("sets", "dev").split(",").map(s => s.trim()).filter(Boolean) as Array<"dev" | "sealed">;
   const trials = Number(arg("trials", "3"));
   const only = arg("only", "").trim();
+  // Strict (the default): the process exits non-zero unless EVERY scenario passes every
+  // trial and no trial errored. The harness finishing is never reported as Claire passing.
+  const strict = arg("strict", "1") !== "0";
   const out = path.resolve(arg("out", "eval-output"));
   mkdirSync(out, { recursive: true });
 
@@ -110,11 +114,13 @@ async function main() {
     return rows.map(row => {
       const metadata = typeof row.metadataJson === "string" ? JSON.parse(row.metadataJson) : (row.metadataJson ?? {});
       const overlay = readDayLineOverlay(metadata);
-      const cancelled = Boolean(overlay.notPursuing || overlay.cancelledAt || metadata?.hiddenFromDayPlan === true);
+      const businessDate = String(row.businessDate).slice(0, 10);
+      // Off the line for this day: cancelled, hidden, or removed from this day (#764). Rows the Day Line would not show are not "open".
+      const cancelled = Boolean(isHiddenFromDayLine(overlay, businessDate) || metadata?.hiddenFromDayPlan === true);
       return {
         id: String(row.id),
         title: String(row.title),
-        businessDate: String(row.businessDate).slice(0, 10),
+        businessDate,
         status: cancelled ? "cancelled" : row.status === "completed" ? "completed" : "open",
         detail: typeof metadata?.detailNote === "string" ? metadata.detailNote : null,
         seeded: seededIds.has(String(row.id)),
@@ -266,11 +272,40 @@ async function main() {
     }
   }
 
-  writeFileSync(path.join(out, "REPORT.md"), renderReport(records, { trials, sets, systems }));
-  writeFileSync(path.join(out, "summary.json"), JSON.stringify(summarize(records), null, 2));
+  const summary = summarize(records);
+  const verdict = acceptance(summary, records);
+  writeFileSync(path.join(out, "REPORT.md"), renderReport(records, { trials, sets, systems, verdict }));
+  writeFileSync(path.join(out, "summary.json"), JSON.stringify({ verdict, scenarios: summary }, null, 2));
   await sql.end();
+  console.log(`\nHARNESS: ran ${records.length} trials, ${verdict.errors} errored.`);
+  for (const system of systems) {
+    const row = verdict.bySystem[system]!;
+    console.log(`CLAIRE (${system}): ${row.scenariosPassingAllTrials}/${row.scenarios} scenarios pass all trials; ${row.trialsPassed}/${row.trials} trials pass.`);
+  }
+  console.log(`ACCEPTANCE: ${verdict.accepted ? "ACCEPTED" : "NOT ACCEPTED"}${strict ? "" : " (non-strict: exit code not enforced)"}`);
   // Any model-side timers (cost tracking, telemetry) must not keep the process alive.
-  process.exit(0);
+  process.exit(strict && !verdict.accepted ? 1 : 0);
+}
+
+type Verdict = {
+  accepted: boolean;
+  errors: number;
+  bySystem: Record<string, { scenarios: number; scenariosPassingAllTrials: number; trials: number; trialsPassed: number }>;
+};
+
+/** Accepted only when every scenario passes every trial for every system and nothing errored. */
+function acceptance(summary: ReturnType<typeof summarize>, records: TrialRecord[]): Verdict {
+  const bySystem: Verdict["bySystem"] = {};
+  for (const row of summary) {
+    const entry = (bySystem[row.system!] ??= { scenarios: 0, scenariosPassingAllTrials: 0, trials: 0, trialsPassed: 0 });
+    entry.scenarios += 1;
+    entry.scenariosPassingAllTrials += row.passAll ? 1 : 0;
+    entry.trials += row.trials;
+    entry.trialsPassed += row.passes;
+  }
+  const errors = records.filter(record => record.error).length;
+  const accepted = records.length > 0 && errors === 0 && Object.values(bySystem).every(entry => entry.scenarios > 0 && entry.scenariosPassingAllTrials === entry.scenarios);
+  return { accepted, errors, bySystem };
 }
 
 function summarize(records: TrialRecord[]) {
@@ -295,12 +330,17 @@ function summarize(records: TrialRecord[]) {
   });
 }
 
-function renderReport(records: TrialRecord[], meta: { trials: number; sets: string[]; systems: string[] }): string {
+function renderReport(records: TrialRecord[], meta: { trials: number; sets: string[]; systems: string[]; verdict: Verdict }): string {
   const summary = summarize(records);
   const priceIn = Number(process.env.CLAIRE_EVAL_PRICE_PER_M_INPUT ?? "3");
   const priceOut = Number(process.env.CLAIRE_EVAL_PRICE_PER_M_OUTPUT ?? "15");
   const lines: string[] = [];
   lines.push(`# Claire evaluation report`, ``, `Generated ${new Date().toISOString()}. Systems: ${meta.systems.join(", ")}. Sets: ${meta.sets.join(", ")}. Trials per scenario: ${meta.trials}. A scenario passes only when every trial passes (pass^k).`, ``);
+  lines.push(`## Verdict`, ``, `- **Harness:** ran ${records.length} trials; ${meta.verdict.errors} errored. (This line says the evaluation executed, nothing about Claire.)`);
+  for (const [system, row] of Object.entries(meta.verdict.bySystem)) {
+    lines.push(`- **Claire (${system}):** ${row.scenariosPassingAllTrials}/${row.scenarios} scenarios pass all trials; ${row.trialsPassed}/${row.trials} trials pass.`);
+  }
+  lines.push(`- **Acceptance:** ${meta.verdict.accepted ? "ACCEPTED — every scenario passed every trial" : "NOT ACCEPTED"}.`, ``);
   lines.push(`## Summary`, ``, `| system | scenario | pass | mean turn ms | max turn ms | tokens in/out | est. cost | false claims | denied saves | unauthorized rows | auth asks | errors |`, `|---|---|---|---|---|---|---|---|---|---|---|---|`);
   for (const row of summary) {
     const cost = row.tokens ? `$${((row.tokens.input * priceIn + row.tokens.output * priceOut) / 1_000_000).toFixed(3)}` : "n/a";

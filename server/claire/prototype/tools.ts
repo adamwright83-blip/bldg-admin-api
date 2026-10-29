@@ -24,7 +24,8 @@ import {
   updateDayDirectorCommitment,
 } from "../../planning/dayDirector/dayDirectorService";
 import { DayLineAdmissionRefusedError, operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
-import { cancelDayLineItem } from "../../planning/dayline/dayLineMutationService";
+import { removeDayDirectorCommitmentsFromDay } from "../../planning/dayline/dayLineMutationService";
+import { verifyOperatorAuthorization } from "./authorization";
 import { drizzleStandingInstructionStore, type StandingInstructionStore } from "../../agents/daphne/standingInstructions";
 import { businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
 
@@ -38,6 +39,10 @@ export type ToolContext = {
   conversationId: string;
   /** A new id per tool call, for admission sourceRef and standing-instruction provenance. */
   nextTurnId: () => string;
+  /** Everything the operator has said on this call, oldest first. Authorization quotes are checked against it. */
+  operatorTurns: () => readonly string[];
+  /** Claire's last spoken line before the operator's latest turn; a bare "yes" authorizes a write only after a question. */
+  lastClaireText: () => string | null;
   standingInstructionStore?: StandingInstructionStore;
 };
 
@@ -83,7 +88,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "apply_day_line_changes",
     description:
-      "Write the operator's authorized Day Line changes in one batch: add new work, move a row to another day, mark a row completed, or remove a row. Call it once with every item the operator has authorized, in the order they belong. Each change gets its own receipt: 'applied' means it is on the Day Line now; 'already_present' means an equivalent open row was already there and nothing was duplicated; 'refused' means the day was ambiguous or the write was not allowed; 'not_found'/'ambiguous' mean the row to move/complete/remove could not be identified (read the day and retry with the id). Only say something is saved when its receipt says applied or already_present.",
+      "Write the operator's authorized Day Line changes in one batch: add new work, move a row to another day, mark a row completed, or take a row off a day. Call it once with every item the operator has authorized, in the order they belong. You must quote the operator's authorizing words in operator_words; the server checks they were actually said on this call, and a bare 'yes' only counts right after you asked a question. Work the operator merely mentioned ('I might…', 'at some point I should…') is not authorized until they tell you to put it on or say yes to your offer. Each change gets its own receipt: 'applied' means it is on the Day Line now; 'already_present' means an equivalent open row was already there and nothing was duplicated; 'refused' means the day was ambiguous or the write was not allowed; 'not_found'/'ambiguous' mean the row to move/complete/remove could not be identified (read the day and retry with the id). Only say something is saved when its receipt says applied or already_present.",
     input_schema: {
       type: "object",
       properties: {
@@ -97,7 +102,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
               op: { type: "string", enum: ["add", "move", "remove", "complete"] },
               title: {
                 type: "string",
-                description: "For add: a short imperative title in the operator's terms (e.g. 'Pick up the Gentiles' laundry at Opus'). For move/remove/complete: the row id from read_day_line, or enough of the existing title to identify it.",
+                description: "For add: a short imperative title in the operator's terms (e.g. 'Pick up the Gentiles' laundry at Opus'). For move/remove/complete: the row id from read_day_line, or enough of the existing title to identify it. 'remove' takes the row off that day only; it does not abandon the work.",
               },
               day: { type: "string", description: "The day the row is on (move/remove/complete) or should be added to (add), in the operator's words." },
               to_day: { type: "string", description: "move only: the day to move it to, in the operator's words." },
@@ -110,8 +115,12 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
             additionalProperties: false,
           },
         },
+        operator_words: {
+          type: "string",
+          description: "The operator's exact words that authorize this batch, copied from what they said on this call (e.g. 'Put them on tomorrow's day line' or 'Yes').",
+        },
       },
-      required: ["changes"],
+      required: ["changes", "operator_words"],
       additionalProperties: false,
     },
   },
@@ -199,10 +208,23 @@ function findRow(rows: DayLineRow[], key: string): { kind: "one"; row: DayLineRo
 
 type Change = { op: ChangeReceipt["op"]; title: string; day: string; to_day?: string; detail?: string };
 
-export async function applyDayLineChanges(ctx: ToolContext, changes: Change[]): Promise<{ receipts: ChangeReceipt[]; wrote: boolean }> {
+export async function applyDayLineChanges(
+  ctx: ToolContext,
+  changes: Change[],
+  operatorWords: string | null | undefined
+): Promise<{ receipts: ChangeReceipt[]; wrote: boolean; authorization: { ok: boolean; quote: string | null; reason: string | null } }> {
   const today = businessDateToday(ctx.now(), ctx.timeZone);
   const receipts: ChangeReceipt[] = [];
   let wrote = false;
+  const verdict = verifyOperatorAuthorization({ quote: operatorWords, operatorTurns: ctx.operatorTurns(), lastClaireText: ctx.lastClaireText() });
+  if (!verdict.ok) {
+    return {
+      receipts: changes.map((change, index) => ({ index, op: change.op, title: change.title, status: "refused", id: null, businessDate: null, day: null, reason: `not authorized: ${verdict.reason}` })),
+      wrote: false,
+      authorization: { ok: false, quote: null, reason: verdict.reason },
+    };
+  }
+  const authorizedQuote = verdict.quote;
   for (const [index, change] of changes.entries()) {
     const base = { index, op: change.op, title: change.title, id: null, businessDate: null, day: null, reason: null } as ChangeReceipt;
     const resolved = resolveSpokenDate(change.day ?? "", { today });
@@ -222,7 +244,7 @@ export async function applyDayLineChanges(ctx: ToolContext, changes: Change[]): 
         }
         const title = change.title.trim().replace(/\s+/g, " ").slice(0, 255);
         const detail = change.detail?.trim().slice(0, 500) || null;
-        const sourceRef = `claire-prototype:${ctx.conversationId}:${ctx.nextTurnId()}`;
+        const sourceRef = `claire-prototype:${ctx.conversationId}:${ctx.nextTurnId()}:"${authorizedQuote.slice(0, 80)}"`;
         const result = await acceptProposalWithReceipt({
           tenantId: ctx.tenantId,
           actorId: ctx.dayDirectorActorId,
@@ -299,15 +321,20 @@ export async function applyDayLineChanges(ctx: ToolContext, changes: Change[]): 
         receipts.push({ ...base, status: "applied", id: row.id, title: row.title, businessDate, day });
         continue;
       }
-      // remove
-      await cancelDayLineItem({
+      // remove: off this day only (removedFromDay), never notPursuing, never cancelling follow-ups (#764).
+      if (row.status === "completed") {
+        receipts.push({ ...base, status: "refused", id: row.id, title: row.title, businessDate, day, reason: "completed history is not rewritten" });
+        continue;
+      }
+      const removed = await removeDayDirectorCommitmentsFromDay({
         tenantId: ctx.tenantId,
         actorId: ctx.dayDirectorActorId,
-        item: { sourceType: "day_director_commitment", sourceId: row.id, displayTitle: row.title, editableCapabilities: ["dayline.cancel"], status: row.status === "completed" ? "completed" : "active" },
-        reason: "operator asked on a call",
+        businessDate,
+        commitmentIds: [row.id],
+        removedBy: ctx.operatorUserId,
+        reason: `operator asked on a call: "${authorizedQuote.slice(0, 200)}"`,
       });
-      const gone = !(await readDayLineRows(ctx, businessDate)).some(item => item.id === row.id);
-      if (!gone) {
+      if (!removed.includes(row.id)) {
         receipts.push({ ...base, status: "failed", id: row.id, businessDate, day, reason: "the row is still on the Day Line" });
         continue;
       }
@@ -318,7 +345,7 @@ export async function applyDayLineChanges(ctx: ToolContext, changes: Change[]): 
       receipts.push({ ...base, status: error instanceof DayLineAdmissionRefusedError ? "refused" : "failed", businessDate, day, reason });
     }
   }
-  return { receipts, wrote };
+  return { receipts, wrote, authorization: { ok: true, quote: authorizedQuote, reason: null } };
 }
 
 function periodSpec(period: (typeof PERIODS)[number], trailingDays?: number): PeriodSpec {
@@ -377,8 +404,8 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
     }
     case "apply_day_line_changes": {
       const changes = Array.isArray(input.changes) ? (input.changes as Change[]) : [];
-      const result = await applyDayLineChanges(ctx, changes);
-      return { output: { receipts: result.receipts }, wrote: result.wrote };
+      const result = await applyDayLineChanges(ctx, changes, typeof input.operator_words === "string" ? input.operator_words : null);
+      return { output: { authorization: result.authorization, receipts: result.receipts }, wrote: result.wrote };
     }
     case "read_business_numbers":
       return { output: await readBusinessNumbers(ctx, input as never), wrote: false };

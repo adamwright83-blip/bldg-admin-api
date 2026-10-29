@@ -1,11 +1,13 @@
 name: Claire prototype evaluation (real models, disposable MySQL)
-# Manual only. Spends Anthropic credit from the capped testing key
+# Spends Anthropic credit from the capped testing key
 # (CLAIRE_TEST_ANTHROPIC_API_KEY), never the production key. Runs the
 # native-tool prototype and, when asked, production Brain V2 on the same
 # scenarios, three trials each, and uploads traces + report as artifacts.
+# Explicit trigger only: a manual dispatch, or a push to the prototype branch
+# whose commit message contains [paid-eval] (GitHub does not register a new
+# workflow for manual dispatch until it exists on main). Ordinary pushes spend
+# nothing. The job fails unless every scenario passes every trial.
 on:
-  # A push to the prototype branch runs the default evaluation (GitHub does not
-  # register a new workflow for manual dispatch until it exists on main).
   push:
     branches: [claude/pre-launch-ai-harness-review-h52nrt]
     paths: ['server/claire/prototype/**', '.github/workflows/claire-prototype-eval.yml']
@@ -31,6 +33,7 @@ permissions:
   contents: read
 jobs:
   evaluate:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paid-eval]')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     services:

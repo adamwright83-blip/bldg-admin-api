@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical storage table literals only (disposable-database tenant tables); canonical product is JOYSTICK. */
 /**
  * Prototype tools against a disposable MySQL, no model: the batch Day Line tool
  * adds through admission, dedupes, moves, completes, removes, refuses vague
@@ -19,6 +20,14 @@ describeMysql("prototype Day Line tools", () => {
   let sql: mysql.Connection;
   let ctx: import("./tools").ToolContext;
   let actorIds: string[];
+  // What the operator said on this "call"; every authorized write must quote it.
+  const operatorTurns: string[] = [
+    "Put the landing page, the Gentiles pickup at Opus and the Huntington Park towel run on tomorrow, and the water bill sometime next week.",
+    "Move the landing page to the day after tomorrow, I finished the Gentiles pickup, and take the towel run off tomorrow.",
+    "Move the unicorn to friday.",
+    "Yes.",
+  ];
+  let lastClaireText: string | null = null;
 
   beforeAll(async () => {
     const parsed = new URL(DATABASE_URL!);
@@ -39,6 +48,8 @@ describeMysql("prototype Day Line tools", () => {
     await sql.query("DELETE FROM claire_operator_instructions WHERE tenantId = ? AND canonicalOperatorId = ?", [TENANT, resolved.identity.canonicalOperatorId]);
     let turn = 0;
     ctx = {
+      operatorTurns: () => operatorTurns,
+      lastClaireText: () => lastClaireText,
       tenantId: TENANT,
       operatorUserId: OPEN_ID,
       dayDirectorActorId: resolved.identity.dayDirectorActorId,
@@ -59,12 +70,26 @@ describeMysql("prototype Day Line tools", () => {
     const { businessDateToday, addDaysYmd } = await import("./spokenDate");
     const today = businessDateToday(new Date(), ZONE);
 
+    // Words the operator never said authorize nothing, and nothing is written.
+    const forged = await applyDayLineChanges(ctx, [{ op: "add", title: "Visit the Chadwick", day: "tomorrow" }], "add the Chadwick visit tomorrow");
+    expect(forged.wrote).toBe(false);
+    expect(forged.authorization.ok).toBe(false);
+    expect(forged.receipts[0]).toMatchObject({ status: "refused" });
+    expect(forged.receipts[0]!.reason).toMatch(/not authorized/);
+    const none = await applyDayLineChanges(ctx, [{ op: "add", title: "Visit the Chadwick", day: "tomorrow" }], "");
+    expect(none.receipts[0]).toMatchObject({ status: "refused" });
+    // A bare yes with no question before it authorizes nothing either.
+    lastClaireText = "You did no orders last week.";
+    const strayYes = await applyDayLineChanges(ctx, [{ op: "add", title: "Visit the Chadwick", day: "tomorrow" }], "Yes.");
+    expect(strayYes.authorization.ok).toBe(false);
+
     const first = await applyDayLineChanges(ctx, [
       { op: "add", title: "Finish the landing page for the Instagram ad", day: "tomorrow" },
       { op: "add", title: "Pick up the Gentiles' laundry at Opus", day: "tomorrow" },
       { op: "add", title: "Huntington Park towel run, then drop the towels at Opus", day: "tomorrow", detail: "flexible, usually 9 or 10 PM" },
       { op: "add", title: "Pay the water bill", day: "sometime next week" },
-    ]);
+    ], "Put the landing page, the Gentiles pickup at Opus and the Huntington Park towel run on tomorrow");
+    expect(first.authorization.ok).toBe(true);
     expect(first.wrote).toBe(true);
     expect(first.receipts.map(r => r.status)).toEqual(["applied", "applied", "applied", "refused"]);
     expect(first.receipts[3]!.reason).toMatch(/ask which day/);
@@ -77,7 +102,7 @@ describeMysql("prototype Day Line tools", () => {
     expect(metadata.detailNote).toMatch(/9 or 10 PM/);
 
     // A second instruction for the same work does not duplicate.
-    const again = await applyDayLineChanges(ctx, [{ op: "add", title: "pick up Gentiles at Opus", day: "tomorrow" }]);
+    const again = await applyDayLineChanges(ctx, [{ op: "add", title: "pick up Gentiles at Opus", day: "tomorrow" }], "the Gentiles pickup at Opus");
     expect(again.wrote).toBe(false);
     expect(again.receipts[0]).toMatchObject({ status: "already_present" });
 
@@ -90,20 +115,27 @@ describeMysql("prototype Day Line tools", () => {
       { op: "move", title: "landing page", day: "tomorrow", to_day: "day after tomorrow" },
       { op: "complete", title: "Gentiles", day: "tomorrow" },
       { op: "remove", title: "Opus", day: "tomorrow" },
-    ]);
+    ], "Move the landing page to the day after tomorrow, I finished the Gentiles pickup");
     expect(ops.receipts[0]).toMatchObject({ status: "applied", businessDate: addDaysYmd(today, 2) });
     expect(ops.receipts[1]).toMatchObject({ status: "applied" });
     // "Opus" now matches the completed pickup and the towel drop: ambiguous.
     expect(["ambiguous", "applied"]).toContain(ops.receipts[2]!.status);
 
-    const removal = await applyDayLineChanges(ctx, [{ op: "remove", title: "towel run", day: "tomorrow" }]);
+    const removal = await applyDayLineChanges(ctx, [{ op: "remove", title: "towel run", day: "tomorrow" }], "take the towel run off tomorrow");
     expect(removal.receipts[0]).toMatchObject({ status: "applied" });
+    // Off that day only (#764): the row still exists, is not marked notPursuing, and carries removedFromDay.
+    const [towelRows] = await sql.query<mysql.RowDataPacket[]>("SELECT status, metadataJson FROM day_director_commitments WHERE tenantId = ? AND id = ?", [TENANT, removal.receipts[0]!.id]);
+    expect(towelRows).toHaveLength(1);
+    const towelMeta = typeof towelRows[0]!.metadataJson === "string" ? JSON.parse(towelRows[0]!.metadataJson) : towelRows[0]!.metadataJson;
+    expect(towelMeta.goldlineDayLine?.removedFromDay?.businessDate).toBe(addDaysYmd(today, 1));
+    expect(towelMeta.goldlineDayLine?.notPursuing).toBeFalsy();
+    expect(towelMeta.goldlineDayLine?.cancelledAt).toBeFalsy();
     const after = await executeTool(ctx, "read_day_line", { day: "tomorrow" });
     const titles = (after.output as { rows: Array<{ title: string; status: string }> }).rows;
     expect(titles.find(row => /Gentiles/.test(row.title))?.status).toBe("completed");
     expect(titles.some(row => /towel/i.test(row.title))).toBe(false);
 
-    const missing = await applyDayLineChanges(ctx, [{ op: "move", title: "unicorn", day: "tomorrow", to_day: "friday" }]);
+    const missing = await applyDayLineChanges(ctx, [{ op: "move", title: "unicorn", day: "tomorrow", to_day: "friday" }], "Move the unicorn to friday.");
     expect(missing.receipts[0]).toMatchObject({ status: "not_found" });
   }, 60_000);
 
