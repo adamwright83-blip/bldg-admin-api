@@ -74,6 +74,9 @@ export async function buildSystemPrompt(ctx: ToolContext, input: { operatorName:
 - A question. "Should the Dana email go on today?" Answer it, offer once, and a bare "yes" then means exactly that offer.
 Work described across the call belongs to one batch: when the authorization comes ("put them on", "just do it", a yes to your offer), write every item they described, on the days they said, with the timing or sequence they gave as detail, in one call, quoting the words that authorized it. Never ask item by item, and never ask again for permission you already have.`,
     `Questions: answer every question the operator asks, including one that comes with a goodbye ("before I go, what can you do?"). Answer first, then say goodbye.`,
+    `Work that was on the Day Line before this call is theirs, already committed: be proactive about recording new work and conservative about changing old work. Move, finish or take off an existing item only when they name it and say what to do with it ("take the Pham session off tomorrow", "the Alvarado job is done"). "I didn't say anything about the Pham session" is not an instruction; say it was already on their list and ask whether they want it off. The server refuses an existing-item change that is not named and instructed; when it does, ask.`,
+    `Dates in a dictated list: a bare weekday is a date, not a question. "Thursday" said on a Thursday means next Thursday; pass it to the tool as said and read the resolved date back so they can correct you. Ask only when a day is genuinely vague ("sometime next week").`,
+    `Speaking: do not narrate what you are about to do ("I'll write these now"); do it, then say the result. A standing rule not to raise a topic means you neither name it nor say you are leaving it out; just don't mention it.`,
     `Truth: a thing is on the Day Line only if a receipt in this conversation says applied or already_present. Say what landed and, if anything failed or was refused, say which and why. Never say something is saved before the receipt, and never later deny or doubt a save the receipt confirmed; if unsure, read the day. Business figures come only from read_business_numbers; if it has no records, say so; never invent a number or a comparison.`,
     `What you can do, if asked: read and change the Day Line (add, move, finish, remove work on any day), read the business numbers from the ledger, and keep standing rules about how you work. What you cannot do: send texts or emails, make calls, book or buy anything, or act outside this call. Answer a capabilities question plainly in those terms.`,
     `Standing rules: when the operator gives you a durable rule about how you behave on calls, save it with save_standing_instruction and follow it from that moment. Rules already in force:`,
@@ -83,7 +86,7 @@ Work described across the call belongs to one batch: when the authorization come
 }
 
 export async function openClaireSession(
-  baseCtx: Omit<ToolContext, "operatorTurns" | "lastClaireText">,
+  baseCtx: Omit<ToolContext, "operatorTurns" | "lastClaireText" | "callRowIds">,
   input: { operatorName: string; businessName: string; model?: string; client?: Anthropic }
 ): Promise<ClaireSession> {
   const client = input.client ?? new Anthropic({ apiKey: ENV.anthropicApiKey });
@@ -92,7 +95,7 @@ export async function openClaireSession(
   // Claire last asked; authorization quotes are checked against that record.
   const operatorTurns: string[] = [];
   let lastClaireText: string | null = null;
-  const ctx: ToolContext = { ...baseCtx, operatorTurns: () => operatorTurns, lastClaireText: () => lastClaireText };
+  const ctx: ToolContext = { ...baseCtx, operatorTurns: () => operatorTurns, lastClaireText: () => lastClaireText, callRowIds: new Set<string>() };
   const systemPrompt = await buildSystemPrompt(ctx, input);
   const messages: Anthropic.MessageParam[] = [];
   const shape = modelRequestShape(model, {});
@@ -107,7 +110,11 @@ export async function openClaireSession(
     let inputTokens = 0;
     let outputTokens = 0;
     let stopReason: string | null = null;
-    let spoken: string[] = [];
+    // Text per model round. The last round is what Claire says; earlier rounds are usually
+    // planning narration before a tool call and are spoken only when the last round said
+    // nothing of substance (run 8 lost a capabilities answer that way; run 11 then spoke
+    // "This is dictation, so I'll write all three now").
+    const rounds: string[][] = [];
 
     for (let round = 0; round < 8; round += 1) {
       const response = await client.messages.create({
@@ -126,10 +133,7 @@ export async function openClaireSession(
       messages.push({ role: "assistant", content: response.content });
       const text = response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map(block => block.text.trim()).filter(Boolean);
       const uses = response.content.filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
-      // Everything Claire writes in this turn is spoken, in order: an answer given in the same
-      // message as a tool call (e.g. a capabilities answer alongside end_call) must not be lost.
-      // Run 8 (2026-10-29) dropped exactly that and spoke only the post-tool "Goodnight".
-      for (const line of text) if (!spoken.includes(line)) spoken.push(line);
+      rounds.push(text);
       if (!uses.length) break;
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const use of uses) {
@@ -149,12 +153,29 @@ export async function openClaireSession(
       }
       messages.push({ role: "user", content: results });
     }
-    const speak = spoken.join(" ");
+    const speak = assembleSpeech(rounds);
     lastClaireText = speak || lastClaireText;
     return { speak, endCall, toolEvents, modelCalls, latencyMs: Date.now() - startedAt, inputTokens, outputTokens, stopReason };
   }
 
   return { conversationId: ctx.conversationId, model, systemPrompt, messages, turn };
+}
+
+const CLOSING_ONLY = /^(?:(?:good ?night|goodbye|bye|take care|talk (?:to you )?(?:soon|later|tomorrow)|get some rest|sleep well|have a good (?:one|night|evening)|you're welcome|anytime|thanks|thank you|later)[,.!]*\s*(?:[A-Z][a-z]+[,.!]*\s*)?)+$/i;
+
+/**
+ * What is spoken for a turn: the final round's text. Earlier rounds (text written
+ * alongside tool calls) are included only when the final round is empty or a
+ * sign-off alone, so an answer given beside end_call survives and planning
+ * narration before a write does not get read aloud.
+ */
+export function assembleSpeech(rounds: readonly (readonly string[])[]): string {
+  const final = rounds.length ? rounds[rounds.length - 1]! : [];
+  const finalText = final.join(" ").trim();
+  if (finalText && !CLOSING_ONLY.test(finalText)) return finalText;
+  const earlier = rounds.slice(0, -1).flat().filter(Boolean);
+  const unique = earlier.filter((line, index) => earlier.indexOf(line) === index);
+  return [...unique, ...final].join(" ").trim();
 }
 
 export function newConversationId(): string {

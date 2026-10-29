@@ -26,6 +26,10 @@ describeMysql("prototype Day Line tools", () => {
     "Move the landing page to the day after tomorrow, I finished the Gentiles pickup, and take the towel run off tomorrow.",
     "Move the unicorn to friday.",
     "Yes.",
+    "The Louise? I didn't say anything about the Louise, that's not something I need on there.",
+    "Take the Louise follow-up off tomorrow, Dana cancelled.",
+    "Okay. I'll do that tomorrow.",
+    "The Chadwick pitch is done, I did it this morning.",
   ];
   let lastClaireText: string | null = null;
 
@@ -50,6 +54,7 @@ describeMysql("prototype Day Line tools", () => {
     ctx = {
       operatorTurns: () => operatorTurns,
       lastClaireText: () => lastClaireText,
+      callRowIds: new Set<string>(),
       tenantId: TENANT,
       operatorUserId: OPEN_ID,
       dayDirectorActorId: resolved.identity.dayDirectorActorId,
@@ -137,6 +142,57 @@ describeMysql("prototype Day Line tools", () => {
 
     const missing = await applyDayLineChanges(ctx, [{ op: "move", title: "unicorn", day: "tomorrow", to_day: "friday" }], "Move the unicorn to friday.");
     expect(missing.receipts[0]).toMatchObject({ status: "not_found" });
+  }, 60_000);
+
+  it("work that predates the call: an ambiguous remark is refused, a named instruction goes through, a deferral follows Claire's last line", async () => {
+    const { applyDayLineChanges } = await import("./tools");
+    const { businessDateToday, addDaysYmd } = await import("./spokenDate");
+    const { acceptProposalWithReceipt } = await import("../../planning/dayDirector/dayDirectorService");
+    const { operatorInstructionAdmission } = await import("../../planning/dayDirector/dayLineAdmission");
+    const today = businessDateToday(new Date(), ZONE);
+    const tomorrow = addDaysYmd(today, 1);
+    const seed = async (title: string, businessDate: string) => {
+      const result = await acceptProposalWithReceipt({
+        tenantId: TENANT, actorId: ctx.dayDirectorActorId, businessDate,
+        proposal: { promptKey: `seed:${randomUUID()}`, title, kind: "operations", quantity: null, sourceText: title, prerequisites: [], question: null, intelligence: "manual_fallback", detailState: "COMPLETE", missingDetails: [], detailNote: null, references: [], targetBusinessDate: businessDate },
+        admission: operatorInstructionAdmission({ operatorUserId: OPEN_ID, surface: "day_line_ui", sourceRef: `seed:${randomUUID()}` }),
+      });
+      return String((result as { stored?: { id?: string } }).stored?.id ?? "");
+    };
+    const louise = await seed("Follow up with Dana at The Louise", tomorrow);
+    const chadwick = await seed("Pitch The Chadwick in person", today);
+    const wilshire = await seed("Pitch Wilshire Vermont in person", today);
+    expect(ctx.callRowIds.has(louise)).toBe(false);
+
+    // Run 11, tutoring trial 3: naming a pre-existing item while asking for nothing must not remove it.
+    const ambiguous = await applyDayLineChanges(ctx, [{ op: "remove", title: louise, day: "tomorrow" }], "The Louise? I didn't say anything about the Louise, that's not something I need on there.");
+    expect(ambiguous.wrote).toBe(false);
+    expect(ambiguous.receipts[0]).toMatchObject({ status: "refused" });
+    expect(ambiguous.receipts[0]!.reason).toMatch(/did not say to take it off/);
+
+    // The same item, explicitly: easy.
+    const explicit = await applyDayLineChanges(ctx, [{ op: "remove", title: "Louise follow-up", day: "tomorrow" }], "Take the Louise follow-up off tomorrow, Dana cancelled.");
+    expect(explicit.receipts[0]).toMatchObject({ status: "applied", id: louise });
+
+    // "I'll do that tomorrow" after Claire named the Wilshire pitch moves that row, not the Chadwick one.
+    lastClaireText = "One thing tonight: pitch Wilshire Vermont in person. That's it; the rest can wait.";
+    const deferral = await applyDayLineChanges(ctx, [
+      { op: "move", title: wilshire, day: "today", to_day: "tomorrow" },
+      { op: "move", title: chadwick, day: "today", to_day: "tomorrow" },
+    ], "Okay. I'll do that tomorrow.");
+    expect(deferral.receipts[0]).toMatchObject({ status: "applied", businessDate: tomorrow });
+    expect(deferral.receipts[1]).toMatchObject({ status: "refused" });
+
+    // Completion needs the item and the fact.
+    const done = await applyDayLineChanges(ctx, [{ op: "complete", title: "Chadwick", day: "today" }], "The Chadwick pitch is done, I did it this morning.");
+    expect(done.receipts[0]).toMatchObject({ status: "applied", id: chadwick });
+
+    // A bare yes binds to the offer's named work only.
+    lastClaireText = "Want me to put the Gentiles pickup on tomorrow?";
+    const bound = await applyDayLineChanges(ctx, [{ op: "add", title: "Pick up the Gentiles at Opus", day: "tomorrow" }, { op: "add", title: "Call the plumber", day: "tomorrow" }], "Yes.");
+    expect(bound.wrote).toBe(false);
+    expect(bound.authorization.ok).toBe(false);
+    expect(bound.authorization.reason).toMatch(/plumber/);
   }, 60_000);
 
   it("saves a standing instruction and reports it active; numbers come back from the ledger without invention", async () => {
