@@ -219,6 +219,10 @@ receipt and a positive amount, `shared/cozyVillagerEvidence.ts:44`). That is sep
 ## Known gaps
 
 - The paid-order return experience is not implemented (see "What reaches the desk, and what doesn't").
+- Held upright, the aiming view fits the whole course (a landscape stage, fan to balcony) to the phone's width, so the
+  course sits small in the middle of the screen with sky above for high flights. The aim marks and the glider draw
+  larger to compensate, and the other moments get closer shots, but whether aiming feels comfortable on a real phone is
+  unknown.
 - No telemetry beyond the courtyard's own counts.
 - Rook's art is the canonical overworld atlas plus nine new poses rendered from the same rig
   (`scripts/assets/blender/rook_rig.py`: fold, hide, toss, catch, lunge, flick, conduct, ears, bow). He always faces
