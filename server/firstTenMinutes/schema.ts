@@ -9,6 +9,7 @@ import type {
   UnderstandingStage,
   UnderstandingView,
 } from "../../shared/firstTenMinutesFindings";
+import type { PortraitLine, PortraitStatus } from "../../shared/firstTenMinutesPortrait";
 
 /** drizzle/0152_first_ten_journeys.sql, applied by scripts/migrate.mjs. */
 export const firstTenJourneys = mysqlTable(
@@ -115,3 +116,21 @@ export const firstTenEvents = mysqlTable(
     journey: index("idx_first_ten_events_journey").on(table.journeyId, table.createdAt),
   })
 );
+
+/**
+ * drizzle/0155_first_ten_portraits.sql: Claire's portrait of the journey (one per journey). `basis` is what it was
+ * written from; `edits_json` holds the person's own words in place of a line, keyed by the line.
+ */
+export const firstTenPortraits = mysqlTable("first_ten_portraits", {
+  journeyId: varchar("journey_id", { length: 36 }).primaryKey(),
+  runId: varchar("run_id", { length: 36 }).notNull(),
+  status: varchar("status", { length: 16 }).$type<PortraitStatus>().notNull(),
+  basis: varchar("basis", { length: 64 }).notNull(),
+  portraitJson: json("portrait_json").$type<{ greeting: string; paragraphs: PortraitLine[][]; closing: PortraitLine | null } | null>(),
+  editsJson: json("edits_json").$type<Record<string, { to: string | null; at: string }> | null>(),
+  writtenBy: varchar("written_by", { length: 16 }),
+  leaseUntil: timestamp("lease_until"),
+  keptAt: timestamp("kept_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});

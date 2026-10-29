@@ -4,12 +4,40 @@ import type { EventItem, MailItem, Owner } from "./sources";
 import { closingSentence, sameAddress } from "./text";
 
 /**
- * Findings that need no model: counted, never interpreted. People the person writes to, a habit in their own sent
- * mail, an image they keep sending, and the work their calendar repeats on one weekday.
+ * Findings that need no model: counted, never interpreted. The person's own name, people they write to, a habit in
+ * their own sent mail, an image they keep sending, the work their calendar repeats on one weekday, and the kind of
+ * event that keeps landing on the same days.
  */
 type Ids = (key: string) => string;
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * The person's own name, for Claire to greet them by: the name their own mail goes out under, used on most of it.
+ * The source is a message of theirs that signs with it, when there is one.
+ */
+export function ownerFindings(sent: MailItem[], owner: Owner, ids: Ids): DraftFinding[] {
+  const names = new Map<string, MailItem[]>();
+  for (const item of sent) {
+    const name = item.from.name?.trim();
+    if (item.automated || !name || name.includes("@") || name.length > 60) continue;
+    names.set(name, [...(names.get(name) ?? []), item]);
+  }
+  const [best] = [...names.entries()].sort((a, b) => b[1].length - a[1].length);
+  const name = best && best[1].length >= 2 ? best[0] : owner.name?.trim() || null;
+  if (!name) return [];
+  const items = names.get(name) ?? [];
+  const signed = items.find(item => item.text.includes(name)) ?? items[items.length - 1];
+  return [
+    {
+      id: ids("owner"),
+      companion: null,
+      rank: 0,
+      payload: { kind: "owner", name },
+      sources: signed ? [mailRef(signed, name)] : [],
+    },
+  ];
+}
 
 /** The people the person writes to most, from their own sent mail. */
 export function peopleFindings(sent: MailItem[], received: MailItem[], owner: Owner, ids: Ids): DraftFinding[] {
@@ -194,6 +222,55 @@ export function routeFindings(events: EventItem[], ids: Ids): DraftFinding[] {
         sources: ordered.map(entry => eventRef(entry.events[entry.events.length - 1])),
       };
     });
+}
+
+/** Words in event titles that say nothing about the work itself. */
+const PLAIN_EVENT_WORDS = new Set(
+  "with call meeting meet sync lunch dinner coffee chat catch check hold busy block focus review appointment reminder birthday holiday vacation office travel flight dentist doctor standup team prep event from into this that their your about".split(" ")
+);
+
+/**
+ * The kind of one-off event that keeps landing on the same days ("wedding", on Saturdays): three or more on the
+ * calendar, at least four in five of them on one or two weekdays. Repeating series are Orren's routes, not this.
+ */
+export function rhythmFindings(events: EventItem[], ids: Ids): DraftFinding[] {
+  const byWord = new Map<string, EventItem[]>();
+  for (const event of events) {
+    if (event.seriesId) continue;
+    const head = event.title.split(/\s+[·•|:-]\s+/)[0].toLowerCase();
+    const words = new Set(
+      (head.match(/[a-z]{4,}/g) ?? [])
+        .map(word => (word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word))
+        .filter(word => !PLAIN_EVENT_WORDS.has(word) && !WEEKDAYS.some(day => day.toLowerCase().startsWith(word)))
+    );
+    for (const word of words) byWord.set(word, [...(byWord.get(word) ?? []), event]);
+  }
+  const rhythms: Array<{ word: string; days: number[]; items: EventItem[] }> = [];
+  for (const [word, items] of byWord) {
+    if (items.length < 3) continue;
+    const counts = new Map<number, number>();
+    for (const item of items) counts.set(weekdayOf(item.localDate), (counts.get(weekdayOf(item.localDate)) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const enough = items.length * 0.8;
+    const days = ranked[0][1] >= enough ? [ranked[0][0]] : ranked.length > 1 && ranked[0][1] + ranked[1][1] >= enough ? [ranked[0][0], ranked[1][0]] : null;
+    if (days) rhythms.push({ word, days: days.sort(), items: [...items].sort((a, b) => a.at.getTime() - b.at.getTime()) });
+  }
+  return rhythms
+    .sort((a, b) => b.items.length - a.items.length)
+    .slice(0, 2)
+    .map((rhythm, index) => ({
+      id: ids(`rhythm:${rhythm.word}`),
+      companion: null,
+      rank: index,
+      payload: {
+        kind: "rhythm" as const,
+        word: rhythm.word,
+        days: rhythm.days,
+        count: rhythm.items.length,
+        titles: rhythm.items.slice(-3).map(item => item.title),
+      },
+      sources: rhythm.items.slice(-3).map(item => eventRef(item)),
+    }));
 }
 
 export { WEEKDAYS };

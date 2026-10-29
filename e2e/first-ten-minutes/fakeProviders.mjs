@@ -60,6 +60,42 @@ function gmailMessage(message) {
   };
 }
 
+/**
+ * The stand-in model's portrait of whoever the corpus describes: Nina's lines, citing the ids it was given, plus one
+ * line about someone who isn't in the records, which the server must strike before anything is shown.
+ */
+function fakePortrait(corpusText) {
+  let corpus;
+  try {
+    corpus = JSON.parse(corpusText);
+  } catch {
+    return { paragraphs: [] };
+  }
+  const findings = corpus.findings ?? [];
+  const id = (kind, test = () => true) => findings.find(finding => finding.kind === kind && test(finding))?.id;
+  const ids = (...values) => values.filter(Boolean);
+  const jules = id("person", finding => finding.fact.includes("Jules"));
+  return {
+    paragraphs: [
+      {
+        sentences: [
+          { text: "Weddings fill your weekends.", findingIds: ids(id("rhythm"), id("contrast")) },
+          { text: "You're building a steadier weekday business around hotel flowers.", findingIds: ids(id("service"), id("route")) },
+        ],
+      },
+      {
+        sentences: [
+          { text: "Jules handles the installations.", findingIds: ids(jules) },
+          { text: "Marta keeps the books.", findingIds: ids(jules) },
+        ],
+      },
+      {
+        sentences: [{ text: "You've added Friday deliveries and kept Sundays for yourself.", findingIds: ids(id("service"), id("rule")) }],
+      },
+    ],
+  };
+}
+
 const modelCalls = [];
 
 const defaults = () => ({
@@ -189,15 +225,19 @@ const server = http.createServer(async (req, res) => {
       : { status: "ZERO_RESULTS", results: [] });
   }
 
-  // ---------------------------------------------------------------- Anthropic (the model's two readings of Nina's corpus)
+  // ---------------------------------------------------------------- Anthropic (the model's two readings of Nina's corpus, and Claire's portrait)
   if (path === "/anthropic/v1/messages" && req.method === "POST") {
     const request = JSON.parse(body || "{}");
     const system = typeof request.system === "string" ? request.system : JSON.stringify(request.system ?? "");
     if (control.modelFails) return send(res, 500, { type: "error", error: { type: "api_error", message: "stand-in failure" } });
     const conversations = system.includes("owner's email");
+    const portrait = system.includes("Give the whole picture its language");
     if (conversations && control.conversationsDelayMs) await new Promise(resolve => setTimeout(resolve, control.conversationsDelayMs));
-    const answer = conversations ? extraction.conversations : extraction.work;
-    modelCalls.push(conversations ? "conversations" : "work");
+    const userText = (request.messages ?? [])
+      .map(message => (typeof message.content === "string" ? message.content : (message.content ?? []).map(part => part.text ?? "").join("")))
+      .join("\n");
+    const answer = portrait ? fakePortrait(userText) : conversations ? extraction.conversations : extraction.work;
+    modelCalls.push(portrait ? "portrait" : conversations ? "conversations" : "work");
     return send(res, 200, {
       id: `msg_fake_${modelCalls.length}`,
       type: "message",

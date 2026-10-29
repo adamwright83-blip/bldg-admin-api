@@ -10,7 +10,9 @@ import { firstTenEvents } from "./schema";
 export type JourneyEventKind =
   | "finding_confirmed"
   | "finding_changed"
-  | "finding_dismissed";
+  | "finding_dismissed"
+  | "portrait_kept"
+  | "portrait_changed";
 
 export async function recordEvent(journeyId: string, kind: JourneyEventKind, payload: Record<string, unknown>): Promise<void> {
   const db = await firstTenDb();
