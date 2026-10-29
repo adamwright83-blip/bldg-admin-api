@@ -138,13 +138,44 @@ journey, so nothing the person said about a finding is lost.
 `GOOGLE_GEOCODING_API_KEY` or `GOOGLE_PLACES_API_KEY` (already used by the geocoder); without either, places keep their
 names and no pins.
 
+## The crew gets acquainted (slice 3)
+
+`shared/firstTenMinutesCrew.ts` decides who speaks and what they point at; `client/src/pages/firstTenMinutes/crew/`
+stages it. The desk starts nearly empty: one thing the person wrote, on stationery. The crew enters at the edges, one
+short line each, in this order, and nobody is introduced:
+
+| Who | Object | Line |
+|---|---|---|
+| Sable | A rule the person wrote (or, failing that, a promise) | "Still true?" ("Still on?" for a promise) |
+| Mara | The places on a small map, each with who asked and when | "That's a small map with quite a lot happening on it." |
+| Rook | Strips of how the person ends their own messages | "You tend to finish with a real question." / "I can work with that." |
+| Bront | Two kinds of request, side by side | the contrast, in two lines |
+| Luma | The picture the person keeps attaching | "This one keeps coming back. Three proposals. Same blue jug." / "I've kept the original." |
+| Orren | The person's repeating route, drawn onto Mara's map | "Your Friday deliveries already pass this street." |
+| Ilex | The older conversation the opportunity hangs on, threaded to its place | "There's an older conversation we should put beside this." |
+
+A companion with nothing to reveal waits; nothing says so. Mara, Orren and Ilex need the whole reading (places,
+route, opportunity), so they come once it has finished.
+
+**Sable's question persists and changes the world.** "Still the rule" marks the rule confirmed; "That's changed"
+keeps the person's new words and crosses the old ones out. Either answer is stored on the finding and appended to
+`first_ten_events` (migration 0154). `suggestionRules` turns confirmed rules into what later suggestions must respect
+(closed days, the rule's own words), and the week above the desk folds Sunday closed. A reload keeps it.
+
+**Every object opens to its source** (who, when, the exact words) and can be corrected: "It changed" (with what's true
+now) or "That's not right". A corrected object greys and moves to the side of the desk, its companion answers in one
+word or two ("Struck."), and it is never revealed again.
+
+**Pictures.** The example shows a painted stand-in. For a real account, the person's own attachment is fetched from
+Gmail when it is shown (at most 4 MB) and never stored.
+
 ## Slices
 
 | # | Slice | State |
 |---|---|---|
 | 1 | Connect: Google and Slack OAuth, what connecting includes, the labelled example | merged |
-| 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | this PR |
-| 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | |
+| 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | merged |
+| 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | this PR |
 | 4 | Claire's portrait: "That sounds like me / Let me change something" | |
 | 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | |
 | 6 | Activation at the moment of value: the draft, scene and decision survive checkout | |
@@ -153,7 +184,7 @@ names and no pins.
 
 ## Verification
 
-- `pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes`
+- `pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes client/src/pages/firstTenMinutes`
 - On a local disposable MySQL (`first_ten_test`): `node scripts/migrate.mjs` twice, then
   `pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes`
 - `scripts/first-ten-e2e.sh`: the real server and page, Google and Slack played locally. Screenshots land in

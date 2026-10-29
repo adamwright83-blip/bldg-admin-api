@@ -5811,5 +5811,12 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0154: JOYSTICK's first ten minutes, what the person decided during their journey (append-only). Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0154_first_ten_events.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes events");
+  await assertRequiredColumns("first_ten_events", ["id", "journey_id", "kind", "payload_json", "created_at"]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

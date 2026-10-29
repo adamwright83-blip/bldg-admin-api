@@ -1,0 +1,732 @@
+/*
+ * The crew gets acquainted. The person's things fill the desk: the current one large in the lamplight, the earlier
+ * ones resting at the sides. The crew stays small along the bottom edge; whoever speaks steps up with one line.
+ */
+.scene {
+  position: relative;
+  width: min(1240px, 100%);
+  min-height: calc(100dvh - 150px);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+}
+
+.desk {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 620px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  min-height: 520px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.slot {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.objectFrame {
+  container-type: inline-size;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.4s ease, filter 0.4s ease;
+}
+
+.big {
+  max-width: 620px;
+}
+
+.small {
+  max-width: 250px;
+}
+
+.corrected {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+}
+
+.objectFrame:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 6px;
+}
+
+.paperBase {
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.28 0 0 0 0 0.19 0 0 0 0.075 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    radial-gradient(130% 90% at 18% 0%, #fffdf7 0%, var(--paper) 52%, var(--paper-shade) 100%);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 30px 60px -26px rgba(0, 0, 0, 0.7),
+    0 12px 22px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------------------------------------------ Sable: the person's words */
+
+.ruleSheet {
+  composes: paperBase;
+  position: relative;
+  padding: 11cqw 9cqw 8cqw;
+}
+
+.ruleWords {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(17px, 8.4cqw, 58px);
+  line-height: 1.08;
+  letter-spacing: -0.012em;
+  font-variation-settings: "opsz" 144;
+}
+
+.struck {
+  text-decoration: line-through;
+  text-decoration-color: rgba(142, 47, 34, 0.75);
+  text-decoration-thickness: 0.06em;
+}
+
+.ruleSource {
+  margin: 5cqw 0 0;
+  font-size: clamp(10px, 2.3cqw, 14px);
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.pin {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffe7a3, #b8862c 60%, #6f4d12);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+}
+
+.answers {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(251, 245, 232, 0.55);
+}
+
+.answers button,
+.changeForm button {
+  border: 0;
+  background: none;
+  padding: 6px 4px;
+  font-size: 16px;
+  color: rgba(251, 245, 232, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: rgba(251, 245, 232, 0.45);
+  cursor: pointer;
+}
+
+.changeForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  color: rgba(251, 245, 232, 0.8);
+  font-size: 14px;
+}
+
+.changeForm label {
+  display: grid;
+  gap: 6px;
+}
+
+.changeForm small {
+  color: rgba(251, 245, 232, 0.5);
+}
+
+.changeForm input {
+  width: min(320px, 70vw);
+  border: 0;
+  border-bottom: 1px solid rgba(251, 245, 232, 0.5);
+  background: transparent;
+  padding: 6px 2px;
+  font: 400 18px Fraunces, Georgia, serif;
+  color: var(--paper);
+  outline: none;
+}
+
+/* ------------------------------------------------------------------ Mara: the map (Orren draws on it) */
+
+.map {
+  composes: paperBase;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 600 / 380;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0) 32.6%, rgba(96, 72, 40, 0.1) 33.3%, rgba(255, 255, 255, 0.5) 33.7%, rgba(0, 0, 0, 0) 34.4%,
+      rgba(0, 0, 0, 0) 65.6%, rgba(96, 72, 40, 0.1) 66.3%, rgba(255, 255, 255, 0.5) 66.7%, rgba(0, 0, 0, 0) 67.4%),
+    radial-gradient(130% 90% at 18% 0%, #fffdf7 0%, #f6edd8 60%, #eadcbc 100%);
+}
+
+.mapSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mapStreets path {
+  fill: none;
+  stroke: rgba(106, 90, 72, 0.3);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 4;
+}
+
+.pencilRing {
+  fill: none;
+  stroke: rgba(70, 58, 140, 0.55);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.routeLine {
+  fill: none;
+  stroke: #c98a35;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stopMark {
+  fill: #fbf5e8;
+  stroke: #c98a35;
+  stroke-width: 2.5;
+}
+
+.stopLabel {
+  font: 500 13px "DM Sans", sans-serif;
+  fill: #6a5a48;
+  paint-order: stroke;
+  stroke: #f8f0de;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.pinLeader {
+  stroke: #8e2f22;
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.stopLeader {
+  stroke: #c98a35;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+}
+
+.pinDot {
+  fill: #8e2f22;
+  stroke: #fbf5e8;
+  stroke-width: 2.5;
+}
+
+.pinHot {
+  fill: #c0392b;
+  stroke: #ffe7a3;
+  stroke-width: 3.5;
+}
+
+.pinName {
+  font: 600 18px Caveat, cursive;
+  fill: #2a2119;
+  paint-order: stroke;
+  stroke: #f8f0de;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.pinAsked {
+  font: 500 12px "DM Sans", sans-serif;
+  fill: #6a5a48;
+  letter-spacing: 0.02em;
+  paint-order: stroke;
+  stroke: #f8f0de;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.mapTitle rect {
+  fill: rgba(251, 245, 232, 0.92);
+  stroke: rgba(106, 90, 72, 0.25);
+  stroke-width: 1;
+}
+
+.mapTitle text {
+  font: 600 23px Caveat, cursive;
+  fill: #2a2119;
+}
+
+.mapUnpinned {
+  font: 600 16px Caveat, cursive;
+  fill: #6a5a48;
+}
+
+.threadKnot {
+  fill: #b2342b;
+  background: #b2342b;
+}
+
+/* ------------------------------------------------------------------ Rook: two endings */
+
+.strips {
+  display: grid;
+  gap: 4cqw;
+  justify-items: center;
+}
+
+.strip {
+  composes: paperBase;
+  margin: 0;
+  padding: 3cqw 6cqw;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(15px, 6.4cqw, 42px);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.ringed {
+  display: inline-block;
+  margin-left: 0.04em;
+  padding: 0 0.12em;
+  border: 0.06em solid rgba(178, 52, 43, 0.85);
+  border-radius: 50%;
+}
+
+/* ------------------------------------------------------------------ Bront: two requests */
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5cqw;
+  align-items: start;
+}
+
+.card {
+  composes: paperBase;
+  padding: 5cqw 4.5cqw 4cqw;
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0 22px, rgba(84, 122, 168, 0.18) 22px 23px),
+    radial-gradient(130% 90% at 18% 0%, #fffdf7 0%, var(--paper) 60%);
+}
+
+.cardQuote {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(12px, 3.4cqw, 21px);
+  line-height: 1.3;
+}
+
+.cardWho {
+  margin: 2.5cqw 0 0;
+  font-size: clamp(9px, 1.9cqw, 12px);
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
+
+.cardLabel {
+  margin: 3cqw 0 0;
+  padding-top: 2.5cqw;
+  border-top: 1px dashed rgba(106, 90, 72, 0.35);
+  font: 600 clamp(13px, 3.4cqw, 21px) Caveat, cursive;
+  color: #3b4f7a;
+}
+
+/* ------------------------------------------------------------------ Luma: the photograph */
+
+.photo {
+  display: grid;
+  gap: 2cqw;
+  width: min(100%, 420px);
+  margin: 0 auto;
+  padding: 4cqw 4cqw 3cqw;
+  background: #fffdf8;
+  rotate: -3deg;
+  box-shadow: 0 30px 56px -24px rgba(0, 0, 0, 0.8), 0 8px 14px -8px rgba(0, 0, 0, 0.5);
+}
+
+.photoImage,
+.photoBlank {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: linear-gradient(160deg, #d9dfe2, #b7c1c6);
+}
+
+.photoCaption {
+  font: 600 clamp(14px, 4.4cqw, 26px) Caveat, cursive;
+  text-align: center;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ Sable's notebook, open at an older page */
+
+.notebook {
+  composes: paperBase;
+  position: relative;
+  padding: 9cqw 7cqw;
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0 26px, rgba(84, 122, 168, 0.16) 26px 27px),
+    linear-gradient(to right, rgba(0, 0, 0, 0) 0 9%, rgba(178, 52, 43, 0.25) 9% calc(9% + 1px), rgba(0, 0, 0, 0) calc(9% + 1px)),
+    radial-gradient(130% 90% at 18% 0%, #fffdf7 0%, var(--paper) 60%);
+}
+
+.notebook .threadKnot {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.notebookLine {
+  margin: 0;
+  font: 600 clamp(16px, 7cqw, 40px) Caveat, cursive;
+}
+
+/* ------------------------------------------------------------------ Orren's week */
+
+.weekRow {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 52px;
+}
+
+.week {
+  display: flex;
+  gap: 4px;
+  perspective: 600px;
+}
+
+.day {
+  position: relative;
+  width: 40px;
+  height: 46px;
+  transform-style: preserve-3d;
+}
+
+.dayFace,
+.dayBack {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: 0 6px 10px -6px rgba(0, 0, 0, 0.6);
+}
+
+.dayFace {
+  background: rgba(251, 245, 232, 0.92);
+  color: var(--ink-soft);
+}
+
+.routeDay {
+  background: #fbf0d9;
+  color: var(--ink);
+}
+
+.dayRoute {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: #c98a35;
+}
+
+.dayBack {
+  transform: rotateY(180deg);
+  align-content: center;
+  gap: 1px;
+  background: #3a1d17;
+  color: rgba(251, 245, 232, 0.55);
+}
+
+.dayBack b {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f0b39f;
+}
+
+/* ------------------------------------------------------------------ the crew, at the edge */
+
+.edge {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 40px);
+  min-height: 116px;
+  padding-top: 64px;
+  pointer-events: none;
+}
+
+.member {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.memberArt,
+.token {
+  width: clamp(60px, 7vw, 92px);
+  height: auto;
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.45));
+  user-select: none;
+}
+
+.token {
+  width: clamp(44px, 5vw, 60px);
+  margin-bottom: 8px;
+}
+
+.tokenDisc {
+  fill: #f1e6d0;
+  stroke: #6a5a48;
+  stroke-width: 1.5;
+}
+
+.tokenInk {
+  fill: none;
+  stroke: #2a2119;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tokenThread {
+  stroke: #b2342b;
+}
+
+.say {
+  --shift: 0px;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  translate: calc(-50% + var(--shift)) 0;
+  width: max-content;
+  max-width: min(340px, 80vw);
+  margin: 0;
+  padding: 9px 13px 10px;
+  border-radius: 10px;
+  background: #fbf5e8;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.35;
+  box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.7);
+  pointer-events: auto;
+}
+
+.say::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - var(--shift));
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: #fbf5e8;
+  rotate: 45deg;
+}
+
+.sayName {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.waiting {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-style: italic;
+  font-size: clamp(18px, 2.2vw, 24px);
+  color: rgba(251, 245, 232, 0.8);
+}
+
+/* ------------------------------------------------------------------ Ilex's thread */
+
+.threadLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.thread {
+  fill: none;
+  stroke: #b2342b;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+/* ------------------------------------------------------------------ where it came from */
+
+.noteScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+  overflow: auto;
+  background: rgba(14, 10, 7, 0.62);
+}
+
+.noteStack {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+
+.noteBlock {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.noteTitle {
+  margin: 0;
+  max-width: 460px;
+  font: 400 17px Fraunces, Georgia, serif;
+  color: rgba(251, 245, 232, 0.9);
+  text-align: center;
+}
+
+.noteCorrect,
+.noteClose,
+.noteActions button {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  font-size: 14px;
+  color: rgba(251, 245, 232, 0.85);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.noteDone {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(251, 245, 232, 0.7);
+}
+
+.noteEdit {
+  display: grid;
+  gap: 8px;
+  width: min(460px, calc(100vw - 32px));
+  color: rgba(251, 245, 232, 0.85);
+  font-size: 14px;
+}
+
+.noteEdit label {
+  display: grid;
+  gap: 6px;
+}
+
+.noteEdit textarea {
+  min-height: 70px;
+  border: 1px solid rgba(251, 245, 232, 0.35);
+  border-radius: 6px;
+  background: rgba(14, 10, 7, 0.5);
+  color: var(--paper);
+  padding: 8px 10px;
+  font: 400 15px "DM Sans", sans-serif;
+}
+
+.noteActions {
+  display: flex;
+  gap: 18px;
+}
+
+@media (max-width: 760px) {
+  .scene {
+    min-height: 0;
+    padding-bottom: 150px;
+  }
+  .desk {
+    grid-template-columns: 1fr 1fr;
+    gap: 22px 14px;
+    min-height: 0;
+  }
+  .stage {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+  .side {
+    gap: 18px;
+  }
+  .small {
+    max-width: 100%;
+  }
+  .weekRow {
+    justify-content: center;
+    min-height: 48px;
+  }
+  .day {
+    width: 36px;
+    height: 42px;
+  }
+  .edge {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    min-height: 0;
+    padding: 70px 8px 6px;
+    gap: 6px;
+    background: linear-gradient(to top, rgba(20, 15, 11, 0.97) 40%, rgba(20, 15, 11, 0));
+  }
+}

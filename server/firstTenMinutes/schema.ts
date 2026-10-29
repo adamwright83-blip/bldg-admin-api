@@ -100,3 +100,18 @@ export type FindingOrigin =
   | { provider: "gmail"; messageId: string; attachmentId: string }
   | { provider: "drive"; fileId: string }
   | { provider: "example"; asset: string };
+
+/** drizzle/0154_first_ten_events.sql: what the person decided, append-only. */
+export const firstTenEvents = mysqlTable(
+  "first_ten_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    journeyId: varchar("journey_id", { length: 36 }).notNull(),
+    kind: varchar("kind", { length: 48 }).notNull(),
+    payloadJson: json("payload_json").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at", { fsp: 3 }).defaultNow().notNull(),
+  },
+  table => ({
+    journey: index("idx_first_ten_events_journey").on(table.journeyId, table.createdAt),
+  })
+);

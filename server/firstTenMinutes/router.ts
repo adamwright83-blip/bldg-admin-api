@@ -12,6 +12,7 @@ import { disconnectProvider, journeyView, moveJourney, requireJourney, startJour
 import { beginReading } from "./understanding/run";
 import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
+import { answerFinding, findingPicture } from "./crew";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -123,4 +124,32 @@ export const firstTenMinutesRouter = router({
     const { journey } = await requireJourney(input);
     return understandingView(journey.id);
   }),
+
+  /**
+   * The person's answer to something the crew found: it's right (confirm), it was true and isn't now (change, with
+   * their words), or it's wrong (dismiss). Kept, and never shown as true again once changed or dismissed.
+   */
+  answerFinding: publicProcedure
+    .input(
+      credentials.extend({
+        findingId: z.string().min(1).max(64),
+        answer: z.enum(["confirm", "change", "dismiss"]),
+        correction: z.string().trim().max(500).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      await answerFinding(journey, input.findingId, input.answer, input.correction ?? null);
+      return understandingView(journey.id);
+    }),
+
+  /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */
+  findingPicture: publicProcedure
+    .input(credentials.extend({ findingId: z.string().min(1).max(64) }))
+    .query(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      return findingPicture(journey, input.findingId);
+    }),
 });

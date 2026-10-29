@@ -756,3 +756,19 @@
     margin-bottom: 12px;
   }
 }
+
+.endLink {
+  position: absolute;
+  left: 50%;
+  top: 104px;
+  translate: -50% 0;
+  z-index: 4;
+  border: 0;
+  background: none;
+  padding: 6px 4px;
+  font-size: 16px;
+  color: rgba(251, 245, 232, 0.9) !important;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: rgba(251, 245, 232, 0.4);
+}
