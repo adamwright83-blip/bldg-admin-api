@@ -381,7 +381,8 @@ describe("W1 acceptance — the 2026-10-20 evening debrief, replayed", () => {
     expect(plan.speak).toMatch(/No record yet for the Coastal Market Rook hunt, the Wayward contact gate and companions earned\./);
     expect(plan.speak).not.toMatch(/(?:Coastal Market|Wayward|Rook)[^.]*\b(?:done|complete|completed|caught)\b/i);
     // The Day Line move is a question, held pending, and nothing is written.
-    expect(plan.speak).toMatch(/Want me to put that on tomorrow's Day Line\?$/);
+    // Named, so a yes is a yes to exactly this move.
+    expect(plan.speak).toMatch(/Want me to put that on tomorrow's Day Line: pitch Wilshire Vermont and The Chadwick in person\?$/);
     expect(plan.speak).not.toMatch(NO_SAVE);
     expect(h.grants.map(grant => [grant.actionClass, grant.authorityBasis])).toEqual([["propose_day_line", "standing_goal_policy"]]);
     expect(state.pendingBriefing?.parsed?.items?.map(item => [item.title, item.businessDate])).toEqual([

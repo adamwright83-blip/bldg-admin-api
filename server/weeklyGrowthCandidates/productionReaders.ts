@@ -16,7 +16,7 @@ import {
 import { listCommercialMissions } from "../commercialMissions/commercialMissionStore";
 import { getDb } from "../db";
 import { listOpsTasks, type OpsTaskType } from "../opsTasks";
-import { asRecord, dayLineDisplayTitle, readDayLineOverlay } from "../../shared/goldlineDayLine";
+import { asRecord, dayLineDisplayTitle, isHiddenFromDayLine, readDayLineOverlay } from "../../shared/goldlineDayLine";
 import type { ProactiveObligation } from "../../shared/claireProactive";
 import type { WeeklyGrowthMotion, WeeklyGrowthPocketKind } from "../../shared/weeklyGrowthCandidates";
 import {
@@ -130,7 +130,7 @@ async function readCommitments(input: {
   return rows.map(row => {
     const metadata = asRecord(row.metadataJson);
     const overlay = readDayLineOverlay(metadata);
-    const hidden = metadata.hiddenFromDayPlan === true || overlay.notPursuing === true || Boolean(overlay.cancelledAt);
+    const hidden = metadata.hiddenFromDayPlan === true || isHiddenFromDayLine(overlay, row.businessDate);
     const campaignId = stringField(metadata, "campaignId");
     const followUpId = stringField(metadata, "commercialFollowUpId") ?? stringField(metadata, "followUpId") ?? stringField(metadata, "followupId");
     const missionId = stringField(metadata, "missionId");

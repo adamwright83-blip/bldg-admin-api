@@ -19,6 +19,7 @@
 
 import type { EvidenceItem } from "../contracts/evidence";
 import type { DayWork } from "../../knowledge/operationsKnowledge";
+import type { DailyCommand } from "../../dailyCommandContract";
 import {
   isNoRecord,
   speakColosseumPosition,
@@ -42,12 +43,40 @@ export type LeadPlan = {
   gameMove: null | { kingdomId: string | null; targets: string[]; pitched: number; total: number };
   /** A move not yet on the Day Line that Claire offers to put there. */
   dayLineMove: null | { title: string; businessDate: string };
+  /** The challenge the operator chose for this day. When set, Claire offers no discretionary move. */
+  operatorChallenge: string | null;
   /** Deterministic speech, goal first. Phrased by Claire's organ when one is available. */
   text: string;
   evidenceIds: string[];
 };
 
 const DAY_WORK_TYPES = new Set(["operations", "day_line_read", "field_today"]);
+
+/**
+ * The operator's own choice for the day: an explicit operator mission that is still open.
+ * 2026-10-28 (call cb980810): Adam made tomorrow the marketing challenge and Claire kept offering
+ * the Greystar pitches on top of it. The operator's choice outranks Claire's discretionary offer;
+ * fixed work (pickups, deliveries, carried commitments) still shows.
+ */
+function operatorChallengeFor(evidence: readonly EvidenceItem[], businessDate: string): { item: EvidenceItem; title: string } | null {
+  for (const item of evidence) {
+    if (item.type !== "workday_command" || !item.authoritativeFor.includes("current_business_truth")) continue;
+    const command = (item.payload as { command?: DailyCommand } | null)?.command;
+    if (!command || command.businessDate !== businessDate) continue;
+    const primary = command.primary;
+    if (command.explicitOperatorMission && primary && primary.status === "open" && primary.title.trim()) {
+      return { item, title: primary.title.trim() };
+    }
+  }
+  return null;
+}
+
+/**
+ * Discretionary sales work, by what the source says it is, never by its title: Day Director growth
+ * rows and the route's commercial visits, calls and sales follow-ups. Pickups, deliveries, payment
+ * blockers and operations rows are obligations and always stay.
+ */
+const SALES_WORK_KINDS = new Set(["growth", "commercial_visit", "commercial_call", "follow_up"]);
 
 function dayWorkFor(evidence: readonly EvidenceItem[], businessDate: string): { item: EvidenceItem; work: DayWork } | null {
   const chosen = evidence.find(
@@ -96,7 +125,15 @@ export function buildLeadPlan(input: {
   const goal = goalProgress?.objective ?? ((goalAdvice?.payload as { title?: string } | null)?.title?.trim() || null);
 
   const dayWork = dayWorkFor(input.evidence, businessDate);
-  const open = dedupeTitles((dayWork?.work.open ?? []).map(item => item.title));
+  const challenge = operatorChallengeFor(input.evidence, businessDate);
+  const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  // On a day the operator chose, the plan says the challenge and the obligations, not more sales work.
+  const open = dedupeTitles([
+    ...(challenge ? [challenge.title] : []),
+    ...(dayWork?.work.open ?? [])
+      .filter(item => !challenge || (!sameTitle(item.title, challenge.title) && !SALES_WORK_KINDS.has(item.workKind ?? "")))
+      .map(item => item.title),
+  ]);
 
   const gameItem = input.evidence.find(item => item.type === "game_state" && item.authoritativeFor.includes("current_business_truth"));
   const view = (gameItem?.payload ?? null) as GameMasterView | null;
@@ -112,20 +149,21 @@ export function buildLeadPlan(input: {
 
   const firstAction = open[0]
     ? spokenAction(open[0])
-    : gameMove?.targets.length
+    : gameMove?.targets.length && !challenge
       ? `pitching ${gameMove.targets[0]} in person`
       : null;
-  const buildings = dedupeTitles([...open, ...(gameMove?.targets ?? [])]);
+  const buildings = dedupeTitles([...open, ...(challenge ? [] : gameMove?.targets ?? [])]);
 
   // A move is offered only when it is not already on that day's line.
   const alreadyOnLine = (name: string) => open.some(title => title.toLowerCase().includes(name.toLowerCase()));
-  const offered = gameMove ? gameMove.targets.filter(name => !alreadyOnLine(name)) : [];
+  const offered = gameMove && !challenge ? gameMove.targets.filter(name => !alreadyOnLine(name)) : [];
   const dayLineMove = offered.length
     ? { title: `Pitch ${list(offered)} in person (Greystar Koreatown)`, businessDate }
     : null;
 
   const when = input.horizon === "tomorrow" ? "Tomorrow" : input.horizon === "today" ? "Today" : "Next";
-  const evidenceIds = [goalItem?.id, goalAdvice?.id, dayWork?.item.id, gameItem?.id].filter((id): id is string => Boolean(id));
+  const evidenceIds = [goalItem?.id, goalAdvice?.id, dayWork?.item.id, gameItem?.id, challenge?.item.id].filter((id): id is string => Boolean(id));
+  const operatorChallenge = challenge?.title ?? null;
 
   if (input.relief) {
     const slot = input.horizon === "tomorrow" ? " tomorrow" : input.horizon === "today" ? " tonight" : "";
@@ -140,6 +178,7 @@ export function buildLeadPlan(input: {
       buildings: firstAction && open[0] ? [open[0]] : buildings.slice(0, 1),
       gameMove,
       dayLineMove: null,
+      operatorChallenge,
       text,
       evidenceIds,
     };
@@ -150,15 +189,17 @@ export function buildLeadPlan(input: {
   if (goalProgress) sentences.push(input.goalAsked ? speakGoalOnRecord(goalProgress) : speakGoalProgress(goalProgress));
   else if (goal) sentences.push(`The goal is ${goal}. I don't have a verified current count.`);
   else sentences.push("I don't have a goal on record for you yet.");
-  if (firstAction) sentences.push(`${when}, the first move is ${firstAction}.`);
+  if (challenge) sentences.push(`${when} is your challenge: ${spokenAction(challenge.title)}.`);
+  else if (firstAction) sentences.push(`${when}, the first move is ${firstAction}.`);
   const rest = open.slice(1, 4);
   if (rest.length) sentences.push(`After that: ${list(rest.map(spokenAction))}.`);
-  const position = view ? speakColosseumPosition(view) : null;
+  // The operator chose the day; Claire's game position is not pitched on top of it.
+  const position = view && !challenge ? speakColosseumPosition(view) : null;
   if (position) sentences.push(position);
-  else if (view && isNoRecord(view.day1TenDoors)) sentences.push("The Colosseum has no record of a visit yet.");
-  const missing = view ? speakNoRecordStages(view) : null;
+  else if (view && !challenge && isNoRecord(view.day1TenDoors)) sentences.push("The Colosseum has no record of a visit yet.");
+  const missing = view && !challenge ? speakNoRecordStages(view) : null;
   if (missing) sentences.push(missing);
-  if (!firstAction && !gameMove) sentences.push(`${when}'s line has nothing open yet, so the move is to pick one.`);
+  if (!firstAction && (!gameMove || challenge)) sentences.push(`${when}'s line has nothing open yet, so the move is to pick one.`);
 
   return {
     horizon: input.horizon,
@@ -168,6 +209,7 @@ export function buildLeadPlan(input: {
     buildings,
     gameMove,
     dayLineMove,
+    operatorChallenge,
     text: sentences.join(" "),
     evidenceIds,
   };
@@ -177,5 +219,7 @@ export function buildLeadPlan(input: {
 export function leadPlanApprovalAsk(move: NonNullable<LeadPlan["dayLineMove"]>, today: string): string {
   const day =
     move.businessDate === today ? "today's" : move.businessDate === addDaysYmd(today, 1) ? "tomorrow's" : `the ${move.businessDate}`;
-  return `Want me to put that on ${day} Day Line?`;
+  // Named, so a yes is a yes to exactly this (2026-10-28: a bare "that" let a yes save the wrong thing).
+  const named = move.title.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+  return `Want me to put that on ${day} Day Line: ${spokenAction(named)}?`;
 }
