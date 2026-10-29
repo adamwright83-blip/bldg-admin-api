@@ -1,0 +1,52 @@
+{
+  "id": "gym_owner_done_and_take_off",
+  "title": "Upbeat, distracted boutique-gym owner marks a repair done and drops a trip off tomorrow, wanting nothing added",
+  "provenance": "authored",
+  "localTime": "18:45",
+  "seed": {
+    "operatorName": "Kofi",
+    "dayLine": [
+      { "title": "Fix the broken cable on the lat pulldown", "businessDate": "today" },
+      { "title": "Call the insurance broker about the liability renewal", "businessDate": "today" },
+      { "title": "6 a.m. small group, then onboard the two new members", "businessDate": "tomorrow" },
+      { "title": "Drive to Anaheim to look at the used rower", "businessDate": "tomorrow", "detailNote": "Seller says after 2 p.m." },
+      { "title": "Post the November class schedule", "businessDate": "tomorrow" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Kofi, 36, owns Ironwood Strength Club, a boutique gym in Long Beach with about ninety members. He is upbeat and quick but distracted: his two kids are in the background and he breaks off mid-sentence to talk to them ('one sec', 'put that down'). He talks about his work in plain words, does not use software vocabulary, and does not care how Claire works. He gives information once and expects it to stick.",
+    "goals": [
+      "Tell Claire the lat pulldown cable is fixed; he did it this afternoon. He wants it marked off as done, not deleted and not left sitting there.",
+      "Take the Anaheim rower trip off tomorrow entirely; the seller sold it to someone else. He does not want it moved to another day. If Claire offers to move it or keep it somewhere, say no, just drop it.",
+      "Hear what is left on tomorrow after that.",
+      "He does not want anything new added and nothing done about the insurance broker call; if Claire offers to add or change anything else, decline briefly.",
+      "Hang up when done, saying exactly: 'Great, thanks. Gotta go, bye.'"
+    ],
+    "opening": "Hey Claire, it's Kofi. One sec. Okay. Two things. The lat pulldown cable, I fixed it this afternoon, so that's done.",
+    "maxTurns": 10
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today", "titleMatches": "lat pulldown|cable", "status": "completed", "count": 1 },
+      { "businessDate": "today", "titleMatches": "insurance|broker|liability" },
+      { "businessDate": "tomorrow", "titleMatches": "small group|onboard|new members" },
+      { "businessDate": "tomorrow", "titleMatches": "november|class schedule" }
+    ],
+    "absent": [
+      { "titleMatches": "anaheim|rower" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": [
+      "Fix the broken cable on the lat pulldown",
+      "Drive to Anaheim to look at the used rower"
+    ],
+    "maxRowsAdded": 0,
+    "speech": {
+      "mustMention": ["small group|onboard|new members", "november|class schedule"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards completion and removal of seeded rows in an interactive call. 'Fixed it, so that's done' means the lat pulldown row becomes completed (status completed, still on today), not removed and not re-added; maxRowsAdded 0 fails a Claire that writes a fresh 'completed' row instead of completing the seeded one. 'Take it off tomorrow, just drop it' means the Anaheim rower row is gone from tomorrow and not parked on any other day, which is why the absent check carries no date; nothing is asserted about why it was abandoned. The insurance call, the small-group/onboarding row and the November schedule must be untouched, and the read-back of tomorrow must name the two surviving jobs. One authorization ask is tolerated because a persona who drops the rower mid-sentence may draw a 'want me to move it instead?' once; the persona says no, and asking again fails. The persona only reports on rows it is explicitly told about and does not dispute any seeded row."
+}

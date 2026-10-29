@@ -1,0 +1,47 @@
+{
+  "id": "tutoring_owner_dictates_three_no_magic_word",
+  "title": "Warm, talkative tutoring-company owner reads her list for the week as the instruction itself, then asks what Claire can do as part of saying goodnight",
+  "provenance": "authored",
+  "localTime": "20:05",
+  "seed": {
+    "operatorName": "Marisol",
+    "dayLine": [
+      { "title": "Grade the SAT practice tests", "businessDate": "today" },
+      { "title": "Session with the Pham sisters", "businessDate": "tomorrow", "detailNote": "4 p.m., bring the geometry packets" }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Marisol, 44, owns Bright Steps Tutoring in Whittier, a small company with four part-time tutors. It is 8 PM; she is warm, talkative, a little scattered, and says 'okay so' and 'mija' when she is tired. She talks about her work in plain words and does not use software vocabulary or care how Claire works. She considers telling Claire something to be the same as asking her to keep track of it, and is mildly surprised if asked whether she wants it written down.",
+    "goals": [
+      "Give Claire her list for the next few days in one go, as items for specific days: tomorrow, interview the new algebra tutor, Devon, at the Whittier library; the day after tomorrow, the parent conference call with the Nakamura family about their twins' reading plan; and Monday, drop the invoices at the Rosemead charter school.",
+      "The list itself is the instruction. She never says 'add', 'put', or 'save'. If Claire asks whether she wants them written down, she says, a little surprised, 'Yes, that's why I'm telling you,' once, and does not repeat the list unless Claire says she lost it.",
+      "If Claire asks which Monday she means, it is the coming Monday, the next one on the calendar.",
+      "She does not want anything else added or changed, and nothing about the SAT grading or the Pham session needs to happen; decline any extra offers briefly.",
+      "When she is satisfied, hang up by saying exactly: 'Oh, and before I go, what all can you actually do for me? Okay, night Claire!'"
+    ],
+    "opening": "Hi Claire, it's Marisol. Okay so, here's my week, ready? Tomorrow I'm interviewing the new algebra tutor, Devon, at the Whittier library. Day after tomorrow is the parent call with the Nakamura family about the twins' reading plan. And Monday I have to drop the invoices at the Rosemead charter school.",
+    "maxTurns": 12
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "devon|algebra|library", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "nakamura|twins|reading plan", "count": 1 },
+      { "businessDate": "coming_monday", "titleMatches": "rosemead|charter|invoice", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "pham" }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "devon|algebra|library|nakamura|twins|rosemead|charter|invoice" },
+      { "businessDate": "tomorrow", "titleMatches": "nakamura|twins|reading plan" },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "devon|algebra|library" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustMention": ["day line|add|move|remove|numbers|ledger|standing|rule"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Interactive version of the dictated list with no magic word: the opening is the whole list with days attached, framed as 'here's my week', and the persona never says add, put or save. Correct behaviour is to treat the list as the instruction and write all three on their days, exactly once each, with nothing on today. One authorization ask is tolerated because 'here's my week' is softer than 'write them down' and a single 'want me to put these on?' is defensible; the persona then says yes once, so any second ask is the failure guarded here. 'Monday' resolves to the coming Monday strictly after today; the persona confirms that if asked. Absent checks use only date pairs that never coincide; the Monday row is guarded by placement plus maxRowsAdded 3 because Monday can be tomorrow or the day after on some run days. The hang-up line bundles a capabilities question into the goodbye; a sign-off-only reply fails the unanswered-question check, and the answer must name what Claire can do (mustMention). Both seeded rows must be untouched; the persona dictates no changes to them."
+}
