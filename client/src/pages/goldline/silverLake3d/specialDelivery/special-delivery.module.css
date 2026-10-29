@@ -1,0 +1,459 @@
+/* Rook's airmail: the HUD keeps Silver Lake's chunky storybook buttons; the desk is plain and quiet on purpose. */
+
+.stationPrompt,
+.stationPill,
+.hudButton,
+.envelopeChip,
+.offer button,
+.deskActions button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.stationPrompt {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #ffc74d;
+  box-shadow: 0 5px 0 #5a3a24;
+  font-weight: 900;
+  font-size: 17px;
+  color: #3b2a1e;
+}
+
+.stationPrompt kbd {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fffaf0;
+  border: 2px solid #5a3a24;
+  font: inherit;
+  font-size: 14px;
+}
+
+.stationPill {
+  position: absolute;
+  right: 16px;
+  bottom: max(64px, calc(env(safe-area-inset-bottom) + 52px));
+  z-index: 6;
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #fff2c4;
+  box-shadow: 0 4px 0 #5a3a24;
+  font-weight: 800;
+  font-size: 14px;
+  color: #3b2a1e;
+}
+
+.hud {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 7;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.hudButton {
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #fffaf0;
+  box-shadow: 0 4px 0 #5a3a24;
+  font-weight: 800;
+  font-size: 14px;
+  color: #3b2a1e;
+}
+
+.hudButton:active,
+.stationPrompt:active,
+.stationPill:active,
+.envelopeChip:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #5a3a24;
+}
+
+.stationPrompt:active {
+  transform: translate(-50%, 3px);
+}
+
+.sidewaysTip {
+  position: absolute;
+  left: 50%;
+  top: max(150px, calc(env(safe-area-inset-top) + 140px));
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 14px;
+  border-radius: 14px;
+  border: 2.5px solid #5a3a24;
+  background: #fffaf0;
+  box-shadow: 0 3px 0 #5a3a24;
+  color: #3b2a1e;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.sidewaysTip button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 2px solid #5a3a24;
+  background: #ffe7a8;
+  color: #3b2a1e;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.envelopeChip {
+  margin-left: auto;
+  padding: 9px 15px;
+  border-radius: 12px;
+  border: 2px solid #1f2a3a;
+  background: #fbf3df;
+  box-shadow: 0 3px 0 #1f2a3a;
+  font-weight: 800;
+  font-size: 14px;
+  color: #1f2a3a;
+  letter-spacing: 0.01em;
+}
+
+/* Rook's speech: a storybook bubble that follows his head (created by the game, styled here) */
+:global(.sd-bubble) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  max-width: min(300px, 70vw);
+  padding: 9px 14px 10px;
+  border-radius: 16px;
+  background: #fffaf0;
+  border: 2.5px solid #5a3a24;
+  box-shadow: 0 3px 0 #5a3a24;
+  font-family: "Nunito", "Baloo 2", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.25;
+  color: #3b2a1e;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  will-change: transform;
+}
+
+:global(.sd-bubble)::after {
+  content: "";
+  position: absolute;
+  left: var(--tail, 50%);
+  bottom: -11px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  background: #fffaf0;
+  border-right: 2.5px solid #5a3a24;
+  border-bottom: 2.5px solid #5a3a24;
+  transform: rotate(45deg);
+}
+
+.offer {
+  position: absolute;
+  left: 50%;
+  bottom: max(76px, calc(env(safe-area-inset-bottom) + 60px));
+  transform: translateX(-50%);
+  z-index: 8;
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: #fffaf0;
+  border: 3px solid #5a3a24;
+  box-shadow: 0 6px 0 #5a3a24;
+  color: #3b2a1e;
+}
+
+.offer p {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.offerButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.offerButtons button {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 999px;
+  border: 3px solid #5a3a24;
+  background: #ffc74d;
+  box-shadow: 0 4px 0 #5a3a24;
+  font-weight: 900;
+  font-size: 15px;
+  color: #3b2a1e;
+}
+
+.offerButtons .quiet,
+.quiet {
+  background: #fffaf0;
+}
+
+/* ---------------------------------------------------------------- the desk: real business, plain and legible */
+
+.deskWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(31, 42, 58, 0.38);
+  user-select: text;
+}
+
+.desk {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 22px 22px 18px;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1f2a3a;
+  box-shadow: 0 18px 50px rgba(20, 30, 45, 0.28);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.deskHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.deskHead h2 {
+  margin: 2px 0 6px;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.deskKicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7686;
+}
+
+.deskClose {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #d6dbe3;
+  background: #f6f8fb;
+  font-size: 16px;
+  color: #3b4656;
+  cursor: pointer;
+}
+
+.realBadge,
+.fixtureBadge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.realBadge {
+  background: #eaf6ee;
+  color: #1f6b3a;
+}
+
+.fixtureBadge {
+  background: #fff1d6;
+  color: #8a5a00;
+  border: 1px dashed #d9a441;
+}
+
+.deskWhy {
+  margin: 12px 0 14px;
+  color: #3b4656;
+}
+
+.sable,
+.rook {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #e3e7ee;
+  background: #fafbfd;
+}
+
+.sable h3,
+.rook h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7686;
+}
+
+.who {
+  color: #1f2a3a;
+}
+
+.sable blockquote {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sable cite,
+.recallList cite {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 12px;
+  color: #6b7686;
+}
+
+.recallList,
+.unknowns {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.unknowns {
+  color: #4b5666;
+  font-size: 14px;
+}
+
+.rook textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #cdd4de;
+  font: inherit;
+  font-size: 15px;
+  color: #1f2a3a;
+  background: #ffffff;
+  resize: vertical;
+}
+
+.rook textarea:focus-visible,
+.deskActions button:focus-visible,
+.deskClose:focus-visible {
+  outline: 3px solid #4f79b8;
+  outline-offset: 2px;
+}
+
+.rookNote {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #4b5666;
+}
+
+.deskState {
+  margin: 4px 0 14px;
+  font-size: 14px;
+  font-weight: 650;
+  color: #1f2a3a;
+}
+
+.deskEmpty {
+  margin: 12px 0 18px;
+  color: #3b4656;
+}
+
+.deskActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deskActions button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #cdd4de;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 650;
+  color: #1f2a3a;
+}
+
+.deskActions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.deskActions .primary {
+  background: #1f2a3a;
+  border-color: #1f2a3a;
+  color: #ffffff;
+}
+
+.deskActions .quiet {
+  border-color: transparent;
+  color: #4b5666;
+}
+
+.muted {
+  color: #6b7686;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .desk {
+    padding: 18px 16px 14px;
+  }
+  .deskActions button {
+    flex: 1 1 calc(50% - 8px);
+  }
+  .deskActions .primary {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.sd-bubble) {
+    transition: none;
+  }
+}

@@ -24,7 +24,12 @@ import { createCozyMusic, type CozyMusic } from "./cozyMusic";
 import SilverLakeDiscoveryPrelude from "./SilverLakeDiscoveryPrelude";
 import { customerIdFromQuestKey, questGiverKey, useReunionQuests } from "./useReunionQuests";
 import type { QuestSpot, ReunionBeat } from "./reunionQuests";
+import SpecialDeliveryLayer from "./specialDelivery/SpecialDeliveryLayer";
+import { useSpecialDeliveryFlag } from "./specialDelivery/useSpecialDeliveryFlag";
 import styles from "./silver-lake-3d.module.css";
+
+/** Rook's airmail has these two neighbours on its course; while it runs they are not also on a doorstep. */
+const AIRMAIL_CAST = ["Bella", "Cleo"] as const;
 
 /**
  * Silver Lake, walkable. Every Silver Lake entry lands here (see silverLakeEntry.ts); the painted 2D encounter is
@@ -141,13 +146,19 @@ export default function SilverLake3D({
 
   const o = useSilverLakeOutreach(territoryId);
   const { targets, selectedTarget, setSelectedSlotId } = o;
+  // Rook's airmail (SPECIAL DELIVERY) is server-flagged per business; the quests wait for the answer so Bella and
+  // Cleo are never handed an errand while they are on the airmail course.
+  const { on: airmailOn, resolved: airmailResolved } = useSpecialDeliveryFlag(territoryId);
+  const [airmailEngaged, setAirmailEngaged] = useState(false);
+  const [deskHandoff, setDeskHandoff] = useState<{ customerId: string; draft: string } | null>(null);
   // Reunion quests: real customers keep their progress and passes on the server; the synthetic preview never writes.
   const rq = useReunionQuests({
-    enabled: ready,
+    enabled: ready && airmailResolved,
     synthetic: o.isSyntheticPreview,
     territoryId,
     targets,
     spots: questSpots,
+    excludeGivers: airmailOn ? AIRMAIL_CAST : undefined,
   });
 
   // ---------------------------------------------------------------- villagers in the world
@@ -202,8 +213,9 @@ export default function SilverLake3D({
         done: isDone(t),
       });
     }
-    // an ambient neighbour never duplicates a quest giver (Bella can't be on two doorsteps)
+    // an ambient neighbour never duplicates a quest giver (Bella can't be on two doorsteps), nor the airmail's cast
     const taken = new Set(out.filter(v => v.key.startsWith("quest:")).map(v => v.name));
+    if (airmailOn) AIRMAIL_CAST.forEach(name => taken.add(name));
     COZY_SLOT_IDS.forEach((_, slot) => {
       if (used.has(slot)) return;
       const variant =
@@ -223,7 +235,7 @@ export default function SilverLake3D({
       });
     });
     return out;
-  }, [targets, rq.on, rq.quest, rq.reunited]);
+  }, [targets, rq.on, rq.quest, rq.reunited, airmailOn]);
 
   const viewByKey = useMemo(() => new Map(views.map(v => [v.key, v])), [views]);
   const targetByKey = useMemo(
@@ -601,6 +613,7 @@ export default function SilverLake3D({
         className={styles.roster}
         aria-label="Silver Lake neighbours"
         data-testid="silver-lake-roster"
+        hidden={airmailEngaged}
       >
         <strong className={styles.rosterTitle}>Neighbours</strong>
         {o.loadFailed ? (
@@ -663,7 +676,7 @@ export default function SilverLake3D({
         })}
       </nav>
 
-      {ready && !talking && !discoveryOpen ? (
+      {ready && !talking && !discoveryOpen && !airmailEngaged ? (
         <div className={styles.controlsHint} aria-hidden>
           <span>WASD / arrows to walk</span>
           <span>Shift to run</span>
@@ -672,7 +685,7 @@ export default function SilverLake3D({
         </div>
       ) : null}
 
-      {nearItem && nearItemQuest && !talking ? (
+      {nearItem && nearItemQuest && !talking && !airmailEngaged ? (
         <button
           type="button"
           className={styles.talkPrompt}
@@ -689,7 +702,7 @@ export default function SilverLake3D({
         </button>
       ) : null}
 
-      {nearView && !talking && !nearItem ? (
+      {nearView && !talking && !nearItem && !airmailEngaged ? (
         <button
           type="button"
           className={styles.talkPrompt}
@@ -703,7 +716,7 @@ export default function SilverLake3D({
         </button>
       ) : null}
 
-      <div className={styles.touchButtons}>
+      <div className={styles.touchButtons} hidden={airmailEngaged}>
         <button type="button" onClick={() => runtimeRef.current?.jump()}>
           Hop
         </button>
@@ -712,6 +725,7 @@ export default function SilverLake3D({
       <div
         className={styles.courtyardWidget}
         data-testid="silver-lake-courtyard-widget"
+        hidden={airmailEngaged}
       >
         <NeighborhoodCourtyardFeature
           chosenFeature={o.neighborhoodMemory.featureChoice}
@@ -741,7 +755,7 @@ export default function SilverLake3D({
         </div>
       ) : null}
 
-      {rq.on && openQuest && openTasks && openQuest.phase !== "done" && !talking && !discoveryOpen ? (
+      {rq.on && openQuest && openTasks && openQuest.phase !== "done" && !talking && !discoveryOpen && !airmailEngaged ? (
         <aside className={styles.questTasks} aria-label={`${openQuest.template.giver.name}'s errand`} data-testid="quest-tasks">
           <div className={styles.questTasksTitle}>{openQuest.template.giver.name}'s HOA complaint</div>
           <ol>
@@ -756,7 +770,7 @@ export default function SilverLake3D({
         </aside>
       ) : null}
 
-      {rq.on && (questNote || (carrying && !talking)) ? (
+      {rq.on && !airmailEngaged && (questNote || (carrying && !talking)) ? (
         <div className={styles.questNote} role="status" data-testid="quest-note">
           {questNote ??
             (carrying ? `Carrying the ${carrying.template.item.name} for ${carrying.template.giver.name}.` : null)}
@@ -902,10 +916,57 @@ export default function SilverLake3D({
         </div>
       ) : null}
 
+      {ready && airmailOn ? (
+        <SpecialDeliveryLayer
+          runtime={runtimeRef.current}
+          ready={ready}
+          synthetic={o.isSyntheticPreview}
+          territoryId={territoryId}
+          tenantKey={o.tenantId}
+          targets={targets}
+          isPassed={rq.isPassed}
+          unfinished={
+            o.neighborhoodMemory.unfinishedActivity
+              ? {
+                  customerId: o.neighborhoodMemory.unfinishedActivity.customerId,
+                  draftBody: o.neighborhoodMemory.unfinishedActivity.draftBody,
+                  updatedAt: o.neighborhoodMemory.unfinishedActivity.updatedAt,
+                }
+              : null
+          }
+          onSaveDraft={(t, draft) =>
+            o.handleSaveUnfinishedDraft({
+              customerId: t.customerId,
+              customerName: t.displayName,
+              villagerVariant: t.villagerVariant,
+              letterApproach: "custom",
+              draftBody: draft,
+            })
+          }
+          onOpenLetterDesk={(t, draft) => {
+            // the Letter Desk owns consent, the hand-off to Messages and "I sent it"; it opens with Rook's draft
+            setDeskHandoff({ customerId: t.customerId, draft });
+            void o.handleSaveUnfinishedDraft({
+              customerId: t.customerId,
+              customerName: t.displayName,
+              villagerVariant: t.villagerVariant,
+              letterApproach: "custom",
+              draftBody: draft,
+            });
+            openCustomer(t, true);
+          }}
+          onEngagedChange={setAirmailEngaged}
+        />
+      ) : null}
+
       {selectedTarget && o.experienceMode === "playable" ? (
         <div className={styles.deskWrap}>
           <PlayableLetterDesk
-            target={selectedTarget}
+            target={
+              deskHandoff && deskHandoff.customerId === selectedTarget.customerId
+                ? { ...selectedTarget, preparedMessage: deskHandoff.draft }
+                : selectedTarget
+            }
             targetIndex={o.selectedIndex}
             totalTargets={targets.length}
             objectiveId={o.objectiveId}

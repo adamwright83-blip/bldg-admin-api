@@ -42,7 +42,53 @@ export type RuntimeCallbacks = {
   onError?: (message: string) => void;
 };
 
+/**
+ * A self-contained activity that lives inside this courtyard (Rook's airmail station). It shares the one scene, camera,
+ * loop and canvas; while it is engaged it can take the camera and hold the hero still, and it gives both back.
+ */
+export type CourtyardActivityApi = {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  canvas: HTMLCanvasElement;
+  container: HTMLElement;
+  reduceMotion: boolean;
+  coarse: boolean;
+  softwareGl: boolean;
+  /** Blender coordinates (z up) to three.js */
+  b2t: (x: number, y: number, z?: number) => THREE.Vector3;
+  stylize: (o: THREE.Object3D) => void;
+  noOutline: (m: THREE.Material) => void;
+  /** where the hero stands and faces (three.js) */
+  hero(): { position: THREE.Vector3; heading: number };
+  /** park the hero somewhere and face her (three.js position, heading radians); `behind` also swings the camera behind her */
+  placeHero(position: THREE.Vector3, heading: number, opts?: { behind?: boolean }): void;
+  /** the hero plays one of her clips (e.g. "Waving", "Cheer", "Idle_A") */
+  heroGesture(clip: string, ms: number): void;
+  /** while locked, walking, hopping, looking and talking are off; the scene still runs at full rate */
+  lockWalking(locked: boolean): void;
+  /** a function that places the camera each frame, or null to give it back to the walking camera */
+  overrideCamera(place: ((camera: THREE.PerspectiveCamera, dt: number) => void) | null): void;
+  setVillagerLabelsHidden(hidden: boolean): void;
+  /** while set, neighbours this returns true for step out of the shot (their cards hide); null brings them back */
+  setVillagersHiddenWhere(where: ((position: THREE.Vector3) => boolean) | null): void;
+  /**
+   * Courtyard props standing between a camera and an activity, e.g. a lamp post in front of the airmail course:
+   * the part of the courtyard's merged meshes within `radius` of (x, z) becomes a see-through ghost while `ghosted`.
+   */
+  /** fade the courtyard's own props near (x, z) (merged meshes whose name matches; the lamp posts by default) */
+  ghostProps(x: number, z: number, radius: number, ghosted: boolean, match?: RegExp, floor?: number): void;
+  /** a solid circle the hero walks around (three.js x, z) */
+  addCollider(x: number, z: number, r: number): void;
+};
+
+export type CourtyardActivity = {
+  update(dt: number, elapsed: number): void;
+  dispose(): void;
+};
+
 export type SilverLakeHandle = {
+  /** mount an activity in this courtyard; it is disposed with the courtyard, or by the returned function */
+  mountActivity(create: (api: CourtyardActivityApi) => CourtyardActivity): () => void;
   setVillagers(list: VillagerView[]): void;
   setFeature(choice: string | null): void;
   setQuestItems(items: QuestItemView[]): void;
@@ -741,10 +787,64 @@ export async function createSilverLake(
   let jumpQueued = false;
   let talkQueued = false;
   let paused = false;
+  // an activity (Rook's airmail) holds the hero still and owns the camera while it is engaged
+  let walkLocked = false;
+  let cameraOverride: ((camera: THREE.PerspectiveCamera, dt: number) => void) | null = null;
+  let labelsHidden = false;
+  let villagerHideWhere: ((position: THREE.Vector3) => boolean) | null = null;
+  const activities = new Set<CourtyardActivity>();
+  /** `floor` is how see-through a fully ghosted prop gets (0 is gone) */
+  type Ghost = { meshes: THREE.Mesh[]; amount: number; target: number; floor: number };
+  const ghosts = new Map<string, Ghost>();
+  /**
+   * Lift the triangles of the courtyard's lamp meshes (or others matching `match`) within `radius` of (x, z) into their
+   * own meshes, so that one lamp post (merged with all the others at export) can turn see-through without touching
+   * the rest.
+   */
+  function carveGhost(root: THREE.Object3D, x: number, z: number, radius: number, match = /lamp/i): Ghost {
+    const meshes: THREE.Mesh[] = [];
+    root.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const found: THREE.Mesh[] = [];
+    root.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && match.test(m.name)) found.push(m);
+    });
+    for (const m of found) {
+      const geo = m.geometry as THREE.BufferGeometry;
+      const pos = geo.attributes.position as THREE.BufferAttribute;
+      const index = geo.index ? Array.from(geo.index.array as ArrayLike<number>) : Array.from({ length: pos.count }, (_, i) => i);
+      const keep: number[] = [];
+      const take: number[] = [];
+      for (let i = 0; i < index.length; i += 3) {
+        let cx = 0;
+        let cz = 0;
+        for (let k = 0; k < 3; k++) {
+          v.fromBufferAttribute(pos, index[i + k]).applyMatrix4(m.matrixWorld);
+          cx += v.x / 3;
+          cz += v.z / 3;
+        }
+        (Math.hypot(cx - x, cz - z) < radius ? take : keep).push(index[i], index[i + 1], index[i + 2]);
+      }
+      if (!take.length) continue;
+      geo.setIndex(keep);
+      const carved = geo.clone();
+      carved.setIndex(take);
+      const mat = (Array.isArray(m.material) ? m.material[0] : m.material).clone();
+      const ghostMesh = new THREE.Mesh(carved, mat);
+      ghostMesh.matrixAutoUpdate = false;
+      ghostMesh.matrix.copy(m.matrix);
+      ghostMesh.castShadow = m.castShadow;
+      ghostMesh.receiveShadow = m.receiveShadow;
+      m.parent?.add(ghostMesh);
+      meshes.push(ghostMesh);
+    }
+    return { meshes, amount: 0, target: 0, floor: 0.18 };
+  }
   const onKeyDown = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    if (paused) return;
+    if (paused || walkLocked) return;
     keys.add(e.code);
     if (e.code === "Space") {
       jumpQueued = true;
@@ -782,7 +882,7 @@ export async function createSilverLake(
   const el = renderer.domElement;
   el.style.touchAction = "none";
   const onDown = (e: PointerEvent) => {
-    if (paused) return;
+    if (paused || walkLocked) return;
     const rect = el.getBoundingClientRect();
     const leftHalf = e.clientX - rect.left < rect.width * 0.45;
     if (e.pointerType !== "mouse" && leftHalf && stickId === null) {
@@ -921,7 +1021,7 @@ export async function createSilverLake(
     if (keys.has("KeyQ")) lookYaw += dt * 2.2;
     if (keys.has("KeyR")) lookYaw -= dt * 2.2;
     let mag = Math.min(1, Math.hypot(mx, my));
-    if (paused || intro.t < intro.dur) mag = 0;
+    if (paused || walkLocked || intro.t < intro.dur) mag = 0;
     const run = keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(stickVal.x, stickVal.y) > 0.92;
     const target = mag > 0.05 ? (run ? RUN_SPEED : WALK_SPEED) * mag : 0;
     speed = damp(speed, target, target > speed ? 9 : 12, dt);
@@ -935,7 +1035,7 @@ export async function createSilverLake(
     pos.z += Math.cos(heading) * speed * dt;
 
     // jump
-    if (jumpQueued && grounded && !paused && intro.t >= intro.dur) {
+    if (jumpQueued && grounded && !paused && !walkLocked && intro.t >= intro.dur) {
       vy = JUMP_V;
       grounded = false;
       airborne = 0;
@@ -1009,8 +1109,16 @@ export async function createSilverLake(
       camPos.lerp(survey, 1 - Math.exp(-2 * dt));
       camLook.lerp(proj.set(0, 0, 0), 1 - Math.exp(-2.5 * dt));
     }
-    camera.position.copy(camPos);
-    camera.lookAt(camLook);
+    if (cameraOverride) {
+      cameraOverride(camera, dt);
+      // keep the walking camera where this one is, so handing it back is a glide, not a cut
+      camPos.copy(camera.position);
+      camera.getWorldDirection(tmp);
+      camLook.copy(camera.position).addScaledVector(tmp, 8);
+    } else {
+      camera.position.copy(camPos);
+      camera.lookAt(camLook);
+    }
 
     // villagers: face the camera (paper cutouts), bob, notice the hero
     let best: Villager | null = null;
@@ -1022,7 +1130,7 @@ export async function createSilverLake(
         best = v;
       }
     });
-    const nextNear = best && intro.t >= intro.dur ? (best as Villager).view.key : null;
+    const nextNear = best && intro.t >= intro.dur && !walkLocked ? (best as Villager).view.key : null;
     if (nextNear !== nearKey) {
       nearKey = nextNear;
       callbacks.onNear?.(nearKey);
@@ -1031,6 +1139,7 @@ export async function createSilverLake(
     const w = container.clientWidth;
     const h = container.clientHeight;
     villagers.forEach(v => {
+      v.group.visible = !(villagerHideWhere && villagerHideWhere(v.group.position));
       const near = v.view.key === nearKey;
       const yawToCam = Math.atan2(camera.position.x - v.group.position.x, camera.position.z - v.group.position.z);
       v.card.rotation.y = yawToCam - v.group.rotation.y;
@@ -1047,7 +1156,7 @@ export async function createSilverLake(
       v.ring.scale.setScalar(near ? 1 + Math.sin(elapsed * 5) * 0.06 : 1);
       // label
       proj.set(v.group.position.x, v.group.position.y + 2.55 + bob, v.group.position.z).project(camera);
-      const visible = intro.t >= intro.dur && proj.z < 1 && Math.hypot(v.base.x - camera.position.x, v.base.z - camera.position.z) < 34;
+      const visible = !labelsHidden && intro.t >= intro.dur && proj.z < 1 && Math.hypot(v.base.x - camera.position.x, v.base.z - camera.position.z) < 34;
       v.label.style.opacity = visible ? (near ? "1" : "0.86") : "0";
       v.label.style.transform = `translate(-50%, -100%) translate(${((proj.x + 1) / 2) * w}px, ${((1 - proj.y) / 2) * h}px) scale(${near ? 1.08 : 0.92})`;
       v.label.classList.toggle("is-near", near);
@@ -1083,7 +1192,7 @@ export async function createSilverLake(
       }
       (it.ring.material as THREE.MeshBasicMaterial).opacity = it === nearItem ? 0.85 : 0.3 + Math.sin(elapsed * 2.4 + it.phase) * 0.08;
     });
-    const nextItem = intro.t >= intro.dur && !paused ? (bestItem as QuestItem | null) : null;
+    const nextItem = intro.t >= intro.dur && !paused && !walkLocked ? (bestItem as QuestItem | null) : null;
     if (nextItem !== nearItem) {
       nearItem = nextItem;
       callbacks.onNearItem?.(nearItem ? { key: nearItem.view.key, hop: nearItem.hop } : null);
@@ -1092,9 +1201,26 @@ export async function createSilverLake(
 
     if (talkQueued) {
       talkQueued = false;
-      if (nearItem && !nearItem.hop && !paused) pickItem(nearItem);
-      else if (nearKey && !paused) talkTo(nearKey);
+      if (nearItem && !nearItem.hop && !paused && !walkLocked) pickItem(nearItem);
+      else if (nearKey && !paused && !walkLocked) talkTo(nearKey);
     }
+
+    activities.forEach(a => a.update(dt, elapsed));
+    ghosts.forEach(gh => {
+      gh.amount += (gh.target - gh.amount) * (1 - Math.exp(-dt * 6));
+      for (const m of gh.meshes) {
+        const mat = m.material as THREE.Material & { opacity: number };
+        const see = gh.amount > 0.02;
+        if (mat.transparent !== see) {
+          mat.transparent = see;
+          mat.needsUpdate = true;
+        }
+        mat.opacity = 1 - (1 - gh.floor) * gh.amount;
+        m.visible = mat.opacity > 0.01;
+        mat.depthWrite = gh.amount < 0.5;
+        mat.userData.outlineParameters = { ...(mat.userData.outlineParameters ?? {}), visible: gh.amount < 0.5 };
+      }
+    });
 
     // ambience
     for (const s of smoke) {
@@ -1240,7 +1366,86 @@ export async function createSilverLake(
   };
   disposers.push(() => delete (window as unknown as { __silverLake3d?: unknown }).__silverLake3d);
 
+  const activityApi: CourtyardActivityApi = {
+    scene,
+    camera,
+    canvas: renderer.domElement,
+    container,
+    reduceMotion,
+    coarse,
+    softwareGl,
+    b2t,
+    stylize: stylizeObject,
+    noOutline,
+    hero: () => ({ position: pos.clone(), heading }),
+    placeHero(position, h, opts) {
+      pos.copy(position);
+      pos.y = 0;
+      vy = 0;
+      grounded = true;
+      heading = h;
+      speed = 0;
+      hero.position.copy(pos);
+      hero.rotation.y = heading;
+      if (opts?.behind) camYaw = heading + Math.PI;
+    },
+    heroGesture(clipName, ms) {
+      if (!actions.has(clipName)) return;
+      play(clipName, 0.15, true);
+      gesture = { name: clipName, until: performance.now() + ms };
+    },
+    lockWalking(locked) {
+      walkLocked = locked;
+      if (locked) {
+        keys.clear();
+        stickId = null;
+        lookId = null;
+        stickVal.x = stickVal.y = 0;
+        knob.style.transform = "";
+        stick.classList.remove("is-on");
+        speed = 0;
+      }
+    },
+    overrideCamera(place) {
+      cameraOverride = place;
+    },
+    setVillagerLabelsHidden(hidden) {
+      labelsHidden = hidden;
+    },
+    setVillagersHiddenWhere(where) {
+      villagerHideWhere = where;
+    },
+    ghostProps(x, z, radius, ghosted, match, floor) {
+      const key = `${x.toFixed(2)}:${z.toFixed(2)}:${radius}:${match?.source ?? "lamp"}`;
+      let ghost = ghosts.get(key);
+      if (!ghost) {
+        ghost = carveGhost(court.scene, x, z, radius, match);
+        ghosts.set(key, ghost);
+      }
+      ghost.target = ghosted ? 1 : 0;
+      ghost.floor = floor ?? 0.18;
+    },
+    addCollider(x, z, r) {
+      circles.push({ x, z, r });
+    },
+  };
+  disposers.push(() => {
+    activities.forEach(a => a.dispose());
+    activities.clear();
+  });
+
   return {
+    mountActivity(create) {
+      const activity = create(activityApi);
+      activities.add(activity);
+      return () => {
+        if (!activities.delete(activity)) return;
+        activity.dispose();
+        cameraOverride = null;
+        walkLocked = false;
+        labelsHidden = false;
+      };
+    },
     setVillagers(list) {
       const keep = new Set(list.map(v => v.key));
       villagers.forEach((v, k) => {

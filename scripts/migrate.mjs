@@ -5645,6 +5645,9 @@ await assertRequiredColumns("personal_outreach_replies", [
     "created_at",
     "updated_at",
   ]);
+  // 0151: Rook's airmail remembers its discoveries on the same row (fiction only, nullable).
+  const [discoveriesColumnDdl] = await readSqlStatements("../drizzle/0151_courtyard_discoveries.sql");
+  await ensureRequiredColumn("lantern_neighborhood_memories", "courtyard_discoveries_json", discoveriesColumnDdl);
 }
 
 // 0145: Silver Lake reunion quests, append-only (fiction progress and explicit passes; never an outreach state).
