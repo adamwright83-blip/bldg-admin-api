@@ -5798,5 +5798,18 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0153: JOYSTICK's first ten minutes, the crew's reading of a journey and its findings (short quotes with sources,
+// never copies of the person's mail). Additive: two new tables, nothing existing altered.
+{
+  const statements = await readSqlStatements("../drizzle/0153_first_ten_findings.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes readings and findings");
+  await assertRequiredColumns("first_ten_readings", [
+    "journey_id", "run_id", "status", "stage", "finished_json", "counts_json", "notes_json", "lease_until", "started_at", "finished_at", "updated_at",
+  ]);
+  await assertRequiredColumns("first_ten_findings", [
+    "id", "journey_id", "run_id", "kind", "companion", "rank", "payload_json", "sources_json", "status", "correction_text", "origin_json", "created_at", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

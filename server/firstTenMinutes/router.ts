@@ -9,6 +9,9 @@ import { isSlackConnectConfigured, slackAuthorizationUrl } from "./slack";
 import { firstTenConnectOrigin, firstTenRedirectUri } from "./origins";
 import { FIRST_TEN_NONCE_COOKIE, newConnectNonce, signConnectState } from "./oauthState";
 import { disconnectProvider, journeyView, moveJourney, requireJourney, startJourney } from "./journeys";
+import { beginReading } from "./understanding/run";
+import { readingDepsFor } from "./understanding/deps";
+import { understandingView } from "./understanding/view";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -96,4 +99,28 @@ export const firstTenMinutesRouter = router({
       await disconnectProvider(journey, input.provider);
       return journeyView(journey, session);
     }),
+
+  /**
+   * The crew begins reading what the person connected (or Nina's example). Returns at once; the reading reports its
+   * own progress through `understanding`. `again` reads afresh, keeping whatever the person already said about a finding.
+   */
+  understand: publicProcedure
+    .input(credentials.extend({ again: z.boolean().optional() }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { session, journey } = await requireJourney(input);
+      const view = await journeyView(journey, session);
+      if (journey.kind === "own" && !view.connections.length) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Connect Google or Slack first, so your crew has something to read." });
+      }
+      await beginReading(journey.id, () => readingDepsFor(journey), { again: input.again });
+      if (journey.stage === "connect") await moveJourney(journey, "understanding");
+      return understandingView(journey.id);
+    }),
+
+  understanding: publicProcedure.input(credentials).query(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return understandingView(journey.id);
+  }),
 });

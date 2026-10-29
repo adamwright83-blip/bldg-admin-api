@@ -1,0 +1,740 @@
+{
+ "note": "Nina's flower studio: invented for JOYSTICK's first-ten-minutes example. Every address is on the reserved .example domain. See shared/firstTenMinutesExample.ts.",
+ "owner": {
+  "name": "Nina Vale",
+  "email": "nina@wildrootflowers.example"
+ },
+ "now": "2026-10-29T17:00:00Z",
+ "messages": [
+  {
+   "id": "nina-m01",
+   "threadId": "th-okafor",
+   "date": "2026-03-12T17:40:00Z",
+   "from": {
+    "name": "Sam Okafor",
+    "email": "sam.okafor@mail.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Our wedding in June",
+   "body": "Hi Nina,\n\nWe're getting married on June 13 at the Hawthorne courtyard. We want the day to feel spectacular. Can you do something big for the arch?\n\nSam",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m02",
+   "threadId": "th-okafor",
+   "date": "2026-03-13T15:05:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Sam Okafor",
+     "email": "sam.okafor@mail.example"
+    }
+   ],
+   "subject": "Re: Our wedding in June",
+   "body": "Hi Sam,\n\nCongratulations! Jules can build the arch frame and I'll do the florals. I'd love to see the courtyard first. Would Friday suit?\n\nNina Vale\nWildroot Flowers · Silver Lake",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m03",
+   "threadId": "th-okafor-proposal",
+   "date": "2026-03-20T18:20:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Sam Okafor",
+     "email": "sam.okafor@mail.example"
+    }
+   ],
+   "subject": "Proposal: Okafor wedding",
+   "body": "Hi Sam,\n\nHere's the proposal for June 13, with the arch and the table pieces. The loose one in the blue jug is the feeling I'd like for the tables. Does that look like your day?\n\nNina",
+   "attachments": [
+    {
+     "filename": "blue-jug.jpg",
+     "mimeType": "image/jpeg",
+     "size": 482113,
+     "attachmentId": "att-blue-jug"
+    }
+   ],
+   "bulk": false
+  },
+  {
+   "id": "nina-m04",
+   "threadId": "th-calloway",
+   "date": "2026-04-02T16:00:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Ana Calloway",
+     "email": "ana@callowayfamily.example"
+    }
+   ],
+   "subject": "Proposal: Calloway dinner",
+   "body": "Hi Ana,\n\nThe proposal for the dinner is attached. I've put the blue jug arrangement on the long table, as we talked about. Would Thursday work to finalise?\n\nNina",
+   "attachments": [
+    {
+     "filename": "blue-jug.jpg",
+     "mimeType": "image/jpeg",
+     "size": 482113,
+     "attachmentId": "att-blue-jug"
+    }
+   ],
+   "bulk": false
+  },
+  {
+   "id": "nina-m05",
+   "threadId": "th-elena-friday",
+   "date": "2026-04-18T16:12:00Z",
+   "from": {
+    "name": "Elena Ruiz",
+    "email": "elena@larkspurhotel.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Friday flowers?",
+   "body": "Hi Nina,\n\nWe loved the arrangements you did for the Calloway dinner. Could you do fresh arrangements every Friday? Lobby and the front desk, something that lasts the weekend.\n\nElena Ruiz\nEvents & Guest Experience\nThe Larkspur Hotel\n2304 Hyperion Ave, Los Angeles, CA 90027",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m06",
+   "threadId": "th-elena-friday",
+   "date": "2026-04-19T09:30:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Elena Ruiz",
+     "email": "elena@larkspurhotel.example"
+    }
+   ],
+   "subject": "Re: Friday flowers?",
+   "body": "Hi Elena,\n\nThank you, that dinner was a joy. We're only doing events at the moment. Ask me again once we have a Friday delivery.\n\nNina Vale\nWildroot Flowers · Silver Lake",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m07",
+   "threadId": "th-wren",
+   "date": "2026-05-06T17:10:00Z",
+   "from": {
+    "name": "Marcus Bell",
+    "email": "marcus@hotelwren.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Weekly flowers for the lobby",
+   "body": "Hello Nina,\n\nDo you ever do weekly flowers for hotels? We need something we can count on every week for the lobby.\n\nMarcus Bell\nGeneral Manager, Hotel Wren\n3150 Sunset Blvd, Los Angeles, CA 90026",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m08",
+   "threadId": "th-wren",
+   "date": "2026-05-07T10:05:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Marcus Bell",
+     "email": "marcus@hotelwren.example"
+    }
+   ],
+   "subject": "Re: Weekly flowers for the lobby",
+   "body": "Hi Marcus,\n\nNot yet, but it's on my list. Shall I send a few photos of what we do for events in the meantime?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m09",
+   "threadId": "th-alder",
+   "date": "2026-06-02T15:45:00Z",
+   "from": {
+    "name": "Priya Shah",
+    "email": "priya@thealderhouse.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Standing order?",
+   "body": "Hi Nina,\n\nWould you be able to do a standing order for the hotel restaurant? Something reliable each week.\n\nPriya Shah\nFood & Beverage, The Alder House\n2810 Rowena Ave, Los Angeles, CA 90039",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m10",
+   "threadId": "th-alder",
+   "date": "2026-06-03T08:50:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Priya Shah",
+     "email": "priya@thealderhouse.example"
+    }
+   ],
+   "subject": "Re: Standing order?",
+   "body": "Hi Priya,\n\nI'd love to, once our weekday deliveries are running. Could I put you on the first list?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m11",
+   "threadId": "th-price",
+   "date": "2026-06-20T19:00:00Z",
+   "from": {
+    "name": "Hannah Price",
+    "email": "hannah.price@mail.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Garden wedding",
+   "body": "Hi Nina,\n\nFor our wedding in July we want it to feel like a garden that got out of hand, in the best way. Spectacular, but not stiff. Is the tasting still Thursday?\n\nHannah",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m12",
+   "threadId": "th-price",
+   "date": "2026-06-21T08:15:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Hannah Price",
+     "email": "hannah.price@mail.example"
+    }
+   ],
+   "subject": "Re: Garden wedding",
+   "body": "Hi Hannah,\n\nThat's my favourite kind of brief. The tasting is Thursday. I can bring one sample arrangement, or one in each style. Shall I bring two?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m13",
+   "threadId": "th-price-proposal",
+   "date": "2026-06-28T17:30:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Hannah Price",
+     "email": "hannah.price@mail.example"
+    }
+   ],
+   "subject": "Proposal: Price wedding",
+   "body": "Hi Hannah,\n\nHere's the proposal. The blue jug is the wild one from the tasting, scaled up for the long tables. Would you like the same for the welcome table?\n\nNina",
+   "attachments": [
+    {
+     "filename": "blue-jug.jpg",
+     "mimeType": "image/jpeg",
+     "size": 482113,
+     "attachmentId": "att-blue-jug"
+    }
+   ],
+   "bulk": false
+  },
+  {
+   "id": "nina-m14",
+   "threadId": "th-sundays",
+   "date": "2026-08-12T18:05:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Jules Moreau",
+     "email": "jules@julesmoreau.example"
+    }
+   ],
+   "subject": "Sundays",
+   "body": "Hi Jules,\n\nA change from me. No more Sunday deliveries. I need one day off, and Sunday is it. Can we move the Hawthorne install to Saturday?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m15",
+   "threadId": "th-sundays",
+   "date": "2026-08-13T09:20:00Z",
+   "from": {
+    "name": "Jules Moreau",
+    "email": "jules@julesmoreau.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Re: Sundays",
+   "body": "Makes sense. Saturday works for the Hawthorne install. I'll bring the big ladder and the arch frame.\n\nJules",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m16",
+   "threadId": "th-lee-moreno",
+   "date": "2026-08-28T16:00:00Z",
+   "from": {
+    "name": "Jules Moreau",
+    "email": "jules@julesmoreau.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Lee-Moreno install",
+   "body": "Nina, the install for the Lee-Moreno wedding is the 26th. I'll handle the hanging pieces if you send me the final counts by the 20th.\n\nJules",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m17",
+   "threadId": "th-lee-moreno",
+   "date": "2026-08-29T08:10:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Jules Moreau",
+     "email": "jules@julesmoreau.example"
+    }
+   ],
+   "subject": "Re: Lee-Moreno install",
+   "body": "Thank you. I'll send the final counts on the 19th, after I confirm the colours with the couple. Can you check the ceiling hooks when you're there?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m18",
+   "threadId": "th-friday-launch",
+   "date": "2026-09-03T15:00:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Teo Marsh",
+     "email": "teo@cafelumen.example"
+    },
+    {
+     "name": "Dana Mercer",
+     "email": "dana.mercer@mail.example"
+    },
+    {
+     "name": "Rafa Ortiz",
+     "email": "rafa@juniperyoga.example"
+    }
+   ],
+   "subject": "Weekly Friday flowers",
+   "body": "Hello friends,\n\nStarting this month, Wildroot has a weekly Friday delivery: fresh arrangements for shops, cafés and hotels, delivered every Friday morning around Silver Lake. Would you like a spot on the first route?\n\nNina Vale\nWildroot Flowers · Silver Lake",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m19",
+   "threadId": "th-friday-launch",
+   "date": "2026-09-04T07:40:00Z",
+   "from": {
+    "name": "Teo Marsh",
+    "email": "teo@cafelumen.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "Re: Weekly Friday flowers",
+   "body": "Yes please! Can it arrive before 10?\n\nTeo\nCafé Lumen",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m20",
+   "threadId": "th-friday-launch",
+   "date": "2026-09-04T09:00:00Z",
+   "from": {
+    "name": "Nina Vale",
+    "email": "nina@wildrootflowers.example"
+   },
+   "to": [
+    {
+     "name": "Teo Marsh",
+     "email": "teo@cafelumen.example"
+    }
+   ],
+   "subject": "Re: Weekly Friday flowers",
+   "body": "Before 10 it is. Shall I start you on the 11th?\n\nNina",
+   "attachments": [],
+   "bulk": false
+  },
+  {
+   "id": "nina-m21",
+   "threadId": "th-market",
+   "date": "2026-10-20T13:00:00Z",
+   "from": {
+    "name": "Flower Market LA",
+    "email": "news@flowermarket.example"
+   },
+   "to": [
+    {
+     "name": "Nina Vale",
+     "email": "nina@wildrootflowers.example"
+    }
+   ],
+   "subject": "This week at the market: dahlias are back",
+   "body": "Dahlias, cosmos and the last of the garden roses. Unsubscribe at any time.",
+   "attachments": [],
+   "bulk": true
+  }
+ ],
+ "events": [
+  {
+   "id": "ev-wed-2026-08-22",
+   "summary": "Hawthorne wedding · install",
+   "start": "2026-08-22T18:00:00Z",
+   "end": "2026-08-22T23:59:00Z",
+   "location": "Hawthorne Courtyard, Los Angeles, CA",
+   "recurringEventId": null
+  },
+  {
+   "id": "ev-fri-lumen-2026-09-11",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-09-11T15:30:00Z",
+   "end": "2026-09-11T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-09-11",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-09-11T16:10:00Z",
+   "end": "2026-09-11T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-09-11",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-09-11T16:45:00Z",
+   "end": "2026-09-11T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-fri-lumen-2026-09-18",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-09-18T15:30:00Z",
+   "end": "2026-09-18T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-09-18",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-09-18T16:10:00Z",
+   "end": "2026-09-18T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-09-18",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-09-18T16:45:00Z",
+   "end": "2026-09-18T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-fri-lumen-2026-09-25",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-09-25T15:30:00Z",
+   "end": "2026-09-25T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-09-25",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-09-25T16:10:00Z",
+   "end": "2026-09-25T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-09-25",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-09-25T16:45:00Z",
+   "end": "2026-09-25T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-wed-2026-09-26",
+   "summary": "Lee-Moreno wedding",
+   "start": "2026-09-26T18:00:00Z",
+   "end": "2026-09-26T23:59:00Z",
+   "location": "The Glasshouse, Los Angeles, CA",
+   "recurringEventId": null
+  },
+  {
+   "id": "ev-fri-lumen-2026-10-02",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-10-02T15:30:00Z",
+   "end": "2026-10-02T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-10-02",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-10-02T16:10:00Z",
+   "end": "2026-10-02T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-10-02",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-10-02T16:45:00Z",
+   "end": "2026-10-02T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-fri-lumen-2026-10-09",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-10-09T15:30:00Z",
+   "end": "2026-10-09T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-10-09",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-10-09T16:10:00Z",
+   "end": "2026-10-09T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-10-09",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-10-09T16:45:00Z",
+   "end": "2026-10-09T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-wed-2026-10-10",
+   "summary": "Garcia wedding",
+   "start": "2026-10-10T18:00:00Z",
+   "end": "2026-10-10T23:59:00Z",
+   "location": "Elysian Park Lodge, Los Angeles, CA",
+   "recurringEventId": null
+  },
+  {
+   "id": "ev-fri-lumen-2026-10-16",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-10-16T15:30:00Z",
+   "end": "2026-10-16T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-10-16",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-10-16T16:10:00Z",
+   "end": "2026-10-16T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-10-16",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-10-16T16:45:00Z",
+   "end": "2026-10-16T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-fri-lumen-2026-10-23",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-10-23T15:30:00Z",
+   "end": "2026-10-23T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-10-23",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-10-23T16:10:00Z",
+   "end": "2026-10-23T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-10-23",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-10-23T16:45:00Z",
+   "end": "2026-10-23T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-wed-2026-10-24",
+   "summary": "Ito wedding",
+   "start": "2026-10-24T18:00:00Z",
+   "end": "2026-10-24T23:59:00Z",
+   "location": "Rowena Hall, Los Angeles, CA",
+   "recurringEventId": null
+  },
+  {
+   "id": "ev-fri-lumen-2026-10-30",
+   "summary": "Friday delivery · Café Lumen",
+   "start": "2026-10-30T15:30:00Z",
+   "end": "2026-10-30T15:55:00Z",
+   "location": "2215 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-lumen"
+  },
+  {
+   "id": "ev-fri-juniper-2026-10-30",
+   "summary": "Friday delivery · Juniper Yoga",
+   "start": "2026-10-30T16:10:00Z",
+   "end": "2026-10-30T16:30:00Z",
+   "location": "2420 Hyperion Ave, Los Angeles, CA 90027",
+   "recurringEventId": "rec-fri-juniper"
+  },
+  {
+   "id": "ev-fri-mercer-2026-10-30",
+   "summary": "Friday delivery · Mercer",
+   "start": "2026-10-30T16:45:00Z",
+   "end": "2026-10-30T17:05:00Z",
+   "location": "1934 Griffith Park Blvd, Los Angeles, CA 90039",
+   "recurringEventId": "rec-fri-mercer"
+  },
+  {
+   "id": "ev-wed-2026-11-07",
+   "summary": "Nguyen wedding",
+   "start": "2026-11-07T18:00:00Z",
+   "end": "2026-11-07T23:59:00Z",
+   "location": "The Hawthorne courtyard, Los Angeles, CA",
+   "recurringEventId": null
+  }
+ ],
+ "files": [
+  {
+   "id": "drv-weekly-sheet",
+   "name": "Weekly service sheet",
+   "mimeType": "application/vnd.google-apps.document",
+   "modifiedTime": "2026-09-01T18:00:00Z",
+   "text": "Wildroot Weekly\n\nFriday delivery, every week. Fresh arrangements delivered every Friday morning around Silver Lake, for cafés, shops, restaurants and hotels.\nSizes: counter, table, lobby.\nOrders by Wednesday noon. No Sunday deliveries.\n\nWildroot Flowers · Silver Lake"
+  },
+  {
+   "id": "drv-proposal-okafor",
+   "name": "Proposal - Okafor wedding",
+   "mimeType": "application/vnd.google-apps.document",
+   "modifiedTime": "2026-03-20T18:00:00Z",
+   "text": "Okafor wedding, June 13. Arch: built by Jules, florals by Wildroot. Tables: loose arrangements in blue jugs."
+  },
+  {
+   "id": "drv-proposal-price",
+   "name": "Proposal - Price wedding",
+   "mimeType": "application/vnd.google-apps.document",
+   "modifiedTime": "2026-06-28T17:00:00Z",
+   "text": "Price wedding, July 18. A garden that got out of hand. Long tables: the wild blue jug arrangement, scaled up."
+  },
+  {
+   "id": "drv-blue-jug",
+   "name": "blue-jug.jpg",
+   "mimeType": "image/jpeg",
+   "modifiedTime": "2026-03-19T20:00:00Z",
+   "md5Checksum": "9b1f3c2a7d6e5f4a3b2c1d0e9f8a7b6c"
+  },
+  {
+   "id": "drv-rent",
+   "name": "Studio rent 2026",
+   "mimeType": "application/vnd.google-apps.spreadsheet",
+   "modifiedTime": "2026-10-01T10:00:00Z"
+  }
+ ],
+ "geocodes": {
+  "2304 Hyperion Ave, Los Angeles, CA 90027": {
+   "lat": 34.0981,
+   "lng": -118.273,
+   "formatted": "2304 Hyperion Ave, Los Angeles, CA 90027, USA"
+  },
+  "3150 Sunset Blvd, Los Angeles, CA 90026": {
+   "lat": 34.0866,
+   "lng": -118.2743,
+   "formatted": "3150 Sunset Blvd, Los Angeles, CA 90026, USA"
+  },
+  "2810 Rowena Ave, Los Angeles, CA 90039": {
+   "lat": 34.1022,
+   "lng": -118.265,
+   "formatted": "2810 Rowena Ave, Los Angeles, CA 90039, USA"
+  },
+  "2215 Hyperion Ave, Los Angeles, CA 90027": {
+   "lat": 34.0972,
+   "lng": -118.2742,
+   "formatted": "2215 Hyperion Ave, Los Angeles, CA 90027, USA"
+  },
+  "2420 Hyperion Ave, Los Angeles, CA 90027": {
+   "lat": 34.0994,
+   "lng": -118.2716,
+   "formatted": "2420 Hyperion Ave, Los Angeles, CA 90027, USA"
+  },
+  "1934 Griffith Park Blvd, Los Angeles, CA 90039": {
+   "lat": 34.1031,
+   "lng": -118.2702,
+   "formatted": "1934 Griffith Park Blvd, Los Angeles, CA 90039, USA"
+  }
+ }
+}

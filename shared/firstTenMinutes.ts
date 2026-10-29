@@ -110,7 +110,7 @@ export const CONNECTION_INCLUDES: Record<ConnectionProvider | "example", Connect
     reads: [
       "Gmail: the messages you've sent and received in the last twelve months. Who you write to, what people ask you for, what you promise.",
       "Google Calendar: your events from the last three months and the next month, so your routes and regular work show up.",
-      "Google Drive: the names of your recent files, and the documents and photos in them.",
+      "Google Drive: the names of your recent files, and the text of your recent documents.",
     ],
     never: [
       "Send, change or delete anything. Access is read-only.",
@@ -129,7 +129,7 @@ export const CONNECTION_INCLUDES: Record<ConnectionProvider | "example", Connect
   slack: {
     title: "Adding Slack",
     reads: [
-      "Messages from the last ninety days in the channels and conversations you're part of, and the names of the people in them.",
+      "Your own messages, and messages sent to you, from the last ninety days, with the names of the people in them.",
     ],
     never: ["Post, react, or change anything in Slack. Access is read-only."],
     kept: [

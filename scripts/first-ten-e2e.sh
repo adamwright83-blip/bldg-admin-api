@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # JOYSTICK's first ten minutes, end to end, against a throwaway local MySQL:
-#   1. the Google / Slack stand-in (e2e/first-ten-minutes/fakeProviders.mjs) on 127.0.0.1:4999
+#   1. the Google / Slack / Anthropic stand-in (e2e/first-ten-minutes/fakeProviders.mjs) on 127.0.0.1:4999
 #   2. the real API and page (development mode, Vite) on 127.0.0.1:3300, flag on
 #   3. Playwright (playwright.first-ten-minutes.config.ts)
 #
@@ -42,6 +42,9 @@ setsid bash -c '
   export JOYSTICK_SLACK_CLIENT_ID=fake-slack-client
   export JOYSTICK_SLACK_CLIENT_SECRET=fake-slack-secret
   export JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN="http://127.0.0.1:${FAKE_PROVIDERS_PORT}"
+  export GOOGLE_GEOCODING_API_KEY=fake-geocoding-key
+  export ANTHROPIC_API_KEY=fake-anthropic-key-for-the-stand-in
+  export ANTHROPIC_BASE_URL="http://127.0.0.1:${FAKE_PROVIDERS_PORT}/anthropic"
   exec pnpm exec tsx server/_core/index.ts
 ' > "$LOG_DIR/server.log" 2>&1 &
 SERVER_PID=$!
