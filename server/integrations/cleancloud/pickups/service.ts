@@ -131,6 +131,17 @@ export async function capturePickups(
         code: "CONFLICT",
         message: "Pickup connection changed.",
       });
+    // Captures can arrive out of order. A snapshot observed before the one already
+    // applied is superseded: applying it would re-add or remove pickups based on an
+    // older view of CleanCloud than the Driver already shows.
+    if (locked.capturedAt && observedAt.getTime() < locked.capturedAt.getTime())
+      return {
+        imported: 0,
+        removed: 0,
+        excluded: 0,
+        superseded: true,
+        capturedAt: locked.capturedAt.toISOString(),
+      };
     const excluded = new Set(locked.excludedOrderIds);
     let imported = 0;
     for (const row of snapshot.rows) {
@@ -261,6 +272,7 @@ export async function capturePickups(
     return {
       imported,
       removed: vanished.length,
+      superseded: false,
       excluded: snapshot.rows.filter(row => excluded.has(row.externalOrderId))
         .length,
       capturedAt: observedAt.toISOString(),

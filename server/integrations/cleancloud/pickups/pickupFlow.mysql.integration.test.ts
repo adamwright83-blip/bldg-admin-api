@@ -245,5 +245,16 @@ describe.skipIf(!allowed)(
         (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id)
       ).toContain(gone!.id);
     });
+    it("an older snapshot arriving after a newer one changes nothing", async () => {
+      const older = { ...snapshot(), observedAt: new Date(Date.now() - 60_000).toISOString() };
+      const newer = snapshot();
+      await capturePickups(actor, newer);
+      const before = (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id).sort();
+      const result = await capturePickups(actor, { ...older, rows: older.rows.slice(0, 1) });
+      expect(result).toMatchObject({ superseded: true, imported: 0, removed: 0 });
+      expect(
+        (await listExternalOrders({ tenantId, scheduledDate: "2026-10-12" })).map(job => job.id).sort()
+      ).toEqual(before);
+    });
   }
 );
