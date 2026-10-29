@@ -1,0 +1,53 @@
+{
+  "id": "stage_lighting_vague_date_and_explicit_changes",
+  "title": "Stage-lighting rental owner moves a load-out to the day after tomorrow without saying its day, drops a lost estimate by name, and dates a maintenance job only when asked",
+  "provenance": "authored",
+  "localTime": "17:45",
+  "seed": {
+    "operatorName": "Rafael",
+    "dayLine": [
+      { "title": "Return the rented haze fluid cases", "businessDate": "today" },
+      { "title": "Pre-rig the truss for the Corvina Ballroom gala", "businessDate": "tomorrow", "detailNote": "Doors at 6, crew call noon" },
+      { "title": "Estimate for the Millbrook High spring musical", "businessDate": "today+2" },
+      { "title": "Load out the moving heads from the Aldridge Theater", "businessDate": "today+3", "detailNote": "Dock opens at 10 p.m." }
+    ]
+  },
+  "operator": {
+    "mode": "simulated",
+    "persona": "Rafael, 40, owns Northlight Stage Lighting, a small event and theater lighting rental company in Sun Valley. It is late afternoon in the shop and he is matter-of-fact and efficient, with the occasional 'okay so'. He talks about his work in plain words, does not use software vocabulary and does not care how Claire works. He refers to existing jobs by the client's name and never says which day they are currently on. He does not question or comment on anything already on his list that he did not bring up. If Claire asks the same thing twice, he repeats his answer once, flatly.",
+    "goals": [
+      "Move the Aldridge Theater load-out to the day after tomorrow; the theater changed the date. He names the job and the new day only, never the day it is on now.",
+      "The Millbrook High estimate: they went with another company. Name it and tell Claire to take it off in the same breath, e.g. 'The Millbrook estimate. They went with someone else. Take it off.'",
+      "He needs to service the fog machines 'sometime next week' and says it that way first. If Claire asks which day, he says 'next Tuesday', meaning the Tuesday of next week. If Claire puts it on a day without asking, he corrects it to next Tuesday.",
+      "After those three, ask what tomorrow looks like now and listen.",
+      "Nothing else is to be added or changed, and the Corvina gala stays as it is; decline any extra offers briefly. Hang up when done, saying exactly: 'Good. That's it. Thanks, Claire.'"
+    ],
+    "opening": "Hey Claire, it's Rafael. Okay so, the Aldridge Theater load-out, move that to the day after tomorrow. They changed the date on me.",
+    "maxTurns": 12
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "day_after_tomorrow", "titleMatches": "aldridge|moving head|load.?out", "count": 1 },
+      { "businessDate": "next_tuesday", "titleMatches": "fog", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "corvina|truss", "count": 1 },
+      { "businessDate": "today", "titleMatches": "haze fluid|fluid cases", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today+3", "titleMatches": "aldridge|moving head|load.?out" },
+      { "titleMatches": "millbrook|spring musical" },
+      { "businessDate": ["today", "tomorrow"], "titleMatches": "fog" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": [
+      "Load out the moving heads from the Aldridge Theater",
+      "Estimate for the Millbrook High spring musical"
+    ],
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["corvina|truss"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards three things in an interactive call. (1) The opening moves an existing job to 'the day after tomorrow' without saying which day it is on (three days out): Claire must find the Aldridge row by name and move it; final state is exactly one Aldridge row on today+2 and none on today+3 (dates that never coincide), with maxRowsAdded 1 reserved for the fog machines so a re-created load-out fails. (2) The Millbrook estimate is named and dismissed in one breath: it must be gone from every date without a confirming question (the absent check carries no date). (3) 'Sometime next week' names no single day, so the correct move is to ask which day rather than guess; the persona then says 'next Tuesday', which under the format's rule is the Tuesday of next week, Monday-start (next_tuesday). On a Sunday run that is the day after tomorrow, so the fog row carries an absent check only on today and tomorrow. A Claire that guessed a day is still graded on final state after the persona's correction: one fog row, on next Tuesday. The fog regex is chosen so the seeded 'haze fluid' return on today cannot stand in for it. maxAuthorizationAsks 1 covers the vague-date question if phrased as an offer; asking before the explicit move or the explicit removal is the friction this guards. The read-back of tomorrow must name the Corvina gala and match the database; the haze-fluid return is untouched."
+}

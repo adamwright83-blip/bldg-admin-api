@@ -1,0 +1,45 @@
+{
+  "id": "tree_service_list_with_bare_weekday_and_restated_job",
+  "title": "Tree-service owner dictates three jobs on three days including a bare 'Wednesday', restates one as its three parts, and wants them read back with his goodnight",
+  "provenance": "authored",
+  "localTime": "18:35",
+  "seed": {
+    "operatorName": "Wendell",
+    "dayLine": [
+      { "title": "Crown reduction on the Lindauer oaks", "businessDate": "tomorrow", "detailNote": "Crew of four, 7 a.m." },
+      { "title": "Service the big chipper", "businessDate": "today+5" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Claire, Wendell. Write these down. Tomorrow after the Lindauer job, take down the dead pine at the Halloran place on Ridgecrest.",
+      "Day after tomorrow, stump grinding for the Marchbanks HOA, the whole row along the entrance.",
+      "And Wednesday, palm skinning for Mrs. Quiroga on Verbena Lane.",
+      "The Halloran pine, just so we're clear, that's the drop, the chipping and the haul-off. All one job. One line, don't split it up.",
+      "Read those three back to me. Then I'm gone. Night."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "halloran|ridgecrest|dead pine|chipping|haul.?off", "count": 1 },
+      { "businessDate": "day_after_tomorrow", "titleMatches": "marchbanks|stump", "count": 1 },
+      { "businessDate": "coming_wednesday", "titleMatches": "quiroga|verbena|palm", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "lindauer|crown reduction", "count": 1 },
+      { "businessDate": "today+5", "titleMatches": "chipper", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "halloran|ridgecrest|dead pine" },
+      { "businessDate": ["today", "tomorrow"], "titleMatches": "marchbanks|stump" },
+      { "businessDate": "today", "titleMatches": "quiroga|verbena|palm" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 3,
+    "speech": {
+      "mustMention": ["halloran|ridgecrest|pine", "marchbanks|stump", "quiroga|verbena|palm"]
+    },
+    "maxAuthorizationAsks": 0,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the dictated list across turns with a restated task and relative dates. 'Write these down' is said before the first item, so the list itself is the instruction and zero authorization asks are correct. Three new rows, one per spoken day: tomorrow, the day after tomorrow, and a bare 'Wednesday', which is the coming Wednesday strictly after today (coming_wednesday; on a Wednesday run that is next week's, by the format's rule). The Wednesday row carries no absent check beyond today because on some run days it coincides with tomorrow or the day after; it is guarded by its required placement plus maxRowsAdded 3. Turn 4 restates the Halloran job as its three parts and says outright that it is one job: count 1 on a regex covering the place, the pine, the chipping and the haul-off fails a Claire that writes the parts as separate rows (the grader's duplicate check would also catch a second Halloran row). The 'chipping' and 'haul.?off' terms are chosen so the seeded 'Service the big chipper' on today+5 cannot stand in for anything. The last line asks for a read-back and says goodnight in the same breath: all three new jobs must be named (mustMention) and the read-back must match the database. The Lindauer crown reduction on tomorrow and the chipper service are untouched; nothing lands on today."
+}

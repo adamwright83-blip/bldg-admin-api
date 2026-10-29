@@ -1,0 +1,44 @@
+{
+  "id": "phlebotomist_done_without_day_and_second_visit",
+  "title": "Mobile phlebotomist marks a two-day-old draw done without saying its day, then books a genuine second visit of tomorrow's job",
+  "provenance": "authored",
+  "localTime": "16:10",
+  "seed": {
+    "operatorName": "Noelle",
+    "dayLine": [
+      { "title": "Fasting draw for Mr. Adeyemi at Larkmead Gardens", "businessDate": "today-2", "detailNote": "Second floor, ring the bell twice" },
+      { "title": "INR draws at Cedarbrook Assisted Living", "businessDate": "tomorrow", "detailNote": "Twelve residents, start at 7" },
+      { "title": "Drop the specimen cooler at the Westgate lab", "businessDate": "tomorrow" },
+      { "title": "Order butterfly needles and lavender-top tubes", "businessDate": "today+3" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hi Claire, it's Noelle. The Adeyemi fasting draw, I finally got that done this morning. Mark it done.",
+      "And Cedarbrook wants a second round of INR draws the day after tomorrow, same as tomorrow's, a few residents missed the window. So that's two visits. Put the second one on.",
+      "What's tomorrow look like?",
+      "Okay, thanks. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today-2", "titleMatches": "adeyemi|fasting draw", "status": "completed", "count": 1 },
+      { "businessDate": ["tomorrow", "day_after_tomorrow"], "titleMatches": "cedarbrook|\\binr\\b", "count": 2 },
+      { "businessDate": "tomorrow", "titleMatches": "westgate|specimen cooler", "count": 1 },
+      { "businessDate": "today+3", "titleMatches": "butterfly|needles|tubes", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today", "titleMatches": "cedarbrook|\\binr\\b" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": ["Fasting draw for Mr. Adeyemi at Larkmead Gardens"],
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["cedarbrook|\\binr\\b", "westgate|specimen cooler"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Two guards. (1) Turn 1 completes an existing job without saying which day it is on (it is two days back): Claire must find the Adeyemi row by name and mark it completed, in place, on today-2. A fresh 'completed' row instead of completing the seeded one trips maxRowsAdded 1 once the Cedarbrook row is also added; removing it instead of completing it fails the completed-status expectation. (2) Turn 2 says explicitly that the same job happens again on another day ('a second round', 'same as tomorrow's', 'two visits'): the Cedarbrook INR work must exist twice, once on tomorrow and once on the day after tomorrow, which is exactly one row added. count 2 across the two dates fails a Claire that moves the seeded row instead of adding a second one, and the grader's duplicate check is suspended for this title by count 2, because the duplication is legitimate here. One authorization ask is tolerated because confirming that a near-identical second row is intended is a reasonable single question before the write; asking twice, or asking before the plain 'mark it done', fails. Westgate and the needle order are never discussed and must be untouched; the read-back of tomorrow must name Cedarbrook and the Westgate drop and must match the database. Nothing may land on today."
+}

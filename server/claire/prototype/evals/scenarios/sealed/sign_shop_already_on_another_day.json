@@ -1,0 +1,45 @@
+{
+  "id": "sign_shop_already_on_another_day",
+  "title": "Sign-shop owner asks to 'add' an install that is already booked three days out, then gives one genuinely new item",
+  "provenance": "authored",
+  "localTime": "11:15",
+  "seed": {
+    "operatorName": "Gideon",
+    "dayLine": [
+      { "title": "Reorder the 3M reflective sheeting", "businessDate": "today" },
+      { "title": "Vinyl wrap the Pacheco Plumbing van", "businessDate": "tomorrow", "detailNote": "Van drops at 8, needs the full day" },
+      { "title": "Install the channel letters at Bramblewood Dental", "businessDate": "today+3", "detailNote": "Lift rental booked, two people" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Hey Claire, it's Gideon. Add the Bramblewood Dental letter install to tomorrow.",
+      "Oh, is it? I forgot I'd already booked it. Yeah, just move it up to tomorrow then, the lift's free.",
+      "And put 'proof the Kettleman Brewing menu board' on tomorrow too, they want to see it before it goes to print.",
+      "So what's tomorrow, three things?",
+      "Good. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "bramblewood|channel letter", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "kettleman|menu board", "count": 1 },
+      { "businessDate": "tomorrow", "titleMatches": "pacheco|vinyl wrap", "count": 1 },
+      { "businessDate": "today", "titleMatches": "reflective|sheeting|3m", "count": 1 }
+    ],
+    "absent": [
+      { "businessDate": "today+3", "titleMatches": "bramblewood|channel letter" },
+      { "businessDate": ["today", "day_after_tomorrow"], "titleMatches": "kettleman|menu board" }
+    ],
+    "seededRowsIntact": true,
+    "seededRowsMayChange": ["Install the channel letters at Bramblewood Dental"],
+    "maxRowsAdded": 1,
+    "speech": {
+      "mustMention": ["bramblewood|channel letter", "kettleman|menu board", "pacheco|vinyl wrap"]
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "Guards the near-duplicate that must not be created. Turn 1 asks to 'add' work that already exists on another day (the Bramblewood install, three days out), and the operator does not realize it. The correct move is to find the existing row and resolve it rather than write a second one: say it is already booked and ask once whether to move it (the one allowed ask), or move it. Turn 2 settles it as a move. Final state: exactly one Bramblewood row, on tomorrow, none on today+3 (a date that never coincides with tomorrow). A Claire that adds a second Bramblewood row on turn 1 fails either way: if she then moves the seeded row too, tomorrow holds two; if she leaves the seeded row, the absent check fails and the added row spends the maxRowsAdded budget that the Kettleman proof needs. Turn 3 is the one authorized new row, placed on tomorrow by explicit instruction, written without a question. Turn 4 presupposes three items on tomorrow; the read-back must name all three (mustMention) and must match the database. The Pacheco wrap and the sheeting reorder are untouched."
+}
