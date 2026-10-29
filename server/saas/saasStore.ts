@@ -47,6 +47,7 @@ import { GoogleGeocoder } from "../geography/googleGeocoder";
 import { seedSessionFromAcquisition } from "../goldlineOnboarding/store";
 import { JOYSTICK_PREPAY_QUESTION_KEYS, type GoldlineOnboardingQuestionKey } from "../../shared/goldlineOnboarding";
 import { buildJoystickDraftPreview, type JoystickDraftAnswerMap, type JoystickDraftPreview } from "../../shared/joystickAcquisition";
+import { FIRST_TEN_ONBOARDING_MODE, JOYSTICK_GENERIC_ONBOARDING_MODE } from "../../shared/firstTenMinutes";
 
 export type PublicSaasPlan = {
   planKey: string;
@@ -273,7 +274,14 @@ export async function startSaasOnboarding(input: {
   return { session, resumeToken };
 }
 
-export async function startJoystickOnboardingDraft(input: { requestId: string }) {
+export async function startJoystickOnboardingDraft(input: {
+  requestId: string;
+  /** shared/firstTenMinutes.ts FIRST_TEN_ONBOARDING_MODE for a first-ten draft; today's funnel otherwise */
+  onboardingMode?: typeof JOYSTICK_GENERIC_ONBOARDING_MODE | typeof FIRST_TEN_ONBOARDING_MODE;
+}) {
+  const onboardingMode = input.onboardingMode ?? JOYSTICK_GENERIC_ONBOARDING_MODE;
+  // A first-ten draft asks no questions; its progress lives in first_ten_journeys.
+  const currentStep = onboardingMode === FIRST_TEN_ONBOARDING_MODE ? "first_ten" : "draft_questions";
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const existing = await db
@@ -293,10 +301,10 @@ export async function startJoystickOnboardingDraft(input: { requestId: string })
       businessName: null,
       slug: null,
       ownerEmail: null,
-      onboardingMode: "joystick_generic",
+      onboardingMode,
       draftAnswersJson: {},
       draftPreviewJson: null,
-      currentStep: "draft_questions",
+      currentStep,
       version: 1,
       startRequestId: input.requestId,
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -312,8 +320,8 @@ export async function startJoystickOnboardingDraft(input: { requestId: string })
       after: {
         sessionId,
         status: "draft",
-        currentStep: "draft_questions",
-        onboardingMode: "joystick_generic",
+        currentStep,
+        onboardingMode,
       },
       source: "joystick_acquisition",
       correlationId,

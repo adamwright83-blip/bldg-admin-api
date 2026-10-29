@@ -1,0 +1,87 @@
+name: First ten minutes
+
+# JOYSTICK's first ten minutes (docs/goldline/FIRST_TEN_MINUTES_BUILD.md): its contracts, its tables on real MySQL,
+# and the whole path in a browser with Google and Slack played by e2e/first-ten-minutes/fakeProviders.mjs.
+on:
+  pull_request:
+    paths:
+      - "server/firstTenMinutes/**"
+      - "shared/firstTenMinutes*"
+      - "client/src/pages/firstTenMinutes/**"
+      - "client/src/App.tsx"
+      - "client/src/pages/JoystickAcquisitionPage.tsx"
+      - "e2e/first-ten-minutes/**"
+      - "playwright.first-ten-minutes.config.ts"
+      - "scripts/first-ten-e2e.sh"
+      - "scripts/migrate.mjs"
+      - "drizzle/*first_ten*"
+      - "server/saas/**"
+      - "server/_core/index.ts"
+      - "server/_core/systemRouter.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/first-ten-minutes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-ten-minutes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  first-ten:
+    name: first ten minutes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: first_ten_test
+        ports:
+          - 3411:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      TZ: UTC
+      DATABASE_URL: mysql://root:root@127.0.0.1:3411/first_ten_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Contracts
+        run: pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes
+      - name: Migrate the disposable database, twice (idempotent)
+        run: |
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs
+      - name: Journeys on MySQL
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: The first ten minutes in a browser
+        run: scripts/first-ten-e2e.sh
+      - name: Keep the screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: first-ten-minutes-e2e
+          path: |
+            tmp/first-ten-e2e-shots
+            tmp/first-ten-e2e-logs
+            tmp/first-ten-e2e-results
+          if-no-files-found: ignore
+          retention-days: 7

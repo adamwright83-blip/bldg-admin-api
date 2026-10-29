@@ -368,6 +368,10 @@ async function startServer() {
     });
   });
 
+  // JOYSTICK's first ten minutes: Google and Slack send a connecting visitor back here (read-only access).
+  const { registerFirstTenOAuthRoutes } = await import("../firstTenMinutes/oauthRoutes");
+  registerFirstTenOAuthRoutes(app);
+
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
   registerVendorOnboardingSessionRoutes(app);
   registerVendorBookingPublicRoutes(app);

@@ -41,7 +41,8 @@ const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
-const JoystickAcquisitionPage = lazy(() => import("./pages/JoystickAcquisitionPage"));
+// /joystick-start: today's funnel, or JOYSTICK's first ten minutes when JOYSTICK_FIRST_TEN_MINUTES opens it.
+const JoystickStartRoute = lazy(() => import("./pages/firstTenMinutes/JoystickStartRoute"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -502,7 +503,7 @@ function AdminHostRouter() {
       <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
-          <JoystickAcquisitionPage />
+          <JoystickStartRoute />
         </Suspense>
       </Route>
       <Route path="/dayforge-onboarding">
@@ -846,7 +847,7 @@ function Router() {
       <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
-          <JoystickAcquisitionPage />
+          <JoystickStartRoute />
         </Suspense>
       </Route>
       <Route path="/dayforge-onboarding">
