@@ -1,6 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { goldlineCargoRouter } from "../goldlineCargo/cargoRouter";
 import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
+import { firstTenMinutesRouter } from "../firstTenMinutes/router";
 import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { legacyAdminRoleProcedure, publicProcedure, router } from "./trpc";
@@ -78,6 +79,7 @@ export const systemRouter = router({
   customerTruthFreshness: customerTruthFreshnessRouter,
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
+  firstTenMinutes: firstTenMinutesRouter,
   gumball: cleancloudBrowserSyncRouter,
   commercialMission: commercialMissionRouter,
   voiceWalkIn: voiceWalkInRouter,

@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { roleAllows } from "./tenantAccess";
+import { JOYSTICK_GENERIC_ONBOARDING_MODE } from "../../shared/firstTenMinutes";
 
 function source(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -140,7 +141,9 @@ describe("DayForge SaaS production contract", () => {
     expect(schema).toContain('draftPreviewJson: json("draftPreviewJson")');
     expect(schema).not.toContain("joystickAcquisitionSessions");
     expect(migration).toContain("JOYSTICK anonymous acquisition nullable identity");
-    expect(store).toContain('onboardingMode: "joystick_generic"');
+    // Today's funnel stays mode joystick_generic by default; a first-ten draft is the same spine in its own mode.
+    expect(store).toContain("input.onboardingMode ?? JOYSTICK_GENERIC_ONBOARDING_MODE");
+    expect(JOYSTICK_GENERIC_ONBOARDING_MODE).toBe("joystick_generic");
     expect(store).toContain("seedSessionFromAcquisition");
     expect(store).toContain("locations: []");
     expect(store).toContain("services: []");

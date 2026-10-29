@@ -5786,5 +5786,17 @@ await ensureRequiredColumn(
   await assertRequiredColumns("story_attempts", ["id", "tenant_id", "operator_id", "season_id", "chapter_number", "outcome", "duration_ms", "local_date", "created_at"]);
 }
 
+// 0152: JOYSTICK's first ten minutes, one journey per signup draft and its read-only connections (tokens encrypted).
+// Additive: two new tables, nothing existing altered.
+{
+  const statements = await readSqlStatements("../drizzle/0152_first_ten_journeys.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes journeys and connections");
+  await assertRequiredColumns("first_ten_journeys", ["id", "acquisition_session_id", "tenant_id", "kind", "stage", "version", "created_at", "updated_at"]);
+  await assertRequiredColumns("first_ten_connections", [
+    "id", "journey_id", "provider", "account_label", "account_subject", "granted_scopes", "encrypted_access_token",
+    "encrypted_refresh_token", "access_expires_at", "status", "created_at", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();
