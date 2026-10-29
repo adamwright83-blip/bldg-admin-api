@@ -14,6 +14,8 @@ import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
+import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
+import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -181,6 +183,48 @@ export const firstTenMinutesRouter = router({
       if (input.answer === "restore") return restorePortraitLine(journey, input.key);
       return changePortraitLine(journey, input.key, input.to);
     }),
+
+  /**
+   * The first chapter: the opportunity the crew found and the findings it rests on, how far the person has played,
+   * and the real draft at the writing table. Nothing here sends anything.
+   */
+  chapter: publicProcedure.input(credentials).query(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return chapterView(journey);
+  }),
+
+  /** A beat of the chapter, played: the revelation seen, a step of Hazel's errand, the letter written. */
+  chapterStep: publicProcedure
+    .input(credentials.extend({ step: z.enum(["revealed", ...LETTER_STEPS, "letter_written"]) }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      return recordChapterStep(journey, input.step);
+    }),
+
+  /** "Now. Yours.": the draft at the writing table, composed from the findings. */
+  prepareDraft: publicProcedure.input(credentials).mutation(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return prepareDraft(journey);
+  }),
+
+  /** Another approach, or the person's own words. */
+  changeDraft: publicProcedure
+    .input(credentials.extend({ approach: z.enum(DRAFT_APPROACHES).optional(), body: z.string().max(2000).optional() }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      return changeDraft(journey, { approach: input.approach, body: input.body });
+    }),
+
+  /** "Not now": the person decided against it. */
+  declineDraft: publicProcedure.input(credentials).mutation(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return declineDraft(journey);
+  }),
 
   /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */
   findingPicture: publicProcedure

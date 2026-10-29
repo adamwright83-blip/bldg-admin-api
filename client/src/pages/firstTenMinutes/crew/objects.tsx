@@ -84,6 +84,7 @@ export function PlacesMap({
   highlight,
   showRoute,
   threadFrom,
+  crossing = null,
 }: {
   title: string | null;
   pins: PlacePin[];
@@ -94,6 +95,8 @@ export function PlacesMap({
   showRoute: boolean;
   /** Ilex: the pin a thread leaves from */
   threadFrom: string | null;
+  /** the chapter's crossing: a paper bridge from the route to a pin, folded shut (with its sign) or open */
+  crossing?: { pinId: string; open: boolean; sign: string | null } | null;
 }) {
   const reduce = useReducedMotion();
   const width = 600;
@@ -199,6 +202,7 @@ export function PlacesMap({
             ) : null}
           </g>
         ))}
+        {crossing ? <Crossing crossing={crossing} pins={pinPoints} stops={stopPoints} reduce={reduce} /> : null}
         {slip && title ? (
           <g className={styles.mapTitle}>
             <rect x={slip.x} y={slip.y} width={slip.width} height={slip.height} />
@@ -214,6 +218,53 @@ export function PlacesMap({
         ) : null}
       </svg>
     </div>
+  );
+}
+
+/**
+ * The crossing between the route and a place: a paper plank from the nearest stop (or from the road's edge, before
+ * there was a route) to the pin. Folded shut it stands on end with its sign; open, it lies flat across.
+ */
+function Crossing({
+  crossing,
+  pins,
+  stops,
+  reduce,
+}: {
+  crossing: { pinId: string; open: boolean; sign: string | null };
+  pins: Array<{ pin: PlacePin; x: number; y: number }>;
+  stops: Array<{ x: number; y: number }>;
+  reduce: boolean | null;
+}) {
+  const pin = pins.find(point => point.pin.findingId === crossing.pinId);
+  if (!pin) return null;
+  const nearest = [...stops].sort((a, b) => Math.hypot(a.x - pin.x, a.y - pin.y) - Math.hypot(b.x - pin.x, b.y - pin.y))[0];
+  const from = nearest && Math.hypot(nearest.x - pin.x, nearest.y - pin.y) > 14 ? nearest : { x: pin.x - 48, y: pin.y + 14 };
+  const length = Math.max(Math.hypot(pin.x - from.x, pin.y - from.y) - 10, 12);
+  const angle = (Math.atan2(pin.y - from.y, pin.x - from.x) * 180) / Math.PI;
+  return (
+    <g data-crossing={crossing.open ? "open" : "closed"} data-testid="first-ten-crossing">
+      <g transform={`translate(${from.x} ${from.y}) rotate(${angle})`}>
+        <motion.rect
+          className={styles.crossingPlank}
+          y={-5}
+          height={10}
+          rx={2}
+          initial={false}
+          animate={{ width: crossing.open ? length : 9 }}
+          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 90, damping: 11 }}
+        />
+      </g>
+      {!crossing.open && crossing.sign ? (
+        <g transform={`translate(${from.x} ${from.y - 16})`} className={styles.crossingSign}>
+          <path d="M0 0 L 0 16" />
+          <rect x={-(crossing.sign.length * 3.4 + 10)} y={-22} width={crossing.sign.length * 6.8 + 20} height={20} rx={2} />
+          <text y={-8} textAnchor="middle">
+            {crossing.sign}
+          </text>
+        </g>
+      ) : null}
+    </g>
   );
 }
 

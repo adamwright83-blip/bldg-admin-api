@@ -20,6 +20,10 @@ import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
+import { RevelationScene } from "./chapter/RevelationScene";
+import { LetterScene } from "./chapter/LetterScene";
+import { DraftTable } from "./chapter/DraftTable";
+import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
@@ -202,12 +206,71 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     wasWriting.current = writing;
   }, [portrait.data?.status, writePortrait]);
   const page = portrait.data && (portrait.data.status === "ready" || portrait.data.status === "kept") ? portrait.data : null;
+  const keptJustNow = useRef(false);
 
   async function onPortrait(input: { answer: "keep" } | { answer: "change"; key: string; to: string | null } | { answer: "restore"; key: string }) {
     if (!credentials) return;
     const next = await answerPortrait.mutateAsync({ ...credentials, ...input });
+    if (input.answer === "keep") keptJustNow.current = true;
     utils.system.firstTenMinutes.portrait.setData(credentials, next);
     if (input.answer === "keep") void journey.refetch();
+  }
+
+  // The first chapter, once the person has kept Claire's page: the revelation, Hazel's letter, the real draft.
+  const portraitKept = page?.status === "kept";
+  const [chapterOpen, setChapterOpen] = useState(false);
+  useEffect(() => {
+    if (!portraitKept || chapterOpen) return;
+    // kept just now, the seal lands first; kept before this visit, the chapter is simply where the person left it
+    const timer = window.setTimeout(() => setChapterOpen(true), keptJustNow.current ? 1800 : 0);
+    return () => window.clearTimeout(timer);
+  }, [portraitKept, chapterOpen]);
+  const chapter = trpc.system.firstTenMinutes.chapter.useQuery(credentials!, { enabled: Boolean(credentials) && portraitKept, retry: false });
+  const chapterStep = trpc.system.firstTenMinutes.chapterStep.useMutation();
+  const prepareDraft = trpc.system.firstTenMinutes.prepareDraft.useMutation();
+  const changeDraft = trpc.system.firstTenMinutes.changeDraft.useMutation();
+  const declineDraft = trpc.system.firstTenMinutes.declineDraft.useMutation();
+  const setChapter = (next: ChapterView) => {
+    if (credentials) utils.system.firstTenMinutes.chapter.setData(credentials, next);
+  };
+  const businessName =
+    reading.view?.findings.find(finding => finding.payload.kind === "business" && finding.status !== "dismissed")?.payload.kind === "business"
+      ? (reading.view.findings.find(finding => finding.payload.kind === "business")!.payload as { name: string }).name
+      : null;
+  const opportunity = chapter.data?.opportunity ?? null;
+  const inChapter = Boolean(chapterOpen && opportunity && chapter.data);
+
+  async function step(which: "revealed" | LetterStep | "letter_written") {
+    if (!credentials) return;
+    setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
+  }
+
+  function renderChapter() {
+    const data = chapter.data;
+    if (!data || !opportunity || !credentials) return null;
+    if (!data.progress.revealed) {
+      return <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />;
+    }
+    if (!data.draft) {
+      return (
+        <LetterScene
+          steps={data.progress.steps}
+          letterWritten={data.progress.letterWritten}
+          carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
+          onStep={which => step(which)}
+          onWritten={() => step("letter_written")}
+          onYours={() => prepareDraft.mutate(credentials, { onSuccess: setChapter })}
+        />
+      );
+    }
+    return (
+      <DraftTable
+        opportunity={opportunity}
+        draft={data.draft}
+        onChange={async (change: { approach?: DraftApproach; body?: string }) => setChapter(await changeDraft.mutateAsync({ ...credentials, ...change }))}
+        onDecline={async () => setChapter(await declineDraft.mutateAsync(credentials))}
+      />
+    );
   }
 
   // Slack added after the reading finished: read again, so the crew sees it too.
@@ -236,7 +299,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               onDisconnect={provider => void removeConnection(provider)}
             />
           ) : null}
-          {crewReady && reading.view && view ? (
+          {inChapter ? renderChapter() : null}
+          {inChapter ? null : crewReady && reading.view && view ? (
             <div className={page ? portraitStyles.settled : styles.holder} data-testid="first-ten-crew-holder" aria-hidden={page ? true : undefined}>
               <CrewScene
                 journeyId={view.id}
@@ -250,7 +314,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           ) : (
             <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
           )}
-          {page && reading.view ? (
+          {page && reading.view && !inChapter ? (
             <PortraitPage
               view={page}
               findings={reading.view.findings}
