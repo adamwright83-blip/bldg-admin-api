@@ -740,7 +740,7 @@ Day Line after the call (2026-10-29 is today):
 Checks:
 
 - ✅ expected /alcott|rekey/ on 2026-10-29 ×1 completed — found 1: "Rekey the Alcott Street fourplex" 2026-10-29 completed
-- ✅ expected /marchetti|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Marchetti Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
+- ✅ expected /ferrante|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Ferrante Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
 - ✅ expected /brendan|panic bar/ on 2026-10-30 ×1 — found 1: "Install the panic bar at St. Brendan's parish hall" 2026-10-30 open
 - ✅ expected /medeco|cylinder/ on 2026-10-30 ×1 — found 1: "Order the Medeco cylinders" 2026-10-30 open
 - ✅ absent /lindqvist|master key/ — found 0: none
@@ -777,7 +777,7 @@ Transcript:
 
 Day Line after the call (2026-10-29 is today):
 
-- 2026-10-29 · Safe opening at Marchetti Jewelers · open · Owner lost the combination; bring the scope · seeded
+- 2026-10-29 · Safe opening at Ferrante Jewelers · open · Owner lost the combination; bring the scope · seeded
 - 2026-10-29 · Rekey the Alcott Street fourplex · completed · seeded
 - 2026-10-30 · Master key system quote for the Lindqvist building · cancelled · seeded
 - 2026-10-30 · Install the panic bar at St. Brendan's parish hall · open · seeded
@@ -788,7 +788,7 @@ Day Line after the call (2026-10-29 is today):
 Checks:
 
 - ✅ expected /alcott|rekey/ on 2026-10-29 ×1 completed — found 1: "Rekey the Alcott Street fourplex" 2026-10-29 completed
-- ✅ expected /marchetti|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Marchetti Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
+- ✅ expected /ferrante|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Ferrante Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
 - ✅ expected /brendan|panic bar/ on 2026-10-30 ×1 — found 1: "Install the panic bar at St. Brendan's parish hall" 2026-10-30 open
 - ✅ expected /medeco|cylinder/ on 2026-10-30 ×1 — found 1: "Order the Medeco cylinders" 2026-10-30 open
 - ✅ absent /lindqvist|master key/ — found 0: none
@@ -827,7 +827,7 @@ Transcript:
 Day Line after the call (2026-10-29 is today):
 
 - 2026-10-29 · Rekey the Alcott Street fourplex · completed · seeded
-- 2026-10-29 · Safe opening at Marchetti Jewelers · open · Owner lost the combination; bring the scope · seeded
+- 2026-10-29 · Safe opening at Ferrante Jewelers · open · Owner lost the combination; bring the scope · seeded
 - 2026-10-30 · Master key system quote for the Lindqvist building · cancelled · seeded
 - 2026-10-30 · Install the panic bar at St. Brendan's parish hall · open · seeded
 - 2026-10-30 · Order the Medeco cylinders · open · seeded
@@ -837,7 +837,7 @@ Day Line after the call (2026-10-29 is today):
 Checks:
 
 - ✅ expected /alcott|rekey/ on 2026-10-29 ×1 completed — found 1: "Rekey the Alcott Street fourplex" 2026-10-29 completed
-- ✅ expected /marchetti|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Marchetti Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
+- ✅ expected /ferrante|safe/ on 2026-10-29 ×1 — found 1: "Safe opening at Ferrante Jewelers" 2026-10-29 open (Owner lost the combination; bring the scope)
 - ✅ expected /brendan|panic bar/ on 2026-10-30 ×1 — found 1: "Install the panic bar at St. Brendan's parish hall" 2026-10-30 open
 - ✅ expected /medeco|cylinder/ on 2026-10-30 ×1 — found 1: "Order the Medeco cylinders" 2026-10-30 open
 - ✅ absent /lindqvist|master key/ — found 0: none
@@ -865,7 +865,7 @@ Transcript:
   - tool `apply_day_line_changes` {"changes":[{"op":"remove","title":"0a23a33c-95a0-4528-82ab-514ea5a8eab3","day":"tomorrow","operator_words":"Yes. Take it off tomorrow entirely. Don't move it anywhere."}],"operator_words":"Yes. Take it off tomorrow entirely. Don't move it anywhere."} → {"authorization":{"ok":true,"quote":"Yes. Take it off tomorrow entirely. Don't move it anywhere.","reason":null},"receipts":[{"index":0,"op":"remove","title":"Master key system quote for the Lindqvist building","id":"0a23a33c-95a0-4528-82ab-514ea5a8eab3","businessDate":"2026-10-30","day":"tomorrow","reason":null,"status":"applied"}]} (7 ms)
 - **Operator:** Move the Medeco cylinder order to tomorrow.
 - **Claire:** I don't see a Medeco cylinder order on today or tomorrow. Which day is it on now, or should I add it to tomorrow as new work? _(5306 ms)_
-  - tool `read_day_line` {"day":"today"} → {"businessDate":"2026-10-29","day":"today","rows":[{"id":"4c5ecd6b-dfc2-40b1-93f0-f1c3336e5f26","title":"Safe opening at Marchetti Jewelers","status":"open","businessDate":"2026-10-29","detail":"Owner lost the combination; bring the scope"},{"id":"bb90cc84-ee5a-44c8-9017-65208d95b37f","title":"Rekey the Alcott Street fourplex","status":"completed","businessDate":"2026-10-29","detail":null}]} (2 ms)
+  - tool `read_day_line` {"day":"today"} → {"businessDate":"2026-10-29","day":"today","rows":[{"id":"4c5ecd6b-dfc2-40b1-93f0-f1c3336e5f26","title":"Safe opening at Ferrante Jewelers","status":"open","businessDate":"2026-10-29","detail":"Owner lost the combination; bring the scope"},{"id":"bb90cc84-ee5a-44c8-9017-65208d95b37f","title":"Rekey the Alcott Street fourplex","status":"completed","businessDate":"2026-10-29","detail":null}]} (2 ms)
   - tool `read_day_line` {"day":"tomorrow"} → {"businessDate":"2026-10-30","day":"tomorrow","rows":[{"id":"95486578-8a83-457c-a9a8-ed076518004b","title":"Install the panic bar at St. Brendan's parish hall","status":"open","businessDate":"2026-10-30","detail":null}]} (1 ms)
 - **Operator:** It's on the day after tomorrow. Move it to tomorrow.
 - **Claire:** The Medeco cylinder order is now on tomorrow, Friday the 30th, moved from Saturday. That's all three changes: Alcott Street done, Lindqvist off, Medeco moved. _(8263 ms, DB changed)_
@@ -879,7 +879,7 @@ Transcript:
 
 Day Line after the call (2026-10-29 is today):
 
-- 2026-10-29 · Safe opening at Marchetti Jewelers · open · Owner lost the combination; bring the scope · seeded
+- 2026-10-29 · Safe opening at Ferrante Jewelers · open · Owner lost the combination; bring the scope · seeded
 - 2026-10-29 · Rekey the Alcott Street fourplex · completed · seeded
 - 2026-10-30 · Order the Medeco cylinders · open · seeded
 - 2026-10-30 · Install the panic bar at St. Brendan's parish hall · open · seeded
