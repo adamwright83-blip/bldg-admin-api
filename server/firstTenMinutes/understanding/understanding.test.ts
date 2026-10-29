@@ -2,50 +2,14 @@ import { describe, expect, it } from "vitest";
 import corpus from "../../../shared/firstTenMinutesExampleCorpus.json";
 import { objectNames, UNDERSTANDING_COPY, type FindingView } from "../../../shared/firstTenMinutesFindings";
 import { findingIds, type DraftFinding } from "./draft";
-import { habitFindings, imageFindings, peopleFindings, plainImageName, routeFindings } from "./deterministic";
-import { exampleGeocoder, exampleReaders } from "./exampleReaders";
-import { exampleExtractor } from "./extractors";
-import {
-  CONVERSATIONS_SYSTEM,
-  conversationCorpus,
-  conversationExtractionSchema,
-  verifyConversations,
-  verifyWork,
-  workCorpus,
-  type ConversationExtraction,
-} from "./extract";
+import { plainImageName } from "./deterministic";
+import { conversationExtractionSchema, verifyConversations, type ConversationExtraction } from "./extract";
 import { linkOpportunities, nowOffers } from "./opportunity";
 import { clusteredPlaces, routeMeetsPlace, streetOf } from "./places";
-import { mergeDrafts } from "./run";
+import { exampleReading } from "../testSupport/exampleReading";
 import { closingSentence, findVerbatim, looksAutomated, parseAddressList, stripQuotedReply } from "./text";
 
 const ids = findingIds("journey-under-test");
-
-async function exampleReading() {
-  const readers = exampleReaders();
-  const extractor = exampleExtractor();
-  const owner = await readers.owner();
-  const sent = (await readers.sentMail(160)).items;
-  const received = (await readers.receivedMail(240)).items;
-  const now = readers.now();
-  const day = 24 * 60 * 60 * 1000;
-  const events = (await readers.calendar({ from: new Date(now.getTime() - 90 * day), to: new Date(now.getTime() + 30 * day) })).items;
-  const files = (await readers.drive(60)).items;
-  const { corpus: text, items } = conversationCorpus(sent, received, owner);
-  const conversations = verifyConversations(await extractor.conversations({ system: CONVERSATIONS_SYSTEM, corpus: text }), items, owner, ids);
-  let all = mergeDrafts([
-    ...peopleFindings(sent, received, owner, ids),
-    ...habitFindings(sent, ids),
-    ...imageFindings(sent, ids),
-    ...routeFindings(events, ids),
-    ...conversations,
-  ]);
-  const work = await extractor.work({ system: "", corpus: workCorpus({ files, slack: [], events, verified: all }) });
-  all = mergeDrafts([...all, ...verifyWork(work, { files, slack: [] }, ids)]);
-  const { placeFindings } = await import("./places");
-  await placeFindings(all, exampleGeocoder());
-  return { all, owner, sent, received, items, events, files, opportunities: linkOpportunities(all, [], ids) };
-}
 
 const ofKind = <K extends DraftFinding["payload"]["kind"]>(all: DraftFinding[], kind: K) =>
   all.filter(finding => finding.payload.kind === kind) as Array<DraftFinding & { payload: Extract<DraftFinding["payload"], { kind: K }> }>;

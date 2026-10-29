@@ -21,25 +21,29 @@ function googleGeocoder(): Geocoder {
   };
 }
 
+/** The journey's Google access, refreshed in place as it is used. Null when Google isn't connected. */
+export async function googleAccessFor(journey: JourneyRow): Promise<GoogleAccess | null> {
+  const google = await connectionSecrets(journey.id, "google");
+  if (!google) return null;
+  return {
+    accessToken: google.accessToken,
+    refreshToken: google.refreshToken,
+    accessExpiresAt: google.accessExpiresAt,
+    grantedScopes: google.grantedScopes,
+    ownerEmail: google.row.accountLabel ?? "",
+    onRefreshed: (accessToken, expiresAt) =>
+      updateAccessToken({ journeyId: journey.id, provider: "google", accessToken, accessExpiresAt: expiresAt }),
+  };
+}
+
 /** Readers for a journey's own connections. A provider that isn't connected reads as nothing, with no error. */
 export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> {
   if (journey.kind === "example") {
     return { readers: exampleReaders(), extractor: exampleExtractor(), geocoder: exampleGeocoder() };
   }
-  const google = await connectionSecrets(journey.id, "google");
   const slack = await connectionSecrets(journey.id, "slack");
-  const ownerEmail = google?.row.accountLabel ?? "";
-  const access: GoogleAccess | null = google
-    ? {
-        accessToken: google.accessToken,
-        refreshToken: google.refreshToken,
-        accessExpiresAt: google.accessExpiresAt,
-        grantedScopes: google.grantedScopes,
-        ownerEmail,
-        onRefreshed: (accessToken, expiresAt) =>
-          updateAccessToken({ journeyId: journey.id, provider: "google", accessToken, accessExpiresAt: expiresAt }),
-      }
-    : null;
+  const access = await googleAccessFor(journey);
+  const ownerEmail = access?.ownerEmail ?? "";
   const gmail = access ? gmailReader(access) : null;
   const calendar = access ? calendarReader(access) : null;
   const drive = access ? driveReader(access) : null;

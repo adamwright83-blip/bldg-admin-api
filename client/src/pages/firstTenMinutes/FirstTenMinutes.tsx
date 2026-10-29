@@ -18,6 +18,8 @@ import { BringYourWorld, ConnectionIncludesSheet, ConnectionsStrip, Invitation }
 import { UnderstandingScene } from "./UnderstandingScene";
 import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
+import { CrewScene } from "./crew/CrewScene";
+import { buildReveals } from "@shared/firstTenMinutesCrew";
 import styles from "./firstTen.module.css";
 
 /**
@@ -129,6 +131,34 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const hasConnection = Boolean(view?.connections.length);
   const reading = useReading(credentials, hasConnection);
   const [closer, setCloser] = useState(false);
+  const [crewDone, setCrewDone] = useState(false);
+  const utils = trpc.useUtils();
+  const answerFinding = trpc.system.firstTenMinutes.answerFinding.useMutation();
+  const move = trpc.system.firstTenMinutes.move.useMutation();
+
+  // The crew steps in as soon as something worthwhile is ready: once the email reading is done, or the whole reading.
+  const crewReady = Boolean(
+    reading.view &&
+      (reading.view.status === "complete" || reading.view.finished.includes("conversations")) &&
+      (reading.view.status === "complete" || buildReveals(reading.view.findings, { final: false }).length > 0)
+  );
+  useEffect(() => {
+    if (!crewReady || !credentials || !view || view.stage !== "understanding") return;
+    move.mutate({ ...credentials, stage: "crew" }, { onSuccess: next => utils.system.firstTenMinutes.journey.setData(credentials, next) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crewReady, credentials, view?.stage]);
+
+  const imageFinding = reading.view?.findings.find(finding => finding.payload.kind === "image" && finding.status !== "dismissed");
+  const picture = trpc.system.firstTenMinutes.findingPicture.useQuery(
+    { ...(credentials ?? { sessionId: "", resumeToken: "" }), findingId: imageFinding?.id ?? "" },
+    { enabled: Boolean(credentials && imageFinding && crewReady), staleTime: Infinity, retry: false }
+  );
+
+  async function answer(findingId: string, choice: "confirm" | "change" | "dismiss", correction?: string) {
+    if (!credentials) return;
+    const next = await answerFinding.mutateAsync({ ...credentials, findingId, answer: choice, correction });
+    utils.system.firstTenMinutes.understanding.setData(credentials, next);
+  }
 
   // Slack added after the reading finished: read again, so the crew sees it too.
   const readingConnections = useRef<number | null>(null);
@@ -156,7 +186,22 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               onDisconnect={provider => void removeConnection(provider)}
             />
           ) : null}
-          <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
+          {crewReady && reading.view && view ? (
+            <CrewScene
+              journeyId={view.id}
+              view={reading.view}
+              picture={picture.data?.src ?? null}
+              onAnswer={answer}
+              onFinished={() => setCrewDone(true)}
+            />
+          ) : (
+            <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
+          )}
+          {crewDone ? (
+            <button type="button" className={styles.endLink} onClick={() => setCloser(true)} data-testid="first-ten-look-closer">
+              Look closer
+            </button>
+          ) : null}
           {closer && reading.view ? <FindingsSheet findings={reading.view.findings} onClose={() => setCloser(false)} /> : null}
         </>
       );
