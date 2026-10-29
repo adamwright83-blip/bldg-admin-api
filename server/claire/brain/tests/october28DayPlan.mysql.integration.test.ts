@@ -238,6 +238,18 @@ describeMysql("2026-10-28 call B — the operator's choice for tomorrow, real ph
     expect(command.primary?.title).toBe(CHALLENGE);
     expect(command.explicitOperatorMission?.completionCondition).toBe("The Instagram landing page is published.");
 
+    // Off ONE day, never abandoned: moved to the next day, the pitch shows there, open, not notPursuing.
+    const dayAfter = addDaysYmd(tomorrow, 1);
+    const { moveDayDirectorCommitmentsToDate } = await import("../../../planning/dayDirector/dayDirectorService");
+    const movedIds = await moveDayDirectorCommitmentsToDate({ tenantId: "default", actorId, commitmentIds: [pitchId], toBusinessDate: dayAfter });
+    expect(movedIds).toEqual([pitchId]);
+    const onDayAfter = await getDayDirectorState({ tenantId: "default", actorId, businessDate: dayAfter });
+    expect(onDayAfter.commitments.map(row => row.title)).toEqual([PITCH]);
+    expect(onDayAfter.commitments[0]!.status).toBe("open");
+    const [movedRow] = (await sql.query<mysql.RowDataPacket[]>("SELECT status, metadataJson FROM day_director_commitments WHERE id = ?", [pitchId]))[0];
+    expect((movedRow!.metadataJson as Record<string, any>).goldlineDayLine.notPursuing).toBe(false);
+    expect((await visibleTomorrow()).sort()).toEqual([CHALLENGE, PICKUP, CUSTOMER_VISIT].sort());
+
     expect(dayPlanCalls).toHaveLength(2);
     expect(dayPlanCalls[0]).toContain(PRIORITY);
     expect(dayPlanCalls[1]).toContain(REMOVE);

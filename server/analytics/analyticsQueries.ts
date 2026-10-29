@@ -556,7 +556,7 @@ export async function listDayLineCommitmentsForAnalysis(
   if (rows.length > maxRows)
     throw new Error("Day-Line commitment materialization limit exceeded");
   // Same truth as the Day Line itself: an operator's rename shows, a removed item is gone.
-  return rows.filter(r => !isHiddenFromDayLine(readDayLineOverlay(r.metadataJson))).map(r => {
+  return rows.filter(r => !isHiddenFromDayLine(readDayLineOverlay(r.metadataJson), r.businessDate)).map(r => {
     const meta =
       r.metadataJson && typeof r.metadataJson === "object"
         ? (r.metadataJson as Record<string, unknown>)

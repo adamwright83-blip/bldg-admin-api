@@ -130,7 +130,7 @@ async function readCommitments(input: {
   return rows.map(row => {
     const metadata = asRecord(row.metadataJson);
     const overlay = readDayLineOverlay(metadata);
-    const hidden = metadata.hiddenFromDayPlan === true || isHiddenFromDayLine(overlay);
+    const hidden = metadata.hiddenFromDayPlan === true || isHiddenFromDayLine(overlay, row.businessDate);
     const campaignId = stringField(metadata, "campaignId");
     const followUpId = stringField(metadata, "commercialFollowUpId") ?? stringField(metadata, "followUpId") ?? stringField(metadata, "followupId");
     const missionId = stringField(metadata, "missionId");

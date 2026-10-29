@@ -144,9 +144,14 @@ export function isDayLineCancelled(
  * gave up on the work use isDayLineCancelled.
  */
 export function isHiddenFromDayLine(
-  overlay: GoldlineDayLineOverlay | null | undefined
+  overlay: GoldlineDayLineOverlay | null | undefined,
+  /** The row's current business date. A removal hides the row only on the day it was removed from. */
+  rowBusinessDate: string | null | undefined
 ): boolean {
-  return isDayLineCancelled(overlay) || Boolean(overlay?.removedFromDay);
+  if (isDayLineCancelled(overlay)) return true;
+  const removed = overlay?.removedFromDay;
+  // Moved to another day afterwards, it shows there: off one day, never abandoned.
+  return Boolean(removed && rowBusinessDate && removed.businessDate === rowBusinessDate);
 }
 
 export function matchDayLineItem(item: DayLineItemRef, utterance: string): boolean {

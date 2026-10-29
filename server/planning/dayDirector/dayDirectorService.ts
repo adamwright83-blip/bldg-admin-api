@@ -167,7 +167,7 @@ export async function getDayDirectorState(input: {
       const detailState =
         metadata.detailState === "NEEDS_DETAILS" ? "NEEDS_DETAILS" : "COMPLETE";
       if (metadata.hiddenFromDayPlan === true) return null;
-      if (isHiddenFromDayLine(overlay)) return null;
+      if (isHiddenFromDayLine(overlay, row.businessDate)) return null;
       const command = readCommandMetadata(metadata);
       const missionType = commitmentMissionType(row);
       const candidatePresentation = presentationFor(presentations, missionType);
@@ -919,7 +919,7 @@ export async function listOpenDayDirectorCommitmentsBetween(input: {
     .filter(row => {
       const metadata = row.metadataJson && typeof row.metadataJson === "object" ? (row.metadataJson as Record<string, unknown>) : {};
       const overlay = readDayLineOverlay(metadata);
-      return metadata.hiddenFromDayPlan !== true && !isHiddenFromDayLine(overlay);
+      return metadata.hiddenFromDayPlan !== true && !isHiddenFromDayLine(overlay, row.businessDate);
     })
     .map(row => ({
       id: row.id,
