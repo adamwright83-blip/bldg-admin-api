@@ -57,6 +57,8 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
     const primary = page.getByTestId("claire-desk-primary-mission");
     await expect(primary).toContainText(fixture.items[0]!.title);
     await expect(primary).toContainText("Needs your approval");
+    // The rest of the desk (secondary mission, runway, settings) sits behind one link, in a drawer beside Claire.
+    await page.getByTestId("claire-desk-drawer-open").click();
     await expect(page.getByTestId("claire-desk-secondary-mission")).toContainText(fixture.items[1]!.title);
     await page.screenshot({ path: `${SHOTS}/1-before-approval.png`, fullPage: true });
 
@@ -89,6 +91,7 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
     const grants = async () =>
       ((await db.execute("SELECT exactAction FROM tenant_standing_authorizations WHERE tenantId=? AND revokedAt IS NULL", [owner.tenantId])) as any)[0].map((r: any) => r.exactAction).sort();
     expect(await grants()).toEqual([]);
+    await page.getByTestId("claire-desk-drawer-open").click();
     const routine = page.getByTestId("activate-routine");
     await routine.getByTestId("activate-morning_readiness").click();
     await expect(routine.getByTestId("activate-morning_readiness-result")).toContainText("Verified. First call window");
@@ -102,6 +105,9 @@ test("Claire Desk: exact mission approval, Day Line, confirm tomorrow feedback, 
       ["claire.evening_debrief.call", "[1,2,3,4,5,6,7]", "18:30", "19:00"],
       ["claire.morning_readiness.call", "[1,2,3,4,5,6,7]", "07:30", "08:00"],
     ]);
+
+    await page.getByTestId("claire-desk-drawer-close").click();
+    await expect(page.getByTestId("claire-desk-drawer")).toBeHidden();
 
     // 5. OPEN COMMS fallbacks without a model or voice provider: honest, nothing claimed saved.
     await page.getByTestId("open-comms-button").click();

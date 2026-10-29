@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Mic, Send } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
+export type CommsPhase = Phase;
 type Phase = "idle" | "connecting" | "listening" | "hearing" | "processing" | "speaking" | "ended" | "error";
 type Line = { who: "you" | "claire"; text: string };
 type Turn = {
@@ -48,9 +50,19 @@ const blobToDataUrl = (blob: Blob) =>
  * OPEN COMMS: an in-app voice conversation with the same Claire runtime as the
  * daily calls. Microphone audio is transcribed on the server, Claire answers
  * from her real business context, and she speaks in her own call voice. Text is
- * always available. Nothing is "saved" unless the server says it persisted.
+ * always available: typing first opens a quiet text session (Claire answers in text, not aloud) that the mic can
+ * join later. Nothing is "saved" unless the server says it persisted.
  */
-export function OpenComms({ onChanged }: { onChanged: () => void }) {
+export function OpenComms({
+  onChanged,
+  onPhase,
+  draft,
+}: {
+  onChanged: () => void;
+  onPhase?: (phase: Phase) => void;
+  /** Text the page puts in the input for the operator to finish and send; a new `id` places it again. */
+  draft?: { id: number; text: string } | null;
+}) {
   const comms = trpc.system.weeklyMission.deskComms.useMutation();
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<Line[]>([]);
@@ -61,6 +73,8 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [micNote, setMicNote] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
+  const [joining, setJoining] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const sessionId = useRef(newSessionId());
   const stream = useRef<MediaStream | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
@@ -70,6 +84,8 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
   const loop = useRef<number | null>(null);
   const phaseRef = useRef<Phase>("idle");
   const micOn = useRef(false);
+  /** The operator opened this session by typing: Claire's replies stay on screen instead of being spoken. */
+  const textOnly = useRef(false);
   /**
    * Comms session generation. Opening and ending both advance it; every async continuation
    * (server reply, microphone start, recorder stop, Claire's voice ending) checks it first,
@@ -87,6 +103,15 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     setPhase(p);
   };
   const active = phase !== "idle" && phase !== "ended";
+  useEffect(() => onPhase?.(phase), [onPhase, phase]);
+  useEffect(() => {
+    if (!draft) return;
+    setTyped(draft.text);
+    const el = input.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(draft.text.length, draft.text.length);
+  }, [draft]);
 
   const rms = () => {
     const a = analyser.current;
@@ -242,6 +267,7 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         };
         loop.current = requestAnimationFrame(tick);
       };
+      if (textOnly.current) return after();
       const browserVoice = (why: string) => {
         if (!current()) return;
         if (!("speechSynthesis" in window)) {
@@ -270,17 +296,23 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     [listen]
   );
 
-  async function open() {
+  /** A fresh session: everything from the last one is cleared, and its late results are fenced out by the epoch. */
+  function fresh(text: boolean) {
     const mine = ++epoch.current;
     teardown();
     sessionId.current = newSessionId();
+    textOnly.current = text;
     setLines([]);
     setSaved([]);
     setPendingApproval(null);
     setError(null);
     setVoiceNote(null);
     setMicNote(null);
-    setP("connecting");
+    return mine;
+  }
+
+  /** Starts the microphone for session `mine`. On failure the operator is told, and typing still works. */
+  async function startMic(mine: number) {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       if (epoch.current !== mine) {
@@ -303,7 +335,31 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
         `Claire can't hear you: the microphone ${e instanceof DOMException && e.name === "NotAllowedError" ? "permission wasn't granted" : "isn't available"}. Type to her below, or allow the microphone and reopen comms.`
       );
     }
+  }
+
+  async function open() {
+    const mine = fresh(false);
+    setP("connecting");
+    await startMic(mine);
+    if (epoch.current !== mine) return;
     await send({});
+  }
+
+  /** The mic joins a session that began in text: same conversation, and Claire speaks from here on. */
+  async function joinVoice() {
+    // One microphone request at a time: a second tap while the first is pending would open a second stream.
+    if (joining || micOn.current) return;
+    const mine = epoch.current;
+    textOnly.current = false;
+    setMicNote(null);
+    setJoining(true);
+    try {
+      await startMic(mine);
+    } finally {
+      setJoining(false);
+    }
+    if (epoch.current !== mine || !micOn.current || phaseRef.current === "processing" || phaseRef.current === "speaking") return;
+    listen();
   }
 
   function interrupt() {
@@ -323,6 +379,12 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
     const text = typed.trim();
     if (!text || phase === "processing") return;
     setTyped("");
+    if (!active) {
+      // Typing with comms closed opens a text session; the mic can join it later.
+      fresh(true);
+      void send({ utterance: text });
+      return;
+    }
     stopLoop();
     stopAudio();
     if (recorder.current?.state === "recording") {
@@ -334,42 +396,10 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
 
   useEffect(() => () => teardown(), [teardown]);
 
+  const label = phase === "listening" && !micOn.current ? "Your turn — type to Claire" : PHASE_LABEL[phase];
+
   return (
     <section className="cd-comms" aria-label="Open comms with Claire" data-testid="open-comms">
-      {!active ? (
-        <button type="button" className="cd-comms-button" onClick={() => void open()} data-testid="open-comms-button">
-          <span className="cd-comms-icon" aria-hidden>◉</span>
-          <span>
-            <strong>OPEN COMMS</strong>
-            <small>Talk to Claire — plan, change, report</small>
-          </span>
-        </button>
-      ) : (
-        <div className="cd-comms-live">
-          <div className="cd-comms-status" role="status" aria-live="polite" data-testid="open-comms-phase" data-phase={phase}>
-            <span className={`cd-dot cd-dot-${phase}`} aria-hidden />
-            {PHASE_LABEL[phase]}
-            {micOn.current && (phase === "listening" || phase === "hearing") ? (
-              <span className="cd-meter" aria-hidden>
-                <span style={{ width: `${Math.min(100, level * 600)}%` }} />
-              </span>
-            ) : null}
-          </div>
-          <div className="cd-comms-controls">
-            {phase === "speaking" ? (
-              <button type="button" onClick={interrupt} data-testid="open-comms-interrupt">Interrupt</button>
-            ) : phase === "hearing" ? (
-              <button type="button" onClick={() => recorder.current?.state === "recording" && recorder.current.stop()}>Done talking</button>
-            ) : phase === "error" ? (
-              <button type="button" onClick={() => listen()}>Try again</button>
-            ) : null}
-            <button type="button" className="cd-end" onClick={end} data-testid="open-comms-end">End comms</button>
-          </div>
-        </div>
-      )}
-      {micNote ? <p role="alert" className="cd-error" data-testid="open-comms-mic-note">{micNote}</p> : null}
-      {voiceNote ? <p className="cd-small" data-testid="open-comms-voice-note">{voiceNote}</p> : null}
-      {error ? <p role="alert" className="cd-error" data-testid="open-comms-error">{error}</p> : null}
       {lines.length ? (
         <ol className="cd-comms-log" data-testid="open-comms-log">
           {lines.map((l, i) => (
@@ -390,20 +420,56 @@ export function OpenComms({ onChanged }: { onChanged: () => void }) {
           <ul>{saved.map((s, i) => <li key={i}>{s}</li>)}</ul>
         </div>
       ) : null}
-      {active || phase === "ended" ? (
-        <form onSubmit={submitTyped} className="cd-comms-type">
-          <label htmlFor="cd-type" className="cd-sr">Type to Claire</label>
-          <input
-            id="cd-type"
-            value={typed}
-            onChange={e => setTyped(e.target.value)}
-            placeholder={phase === "ended" ? "Comms ended — open again to continue" : "Or type to Claire"}
-            disabled={phase === "ended"}
-            data-testid="open-comms-input"
-          />
-          <button type="submit" disabled={!typed.trim() || phase === "processing" || phase === "ended"}>Send</button>
-        </form>
+      {micNote ? <p role="alert" className="cd-error" data-testid="open-comms-mic-note">{micNote}</p> : null}
+      {voiceNote ? <p className="cd-small" data-testid="open-comms-voice-note">{voiceNote}</p> : null}
+      {error ? <p role="alert" className="cd-error" data-testid="open-comms-error">{error}</p> : null}
+      {active ? (
+        <div className="cd-comms-live">
+          <div className="cd-comms-status" role="status" aria-live="polite" data-testid="open-comms-phase" data-phase={phase}>
+            <span className={`cd-dot cd-dot-${phase}`} aria-hidden />
+            {label}
+            {micOn.current && (phase === "listening" || phase === "hearing") ? (
+              <span className="cd-meter" aria-hidden>
+                <span style={{ width: `${Math.min(100, level * 600)}%` }} />
+              </span>
+            ) : null}
+          </div>
+          <div className="cd-comms-controls">
+            {phase === "speaking" ? (
+              <button type="button" onClick={interrupt} data-testid="open-comms-interrupt">Interrupt</button>
+            ) : phase === "hearing" ? (
+              <button type="button" onClick={() => recorder.current?.state === "recording" && recorder.current.stop()}>Done talking</button>
+            ) : phase === "error" ? (
+              <button type="button" onClick={() => listen()}>Try again</button>
+            ) : null}
+            <button type="button" className="cd-end" onClick={end} data-testid="open-comms-end">End comms</button>
+          </div>
+        </div>
       ) : null}
+      <form onSubmit={submitTyped} className="cd-comms-type">
+        <label htmlFor="cd-type" className="cd-sr">Tell Claire</label>
+        <input
+          id="cd-type"
+          ref={input}
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          placeholder={active ? "Type to Claire" : "Tell Claire what to change…"}
+          autoComplete="off"
+          data-testid="open-comms-input"
+        />
+        <button type="submit" className="cd-comms-icon-button" aria-label="Send to Claire" disabled={!typed.trim() || phase === "processing"}>
+          <Send aria-hidden />
+        </button>
+        {!active ? (
+          <button type="button" className="cd-comms-icon-button cd-mic" aria-label="Talk to Claire" onClick={() => void open()} data-testid="open-comms-button">
+            <Mic aria-hidden />
+          </button>
+        ) : !micOn.current && phase !== "connecting" ? (
+          <button type="button" className="cd-comms-icon-button cd-mic" aria-label="Talk instead of typing" disabled={joining} onClick={() => void joinVoice()} data-testid="open-comms-voice">
+            <Mic aria-hidden />
+          </button>
+        ) : null}
+      </form>
     </section>
   );
 }
