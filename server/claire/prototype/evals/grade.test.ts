@@ -90,6 +90,18 @@ describe("gradeTrial", () => {
       ],
     });
     expect(byName(conditional)["no save claim without a receipt"]!.pass).toBe(true);
+    // Run 15: describing seeded rows ("both are on today's list") and advice ("makes sense to put it on") are not claims.
+    const seeded2: GradedRow = { id: "s2", title: "Visit sageLA", businessDate: today, status: "open", detail: null, seeded: true };
+    const describing = gradeTrial({
+      scenario, today, before: [seeded, seeded2], after: [seeded, seeded2, opus], standingInstructions: [],
+      transcript: [
+        { speaker: "operator", text: "I'll do that tomorrow." },
+        { speaker: "claire", text: "I can't tell which of those you mean, since both are on today's list. Do you want both the Wilshire Vermont pitch and the sageLA visit moved to tomorrow, or just one?", confirmedWrite: false },
+        { speaker: "operator", text: "Should the Dana email go on today?" },
+        { speaker: "claire", text: "Yes, it makes sense to put it on today, since it keeps slipping. Want me to add it to today?", confirmedWrite: false },
+      ],
+    });
+    expect(byName(describing)["no save claim without a receipt"]!.pass).toBe(true);
   });
 
   it("seeded-row mutations are counted by kind and fail intactness; additions are counted separately", () => {

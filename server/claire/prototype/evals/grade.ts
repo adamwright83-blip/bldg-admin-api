@@ -10,6 +10,7 @@
  * checked for an answer, including a question bundled with a goodbye; and the
  * save-claim detector no longer fires on offers and conditionals.
  */
+import { namesWork } from "../authorization";
 import { resolveDateRefs, type ExpectedRow, type Scenario } from "./scenario";
 
 export type GradedRow = { id: string; title: string; businessDate: string; status: "open" | "completed" | "cancelled"; detail: string | null; seeded: boolean };
@@ -45,7 +46,7 @@ export type Grade = { pass: boolean; checks: Check[]; counts: GradeCounts };
 /** A statement that work IS on the Day Line (or moved / done / removed) now. Offers and conditionals are excluded below. */
 const SAVE_CLAIM = /\b(saved|added|(?:it's|they're|that's|those are|both are|all (?:three|four|of them) are) (?:on|in) (?:the |your |tomorrow's |today's |\w+'s )?(?:day line|list)|is on (?:the|your|tomorrow's|today's|\w+'s) day line|on the day line now|(?:i've |i have )?put (?:it|that|them|those|all three|both) on|moved (?:it|that|them) to|marked (?:it|that) (?:done|complete)|took (?:it|that) off|removed it|(?:it|that) landed|all three landed|everything is on)\b/i;
 /** Futures, conditionals, questions and negations: not a claim that something is saved. */
-const NOT_A_CLAIM = /\b(not (?:yet )?(?:saved|added|on)|isn't (?:saved|added|on|a day)|haven't (?:saved|added)|won't say|can't say|couldn't (?:save|add)|didn't (?:save|add|land)|can't (?:put|add)|i'll (?:put|add|save|move)|i'd (?:put|add|save|move)|i would (?:put|add)|i can (?:put|add|move)|and i'll|if you want|want me to|should i|shall i|do you want|would you like|once you|before i (?:put|add)|tell me (?:which|what|when))\b/i;
+const NOT_A_CLAIM = /\b(not (?:yet )?(?:saved|added|on)|isn't (?:saved|added|on|a day)|haven't (?:saved|added)|won't say|can't say|couldn't (?:save|add)|didn't (?:save|add|land)|can't (?:put|add)|i'll (?:put|add|save|move)|i'd (?:put|add|save|move)|i would (?:put|add)|i can (?:put|add|move)|and i'll|if you want|want me to|should i|shall i|do you want|would you like|once you|before i (?:put|add)|tell me (?:which|what|when)|makes sense to|worth (?:putting|adding)|to (?:put|add|move) (?:it|that|them|those)|could go on|should go on|you could|we could)\b/i;
 const DENIAL = /\b(nothing(?:'s| is| has been)? (?:written|saved|added|landed|on the day line)|isn't confirmed|can't confirm|not confirmed|i shouldn't have said (?:saved|added)|still (?:aren't|isn't|not) on)\b/i;
 const AUTH_ASK = /\b(want me to (?:put|add|set|move|save)|should i (?:put|add|set|move|save)|shall i (?:put|add|set|move)|say yes and|give me (?:a|one) (?:yes|line to confirm)|do you want (?:that|it|them|those|me to (?:put|add|save)) (?:on|to)?|would you like (?:me to )?(?:put|add)|before you go:? (?:do you want|should i))\b/i;
 
@@ -161,7 +162,10 @@ export function gradeTrial(input: {
   for (const turn of input.transcript) {
     if (turn.speaker !== "claire") continue;
     const sentences = turn.text.replace(/[’‘]/g, "'").split(/(?<=[.!?])\s+/);
-    const claims = sentences.some(sentence => SAVE_CLAIM.test(sentence) && !NOT_A_CLAIM.test(sentence));
+    // A turn that names rows which were already there and writes nothing is describing them
+    // ("both are on today's list" about seeded work), not claiming a new save.
+    const describesSeeded = !turn.confirmedWrite && input.before.some(row => namesWork(turn.text, row.title));
+    const claims = !describesSeeded && sentences.some(sentence => SAVE_CLAIM.test(sentence) && !NOT_A_CLAIM.test(sentence));
     if (claims && !turn.confirmedWrite && !confirmedSoFar) falseClaims.push(turn.text);
     // A later summary of writes that did happen ("everything is on your Day Line") is not a false claim,
     // so once a write is confirmed only claims about NEW work count: a claim with no receipt in a turn

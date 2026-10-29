@@ -114,13 +114,30 @@ export function verifyOperatorAuthorization(input: {
   return { ok: true, quote, bareAck };
 }
 
+/** Split spoken text into sentences. */
+export function sentencesOf(text: string): string[] {
+  return text.replace(/[’‘]/g, "'").split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
+}
+
+/**
+ * The part of Claire's last line that was an offer: only its offering sentences.
+ * "Tomorrow has the Pham session and the SAT grading. Want me to put the Nakamura
+ * call on Saturday?" offers the Nakamura call, not the Pham session.
+ */
+export function offerText(lastClaireText: string | null): string | null {
+  if (!lastClaireText) return null;
+  const offering = sentencesOf(lastClaireText).filter(sentence => OFFER.test(sentence));
+  return offering.length ? offering.join(" ") : null;
+}
+
 /**
  * A bare yes binds to the offer Claire just made, for the work that offer named.
  * Returns the titles the offer did not name (empty = all bound).
  */
 export function changesOutsideOffer(lastClaireText: string | null, titles: readonly string[]): string[] {
-  if (!lastClaireText) return [...titles];
-  return titles.filter(title => !namesWork(lastClaireText, title));
+  const offer = offerText(lastClaireText);
+  if (!offer) return [...titles];
+  return titles.filter(title => !namesWork(offer, title));
 }
 
 const REFERENT = /\b(that|it|those|them|this|these|the (?:first|second|third|last) one|both|all three|all of (?:it|them|those))\b/i;
@@ -135,6 +152,51 @@ export type ExistingRowOp = "move" | "remove" | "complete";
  * item Claire just named) and carry THIS action. Otherwise refuse, and say why,
  * so Claire asks instead of acting.
  */
+/**
+ * Clauses of an instruction: sentences, and a comma or "then/and then" that is
+ * followed by a fresh imperative ("…about the Pham session, take the OPUS pickup
+ * off"). "Take the Pham session and the OPUS pickup off" stays one clause.
+ */
+const IMPERATIVE_START = /(?:and |then |but |so |also )?(?:take|pull|move|push|bump|mark|scratch|remove|delete|cancel|drop|skip|leave|put|knock|get|strike|cross|finish|reschedule|shift|postpone|defer|swap|switch|clear)\b/i;
+export function clausesOf(text: string): string[] {
+  const out: string[] = [];
+  for (const sentence of sentencesOf(text)) {
+    let rest = sentence;
+    for (;;) {
+      const match = /,\s*|\bthen\s+|\band then\s+/i.exec(rest);
+      if (!match) break;
+      const after = rest.slice(match.index + match[0].length);
+      if (IMPERATIVE_START.test(after) && /^(?:and |then |but |so |also )?(?:take|pull|move|push|bump|mark|scratch|remove|delete|cancel|drop|skip|leave|put|knock|get|strike|cross|finish|reschedule|shift|postpone|defer|swap|switch|clear)\b/i.test(after)) {
+        out.push(rest.slice(0, match.index).trim());
+        rest = after;
+      } else {
+        // Not a clause boundary; keep scanning past it.
+        const head = rest.slice(0, match.index + match[0].length);
+        const tail = clauseTail(after);
+        if (!tail) break;
+        rest = head + tail.before;
+        if (tail.rest) { out.push(rest.trim()); rest = tail.rest; } else break;
+      }
+    }
+    if (rest.trim()) out.push(rest.trim());
+  }
+  return out.filter(Boolean);
+}
+
+/** Helper for clausesOf: find the next imperative-led boundary inside `text`. */
+function clauseTail(text: string): { before: string; rest: string } | null {
+  const match = /,\s*(?=(?:and |then |but |so |also )?(?:take|pull|move|push|bump|mark|scratch|remove|delete|cancel|drop|skip|leave|put|knock|get|strike|cross|finish|reschedule|shift|postpone|defer|swap|switch|clear)\b)|\b(?:and )?then\s+(?=(?:take|pull|move|push|bump|mark|scratch|remove|delete|cancel|drop|skip|leave|put|knock|get|strike|cross|finish|reschedule|shift)\b)/i.exec(text);
+  if (!match) return { before: text, rest: "" };
+  return { before: text.slice(0, match.index), rest: text.slice(match.index + match[0].length) };
+}
+
+/**
+ * Pre-existing work: ONE clause of the operator's words must both name THIS
+ * item (or refer to the item Claire just named) and carry THIS action. Naming
+ * in one clause and an action in another ("I didn't say anything about the
+ * Pham session. Take the OPUS pickup off tomorrow.") authorizes nothing for
+ * the Pham session. Otherwise refuse, and say why, so Claire asks.
+ */
 export function authorizeExistingRowChange(input: {
   op: ExistingRowOp;
   rowTitle: string;
@@ -145,17 +207,20 @@ export function authorizeExistingRowChange(input: {
   toDay?: string | null;
 }): { ok: true } | { ok: false; reason: string } {
   const quote = input.quote.trim();
-  const named = quote.includes(input.rowId) || namesWork(quote, input.rowTitle);
-  const referred = !named && REFERENT.test(quote) && Boolean(input.lastClaireText && namesWork(input.lastClaireText, input.rowTitle));
-  if (!named && !referred) {
-    return { ok: false, reason: `"${input.rowTitle}" was on the Day Line before this call, and the operator's words do not name it; ask before changing work they already committed to` };
-  }
   const action = input.op === "remove" ? REMOVE_ACTION : input.op === "complete" ? COMPLETE_ACTION : MOVE_ACTION;
   const toDayWords = input.op === "move" && input.toDay ? normalizeWords(input.toDay) : null;
-  const actionPresent = action.test(quote) || Boolean(toDayWords && normalizeWords(quote).includes(toDayWords));
-  if (!actionPresent) {
-    const verb = input.op === "remove" ? "take it off" : input.op === "complete" ? "that it is done" : "move it";
-    return { ok: false, reason: `"${input.rowTitle}" was on the Day Line before this call; the operator mentioned it but did not say to ${verb}. Ask: "Do you want me to ${input.op === "complete" ? "mark it done" : input.op === "remove" ? "take it off" : "move it"}?"` };
+  let namedSomewhere = false;
+  for (const clause of clausesOf(quote)) {
+    const named = clause.includes(input.rowId) || namesWork(clause, input.rowTitle);
+    const referred = !named && REFERENT.test(clause) && Boolean(input.lastClaireText && namesWork(input.lastClaireText, input.rowTitle));
+    if (!named && !referred) continue;
+    namedSomewhere = true;
+    const actionHere = action.test(clause) || Boolean(toDayWords && normalizeWords(clause).includes(toDayWords));
+    if (actionHere) return { ok: true };
   }
-  return { ok: true };
+  if (!namedSomewhere) {
+    return { ok: false, reason: `"${input.rowTitle}" was on the Day Line before this call, and the operator's words do not name it; ask before changing work they already committed to` };
+  }
+  const verb = input.op === "remove" ? "take it off" : input.op === "complete" ? "that it is done" : "move it";
+  return { ok: false, reason: `"${input.rowTitle}" was on the Day Line before this call; the operator mentioned it but did not say to ${verb}. Ask: "Do you want me to ${input.op === "complete" ? "mark it done" : input.op === "remove" ? "take it off" : "move it"}?"` };
 }

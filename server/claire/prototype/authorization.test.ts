@@ -84,6 +84,36 @@ describe("authorizeExistingRowChange: conservative about work that predates the 
     expect(authorizeExistingRowChange({ op: "move", ...pitch, quote: "Move the Wilshire Vermont pitch to Friday.", lastClaireText: null, toDay: "friday" })).toEqual({ ok: true });
   });
 
+  it("the action binds to the item in its own clause (adversarial: name in one clause, action for another item in the next)", () => {
+    const pham = { rowId: "r-pham", rowTitle: "Session with the Pham sisters" };
+    const opus = { rowId: "r-opus", rowTitle: "Pickup at OPUS" };
+    const twoSentences = "I didn't say anything about the Pham session. Take the OPUS pickup off tomorrow.";
+    expect(authorizeExistingRowChange({ op: "remove", ...pham, quote: twoSentences, lastClaireText: null }).ok).toBe(false);
+    expect(authorizeExistingRowChange({ op: "remove", ...opus, quote: twoSentences, lastClaireText: null })).toEqual({ ok: true });
+    const comma = "I didn't say anything about the Pham session, take the OPUS pickup off tomorrow.";
+    expect(authorizeExistingRowChange({ op: "remove", ...pham, quote: comma, lastClaireText: null }).ok).toBe(false);
+    expect(authorizeExistingRowChange({ op: "remove", ...opus, quote: comma, lastClaireText: null })).toEqual({ ok: true });
+    // A shared verb over a list is one clause: both authorized.
+    const shared = "Take the Pham session and the OPUS pickup off tomorrow.";
+    expect(authorizeExistingRowChange({ op: "remove", ...pham, quote: shared, lastClaireText: null })).toEqual({ ok: true });
+    expect(authorizeExistingRowChange({ op: "remove", ...opus, quote: shared, lastClaireText: null })).toEqual({ ok: true });
+    // Mixed actions in one breath each bind to their own item.
+    const mixed = "The Chadwick pitch is done, and move the OPUS pickup to Friday.";
+    expect(authorizeExistingRowChange({ op: "complete", rowId: "r-c", rowTitle: "Pitch The Chadwick in person", quote: mixed, lastClaireText: null })).toEqual({ ok: true });
+    expect(authorizeExistingRowChange({ op: "remove", ...opus, quote: mixed, lastClaireText: null }).ok).toBe(false);
+    expect(authorizeExistingRowChange({ op: "move", ...opus, quote: mixed, lastClaireText: null, toDay: "friday" })).toEqual({ ok: true });
+  });
+
+  it("a bare yes authorizes the offer's sentence, not every task Claire mentioned", async () => {
+    const { offerText } = await import("./authorization");
+    const line = "Tomorrow has the Pham session and the SAT grading. Want me to take the Pham session off tomorrow?";
+    expect(offerText(line)).toBe("Want me to take the Pham session off tomorrow?");
+    expect(authorizeExistingRowChange({ op: "remove", rowId: "r-pham", rowTitle: "Session with the Pham sisters", quote: offerText(line)!, lastClaireText: line })).toEqual({ ok: true });
+    expect(authorizeExistingRowChange({ op: "remove", rowId: "r-sat", rowTitle: "Grade the SAT practice tests", quote: offerText(line)!, lastClaireText: line }).ok).toBe(false);
+    expect(changesOutsideOffer(line, ["Grade the SAT practice tests"])).toEqual(["Grade the SAT practice tests"]);
+    expect(changesOutsideOffer(line, ["Session with the Pham sisters"])).toEqual([]);
+  });
+
   it("a question about an existing item is not an instruction to change it", () => {
     expect(authorizeExistingRowChange({ op: "remove", rowId: "r-l", rowTitle: "Interview with the Whole Dog magazine writer", quote: "What's the deal with the magazine interview?", lastClaireText: null }).ok).toBe(false);
   });

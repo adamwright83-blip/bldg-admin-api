@@ -25,7 +25,7 @@ import {
 } from "../../planning/dayDirector/dayDirectorService";
 import { DayLineAdmissionRefusedError, operatorInstructionAdmission } from "../../planning/dayDirector/dayLineAdmission";
 import { removeDayDirectorCommitmentsFromDay } from "../../planning/dayline/dayLineMutationService";
-import { authorizeExistingRowChange, changesOutsideOffer, verifyOperatorAuthorization } from "./authorization";
+import { authorizeExistingRowChange, changesOutsideOffer, offerText, verifyOperatorAuthorization } from "./authorization";
 import { drizzleStandingInstructionStore, type StandingInstructionStore } from "../../agents/daphne/standingInstructions";
 import { businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
 
@@ -231,16 +231,9 @@ export async function applyDayLineChanges(
     };
   }
   const authorizedQuote = verdict.quote;
-  if (verdict.bareAck) {
-    const outside = changesOutsideOffer(ctx.lastClaireText(), changes.map(change => change.title));
-    if (outside.length) {
-      return {
-        receipts: changes.map((change, index) => ({ index, op: change.op, title: change.title, status: "refused", id: null, businessDate: null, day: null, reason: `not authorized: "${authorizedQuote}" answers your offer, and your offer did not name ${outside.map(t => `"${t}"`).join(", ")}; ask about those plainly` })),
-        wrote: false,
-        authorization: { ok: false, quote: null, reason: `a bare yes binds only to the work your offer named; not named: ${outside.join("; ")}` },
-      };
-    }
-  }
+  // A bare yes authorizes what the OFFER said: the offer's sentences are the instruction,
+  // for naming the item and for the action ("Want me to take the Pham session off tomorrow?").
+  const instructionText = verdict.bareAck ? (offerText(ctx.lastClaireText()) ?? "") : authorizedQuote;
   for (const [index, change] of changes.entries()) {
     const base = { index, op: change.op, title: change.title, id: null, businessDate: null, day: null, reason: null } as ChangeReceipt;
     const resolved = resolveSpokenDate(change.day ?? "", { today });
@@ -252,6 +245,11 @@ export async function applyDayLineChanges(
     const day = spokenDay(businessDate, today);
     try {
       if (change.op === "add") {
+        // A bare yes binds only to the work the offer named; an item the offer did not mention is not authorized by it.
+        if (verdict.bareAck && changesOutsideOffer(ctx.lastClaireText(), [change.title]).length) {
+          receipts.push({ ...base, status: "refused", businessDate, day, reason: `not authorized: "${authorizedQuote}" answers your offer, and your offer did not name "${change.title}"; ask about it plainly` });
+          continue;
+        }
         const existing = (await readDayLineRows(ctx, businessDate)).filter(row => row.status === "open");
         const duplicate = existing.find(row => sameWork(row.title, change.title));
         if (duplicate) {
@@ -313,7 +311,7 @@ export async function applyDayLineChanges(
           op: change.op as "move" | "remove" | "complete",
           rowTitle: row.title,
           rowId: row.id,
-          quote: change.operator_words?.trim() || authorizedQuote,
+          quote: change.operator_words?.trim() || instructionText,
           lastClaireText: ctx.lastClaireText(),
           toDay: change.to_day ?? null,
         });

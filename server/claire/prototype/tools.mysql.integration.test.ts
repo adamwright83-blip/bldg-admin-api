@@ -30,6 +30,8 @@ describeMysql("prototype Day Line tools", () => {
     "Take the Louise follow-up off tomorrow, Dana cancelled.",
     "Okay. I'll do that tomorrow.",
     "The Chadwick pitch is done, I did it this morning.",
+    "I didn't say anything about the Louise session. Take the OPUS pickup off tomorrow.",
+    "Yes.",
   ];
   let lastClaireText: string | null = null;
 
@@ -187,12 +189,37 @@ describeMysql("prototype Day Line tools", () => {
     const done = await applyDayLineChanges(ctx, [{ op: "complete", title: "Chadwick", day: "today" }], "The Chadwick pitch is done, I did it this morning.");
     expect(done.receipts[0]).toMatchObject({ status: "applied", id: chadwick });
 
+    // Adversarial (review of round 3): the item named in one sentence must not receive the action of the next.
+    const opus = await seed("Pickup at OPUS", tomorrow);
+    const louise2 = await seed("Session at The Louise", tomorrow);
+    const adversarial = await applyDayLineChanges(ctx, [
+      { op: "remove", title: louise2, day: "tomorrow" },
+      { op: "remove", title: opus, day: "tomorrow" },
+    ], "I didn't say anything about the Louise session. Take the OPUS pickup off tomorrow.");
+    expect(adversarial.receipts[0]).toMatchObject({ status: "refused", id: louise2 });
+    expect(adversarial.receipts[1]).toMatchObject({ status: "applied", id: opus });
+    const [louiseRow] = await sql.query<mysql.RowDataPacket[]>("SELECT metadataJson FROM day_director_commitments WHERE tenantId = ? AND id = ?", [TENANT, louise2]);
+    const louiseMeta = typeof louiseRow[0]!.metadataJson === "string" ? JSON.parse(louiseRow[0]!.metadataJson) : louiseRow[0]!.metadataJson;
+    expect(louiseMeta.goldlineDayLine?.removedFromDay).toBeFalsy();
+
+    // A bare yes after Claire mentioned two existing items but offered to change one: only the offered one.
+    const sat = await seed("Grade the SAT practice tests", tomorrow);
+    lastClaireText = "Tomorrow has the Louise session and the SAT grading. Want me to take the Louise session off tomorrow?";
+    const yesToOne = await applyDayLineChanges(ctx, [
+      { op: "remove", title: louise2, day: "tomorrow" },
+      { op: "remove", title: sat, day: "tomorrow" },
+    ], "Yes.");
+    expect(yesToOne.receipts[0]).toMatchObject({ status: "applied", id: louise2 });
+    expect(yesToOne.receipts[1]).toMatchObject({ status: "refused", id: sat });
+
     // A bare yes binds to the offer's named work only.
     lastClaireText = "Want me to put the Gentiles pickup on tomorrow?";
     const bound = await applyDayLineChanges(ctx, [{ op: "add", title: "Pick up the Gentiles at Opus", day: "tomorrow" }, { op: "add", title: "Call the plumber", day: "tomorrow" }], "Yes.");
-    expect(bound.wrote).toBe(false);
-    expect(bound.authorization.ok).toBe(false);
-    expect(bound.authorization.reason).toMatch(/plumber/);
+    expect(bound.receipts[0]).toMatchObject({ status: "applied" });
+    expect(bound.receipts[1]).toMatchObject({ status: "refused" });
+    expect(bound.receipts[1]!.reason).toMatch(/plumber/);
+    const [plumberRows] = await sql.query<mysql.RowDataPacket[]>("SELECT id FROM day_director_commitments WHERE tenantId = ? AND actorId IN (?) AND title LIKE '%plumber%'", [TENANT, actorIds]);
+    expect(plumberRows).toHaveLength(0);
   }, 60_000);
 
   it("saves a standing instruction and reports it active; numbers come back from the ledger without invention", async () => {
