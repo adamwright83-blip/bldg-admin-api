@@ -66,7 +66,7 @@ describe("active-customer standing across the Laundry Farm company", () => {
       { tenantId: "default", operatorUserId: "adam-admin", now: NOW, timeZone: ZONE },
       { loadAuthorizedTenantIds: async () => ["default", "laundry_farm"], loadLedger: async input => books[input.tenantId]!, loadCoverage: async () => coverage([]) }
     );
-    expect(standing).toMatchObject({ value: 4, complete: true, countedThrough: "2026-10-29", caveats: [] });
+    expect(standing).toMatchObject({ value: 4, complete: true, atLeast: false, windowEnd: "2026-10-29", caveats: [] });
   });
 
   it("keeps the real count but says through when, and why, when CleanCloud is behind and some payments are unproven", async () => {
@@ -86,9 +86,15 @@ describe("active-customer standing across the Laundry Farm company", () => {
           input.tenantId === "laundry_farm" ? coverage([{ name: "CleanCloud", status: "stale", coveredThrough: "2026-10-26" }, { name: "Laundry Butler", status: "fresh", coveredThrough: null }]) : coverage([]),
       }
     );
+    // Today's window over what could be read: a minimum, never a historical "as of the 26th".
     expect(standing.value).toBe(3);
     expect(standing.complete).toBe(false);
-    expect(standing.countedThrough).toBe("2026-10-26");
+    expect(standing.atLeast).toBe(true);
+    expect(standing.windowEnd).toBe("2026-10-29");
+    expect(standing.sources).toEqual([
+      { source: "CleanCloud", through: "2026-10-26", current: false },
+      { source: "Laundry Butler", through: null, current: true },
+    ]);
     expect(standing.caveats).toEqual([
       "CleanCloud records only reach 2026-10-26; nothing newer has been imported.",
       "4 Laundry Butler orders have a payment with no recorded captured amount, so they aren't counted.",
@@ -109,6 +115,36 @@ describe("active-customer standing across the Laundry Farm company", () => {
       { tenantId: "default", operatorUserId: "adam-admin", now: NOW, timeZone: ZONE },
       { loadAuthorizedTenantIds: async () => ["default", "laundry_farm"], loadLedger: async () => ledger([], { completeness: "unavailable", loadedSources: [] }), loadCoverage: async () => coverage([]) }
     );
-    expect(none).toMatchObject({ value: null, complete: false, countedThrough: null });
+    expect(none).toMatchObject({ value: null, complete: false, atLeast: false });
+  });
+
+  it("a coverage check that fails makes the count incomplete, never current (PR #775 review)", async () => {
+    const standing = await getActiveCustomerStanding(
+      { tenantId: "default", operatorUserId: "adam-admin", now: NOW, timeZone: ZONE },
+      {
+        loadAuthorizedTenantIds: async () => ["default", "laundry_farm"],
+        loadLedger: async input => ledger([event(`${input.tenantId}-1`, input.tenantId === "default" ? "3105550001" : "3105550002", input.tenantId === "default" ? "laundry_butler" : "cleancloud")]),
+        loadCoverage: async input => (input.tenantId === "laundry_farm" ? Promise.reject(new Error("coverage read failed")) : coverage([])),
+      }
+    );
+    expect(standing).toMatchObject({ value: 2, complete: false, atLeast: true, caveats: ["Could not check how current the Laundry Farm records are."] });
+    expect(standing.sources).toContainEqual({ source: "Laundry Farm", through: null, current: false });
+  });
+
+  it("an operator who may read only one book gets that book alone; the other is never loaded", async () => {
+    const loaded: string[] = [];
+    const standing = await getActiveCustomerStanding(
+      { tenantId: "default", operatorUserId: "teammate", now: NOW, timeZone: ZONE },
+      {
+        loadAuthorizedTenantIds: async () => ["default"],
+        loadLedger: async input => {
+          loaded.push(input.tenantId);
+          return ledger([event("lb-1", "3105550001", "laundry_butler")]);
+        },
+        loadCoverage: async () => coverage([]),
+      }
+    );
+    expect(loaded).toEqual(["default"]);
+    expect(standing).toMatchObject({ value: 1, tenants: ["default"], complete: true });
   });
 });

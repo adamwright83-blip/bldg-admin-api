@@ -1,6 +1,6 @@
 /**
- * Where the operator stands on an active-customer goal: the verified count,
- * how complete it is, and the last day the records cover.
+ * Where the operator stands on an active-customer goal: today's verified count,
+ * whether it is complete or only a minimum, and how far each source reaches.
  *
  * Same definition and ledger as `getActiveCustomerMetric`
  * (ACTIVE_CUSTOMER_DEFINITION), with two differences found on 2026-10-29:
@@ -13,9 +13,14 @@
  *   but only the books the operator is authorized to read (the company view's rule).
  * - Freshness. The ledger calls itself complete when its sources load, even
  *   when CleanCloud has not been imported for days. Source coverage says how
- *   far each book reaches, so the count says "through when".
+ *   far each source reaches.
  *
- * Never throws for a missing source: what could not be read becomes a caveat.
+ * The count is always TODAY's 30-day window over the records that could be
+ * read (PR #775 review: a today-window count labeled "as of the 26th" is
+ * neither). Missing records can only leave customers out, so an incomplete
+ * count is a minimum: "at least 23", with the sources that are behind.
+ * Never throws for a missing source: what could not be read, including the
+ * coverage check itself, becomes a caveat and the count is incomplete.
  */
 import { reconcileLedgerSpan } from "../analytics/canonicalRevenue";
 import { activeCustomerPopulation } from "../analytics/businessMetrics";
@@ -28,10 +33,14 @@ import { activeCustomerWindow } from "./activeCustomerMetric";
 export type ActiveCustomerStanding = {
   /** Distinct active customers in the records that could be read and verified. Null when nothing could be read. */
   value: number | null;
-  /** Every book loaded, every paid order verified, and every held source current. */
+  /** Every book loaded, every paid order verified, coverage readable, and every held source current. */
   complete: boolean;
-  /** Last business-local day the records reach. Today when every source is current. */
-  countedThrough: string | null;
+  /** Incomplete but readable: the true count today is at least `value`. */
+  atLeast: boolean;
+  /** Business-local day the 30-day window ends (today). */
+  windowEnd: string;
+  /** How far each held source reaches; `current` false when it is behind or unknown. */
+  sources: Array<{ source: string; through: string | null; current: boolean }>;
   tenants: string[];
   /** Plain sentences: why the count may be low. Empty when complete. */
   caveats: string[];
@@ -79,10 +88,11 @@ export async function getActiveCustomerStanding(
 
   const events: PaidOrderEvent[] = [];
   const caveats: string[] = [];
-  const throughDays: string[] = [];
+  const sources: ActiveCustomerStanding["sources"] = [];
   let readable = 0;
   for (const tenantId of tenants) {
     const [ledger, coverage] = await Promise.all([
+      // A coverage read that fails is null here and becomes a caveat in coverageCaveats.
       loadLedger({ tenantId, startUtc: window.start, endExclusiveUtc: new Date(now.getTime() + 1), timeZone }).catch(() => null),
       loadCoverage({ tenantId, now }).catch(() => null),
     ]);
@@ -105,24 +115,49 @@ export async function getActiveCustomerStanding(
         caveats.push(`${SOURCE_NAMES[source] ?? source} orders could not be read.`);
       }
     }
-    for (const source of coverage?.sources ?? []) {
-      if (!source.includedInCombinedBook || source.status === "fresh") continue;
-      if (source.coveredThrough) throughDays.push(source.coveredThrough);
-      caveats.push(
-        source.coveredThrough
-          ? `${source.name} records only reach ${source.coveredThrough}; nothing newer has been imported.`
-          : `${source.name} records are not current.`
-      );
-    }
+    caveats.push(...coverageCaveats(tenantId, coverage, sources));
   }
   const population = activeCustomerPopulation(events, span, 1);
   const unique = [...new Set(caveats)];
+  const complete = readable === tenants.length && unique.length === 0;
   return {
     value: readable ? population.count : null,
-    complete: readable === tenants.length && unique.length === 0,
-    countedThrough: throughDays.length ? throughDays.sort()[0]! : readable ? span.end : null,
+    complete,
+    atLeast: Boolean(readable) && !complete,
+    windowEnd: span.end,
+    sources: sources.filter((entry, index) => sources.findIndex(other => other.source === entry.source && other.through === entry.through && other.current === entry.current) === index),
     tenants,
     caveats: unique,
   };
+}
+
+export const BOOK_NAMES: Record<string, string> = { default: "Laundry Butler", laundry_farm: "Laundry Farm" };
+
+/**
+ * Freshness caveats for one book. A coverage snapshot that could not be read is itself a caveat:
+ * unknown freshness is never treated as current (PR #775 review). Fills `sources` as a side record.
+ */
+export function coverageCaveats(
+  tenantId: string,
+  coverage: BusinessSourceCoverageSnapshot | null,
+  sources: Array<{ source: string; through: string | null; current: boolean }> = []
+): string[] {
+  if (!coverage) {
+    sources.push({ source: BOOK_NAMES[tenantId] ?? tenantId, through: null, current: false });
+    return [`Could not check how current the ${BOOK_NAMES[tenantId] ?? tenantId} records are.`];
+  }
+  const caveats: string[] = [];
+  for (const source of coverage.sources) {
+    if (!source.includedInCombinedBook) continue;
+    const current = source.status === "fresh";
+    sources.push({ source: source.name, through: source.coveredThrough ?? null, current });
+    if (current) continue;
+    caveats.push(
+      source.coveredThrough
+        ? `${source.name} records only reach ${source.coveredThrough}; nothing newer has been imported.`
+        : `${source.name} records are not current.`
+    );
+  }
+  return caveats;
 }
 

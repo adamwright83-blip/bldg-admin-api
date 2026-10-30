@@ -13,8 +13,8 @@
  *             Claire says she has no verified current count.
  *   standing  the same count with its completeness, the last day the records
  *             reach and why it may be low (activeCustomerStanding.ts), across
- *             the company's books. Lets Claire say "23 as of the 26th" instead
- *             of nothing when a source is behind.
+ *             the company's books. Lets Claire say "at least 23" instead of
+ *             nothing when a source is behind.
  *
  * The goals compartment separately carries the objective as advice
  * (`goal_recommendation`). This item lets the plan SPEAK the numbers.

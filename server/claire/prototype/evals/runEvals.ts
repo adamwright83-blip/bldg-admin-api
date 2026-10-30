@@ -179,7 +179,12 @@ async function main() {
       readCurrentValue: async () => {
         if (goal?.current != null && goal.caveats?.length) {
           const through = new Date(Date.now() - (goal.countedThroughDaysAgo ?? 0) * 86_400_000).toISOString().slice(0, 10);
-          return { value: null, note: goal.caveats.join(" "), standing: { value: goal.current, complete: false, countedThrough: through, tenants: ["default", "laundry_farm"], caveats: goal.caveats } };
+          const today = new Date().toISOString().slice(0, 10);
+          return {
+            value: null,
+            note: goal.caveats.join(" "),
+            standing: { value: goal.current, complete: false, atLeast: true, windowEnd: today, sources: [{ source: "CleanCloud", through, current: false }, { source: "Laundry Butler", through: null, current: true }], tenants: ["default", "laundry_farm"], caveats: goal.caveats },
+          };
         }
         return goal?.current != null ? { value: goal.current, note: null } : { value: null, note: goal?.currentNote ?? "no verified current count" };
       },

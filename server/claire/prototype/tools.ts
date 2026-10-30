@@ -31,6 +31,10 @@ import { drizzleStandingInstructionStore, type StandingInstructionStore } from "
 import { addDaysYmd, businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
 import { matchWork, plausibleSameWork } from "./workMatch";
 import { productionGoalProgressReaders, readGoalProgress, type GoalProgressReaders } from "../gameMaster/goalProgress";
+import { ACTIVE_CUSTOMER_DEFINITION } from "../activeCustomerMetric";
+import { BOOK_NAMES, coverageCaveats, getActiveCustomerStanding, standingTenants, type ActiveCustomerStandingDeps } from "../activeCustomerStanding";
+import { membershipTenantIds, readLaundryFarmCompanyView } from "../../analytics/laundryFarmCompanyView";
+import type { BusinessSourceCoverageSnapshot } from "../../analytics/sourceCoverage";
 
 export type ToolContext = {
   tenantId: string;
@@ -50,6 +54,11 @@ export type ToolContext = {
   callRowIds: Set<string>;
   standingInstructionStore?: StandingInstructionStore;
   goalProgressReaders?: GoalProgressReaders;
+  /** Test seams for company-scoped business reads. Production reads the database. */
+  companyReaders?: ActiveCustomerStandingDeps & {
+    readCompanyView?: typeof readLaundryFarmCompanyView;
+    runQuery?: typeof runBusinessQuery;
+  };
 };
 
 export type DayLineRow = { id: string; title: string; status: "open" | "completed"; businessDate: string; detail: string | null };
@@ -156,7 +165,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "read_business_numbers",
     description:
-      "Read verified business figures from the ledger: revenue, orders, average order value, active/new/dormant customers, top customers, latest or biggest orders, open orders. Returns the period actually covered and the records. If it returns no records or 'unavailable', say that plainly; never state a figure that did not come from this tool.",
+      "Read verified business figures from the ledger: revenue, orders, average order value, active/new/dormant customers, top customers, latest or biggest orders, open orders. It reads the whole company the operator runs (every order book they are authorized for, each sale keeping its payment source), so the operator never has to say which book. Revenue, orders and average order are company totals with a per-book breakdown; may_state_company_total false means a book was unread or incomplete, so say the figure is what is recorded so far. active_customers is the same count read_goal_progress gives (at least N when incomplete). Other customer lists come per book: the same person can be in both, so never add customer counts across books. caveats say which records are behind. If it returns no records or 'unavailable', say that plainly; never state a figure that did not come from this tool.",
     input_schema: {
       type: "object",
       properties: {
@@ -171,7 +180,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "read_goal_progress",
     description:
-      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and the current count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is still the real count from the records that could be read, through counted_through: say it with that date (\"23 as of the 26th\") and, only if they ask why, the caveats; never present it as final and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why.",
+      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and today's count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is a minimum for today (records that are behind can only leave customers out): say \"at least\" the number (\"at least 23 of 50\") and, briefly or when asked, which records are behind (sources, caveats). Never present a minimum as the final count and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why. The same numbers come from read_business_numbers with metric active_customers.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -453,9 +462,92 @@ function periodSpec(period: (typeof PERIODS)[number], trailingDays?: number): Pe
   return { kind: period } as PeriodSpec;
 }
 
+async function loadCoverageSnapshot(ctx: ToolContext, tenantId: string): Promise<BusinessSourceCoverageSnapshot | null> {
+  const load =
+    ctx.companyReaders?.loadCoverage ??
+    (async (input: { tenantId: string; now: Date }) => (await import("../../analytics/sourceCoverage")).loadBusinessSourceCoverage(input));
+  return load({ tenantId, now: ctx.now() }).catch(() => null);
+}
+
+/**
+ * Business numbers for the company the operator runs, the same scope read_goal_progress uses:
+ * every book of the company the operator is authorized to read (Laundry Farm: CleanCloud under
+ * laundry_farm, Laundry Butler under default). Oct 29: the goal said 23 company-wide while this
+ * tool read one book and would have said 2.
+ */
 async function readBusinessNumbers(ctx: ToolContext, input: { metric: BusinessMetric; period: (typeof PERIODS)[number]; trailing_days?: number }) {
+  const authorized = await (ctx.companyReaders?.loadAuthorizedTenantIds ?? membershipTenantIds)(ctx.operatorUserId).catch(() => [] as string[]);
+  const books = standingTenants(ctx.tenantId, authorized);
+  if (input.metric === "active_customers") {
+    const standing = await getActiveCustomerStanding(
+      { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, now: ctx.now(), timeZone: ctx.timeZone },
+      { ...ctx.companyReaders, loadAuthorizedTenantIds: async () => authorized }
+    );
+    return {
+      status: standing.value === null ? "unavailable" : "ok",
+      metric: input.metric,
+      books: standing.tenants.map(tenantId => BOOK_NAMES[tenantId] ?? tenantId),
+      period: { note: "Active customers are always the 30 days ending today.", end: standing.windowEnd },
+      definition: ACTIVE_CUSTOMER_DEFINITION,
+      count: standing.value,
+      complete: standing.complete,
+      at_least: standing.atLeast,
+      sources: standing.sources,
+      caveats: standing.caveats,
+    };
+  }
+  if (books.length > 1 && (input.metric === "revenue" || input.metric === "orders" || input.metric === "aov")) {
+    const view = await (ctx.companyReaders?.readCompanyView ?? readLaundryFarmCompanyView)({
+      operatorUserId: ctx.operatorUserId,
+      now: ctx.now(),
+      period: periodSpec(input.period, input.trailing_days),
+      authorizedTenantIds: authorized,
+    });
+    const caveats: string[] = [];
+    for (const tenantId of view.tenantsRead) caveats.push(...coverageCaveats(tenantId, await loadCoverageSnapshot(ctx, tenantId)));
+    for (const tenantId of view.tenantsUnread) if (books.includes(tenantId)) caveats.push(`The ${BOOK_NAMES[tenantId] ?? tenantId} order book could not be read.`);
+    const figures = (f: (typeof view.totals)) => ({
+      recorded_sales: f.recordedSalesCents / 100,
+      net_revenue: f.netRevenueCents / 100,
+      refunds: f.refundCents / 100,
+      orders: f.orderCount,
+      average_order: f.orderCount ? Math.round(f.recordedSalesCents / f.orderCount) / 100 : null,
+    });
+    return {
+      status: "ok",
+      metric: input.metric,
+      scope: view.scope,
+      period: view.period,
+      totals: figures(view.totals),
+      by_book: view.businessRevenue.map(book => ({ book: BOOK_NAMES[book.tenantId] ?? book.tenantId, ...figures(book.figures) })),
+      may_state_company_total: view.mayStateCompanyTotal && caveats.length === 0,
+      overlap: view.overlap.status === "unresolved" ? { possible_double_counted: view.overlap.unresolvedIncludedCents / 100, pairs: view.overlap.unresolvedPairCount } : null,
+      caveats: [...new Set(caveats)],
+      note: "Dollars. Figures are the ledger's records for the period, not sales in the world; say which.",
+    };
+  }
+  if (books.length > 1) {
+    const perBook = [];
+    const caveats: string[] = [];
+    for (const tenantId of books) {
+      perBook.push({ book: BOOK_NAMES[tenantId] ?? tenantId, ...(await readOneBook(ctx, tenantId, input)) });
+      caveats.push(...coverageCaveats(tenantId, await loadCoverageSnapshot(ctx, tenantId)));
+    }
+    return {
+      status: perBook.some(book => book.status === "ok") ? "ok" : "unavailable",
+      metric: input.metric,
+      scope: "per_book",
+      books: perBook,
+      caveats: [...new Set(caveats)],
+      note: "Listed per order book. The same customer can appear in both books, so never add customer counts across books.",
+    };
+  }
+  return readOneBook(ctx, ctx.tenantId, input);
+}
+
+async function readOneBook(ctx: ToolContext, tenantId: string, input: { metric: BusinessMetric; period: (typeof PERIODS)[number]; trailing_days?: number }) {
   const query = { ...defaultBusinessQuery(input.metric), period: periodSpec(input.period, input.trailing_days) };
-  const result = await runBusinessQuery(ctx.tenantId, query);
+  const result = await (ctx.companyReaders?.runQuery ?? runBusinessQuery)(tenantId, query);
   if (result.status !== "ok") {
     return { status: "unavailable", metric: input.metric, period: { start: result.period.start, end: result.period.end }, reason: result.reason };
   }
@@ -485,7 +577,8 @@ async function readGoal(ctx: ToolContext) {
     started_at: progress.baselineValue,
     current: progress.standing?.value ?? progress.currentValue,
     current_is_complete: progress.currentValue !== null,
-    counted_through: progress.standing?.countedThrough ?? null,
+    current_is_minimum: progress.standing?.atLeast ?? false,
+    sources: progress.standing?.sources ?? [],
     caveats: progress.standing?.caveats ?? (progress.currentNote ? [progress.currentNote] : []),
     to_go: (progress.standing?.value ?? progress.currentValue) === null ? null : Math.max(0, progress.targetValue - (progress.standing?.value ?? progress.currentValue)!),
   };
