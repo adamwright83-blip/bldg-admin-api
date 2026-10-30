@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { offerWords, gmailComposeUrl, type ActivationView } from "../../../shared/firstTenMinutesActivation";
+import { exampleOf } from "../../../shared/firstTenMinutesExample";
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { advertisedOfferForPlan } from "../../saas/joystickStripeOffer";
 import { assertNewBusinessIdentity, assertTestModeCheckoutKey } from "../../saas/paidCustomerLifecycle";
@@ -54,7 +55,8 @@ function named<K extends string>(findings: FindingView[], kind: K): string | nul
 
 export async function activationView(journey: JourneyRow, credentials: DraftCredentials): Promise<ActivationView> {
   const session = await requireOnboardingSession(credentials);
-  const offer = journey.kind === "example" ? null : await currentOffer();
+  const example = exampleOf(journey.kind);
+  const offer = example ? null : await currentOffer();
   const google = (await connectionRows(journey.id)).find(row => row.provider === "google" && row.status === "connected");
   const findings = (await understandingView(journey.id)).findings;
   const status = session.status === "provisioned" || session.status === "complete" ? "active" : session.status === "checkout_pending" ? "checkout_pending" : "none";
@@ -64,7 +66,8 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
     await db.update(firstTenJourneys).set({ tenantId: session.tenantId }).where(eq(firstTenJourneys.id, journey.id));
   }
   return {
-    example: journey.kind === "example",
+    example: Boolean(example),
+    exampleOwner: example?.owner ?? null,
     required: Boolean(offer),
     offer,
     status,
@@ -86,7 +89,8 @@ export async function beginActivation(
   identity: { businessName: string; contactName: string; ownerEmail: string; timeZone: string },
   stripe?: Stripe
 ): Promise<{ url: string }> {
-  if (journey.kind === "example") throw new TRPCError({ code: "BAD_REQUEST", message: "Nina's example can't be activated. Bring your own to continue." });
+  const example = exampleOf(journey.kind);
+  if (example) throw new TRPCError({ code: "BAD_REQUEST", message: `${example.owner}'s example can't be activated. Bring your own to continue.` });
   const offer = await currentOffer();
   if (!offer) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "JOYSTICK isn't taking payment yet. Everything here is saved." });
   const chapter = await chapterView(journey);
@@ -119,7 +123,8 @@ export async function handOffDraft(
   credentials: DraftCredentials,
   channel: "gmail" | "copy"
 ): Promise<{ url: string | null }> {
-  if (journey.kind === "example") throw new TRPCError({ code: "BAD_REQUEST", message: "Nothing is sent from Nina's example." });
+  const example = exampleOf(journey.kind);
+  if (example) throw new TRPCError({ code: "BAD_REQUEST", message: `Nothing is sent from ${example.owner}'s example.` });
   const activation = await activationView(journey, credentials);
   if (activation.required && activation.status !== "active") {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Continue with JOYSTICK first; your message stays here." });

@@ -131,6 +131,12 @@ describe("Claire's portrait (Nina)", () => {
     const confirmed = findings.map(finding => (finding.payload.kind === "rule" ? { ...finding, status: "confirmed" as const } : finding));
     expect(portraitBasis(findings)).toBe(portraitBasis([...findings].reverse()));
     expect(portraitBasis(confirmed)).not.toBe(portraitBasis(findings));
+    // a later reading can change what a finding says under the same id (a rhythm recounted); that changes it too
+    const recounted = findings.map(finding =>
+      finding.payload.kind === "rhythm" ? { ...finding, payload: { ...finding.payload, count: finding.payload.count + 1 } } : finding
+    );
+    expect(recounted.some(finding => finding.payload.kind === "rhythm")).toBe(true);
+    expect(portraitBasis(recounted)).not.toBe(portraitBasis(findings));
   });
 });
 
@@ -146,5 +152,21 @@ describe("what the portrait needs from the reading (Nina)", () => {
   it("recognises the words the findings already use", () => {
     expect(stem("Weddings")).toBe(stem("wedding"));
     expect(stem("promises")).toBe(stem("promised"));
+  });
+});
+
+describe("Claire's portrait (Dev)", () => {
+  it("is written for Dev's records the way Nina's is, every line standing", async () => {
+    const { all, opportunities } = await exampleReading("journey-under-test", "dev");
+    const findings = asViews([...all, ...opportunities]);
+    const draft = await examplePortraitWriter("dev").write({ system: PORTRAIT_SYSTEM, corpus: portraitCorpus(findings, firstNameFor(findings)), findings });
+    const page = settlePortrait(draft, findings);
+    expect(page?.greeting).toBe("Dev, here's where you are.");
+    expect(page?.paragraphs.map(paragraph => paragraph.map(line => line.text))).toEqual([
+      ["Your work runs between homes and small businesses around Highland Park.", "The businesses need it fixed before they open; the homeowners bring a list."],
+      ["You only quote after a site visit.", "You answer the same day, with a time."],
+      ["An estimate still holds more than the client asked for first."],
+    ]);
+    expect(page?.closing?.text).toBe(PORTRAIT_CLOSING);
   });
 });

@@ -47,7 +47,7 @@ export function BringYourWorld(props: {
   slackReady: boolean;
   notice: string | null;
   onConnect: (provider: ConnectionProvider) => void;
-  onExample: () => void;
+  onExample: (kind: "example" | "example_dev") => void;
   onIncludes: (what: ConnectionProvider | "example") => void;
 }) {
   return (
@@ -75,8 +75,12 @@ export function BringYourWorld(props: {
               Add Slack
             </button>
             <span className={styles.dot} aria-hidden="true">·</span>
-            <button type="button" disabled={props.busy} onClick={props.onExample} data-testid="first-ten-example">
+            <button type="button" disabled={props.busy} onClick={() => props.onExample("example")} data-testid="first-ten-example">
               Explore an example
+            </button>
+            <span className={styles.dot} aria-hidden="true">·</span>
+            <button type="button" disabled={props.busy} onClick={() => props.onExample("example_dev")} data-testid="first-ten-example-dev">
+              An electrician's
             </button>
           </p>
         </div>

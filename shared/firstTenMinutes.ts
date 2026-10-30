@@ -142,7 +142,7 @@ export const CONNECTION_INCLUDES: Record<ConnectionProvider | "example", Connect
   example: {
     title: "Exploring an example",
     reads: [
-      "Nina's flower studio: her email, calendar and files, all invented for this example.",
+      "Nina's flower studio or Dev's electrical business: their email, calendar and files, all invented for these examples.",
     ],
     never: ["Use anything from your accounts. Nothing here is yours, and nothing is sent to anyone."],
     kept: ["Nothing about you. You can bring your own world at any point."],
@@ -152,7 +152,8 @@ export const CONNECTION_INCLUDES: Record<ConnectionProvider | "example", Connect
 
 // ------------------------------------------------------------------ the journey
 
-export type JourneyKind = "own" | "example";
+export type JourneyKind = "own" | "example" | "example_dev";
+export const JOURNEY_KINDS = ["own", "example", "example_dev"] as const satisfies readonly JourneyKind[];
 
 /**
  * Where the visitor is. The page decides what to show inside a stage; the server keeps the stage so a reload, a

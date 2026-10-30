@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { exampleOf } from "../../shared/firstTenMinutesExample";
 import { recordEvent } from "./events";
 import type { JourneyRow } from "./store";
 import { googleAccessFor } from "./understanding/deps";
@@ -35,7 +36,8 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif
 export async function findingPicture(journey: JourneyRow, findingId: string): Promise<{ src: string } | null> {
   const row = await findingRow(journey.id, findingId);
   if (!row || row.kind !== "image" || row.payloadJson.kind !== "image") return null;
-  if (journey.kind === "example") return { src: "/assets/first-ten/example/blue-jug.webp" };
+  const example = exampleOf(journey.kind);
+  if (example) return example.key === "nina" ? { src: "/assets/first-ten/example/blue-jug.webp" } : null;
   const origin = row.originJson;
   if (!origin || origin.provider !== "gmail") return null;
   const mimeType = row.payloadJson.mimeType ?? "image/jpeg";

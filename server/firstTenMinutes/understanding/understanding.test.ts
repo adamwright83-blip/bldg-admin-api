@@ -144,6 +144,11 @@ describe("what the model may not do", () => {
         a: { sourceId: "nina-m01", quote: "We want the day to feel spectacular.", line: "Your 3 wedding clients ask for a spectacular day." },
         b: { sourceId: "nina-m07", quote: "We need something we can count on every week for the lobby.", line: "The hotels want weekly flowers." },
       },
+      // "what comes first" is the client's to say: Nina's own words don't count, nor a part that isn't in the quote
+      scopeChanges: [
+        { sourceId: "nina-m06", quote: "Ask me again once we have a Friday delivery.", first: "Friday", later: "events" },
+        { sourceId: "nina-m05", quote: "Could you do fresh arrangements every Friday?", first: "fresh arrangements", later: "the garden" },
+      ],
     });
     expect(verifyConversations(invented, items, owner, ids)).toEqual([]);
   });

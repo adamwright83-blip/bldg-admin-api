@@ -1,18 +1,19 @@
+import type { ExampleKey } from "../../../shared/firstTenMinutesExample";
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { findingIds, type DraftFinding } from "../understanding/draft";
 import { habitFindings, imageFindings, ownerFindings, peopleFindings, rhythmFindings, routeFindings } from "../understanding/deterministic";
-import { exampleGeocoder, exampleReaders } from "../understanding/exampleReaders";
+import { exampleCorpus, exampleGeocoder, exampleReaders } from "../understanding/exampleReaders";
 import { exampleExtractor } from "../understanding/extractors";
 import { CONVERSATIONS_SYSTEM, conversationCorpus, verifyConversations, verifyWork, workCorpus } from "../understanding/extract";
 import { linkOpportunities } from "../understanding/opportunity";
 import { placeFindings } from "../understanding/places";
 import { mergeDrafts } from "../understanding/run";
 
-/** Nina's example read end to end in memory, exactly as the runner reads it, for tests. */
-export async function exampleReading(journeyId = "journey-under-test") {
+/** An example (Nina's by default) read end to end in memory, exactly as the runner reads it, for tests. */
+export async function exampleReading(journeyId = "journey-under-test", key: ExampleKey = "nina") {
   const ids = findingIds(journeyId);
-  const readers = exampleReaders();
-  const extractor = exampleExtractor();
+  const readers = exampleReaders(exampleCorpus(key));
+  const extractor = exampleExtractor(key);
   const owner = await readers.owner();
   const sent = (await readers.sentMail(160)).items;
   const received = (await readers.receivedMail(240)).items;
@@ -33,7 +34,7 @@ export async function exampleReading(journeyId = "journey-under-test") {
   ]);
   const work = await extractor.work({ system: "", corpus: workCorpus({ files, slack: [], events, verified: all }) });
   all = mergeDrafts([...all, ...verifyWork(work, { files, slack: [] }, ids)]);
-  await placeFindings(all, exampleGeocoder());
+  await placeFindings(all, exampleGeocoder(exampleCorpus(key)));
   const opportunities = linkOpportunities(all, [], ids);
   return { all, owner, sent, received, items, events, files, opportunities };
 }

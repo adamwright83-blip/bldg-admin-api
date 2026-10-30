@@ -1,0 +1,76 @@
+{
+  "note": "What the email and document readings return for Dev's invented example (shared/firstTenMinutesExampleDevCorpus.json). The server verifies every quote against the corpus exactly as it does for a real account; the estimate's opportunity is left to the server's own chain check.",
+  "conversations": {
+    "business": { "name": "Northfield Electric", "offering": "electrical work", "sourceId": "dev-m02", "quote": "Northfield Electric · Highland Park" },
+    "rules": [
+      { "sourceId": "dev-m02", "quote": "I only quote after a site visit", "statement": "Quotes only after a site visit" }
+    ],
+    "promises": [
+      { "sourceId": "dev-m05", "quote": "I'll send the estimate this week", "statement": "The estimate to Marisol this week" }
+    ],
+    "requests": [
+      { "sourceId": "dev-m01", "quote": "Could you look at the garage, the kitchen lighting and the upstairs hallway while you're out here?", "wants": "The garage, kitchen lighting and upstairs hallway", "recurring": false },
+      { "sourceId": "dev-m06", "quote": "Could you take a look at the hallway lights at York Commons?", "wants": "Flickering hallway lights looked at", "recurring": false },
+      { "sourceId": "dev-m08", "quote": "Could you come before we open on Saturday?", "wants": "The oven circuit fixed before Saturday", "recurring": false },
+      { "sourceId": "dev-m10", "quote": "Can our panel handle it?", "wants": "The panel checked for two kilns", "recurring": false }
+    ],
+    "replies": [
+      { "sourceId": "dev-m02", "quote": "Happy to look at all three.", "requestSourceId": "dev-m01", "declined": false, "missing": null },
+      { "sourceId": "dev-m07", "quote": "I can be there Tuesday at 8.", "requestSourceId": "dev-m06", "declined": false, "missing": null },
+      { "sourceId": "dev-m09", "quote": "I can do Friday at 6am, before your first bake.", "requestSourceId": "dev-m08", "declined": false, "missing": null },
+      { "sourceId": "dev-m11", "quote": "Probably, but I'd want to see the panel first.", "requestSourceId": "dev-m10", "declined": false, "missing": null }
+    ],
+    "services": [],
+    "places": [
+      { "name": "York Commons", "category": "building", "sourceId": "dev-m06", "quote": "Property Manager, York Commons", "address": "5021 York Blvd, Los Angeles, CA 90042" },
+      { "name": "The Figueroa Bakery", "category": "bakery", "sourceId": "dev-m08", "quote": "The Figueroa Bakery", "address": "5609 N Figueroa St, Los Angeles, CA 90042" },
+      { "name": "Avenue 50 Studio", "category": "studio", "sourceId": "dev-m10", "quote": "Avenue 50 Studio", "address": "131 N Avenue 50, Los Angeles, CA 90042" }
+    ],
+    "contrast": {
+      "a": { "sourceId": "dev-m01", "quote": "Could you look at the garage, the kitchen lighting and the upstairs hallway while you're out here?", "line": "Your homeowners bring you a list." },
+      "b": { "sourceId": "dev-m08", "quote": "Could you come before we open on Saturday?", "line": "The shops need it fixed before they open." }
+    },
+    "scopeChanges": [
+      { "sourceId": "dev-m04", "quote": "Let's do the garage first; the house can wait.", "first": "the garage", "later": "the house" }
+    ]
+  },
+  "work": {
+    "services": [],
+    "rules": [
+      { "sourceId": "drv-rates", "quote": "I only quote after a site visit.", "statement": "Quotes only after a site visit" }
+    ],
+    "promises": [],
+    "opportunities": [],
+    "estimates": [
+      {
+        "sourceId": "drv-ortega-estimate",
+        "title": "Estimate — Ortega residence, 1418 Avenue 54",
+        "client": "Marisol Ortega",
+        "areas": [
+          {
+            "name": "Garage",
+            "lines": [
+              { "text": "New 50A circuit for an EV charger", "amount": "$1,450" },
+              { "text": "EV charger installation — charger model TBD by client", "amount": null },
+              { "text": "LED shop lights (4)", "amount": "$620" }
+            ]
+          },
+          {
+            "name": "Kitchen",
+            "lines": [
+              { "text": "Under-cabinet lighting", "amount": "$980" },
+              { "text": "Two GFCI outlets by the sink", "amount": "$360" }
+            ]
+          },
+          {
+            "name": "Upstairs hallway",
+            "lines": [
+              { "text": "Replace three hallway fixtures", "amount": "$540" },
+              { "text": "Hardwired smoke detectors (2)", "amount": "$410" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

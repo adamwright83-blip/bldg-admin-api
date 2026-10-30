@@ -36,8 +36,27 @@ type Candidate = {
   request: DraftFinding & { payload: Payload<"request"> };
   reply: (DraftFinding & { payload: Payload<"reply"> }) | null;
   service: (DraftFinding & { payload: Payload<"service"> }) | null;
+  estimate?: (DraftFinding & { payload: Payload<"estimate"> }) | null;
+  scope?: (DraftFinding & { payload: Payload<"scope"> }) | null;
   summary: string | null;
 };
+
+const nameWords = (name: string | null) => (name ?? "").toLowerCase().split(/[^a-z]+/).filter(word => word.length > 1);
+
+/** The estimate is for this person: their full name, or their family name, as the document writes it. */
+function forClient(estimate: Payload<"estimate">, person: { name: string | null }): boolean {
+  const theirs = nameWords(person.name);
+  const written = nameWords(estimate.client);
+  if (!theirs.length || !written.length) return false;
+  return written.join(" ") === theirs.join(" ") || written[written.length - 1] === theirs[theirs.length - 1];
+}
+
+/** It still holds both: an area the client asked for first, and at least one that can wait. */
+export function stillMixed(estimate: Payload<"estimate">, scope: Payload<"scope">): boolean {
+  const first = tokens(scope.first);
+  const firstAreas = estimate.areas.filter(area => [...tokens(area.name)].some(word => first.has(word)));
+  return firstAreas.length > 0 && firstAreas.length < estimate.areas.length;
+}
 
 const is = <K extends FindingPayload["kind"]>(kind: K) => (finding: DraftFinding): finding is DraftFinding & { payload: Payload<K> } =>
   finding.payload.kind === kind;
@@ -48,11 +67,16 @@ export function linkOpportunities(findings: DraftFinding[], proposals: WorkExtra
   const services = findings.filter(is("service"));
   const places = findings.filter(is("place"));
   const routes = findings.filter(is("route"));
+  const estimates = findings.filter(is("estimate"));
+  const scopes = findings.filter(is("scope"));
   const byId = new Map(findings.map(finding => [finding.id, finding]));
 
   const candidates: Candidate[] = [];
   const add = (candidate: Candidate) => {
-    if (!candidates.some(existing => existing.request.id === candidate.request.id)) candidates.push(candidate);
+    const existing = candidates.findIndex(known => known.request.id === candidate.request.id);
+    if (existing < 0) candidates.push(candidate);
+    // the estimate's own chain says more than a bare proposal about the same conversation
+    else if (candidate.estimate && !candidates[existing].estimate) candidates[existing] = candidate;
   };
 
   const holds = (request: Candidate["request"], reply: Candidate["reply"], service: Candidate["service"]) =>
@@ -93,6 +117,19 @@ export function linkOpportunities(findings: DraftFinding[], proposals: WorkExtra
     if (service) add({ type: "became_possible", request, reply, service, summary: null });
   }
 
+  // An estimate that wouldn't fit: the client asked for several things, then said what comes first, and the estimate
+  // still holds all of it. The conversation it rests on is their earliest request before they said so.
+  for (const scope of scopes) {
+    const client = scope.payload.from;
+    const request = requests
+      .filter(candidate => candidate.payload.from.address === client.address && new Date(candidate.payload.at) < new Date(scope.payload.at))
+      .sort((a, b) => new Date(a.payload.at).getTime() - new Date(b.payload.at).getTime())[0];
+    const estimate = estimates.find(candidate => forClient(candidate.payload, client) && stillMixed(candidate.payload, scope.payload));
+    if (!request || !estimate) continue;
+    const reply = replies.find(candidate => candidate.payload.requestId === request.id) ?? null;
+    add({ type: "deserves_finishing", request, reply, service: null, estimate, scope, summary: null });
+  }
+
   const scored = candidates.map(candidate => {
     const asker = candidate.request.payload.from.address;
     const place = places.find(
@@ -113,6 +150,7 @@ export function linkOpportunities(findings: DraftFinding[], proposals: WorkExtra
     }
     const score =
       (candidate.type === "became_possible" ? 100 : candidate.type === "deserves_finishing" ? 60 : candidate.type === "within_reach" ? 50 : 30) +
+      (candidate.estimate ? 20 : 0) +
       (along === "street" ? 25 : along === "nearby" ? 15 : 0) +
       (place ? 10 : 0) +
       (candidate.request.payload.recurring ? 5 : 0);
@@ -136,12 +174,16 @@ export function linkOpportunities(findings: DraftFinding[], proposals: WorkExtra
         routeId: route?.id ?? null,
         placeId: place?.id ?? null,
         along,
+        estimateId: candidate.estimate?.id ?? null,
+        scopeId: candidate.scope?.id ?? null,
         summary: summarize(candidate),
       },
       sources: [
         ...candidate.request.sources,
         ...(candidate.reply?.sources ?? []),
         ...(candidate.service?.sources ?? []),
+        ...(candidate.scope?.sources ?? []),
+        ...(candidate.estimate?.sources ?? []),
       ],
     }));
 }
@@ -155,6 +197,7 @@ function summarize(candidate: Candidate): string {
     return `${who} asked in ${when}, before you offered ${service.charAt(0).toLowerCase()}${service.slice(1)}. You offer it now.`;
   }
   if (candidate.type === "unanswered") return `${who} asked in ${when}, and there's no reply yet.`;
+  if (candidate.estimate && candidate.scope) return `${who} asked in ${when}, then said what comes first. The estimate still holds all of it.`;
   return candidate.summary && candidate.summary.split(/\s+/).length <= 24 && !/\d{3,}/.test(candidate.summary)
     ? candidate.summary
     : `${who} asked in ${when}.`;

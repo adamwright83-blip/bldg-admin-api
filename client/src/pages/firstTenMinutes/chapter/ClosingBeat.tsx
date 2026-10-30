@@ -1,6 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
+import type { ChapterKind, ChapterOpportunity, EstimateTrays } from "@shared/firstTenMinutesChapter";
 import { TeaCosy } from "./props";
+import { TodayMap, Workbench } from "./TodayMap";
 import styles from "./send.module.css";
 
 /**
@@ -28,7 +30,66 @@ const LINES: Record<ClosingOutcome, Array<{ who: "hazel" | "narrator"; text: str
   ],
 };
 
-export function ClosingBeat({ outcome }: { outcome: ClosingOutcome }) {
+/**
+ * Part 3's chapters close on what the person's action left in the world (Astra): "A newly opened route remains on the
+ * map. The original message stays pinned beside it." / "Dev's workbench keeps the two-tray arrangement he chose."
+ */
+function chapterLines(kind: "time" | "scope", outcome: ClosingOutcome): string[] {
+  if (kind === "scope") return ["The workbench keeps the two-tray arrangement you chose."];
+  return outcome === "not_now"
+    ? ["A newly opened route remains on the map."]
+    : ["A newly opened route remains on the map.", "The original message stays pinned beside it."];
+}
+
+export function ClosingBeat({
+  outcome,
+  kind = "letter",
+  opportunity = null,
+  businessName = null,
+  closedDays = [],
+  trays = null,
+}: {
+  outcome: ClosingOutcome;
+  kind?: ChapterKind;
+  opportunity?: ChapterOpportunity | null;
+  businessName?: string | null;
+  closedDays?: number[];
+  trays?: EstimateTrays | null;
+}) {
+  if ((kind === "time" && opportunity) || (kind === "scope" && trays)) {
+    return (
+      <ChapterClosing outcome={outcome} lines={chapterLines(kind, outcome)}>
+        {kind === "time" ? <TodayMap opportunity={opportunity!} businessName={businessName} closedDays={closedDays} /> : <Workbench trays={trays!} />}
+      </ChapterClosing>
+    );
+  }
+  return <CourtyardClosing outcome={outcome} />;
+}
+
+function ChapterClosing({ outcome, lines, children }: { outcome: ClosingOutcome; lines: string[]; children: React.ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <section className={styles.closingPaper} data-testid="first-ten-closing" data-outcome={outcome}>
+      {children}
+      <div className={styles.closingPaperLines}>
+        {lines.map((line, index) => (
+          <motion.p
+            key={line}
+            className={styles.closingNarration}
+            data-testid="first-ten-closing-line"
+            initial={reduce ? false : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: reduce ? 0 : 0.6 + index * 1.4 }}
+          >
+            {line}
+          </motion.p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CourtyardClosing({ outcome }: { outcome: ClosingOutcome }) {
   const reduce = useReducedMotion();
   const [shown, setShown] = useState(1);
   const lines = LINES[outcome];

@@ -1,14 +1,42 @@
-import corpus from "../../../shared/firstTenMinutesExampleCorpus.json";
+import ninaCorpus from "../../../shared/firstTenMinutesExampleCorpus.json";
+import devCorpus from "../../../shared/firstTenMinutesExampleDevCorpus.json";
+import type { ExampleKey } from "../../../shared/firstTenMinutesExample";
 import type { EventItem, FileItem, Geocoder, MailItem, SourceReaders } from "./sources";
 import { looksAutomated, sameAddress, stripQuotedReply } from "./text";
 
 /**
- * Nina's example, read exactly the way a real account is read: the same item shapes, the same deterministic
- * findings, the same verification of every quote. Only the source is invented (shared/firstTenMinutesExampleCorpus.json).
+ * The examples, read exactly the way a real account is read: the same item shapes, the same deterministic findings,
+ * the same verification of every quote. Only the source is invented (shared/firstTenMinutesExample*Corpus.json).
  */
-type CorpusMessage = (typeof corpus.messages)[number];
+type Mailbox = { name: string; email: string };
+export type ExampleCorpus = {
+  owner: Mailbox;
+  now: string;
+  messages: Array<{
+    id: string;
+    threadId: string;
+    date: string;
+    from: Mailbox;
+    to: Mailbox[];
+    subject: string;
+    body: string;
+    attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }>;
+    bulk?: boolean;
+  }>;
+  events: Array<{ id: string; summary: string; start: string; end?: string | null; location?: string | null; recurringEventId?: string | null }>;
+  files: Array<{ id: string; name: string; mimeType: string; modifiedTime: string; text?: string; md5Checksum?: string }>;
+  geocodes: Record<string, { lat: number; lng: number; formatted: string }>;
+};
 
-function mailItem(message: CorpusMessage): MailItem {
+const CORPORA: Record<ExampleKey, ExampleCorpus> = { nina: ninaCorpus, dev: devCorpus };
+
+export function exampleCorpus(key: ExampleKey = "nina"): ExampleCorpus {
+  return CORPORA[key];
+}
+
+type CorpusMessage = ExampleCorpus["messages"][number];
+
+function mailItem(message: CorpusMessage, corpus: ExampleCorpus): MailItem {
   return {
     provider: "gmail",
     id: message.id,
@@ -25,7 +53,7 @@ function mailItem(message: CorpusMessage): MailItem {
   };
 }
 
-/** Nina works in Los Angeles: Pacific time, daylight saving until November 1, 2026. */
+/** Nina and Dev both work in Los Angeles: Pacific time, daylight saving until November 1, 2026. */
 function corpusOffsetMinutes(iso: string): number {
   return new Date(iso) < new Date("2026-11-01T09:00:00Z") ? -7 * 60 : -8 * 60;
 }
@@ -35,8 +63,8 @@ export function localParts(iso: string, offsetMinutes: number): { localDate: str
   return { localDate: shifted.slice(0, 10), localTime: shifted.slice(11, 16) };
 }
 
-export function exampleReaders(): SourceReaders {
-  const mail = corpus.messages.map(mailItem);
+export function exampleReaders(corpus: ExampleCorpus = exampleCorpus()): SourceReaders {
+  const mail = corpus.messages.map(message => mailItem(message, corpus));
   return {
     async owner() {
       return { name: corpus.owner.name, email: corpus.owner.email };
@@ -70,8 +98,8 @@ export function exampleReaders(): SourceReaders {
         name: file.name,
         mimeType: file.mimeType,
         modifiedAt: new Date(file.modifiedTime),
-        text: "text" in file && typeof file.text === "string" ? file.text : null,
-        md5: "md5Checksum" in file && typeof file.md5Checksum === "string" ? file.md5Checksum : null,
+        text: typeof file.text === "string" ? file.text : null,
+        md5: typeof file.md5Checksum === "string" ? file.md5Checksum : null,
         url: null,
       }));
       return { items, unavailable: null };
@@ -85,8 +113,8 @@ export function exampleReaders(): SourceReaders {
   };
 }
 
-export function exampleGeocoder(): Geocoder {
-  const table = corpus.geocodes as Record<string, { lat: number; lng: number; formatted: string }>;
+export function exampleGeocoder(corpus: ExampleCorpus = exampleCorpus()): Geocoder {
+  const table = corpus.geocodes;
   return {
     async geocode(address) {
       return table[address.trim()] ?? null;

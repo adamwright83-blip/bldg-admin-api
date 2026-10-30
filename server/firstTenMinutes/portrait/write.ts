@@ -79,6 +79,12 @@ export function factOf(payload: FindingPayload): string {
       return `${capitalize(payload.word)}s on their calendar: ${payload.count}, on ${payload.days.map(index => `${WEEKDAY_NAMES[index]}s`).join(" and ")}`;
     case "contrast":
       return `What different customers ask for: ${payload.aLine} / ${payload.bLine}`;
+    case "estimate":
+      return `An estimate they are still working on, last changed on ${day(payload.at)}${payload.client ? `, for ${payload.client}` : ""}: ${payload.areas
+        .map(area => area.name)
+        .join(", ")}`;
+    case "scope":
+      return `${who(payload.from)} told them on ${day(payload.at)} what to do first: "${payload.quote}"`;
     case "opportunity":
       return `Where this page leads next (point towards it at most; never say who or what): ${payload.summary}`;
   }
@@ -162,6 +168,12 @@ function namesIn(finding: FindingView): string[] {
       break;
     case "opportunity":
       person(payload.person);
+      break;
+    case "scope":
+      person(payload.from);
+      break;
+    case "estimate":
+      if (payload.client) names.push(payload.client);
       break;
     default:
       break;

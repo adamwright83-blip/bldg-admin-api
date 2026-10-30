@@ -1,0 +1,201 @@
+{
+  "note": "Dev's electrical business: invented for JOYSTICK's first-ten-minutes example of \"The Estimate That Wouldn't Fit\". Every address is on the reserved .example domain. See shared/firstTenMinutesExample.ts.",
+  "owner": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+  "now": "2026-10-29T17:00:00Z",
+  "messages": [
+    {
+      "id": "dev-m01",
+      "threadId": "th-ortega",
+      "date": "2026-08-04T16:20:00Z",
+      "from": { "name": "Marisol Ortega", "email": "marisol.ortega@mail.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Electrical work at Avenue 54",
+      "body": "Hi Dev,\n\nWe just bought 1418 Avenue 54 and there's a list. Could you look at the garage, the kitchen lighting and the upstairs hallway while you're out here? We'd like an EV charger in the garage eventually.\n\nThanks,\nMarisol",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m02",
+      "threadId": "th-ortega",
+      "date": "2026-08-04T19:05:00Z",
+      "from": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+      "to": [{ "name": "Marisol Ortega", "email": "marisol.ortega@mail.example" }],
+      "subject": "Re: Electrical work at Avenue 54",
+      "body": "Hi Marisol,\n\nCongratulations on the house. Happy to look at all three. I only quote after a site visit, so I'll come by Thursday and put one estimate together for the lot. Does 9 work?\n\nDev Mistry\nNorthfield Electric · Highland Park",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m03",
+      "threadId": "th-ortega",
+      "date": "2026-08-04T21:30:00Z",
+      "from": { "name": "Marisol Ortega", "email": "marisol.ortega@mail.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Re: Electrical work at Avenue 54",
+      "body": "9 works. See you Thursday.\n\nMarisol",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m06",
+      "threadId": "th-york",
+      "date": "2026-09-02T15:10:00Z",
+      "from": { "name": "Gabe Torres", "email": "gabe@yorkcommons.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Hallway lights at York Commons",
+      "body": "Hi Dev,\n\nCould you take a look at the hallway lights at York Commons? Two fixtures on the second floor keep flickering.\n\nGabe Torres\nProperty Manager, York Commons\n5021 York Blvd, Los Angeles, CA 90042",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m07",
+      "threadId": "th-york",
+      "date": "2026-09-02T17:45:00Z",
+      "from": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+      "to": [{ "name": "Gabe Torres", "email": "gabe@yorkcommons.example" }],
+      "subject": "Re: Hallway lights at York Commons",
+      "body": "Hi Gabe,\n\nI can be there Tuesday at 8. Will someone be on site to let me in?\n\nDev Mistry\nNorthfield Electric · Highland Park",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m08",
+      "threadId": "th-figueroa",
+      "date": "2026-09-15T14:30:00Z",
+      "from": { "name": "Priya Nair", "email": "priya@figueroabakery.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Oven circuit",
+      "body": "Hi Dev,\n\nOur oven circuit keeps tripping. Could you come before we open on Saturday?\n\nPriya Nair\nThe Figueroa Bakery\n5609 N Figueroa St, Los Angeles, CA 90042",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m09",
+      "threadId": "th-figueroa",
+      "date": "2026-09-15T16:00:00Z",
+      "from": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+      "to": [{ "name": "Priya Nair", "email": "priya@figueroabakery.example" }],
+      "subject": "Re: Oven circuit",
+      "body": "Hi Priya,\n\nI can do Friday at 6am, before your first bake. Is the back door the best way in?\n\nDev",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m10",
+      "threadId": "th-kilns",
+      "date": "2026-10-06T18:20:00Z",
+      "from": { "name": "Luis Romero", "email": "luis@avenue50studio.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Two kilns",
+      "body": "Hi Dev,\n\nWe're adding two kilns to the studio. Can our panel handle it?\n\nLuis Romero\nAvenue 50 Studio\n131 N Avenue 50, Los Angeles, CA 90042",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m11",
+      "threadId": "th-kilns",
+      "date": "2026-10-06T20:10:00Z",
+      "from": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+      "to": [{ "name": "Luis Romero", "email": "luis@avenue50studio.example" }],
+      "subject": "Re: Two kilns",
+      "body": "Hi Luis,\n\nProbably, but I'd want to see the panel first. Could I stop by Monday morning?\n\nDev",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m04",
+      "threadId": "th-ortega",
+      "date": "2026-10-21T16:40:00Z",
+      "from": { "name": "Marisol Ortega", "email": "marisol.ortega@mail.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "Re: Electrical work at Avenue 54",
+      "body": "Hi Dev,\n\nThanks again for coming by. Let's do the garage first; the house can wait. We'd like the charger in before the car arrives in December.\n\nMarisol",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m05",
+      "threadId": "th-ortega",
+      "date": "2026-10-21T18:15:00Z",
+      "from": { "name": "Dev Mistry", "email": "dev@northfieldelectric.example" },
+      "to": [{ "name": "Marisol Ortega", "email": "marisol.ortega@mail.example" }],
+      "subject": "Re: Electrical work at Avenue 54",
+      "body": "Hi Marisol,\n\nMakes sense. I'll send the estimate this week.\n\nDev",
+      "attachments": [],
+      "bulk": false
+    },
+    {
+      "id": "dev-m12",
+      "threadId": "th-supply",
+      "date": "2026-10-20T13:00:00Z",
+      "from": { "name": "Eastside Electric Supply", "email": "news@eastsidesupply.example" },
+      "to": [{ "name": "Dev Mistry", "email": "dev@northfieldelectric.example" }],
+      "subject": "This week at Eastside Supply",
+      "body": "New stock: 50A breakers, EV charger brackets and LED shop lights. Unsubscribe any time.",
+      "attachments": [],
+      "bulk": true
+    }
+  ],
+  "events": [
+    {
+      "id": "ev-ortega-visit",
+      "summary": "Site visit · Ortega",
+      "start": "2026-08-06T16:00:00Z",
+      "end": "2026-08-06T17:30:00Z",
+      "location": "1418 Avenue 54, Los Angeles, CA 90042",
+      "recurringEventId": null
+    },
+    {
+      "id": "ev-york-fixtures",
+      "summary": "York Commons · hallway fixtures",
+      "start": "2026-09-08T15:00:00Z",
+      "end": "2026-09-08T16:30:00Z",
+      "location": "5021 York Blvd, Los Angeles, CA 90042",
+      "recurringEventId": null
+    },
+    {
+      "id": "ev-figueroa-oven",
+      "summary": "Figueroa Bakery · oven circuit",
+      "start": "2026-09-18T13:00:00Z",
+      "end": "2026-09-18T14:30:00Z",
+      "location": "5609 N Figueroa St, Los Angeles, CA 90042",
+      "recurringEventId": null
+    },
+    {
+      "id": "ev-avenue50-panel",
+      "summary": "Avenue 50 Studio · panel",
+      "start": "2026-10-12T16:00:00Z",
+      "end": "2026-10-12T17:00:00Z",
+      "location": "131 N Avenue 50, Los Angeles, CA 90042",
+      "recurringEventId": null
+    }
+  ],
+  "files": [
+    {
+      "id": "drv-ortega-estimate",
+      "name": "Estimate — Ortega residence (draft)",
+      "mimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2026-08-11T22:00:00Z",
+      "text": "Northfield Electric\nEstimate — Ortega residence, 1418 Avenue 54\nPrepared for Marisol Ortega\nDraft, not sent\n\nGarage\nNew 50A circuit for an EV charger — $1,450\nEV charger installation — charger model TBD by client\nLED shop lights (4) — $620\n\nKitchen\nUnder-cabinet lighting — $980\nTwo GFCI outlets by the sink — $360\n\nUpstairs hallway\nReplace three hallway fixtures — $540\nHardwired smoke detectors (2) — $410\n\nTotal: $4,360, plus the charger installation"
+    },
+    {
+      "id": "drv-rates",
+      "name": "Northfield rates 2026",
+      "mimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2026-01-10T18:00:00Z",
+      "text": "Northfield Electric, rates for 2026\nService call: $125\nHourly: $110\nI only quote after a site visit. Estimates are good for 30 days."
+    },
+    {
+      "id": "drv-york-notes",
+      "name": "York Commons — fixture notes",
+      "mimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2026-09-08T18:00:00Z",
+      "text": "Second floor hallway: two fixtures flickering. Replaced both ballasts and tested."
+    }
+  ],
+  "geocodes": {
+    "5021 York Blvd, Los Angeles, CA 90042": { "lat": 34.1207, "lng": -118.2058, "formatted": "5021 York Blvd, Los Angeles, CA 90042, USA" },
+    "5609 N Figueroa St, Los Angeles, CA 90042": { "lat": 34.1104, "lng": -118.1922, "formatted": "5609 N Figueroa St, Los Angeles, CA 90042, USA" },
+    "131 N Avenue 50, Los Angeles, CA 90042": { "lat": 34.1095, "lng": -118.2018, "formatted": "131 N Avenue 50, Los Angeles, CA 90042, USA" }
+  }
+}

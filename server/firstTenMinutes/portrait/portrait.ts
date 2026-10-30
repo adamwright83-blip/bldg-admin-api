@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { portraitLines, type PortraitLine, type PortraitView } from "../../../shared/firstTenMinutesPortrait";
+import { exampleOf } from "../../../shared/firstTenMinutesExample";
 import { recordEvent } from "../events";
 import { setJourneyStage, type JourneyRow } from "../store";
 import { understandingView } from "../understanding/view";
@@ -15,19 +16,30 @@ import { claudePortraitWriter, examplePortraitWriter } from "./writers";
  * kept it and what it rests on has changed: a finding corrected, a rule confirmed.
  */
 
-/** What the portrait rests on: every finding still standing, with what the person said about it. */
+/**
+ * What the portrait rests on: every finding still standing, what it says and where it came from, with what the person
+ * said about it. A later reading can change a finding's content under the same id (Slack added, a calendar rhythm
+ * recounted), and that changes the basis too.
+ */
 export function portraitBasis(findings: readonly FindingView[]): string {
   const standing = portraitFindings(findings)
-    .map(finding => [finding.id, finding.status, finding.correction ?? ""])
+    .map(finding => [
+      finding.id,
+      finding.status,
+      finding.correction ?? "",
+      JSON.stringify(finding.payload),
+      finding.sources.map(source => `${source.provider}:${source.ref}:${source.excerpt}`).join("|"),
+    ])
     .sort((a, b) => a[0].localeCompare(b[0]));
   return createHash("sha256")
-    .update(JSON.stringify(["portrait-v1", firstNameFor(findings), standing]))
+    .update(JSON.stringify(["portrait-v2", firstNameFor(findings), standing]))
     .digest("hex");
 }
 
 export function portraitWriterFor(journey: JourneyRow): { writer: PortraitWriter; name: string } {
-  return journey.kind === "example"
-    ? { writer: examplePortraitWriter(), name: "example" }
+  const example = exampleOf(journey.kind);
+  return example
+    ? { writer: examplePortraitWriter(example.key), name: "example" }
     : { writer: claudePortraitWriter(journey.id), name: "claude" };
 }
 

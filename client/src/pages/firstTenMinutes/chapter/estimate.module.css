@@ -1,0 +1,513 @@
+/*
+ * "The Estimate That Wouldn't Fit": Bront's cart, the paper house, the arch, and two trays, in the same Silver Lake
+ * courtyard. Sizes follow the courtyard (container units), like the letter scene.
+ */
+
+.scene {
+  composes: courtyard from "./chapter.module.css";
+}
+
+.back {
+  composes: courtyardBack from "./chapter.module.css";
+}
+
+.shade {
+  composes: courtyardShade from "./chapter.module.css";
+}
+
+.sayName {
+  composes: sayName from "./chapter.module.css";
+}
+
+.edgeArt {
+  composes: edgeArt from "./chapter.module.css";
+}
+
+.title {
+  position: absolute;
+  left: 3%;
+  top: 3%;
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(15px, 2cqw, 22px);
+  font-style: italic;
+  color: rgba(251, 245, 232, 0.95);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* ------------------------------------------------------------------ the arch, and Hazel by it */
+
+/* drawn over the cart, so the cart passes through it */
+.arch {
+  position: absolute;
+  z-index: 2;
+  right: 4%;
+  bottom: 6%;
+  width: 21%;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.45));
+}
+
+.hazel {
+  position: absolute;
+  right: 23%;
+  bottom: 9%;
+  width: 12%;
+  height: auto;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.4));
+}
+
+/* ------------------------------------------------------------------ Bront's cart */
+
+.cart {
+  position: absolute;
+  z-index: 1;
+  left: 5%;
+  bottom: 5%;
+  width: 46%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.load {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  padding: 0 2%;
+}
+
+.wagon {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.house {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.6cqw 1cqw;
+  padding-top: 2cqw;
+}
+
+.room {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 11cqw;
+  padding: 1cqw 1.4cqw;
+  border: 1px solid rgba(106, 90, 72, 0.45);
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #fffdf6, #f3e8d2);
+  color: var(--ink);
+  font-size: clamp(12px, 1.35cqw, 15px);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.6);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.room[aria-disabled="true"] {
+  cursor: default;
+}
+
+.room:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.roof {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: 100%;
+  height: 1.4cqw;
+  background: #efe2c8;
+  border: 1px solid rgba(106, 90, 72, 0.45);
+  border-bottom: 0;
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+}
+
+.roomName {
+  white-space: nowrap;
+}
+
+.roomHeld {
+  transform: translateY(-8px) rotate(-2deg);
+  box-shadow:
+    0 0 0 2px var(--amber),
+    0 14px 20px -10px rgba(0, 0, 0, 0.7);
+}
+
+.question {
+  display: inline-grid;
+  place-items: center;
+  width: 1.8cqw;
+  min-width: 16px;
+  height: 1.8cqw;
+  min-height: 16px;
+  border-radius: 50%;
+  background: var(--ink-red);
+  color: #fff7ee;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trays {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1cqw;
+}
+
+.tray {
+  display: grid;
+  align-content: start;
+  gap: 1.2cqw;
+  min-height: 7cqw;
+  padding: 0.8cqw 0.8cqw 1.4cqw;
+  border: 2px dashed rgba(251, 245, 232, 0.45);
+  border-radius: 6px;
+  background: rgba(58, 42, 28, 0.62);
+  color: #fbf5e8;
+}
+
+.trayReady {
+  border-color: var(--amber);
+  cursor: pointer;
+}
+
+.trayLabel {
+  justify-self: start;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: rgba(251, 245, 232, 0.95) !important;
+  font-size: clamp(11px, 1.2cqw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trayLabel:disabled {
+  opacity: 0.8;
+  cursor: default;
+}
+
+.trayRooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.6cqw 0.8cqw;
+  padding-top: 1.2cqw;
+}
+
+/* packed: the job as one tidy package, the later work in its own envelope */
+.package,
+.envelope {
+  display: grid;
+  place-items: center;
+  padding: 1.2cqw 1.6cqw;
+  font-size: clamp(12px, 1.35cqw, 15px);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.package {
+  justify-self: start;
+  min-width: 18cqw;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, transparent 47%, #a0522d 47%, #a0522d 53%, transparent 53%),
+    linear-gradient(to bottom, #fffdf6, #efe2c8);
+  border: 1px solid rgba(106, 90, 72, 0.5);
+  box-shadow: 0 8px 14px -8px rgba(0, 0, 0, 0.7);
+}
+
+.envelope {
+  justify-self: end;
+  min-width: 18cqw;
+  border-radius: 2px;
+  background:
+    linear-gradient(160deg, transparent 49%, rgba(106, 90, 72, 0.35) 50%, transparent 51%),
+    linear-gradient(20deg, transparent 49%, rgba(106, 90, 72, 0.35) 50%, transparent 51%),
+    #f6edd9;
+  border: 1px solid rgba(106, 90, 72, 0.45);
+}
+
+/* ------------------------------------------------------------------ a room, unfolded */
+
+.unfolded {
+  position: absolute;
+  left: 34%;
+  top: 21%;
+  z-index: 5;
+  width: min(420px, 38%);
+  max-height: 62%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  border-radius: 6px;
+  background: #fbf5e8;
+  color: var(--ink);
+  transform-origin: top center;
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.8);
+}
+
+.unfoldedName {
+  margin: 0 0 8px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 19px;
+}
+
+.lines {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lines li[data-open] {
+  color: var(--ink-red);
+  font-style: italic;
+}
+
+.lines b {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.unfolded blockquote {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------------------------ Sable with the later message; Rook */
+
+.sable {
+  position: absolute;
+  right: 1%;
+  bottom: 45%;
+  width: 18%;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.sable .edgeArt {
+  width: 52%;
+}
+
+.laterNote {
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #fffaf0;
+  color: var(--ink);
+  box-shadow: 0 8px 14px -8px rgba(0, 0, 0, 0.7);
+  rotate: 2deg;
+}
+
+.noteWords {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(12px, 1.3cqw, 15px);
+  line-height: 1.35;
+}
+
+.noteWho {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.rook {
+  position: absolute;
+  left: 1%;
+  bottom: 44%;
+  width: 7%;
+  pointer-events: none;
+  transition: transform 0.3s ease;
+}
+
+.rook[data-holding="yes"] {
+  transform: translateY(-6px) rotate(-8deg);
+}
+
+/* ------------------------------------------------------------------ what's said */
+
+.narration,
+.say {
+  position: absolute;
+  margin: 0;
+  padding: 10px 14px 11px;
+  max-width: min(440px, 60%);
+  border-radius: 10px;
+  background: #fbf5e8;
+  color: var(--ink);
+  font-size: clamp(14px, 1.6cqw, 16px);
+  line-height: 1.38;
+  box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
+}
+
+.narration {
+  left: 50%;
+  top: 4%;
+  translate: -50% 0;
+  font-family: Fraunces, Georgia, serif;
+  font-style: italic;
+  text-align: center;
+  background: rgba(251, 245, 232, 0.94);
+}
+
+.say_hazel {
+  right: 14%;
+  top: 14%;
+}
+
+.say_sable {
+  right: 3%;
+  top: 9%;
+}
+
+.say_bront {
+  left: 5%;
+  top: 9%;
+}
+
+/* ------------------------------------------------------------------ through the arch */
+
+.next {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  translate: -50% 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 16px;
+  width: max-content;
+  max-width: 92%;
+}
+
+.next button {
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  color: rgba(251, 245, 232, 0.95) !important;
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+
+.next .nextMain {
+  padding: 11px 22px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink) !important;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  text-decoration: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* ------------------------------------------------------------------ phones */
+
+@media (max-width: 720px) {
+  .scene {
+    aspect-ratio: 3 / 4.6;
+  }
+
+  .arch {
+    right: 3%;
+    bottom: 34%;
+    width: 22%;
+  }
+
+  .hazel {
+    right: 27%;
+    bottom: 36%;
+    width: 18%;
+  }
+
+  .cart {
+    left: 3%;
+    right: 3%;
+    bottom: 3%;
+    width: auto;
+  }
+
+  .room {
+    min-width: 0;
+    padding: 2cqw 2.4cqw;
+    font-size: 13px;
+  }
+
+  .roof {
+    height: 2.6cqw;
+  }
+
+  .tray {
+    min-height: 16cqw;
+  }
+
+  .trayRooms {
+    gap: 3.2cqw 1.6cqw;
+    padding-top: 2.6cqw;
+  }
+
+  .unfolded {
+    left: 4%;
+    right: 4%;
+    top: 12%;
+    width: auto;
+    max-height: 44%;
+  }
+
+  .sable {
+    right: 2%;
+    top: 9%;
+    bottom: auto;
+    width: 34%;
+  }
+
+  .rook {
+    width: 12%;
+    bottom: 40%;
+  }
+
+  .narration,
+  .say {
+    max-width: 88%;
+  }
+
+  .say_hazel,
+  .say_sable,
+  .say_bront {
+    left: 4%;
+    right: auto;
+    top: 6%;
+  }
+
+  .next {
+    bottom: auto;
+    top: 46%;
+  }
+}

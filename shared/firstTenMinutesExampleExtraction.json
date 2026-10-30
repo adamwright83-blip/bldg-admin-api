@@ -37,7 +37,8 @@
     "contrast": {
       "a": { "sourceId": "nina-m01", "quote": "We want the day to feel spectacular.", "line": "Your wedding clients ask for a spectacular day." },
       "b": { "sourceId": "nina-m07", "quote": "We need something we can count on every week for the lobby.", "line": "The hotels keep asking for something they can count on every week." }
-    }
+    },
+    "scopeChanges": []
   },
   "work": {
     "services": [
@@ -47,6 +48,7 @@
       { "sourceId": "drv-weekly-sheet", "quote": "No Sunday deliveries.", "statement": "No Sunday deliveries" }
     ],
     "promises": [],
-    "opportunities": []
+    "opportunities": [],
+    "estimates": []
   }
 }

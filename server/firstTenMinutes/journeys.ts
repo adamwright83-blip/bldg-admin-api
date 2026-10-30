@@ -7,7 +7,7 @@ import {
   type JourneyKind,
   type JourneyStage,
 } from "../../shared/firstTenMinutes";
-import { EXAMPLE_CONNECTION } from "../../shared/firstTenMinutesExample";
+import { exampleOf } from "../../shared/firstTenMinutesExample";
 import {
   connectionRows,
   connectionSecrets,
@@ -23,7 +23,7 @@ import { revokeSlackToken } from "./slack";
 
 export type DraftCredentials = { sessionId: string; resumeToken: string };
 
-/** A new signup draft in the first-ten mode, and its journey. `example` is Nina's labelled example. */
+/** A new signup draft in the first-ten mode, and its journey. `example` and `example_dev` are the labelled examples. */
 export async function startJourney(input: { requestId: string; kind: JourneyKind }) {
   const { session, resumeToken } = await startJoystickOnboardingDraft({
     requestId: input.requestId,
@@ -57,10 +57,10 @@ export async function journeyView(
   journey: JourneyRow,
   session: { expiresAt: Date }
 ): Promise<FirstTenJourneyView> {
-  const connections =
-    journey.kind === "example"
-      ? [EXAMPLE_CONNECTION]
-      : (await connectionRows(journey.id)).filter(row => row.status === "connected").map(connectionView);
+  const example = exampleOf(journey.kind);
+  const connections = example
+    ? [example.connection]
+    : (await connectionRows(journey.id)).filter(row => row.status === "connected").map(connectionView);
   return {
     id: journey.id,
     kind: journey.kind,

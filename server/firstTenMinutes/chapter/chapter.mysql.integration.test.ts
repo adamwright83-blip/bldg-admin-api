@@ -24,13 +24,13 @@ describe.skipIf(!allowed)("the first chapter on MySQL", () => {
     await db?.end();
   });
 
-  async function readExample() {
+  async function readExample(kind: "example" | "example_dev" = "example") {
     const { startJourney } = await import("../journeys");
     const { runReading } = await import("../understanding/run");
     const { readingDepsFor } = await import("../understanding/deps");
     const { claimReading } = await import("../understanding/store");
     const { journeyById, setJourneyStage } = await import("../store");
-    const started = (await startJourney({ requestId: randomUUID(), kind: "example" })).journey;
+    const started = (await startJourney({ requestId: randomUUID(), kind })).journey;
     const runId = randomUUID();
     await claimReading(started.id, runId, { again: false });
     await runReading(started.id, runId, await readingDepsFor(started));
@@ -43,7 +43,7 @@ describe.skipIf(!allowed)("the first chapter on MySQL", () => {
     const { chapterView, recordChapterStep, prepareDraft } = await import("./chapter");
     const before = await chapterView(journey);
     expect(before.opportunity?.person.address).toBe("elena@larkspurhotel.example");
-    expect(before.progress).toEqual({ revealed: false, steps: [], letterWritten: false });
+    expect(before.progress).toEqual({ revealed: false, steps: [], letterWritten: false, trays: null });
 
     await recordChapterStep(journey, "revealed");
     // Pip first: not yet. The letter before the quill: not yet.
@@ -52,7 +52,7 @@ describe.skipIf(!allowed)("the first chapter on MySQL", () => {
     for (const step of ["glove", "shake", "quill", "dip"] as const) await recordChapterStep(journey, step);
     await recordChapterStep(journey, "glove"); // again: recorded once
     const played = await recordChapterStep(journey, "letter_written");
-    expect(played.progress).toEqual({ revealed: true, steps: ["glove", "shake", "quill", "dip"], letterWritten: true });
+    expect(played.progress).toEqual({ revealed: true, steps: ["glove", "shake", "quill", "dip"], letterWritten: true, trays: null });
 
     const first = await prepareDraft(journey, new Date("2026-10-29T17:00:00Z"));
     expect(first.draft).toMatchObject({
@@ -102,5 +102,45 @@ describe.skipIf(!allowed)("the first chapter on MySQL", () => {
       [journey.id]
     );
     expect(rows[0]).toMatchObject({ status: "prepared", handed_off_at: null, reported_sent_at: null, verified_sent_at: null });
+  });
+
+  it("splits Dev's estimate onto two trays, keeps the arrangement, and composes the focused estimate or the question", async () => {
+    const journey = await readExample("example_dev");
+    const { chapterView, arrangeEstimate, prepareDraft, changeDraft } = await import("./chapter");
+    const now = new Date("2026-10-29T17:00:00Z");
+    const before = await chapterView(journey, now);
+    expect(before).toMatchObject({ kind: "scope", title: "The Estimate That Wouldn't Fit", progress: { trays: null } });
+    expect(before.opportunity?.estimate?.areas.map(area => area.name)).toEqual(["Garage", "Kitchen", "Upstairs hallway"]);
+
+    // it won't go through the arch until the scope is separated, and nothing is taken out to make it
+    await expect(prepareDraft(journey, now)).rejects.toThrow(/won't fit/);
+    await expect(arrangeEstimate(journey, { thisJob: ["Garage", "Kitchen", "Upstairs hallway"], later: [] })).rejects.toThrow(/won't fit/);
+    await expect(arrangeEstimate(journey, { thisJob: ["Garage"], later: ["Kitchen"] })).rejects.toThrow(/Nothing is taken out/);
+    const arranged = await arrangeEstimate(journey, { thisJob: ["Garage"], later: ["Kitchen", "Upstairs hallway"] });
+    expect(arranged.progress.trays).toEqual({ thisJob: ["Garage"], later: ["Kitchen", "Upstairs hallway"] });
+
+    const asked = await prepareDraft(journey, now, "question");
+    expect(asked.draft).toMatchObject({
+      approach: "question",
+      to: { name: "Marisol Ortega", address: "marisol.ortega@mail.example" },
+      subject: "Re: Electrical work at Avenue 54",
+      body: "Hi Marisol — before I finish the garage estimate, I need one detail from you: the charger model. Could you let me know?",
+      status: "prepared",
+      edited: false,
+    });
+    const focused = await changeDraft(journey, { approach: "focused" }, now);
+    expect(focused.draft?.body.split("\n")[0]).toBe(
+      "Hi Marisol — I've separated the garage work from the house work so we can move ahead with the first part. The later work is listed separately."
+    );
+    expect(focused.draft?.body).toContain("EV charger installation — charger model TBD by client");
+    await expect(changeDraft(journey, { approach: "short" }, now)).rejects.toThrow(/not a way/);
+    // once it's through the arch, the arrangement stays as the person left it
+    await expect(arrangeEstimate(journey, { thisJob: ["Kitchen"], later: ["Garage", "Upstairs hallway"] })).rejects.toThrow(/already gone through/);
+
+    const [events] = await db.query<mysql.RowDataPacket[]>(
+      "SELECT kind FROM first_ten_events WHERE journey_id = ? AND kind IN ('estimate_arranged', 'draft_prepared', 'draft_changed') ORDER BY created_at",
+      [journey.id]
+    );
+    expect(events.map(event => event.kind)).toEqual(["estimate_arranged", "draft_prepared", "draft_changed"]);
   });
 });

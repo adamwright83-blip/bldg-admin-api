@@ -96,6 +96,29 @@ function fakePortrait(corpusText) {
   };
 }
 
+/** The email reading as the stand-in model returns it, in the mode the test asked for. */
+function conversationsAnswer() {
+  if (control.opportunity !== "unanswered") return extraction.conversations;
+  return {
+    ...extraction.conversations,
+    services: [],
+    replies: extraction.conversations.replies.filter(reply => reply.requestSourceId !== "nina-m05"),
+  };
+}
+
+/** The documents reading; in "unanswered" mode it proposes Elena's request, by the id the server gave it. */
+function workAnswer(corpusText) {
+  if (control.opportunity !== "unanswered") return extraction.work;
+  const requestId = corpusText.match(/<finding id="([^"]+)" kind="request"[^>]*>Elena Ruiz asked/)?.[1];
+  return {
+    ...extraction.work,
+    services: [],
+    opportunities: requestId
+      ? [{ type: "unanswered", requestFindingId: requestId, replyFindingId: null, serviceFindingId: null, summary: "Elena asked about Friday flowers and there's no reply yet." }]
+      : [],
+  };
+}
+
 const modelCalls = [];
 /** what the person "sent from Gmail" during a test, after JOYSTICK handed the message over */
 const sentLater = [];
@@ -110,6 +133,9 @@ const defaults = () => ({
   modelFails: false,
   // the email reading takes this long to come back, so a test can watch the reading while it works
   conversationsDelayMs: 0,
+  // "unanswered": the reading finds Elena's request with no reply and nothing new to offer, so no Part 3 chapter fits
+  // and the journey goes through Hazel's "A Proper Letter"
+  opportunity: "became_possible",
 });
 let control = defaults();
 const revoked = [];
@@ -282,7 +308,7 @@ const server = http.createServer(async (req, res) => {
     const userText = (request.messages ?? [])
       .map(message => (typeof message.content === "string" ? message.content : (message.content ?? []).map(part => part.text ?? "").join("")))
       .join("\n");
-    const answer = portrait ? fakePortrait(userText) : conversations ? extraction.conversations : extraction.work;
+    const answer = portrait ? fakePortrait(userText) : conversations ? conversationsAnswer() : workAnswer(userText);
     modelCalls.push(portrait ? "portrait" : conversations ? "conversations" : "work");
     return send(res, 200, {
       id: `msg_fake_${modelCalls.length}`,

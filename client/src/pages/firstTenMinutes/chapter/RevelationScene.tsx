@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChapterOpportunity } from "@shared/firstTenMinutesChapter";
+import type { ChapterKind, ChapterOpportunity } from "@shared/firstTenMinutesChapter";
 import type { PlacePin } from "@shared/firstTenMinutesCrew";
 import { CREW_ART } from "../crew";
 import { PlacesMap } from "../crew/objects";
@@ -11,6 +11,11 @@ import styles from "./chapter.module.css";
  * The revelation, played rather than announced. The calendar turns back to when they asked; the crossing is folded
  * shut, and Rook tries it. The person turns the calendar to today and brings the old invitation onto today's map;
  * the crossing unfolds. Nobody says what it means. For whoever wants it, the full explanation is one tap away.
+ *
+ * In "The Friday That Didn't Exist" (Astra, Part 3) it is the chapter itself: Sable puts the old message down where
+ * the conversation stopped, the calendar turns back and forth between then and now (the same place behaves
+ * differently across time), a delivery cart rolls onto today's route, a day the person keeps closed stays folded, and
+ * Rook steps onto the opened crossing a little too enthusiastically.
  */
 type Phase = "back" | "then" | "forward" | "now" | "brought";
 
@@ -53,14 +58,25 @@ export function RevelationScene({
   opportunity,
   businessName,
   now,
+  kind = "letter",
+  title = null,
+  closedDays = [],
   onPickUp,
 }: {
   opportunity: ChapterOpportunity;
   businessName: string | null;
   now: Date;
+  kind?: ChapterKind;
+  title?: string | null;
+  /** days the person keeps closed by a rule they confirmed: their crossing stays folded */
+  closedDays?: number[];
   onPickUp: () => void;
 }) {
   const reduce = useReducedMotion();
+  const timeChapter = kind === "time";
+  // after the first pass, the calendar turns back and forth: the same place, then and now
+  const [peek, setPeek] = useState(false);
+  const [fell, setFell] = useState(false);
   const asked = useMemo(() => new Date(opportunity.request.at), [opportunity.request.at]);
   const today = useMemo(() => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), [now]);
   const span = Math.max(0, monthsBetween(asked, today));
@@ -85,16 +101,33 @@ export function RevelationScene({
   }, [phase, shown, today, span, reduce]);
 
   const weekday = opportunity.route ? WEEKDAYS[opportunity.route.weekday] : null;
-  const sign = `${(weekday ?? opportunity.reply?.missing ?? "").toUpperCase()} — UNAVAILABLE`.replace(/^ — /, "");
+  // the sign says what wasn't there then, and only when something wasn't
+  const sign = opportunity.reply?.missing ? `${(weekday ?? opportunity.reply.missing).toUpperCase()} — UNAVAILABLE` : null;
   const pins: PlacePin[] =
     opportunity.place && opportunity.place.lat !== null && opportunity.place.lng !== null
       ? [{ findingId: opportunity.place.findingId, name: opportunity.place.name, lat: opportunity.place.lat, lng: opportunity.place.lng, asked: null }]
       : [];
   const route = (opportunity.route?.stops ?? []).map(stop => ({ label: stop.label, location: "", lat: stop.lat, lng: stop.lng }));
-  const onMap = phase === "brought";
-  const atToday = phase === "now" || phase === "brought";
-  const rookLine = phase === "then" ? "Well, that's inconvenient." : phase === "brought" ? "Oh. Well, look at that." : null;
+  const onMap = phase === "brought" && !peek;
+  const atToday = (phase === "now" || phase === "brought") && !peek;
+  const showingThen = phase === "then" || peek;
+  const rookLine =
+    phase === "then" ? "Well, that's inconvenient." : phase === "brought" && !peek ? (fell ? "I was going there." : "Oh. Well, look at that.") : null;
+  const sableLine = timeChapter && phase === "then" ? "This is where the conversation stopped." : null;
   const who = opportunity.person.name ?? opportunity.person.address;
+  const kept = closedDays.length ? `${WEEKDAYS[closedDays[0]].toUpperCase()} — CLOSED` : null;
+
+  // Rook steps onto the opened crossing a little too enthusiastically; it unfolds beneath him
+  useEffect(() => {
+    if (!timeChapter || phase !== "brought" || fell) return;
+    const timer = window.setTimeout(() => setFell(true), reduce ? 1600 : 2600);
+    return () => window.clearTimeout(timer);
+  }, [timeChapter, phase, fell, reduce]);
+
+  function turnBack(back: boolean) {
+    setPeek(back);
+    setShown(back ? addMonths(today, -span) : today);
+  }
 
   function bring() {
     if (phase !== "now") return;
@@ -111,7 +144,12 @@ export function RevelationScene({
   );
 
   return (
-    <section className={styles.revelation} data-testid="first-ten-revelation" data-phase={phase}>
+    <section className={styles.revelation} data-testid="first-ten-revelation" data-phase={phase} data-view={showingThen ? "then" : "now"}>
+      {timeChapter && title ? (
+        <p className={styles.chapterTitle} data-testid="first-ten-chapter-title">
+          {title}
+        </p>
+      ) : null}
       <div className={styles.revelationDesk}>
         <div className={styles.calendar} data-testid="first-ten-calendar" data-month={MONTH(shown)}>
           <AnimatePresence initial={false} mode="popLayout">
@@ -126,10 +164,10 @@ export function RevelationScene({
               <CalendarPage
                 month={shown}
                 circled={
-                  phase === "then" ? asked.getUTCDate() : atToday ? now.getUTCDate() : null
+                  showingThen ? asked.getUTCDate() : atToday ? now.getUTCDate() : null
                 }
               >
-                {phase === "then" ? (
+                {showingThen ? (
                   <div className={styles.pinned}>
                     {invitation}
                     {opportunity.reply ? (
@@ -156,6 +194,11 @@ export function RevelationScene({
               {MONTH(today)} →
             </button>
           ) : null}
+          {timeChapter && (phase === "now" || phase === "brought") ? (
+            <button type="button" className={styles.turn} onClick={() => turnBack(!peek)} data-testid="first-ten-turn-page">
+              {peek ? `${MONTH(today)} →` : `← ${MONTH(addMonths(today, -span))}`}
+            </button>
+          ) : null}
         </div>
 
         <div className={styles.mapHolder} ref={mapRef} data-testid="first-ten-today-map" onClick={phase === "now" ? bring : undefined}>
@@ -169,7 +212,9 @@ export function RevelationScene({
               highlight={opportunity.place?.findingId ?? null}
               showRoute={atToday}
               threadFrom={null}
-              crossing={opportunity.place ? { pinId: opportunity.place.findingId, open: onMap, sign: phase === "then" || phase === "back" ? sign : null } : null}
+              crossing={opportunity.place ? { pinId: opportunity.place.findingId, open: onMap, sign: showingThen || phase === "back" ? sign : null } : null}
+              keptClosed={timeChapter && atToday ? kept : null}
+              cart={timeChapter && atToday}
             />
           ) : (
             <div className={styles.mapBlank}>{businessName ?? "Today"}</div>
@@ -214,7 +259,33 @@ export function RevelationScene({
       ) : null}
 
       <div className={styles.revelationEdge}>
-        <div className={styles.rook} data-crew="rook">
+        {timeChapter ? (
+          <div className={styles.rook} data-crew="sable">
+            <AnimatePresence>
+              {sableLine ? (
+                <motion.p
+                  key={sableLine}
+                  className={styles.say}
+                  data-testid="first-ten-chapter-sable"
+                  initial={reduce ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <span className={styles.sayName}>Sable</span>
+                  {sableLine}
+                </motion.p>
+              ) : null}
+            </AnimatePresence>
+            {CREW_ART.sable ? <img src={CREW_ART.sable.src} alt={CREW_ART.sable.alt} className={styles.rookArt} draggable={false} /> : null}
+          </div>
+        ) : null}
+        <motion.div
+          className={styles.rook}
+          data-crew="rook"
+          data-fell={fell ? "yes" : "no"}
+          animate={fell && !reduce ? { y: [0, -26, 10, 0], rotate: [0, -12, 6, 0] } : { y: 0, rotate: 0 }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+        >
           <AnimatePresence mode="wait">
             {rookLine ? (
               <motion.p
@@ -224,7 +295,7 @@ export function RevelationScene({
                 initial={reduce ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                transition={{ delay: reduce ? 0 : phase === "then" ? 0.9 : 0.6 }}
+                transition={{ delay: reduce ? 0 : phase === "then" ? (timeChapter ? 2.6 : 0.9) : 0.6 }}
               >
                 <span className={styles.sayName}>Rook</span>
                 {rookLine}
@@ -232,8 +303,8 @@ export function RevelationScene({
             ) : null}
           </AnimatePresence>
           {CREW_ART.rook ? <img src={CREW_ART.rook.src} alt={CREW_ART.rook.alt} className={styles.rookArt} draggable={false} /> : null}
-        </div>
-        {phase === "brought" ? (
+        </motion.div>
+        {phase === "brought" && (!timeChapter || fell) ? (
           <motion.button
             type="button"
             className={styles.pickUp}
@@ -241,7 +312,7 @@ export function RevelationScene({
             data-testid="first-ten-pick-up"
             initial={reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: reduce ? 0 : 1.6 }}
+            transition={{ delay: reduce ? 0 : timeChapter ? 1.2 : 1.6 }}
           >
             Pick up the story
           </motion.button>
@@ -256,7 +327,11 @@ export function RevelationScene({
   );
 }
 
-/** The full explanation, for whoever wants it, with every part's source. */
+/**
+ * The full explanation, for whoever wants it, with every part's source. When something became possible it carries
+ * the chapter's reveal (Astra: "She asked before you could. You can now.", by name rather than a guessed pronoun),
+ * earned by the records, with the old answer and what exists now side by side.
+ */
 function WhySheet({ opportunity, onClose }: { opportunity: ChapterOpportunity; onClose: () => void }) {
   const first = opportunity.firstName ?? "They";
   const missing = opportunity.reply?.missing ?? opportunity.service?.name ?? null;
@@ -266,11 +341,25 @@ function WhySheet({ opportunity, onClose }: { opportunity: ChapterOpportunity; o
       <article className={styles.whySheet} onClick={event => event.stopPropagation()} data-testid="first-ten-why-sheet">
         {opportunity.type === "became_possible" && missing ? (
           <>
-            <h2>Someone already asked for what you now offer.</h2>
+            <h2>{first} asked before you could. You can now.</h2>
             <p>
               {first} asked before {missing} existed. It exists now{passes}.
             </p>
-            <p>This may be a conversation worth reopening.</p>
+            {opportunity.reply || opportunity.service ? (
+              <div className={styles.whyThenNow} data-testid="first-ten-why-then-now">
+                {opportunity.reply ? (
+                  <p>
+                    <b>Then</b> “{opportunity.reply.quote}”
+                  </p>
+                ) : null}
+                {opportunity.service ? (
+                  <p>
+                    <b>Now</b> “{opportunity.service.quote}”
+                    {opportunity.route ? ` · every ${WEEKDAYS[opportunity.route.weekday]}: ${opportunity.route.stops.map(stop => stop.label).join(", ")}` : ""}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : (
           <h2>There's a conversation worth reopening.</h2>

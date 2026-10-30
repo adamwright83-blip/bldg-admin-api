@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { JOURNEY_STAGES, type FirstTenAvailability } from "../../shared/firstTenMinutes";
+import { JOURNEY_KINDS, JOURNEY_STAGES, type FirstTenAvailability } from "../../shared/firstTenMinutes";
 import { assertFirstTenOpen, firstTenMode } from "./flag";
 import { googleAuthorizationUrl, isGoogleConnectConfigured } from "./google";
 import { isSlackConnectConfigured, slackAuthorizationUrl } from "./slack";
@@ -14,10 +14,10 @@ import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
-import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
+import { arrangeEstimate, changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, handOffDraft, reportDraft, verifyDraft } from "./activation/activation";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
-import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
+import { ALL_DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -40,7 +40,7 @@ export const firstTenMinutesRouter = router({
   ),
 
   start: publicProcedure
-    .input(z.object({ requestId: z.string().uuid(), kind: z.enum(["own", "example"]) }))
+    .input(z.object({ requestId: z.string().uuid(), kind: z.enum(JOURNEY_KINDS) }))
     .mutation(async ({ input }) => {
       assertFirstTenOpen();
       const started = await startJourney(input);
@@ -206,15 +206,24 @@ export const firstTenMinutesRouter = router({
     }),
 
   /** "Now. Yours.": the draft at the writing table, composed from the findings. */
-  prepareDraft: publicProcedure.input(credentials).mutation(async ({ input }) => {
+  prepareDraft: publicProcedure.input(credentials.extend({ approach: z.enum(ALL_DRAFT_APPROACHES).optional() })).mutation(async ({ input }) => {
     assertFirstTenOpen();
     const { journey } = await requireJourney(input);
-    return prepareDraft(journey);
+    return prepareDraft(journey, new Date(), input.approach);
   }),
+
+  /** The estimate on the cart, split onto two trays: this job, and possible later work. */
+  arrangeEstimate: publicProcedure
+    .input(credentials.extend({ thisJob: z.array(z.string().max(120)).max(8), later: z.array(z.string().max(120)).max(8) }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      return arrangeEstimate(journey, { thisJob: input.thisJob, later: input.later });
+    }),
 
   /** Another approach, or the person's own words. */
   changeDraft: publicProcedure
-    .input(credentials.extend({ approach: z.enum(DRAFT_APPROACHES).optional(), body: z.string().max(2000).optional() }))
+    .input(credentials.extend({ approach: z.enum(ALL_DRAFT_APPROACHES).optional(), body: z.string().max(2000).optional() }))
     .mutation(async ({ input }) => {
       assertFirstTenOpen();
       const { journey } = await requireJourney(input);

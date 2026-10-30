@@ -1,7 +1,8 @@
 import { GoogleGeocoder } from "../../geography/googleGeocoder";
 import { providerUrl } from "../providerFetch";
 import { connectionSecrets, updateAccessToken, type JourneyRow } from "../store";
-import { exampleGeocoder, exampleReaders } from "./exampleReaders";
+import { exampleOf } from "../../../shared/firstTenMinutesExample";
+import { exampleCorpus, exampleGeocoder, exampleReaders } from "./exampleReaders";
 import { claudeExtractor, exampleExtractor } from "./extractors";
 import { calendarReader, driveReader, gmailReader, type GoogleAccess } from "./googleReaders";
 import type { ReadingDeps } from "./run";
@@ -38,8 +39,10 @@ export async function googleAccessFor(journey: JourneyRow): Promise<GoogleAccess
 
 /** Readers for a journey's own connections. A provider that isn't connected reads as nothing, with no error. */
 export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> {
-  if (journey.kind === "example") {
-    return { readers: exampleReaders(), extractor: exampleExtractor(), geocoder: exampleGeocoder() };
+  const example = exampleOf(journey.kind);
+  if (example) {
+    const corpus = exampleCorpus(example.key);
+    return { readers: exampleReaders(corpus), extractor: exampleExtractor(example.key), geocoder: exampleGeocoder(corpus) };
   }
   const slack = await connectionSecrets(journey.id, "slack");
   const access = await googleAccessFor(journey);

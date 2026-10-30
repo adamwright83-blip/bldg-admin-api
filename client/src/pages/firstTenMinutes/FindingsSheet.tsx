@@ -34,6 +34,10 @@ export function findingLine(payload: FindingPayload): string {
       return `${payload.titles.join(", ")}: ${payload.days.map(day => `${WEEKDAYS[day]}s`).join(" and ")}`;
     case "contrast":
       return `${payload.aLine} ${payload.bLine}`;
+    case "estimate":
+      return `${payload.title}: ${payload.areas.map(area => area.name).join(", ")}`;
+    case "scope":
+      return `${payload.from.name ?? payload.from.address} said: ${payload.quote}`;
     case "opportunity":
       return payload.summary;
   }
@@ -41,6 +45,8 @@ export function findingLine(payload: FindingPayload): string {
 
 const ORDER: FindingPayload["kind"][] = [
   "opportunity",
+  "estimate",
+  "scope",
   "rule",
   "promise",
   "habit",

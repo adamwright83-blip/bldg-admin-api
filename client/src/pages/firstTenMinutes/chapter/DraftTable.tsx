@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
-import { DRAFT_APPROACHES, DRAFT_APPROACH_NAMES, type ChapterOpportunity, type DraftApproach, type DraftView } from "@shared/firstTenMinutesChapter";
+import { DRAFT_APPROACH_NAMES, approachesFor, chapterKind, type ChapterOpportunity, type DraftApproach, type DraftView } from "@shared/firstTenMinutesChapter";
 import { CREW_ART } from "../crew";
 import { sourceDate } from "../SourceNote";
 import styles from "./chapter.module.css";
@@ -31,7 +31,9 @@ export function DraftTable({
   const declined = draft.status === "declined";
   const who = opportunity.firstName ?? opportunity.person.name ?? opportunity.person.address;
   const where = opportunity.place?.category ? ` at the ${opportunity.place.category}` : "";
-  const nextApproach = DRAFT_APPROACHES[(DRAFT_APPROACHES.indexOf(draft.approach) + 1) % DRAFT_APPROACHES.length];
+  const approaches = approachesFor(opportunity);
+  const nextApproach = approaches.length > 1 ? approaches[(approaches.indexOf(draft.approach) + 1) % approaches.length] : null;
+  const estimate = chapterKind(opportunity) === "scope";
 
   async function act(work: () => Promise<void>) {
     setBusy(true);
@@ -76,6 +78,14 @@ export function DraftTable({
             <p className={styles.noteWords}>“{opportunity.service.quote}”</p>
             <p className={styles.noteWho}>You · {sourceDate(opportunity.service.at)}</p>
           </div>
+        ) : opportunity.scope ? (
+          <div className={styles.nowCard} data-testid="first-ten-now">
+            <p className={styles.thenLabel}>Now</p>
+            <p className={styles.noteWords}>“{opportunity.scope.quote}”</p>
+            <p className={styles.noteWho}>
+              {opportunity.person.name ?? opportunity.person.address} · {sourceDate(opportunity.scope.at)}
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -116,7 +126,7 @@ export function DraftTable({
             </div>
           </div>
         ) : (
-          <p className={styles.messageBody} data-testid="first-ten-message-body">
+          <p className={styles.messageBody} data-testid="first-ten-message-body" data-estimate={estimate ? "yes" : undefined}>
             {draft.body}
           </p>
         )}
@@ -143,9 +153,11 @@ export function DraftTable({
               >
                 Edit
               </button>
-              <button type="button" disabled={busy} title={DRAFT_APPROACH_NAMES[nextApproach]} onClick={() => void act(() => onChange({ approach: nextApproach }))}>
-                Try another way
-              </button>
+              {nextApproach ? (
+                <button type="button" disabled={busy} title={DRAFT_APPROACH_NAMES[nextApproach]} onClick={() => void act(() => onChange({ approach: nextApproach }))}>
+                  {estimate ? DRAFT_APPROACH_NAMES[nextApproach] : "Try another way"}
+                </button>
+              ) : null}
               <button type="button" disabled={busy} onClick={() => void act(onDecline)}>
                 Not now
               </button>
@@ -156,13 +168,15 @@ export function DraftTable({
 
       {!declined ? children : null}
 
-      <div className={styles.tableRook} data-crew="rook">
-        <p className={styles.say} data-testid="first-ten-table-line">
-          <span className={styles.sayName}>Rook</span>
-          Short enough to answer.
-        </p>
-        {CREW_ART.rook ? <img src={CREW_ART.rook.src} alt={CREW_ART.rook.alt} className={styles.rookArt} draggable={false} /> : null}
-      </div>
+      {estimate ? null : (
+        <div className={styles.tableRook} data-crew="rook">
+          <p className={styles.say} data-testid="first-ten-table-line">
+            <span className={styles.sayName}>Rook</span>
+            Short enough to answer.
+          </p>
+          {CREW_ART.rook ? <img src={CREW_ART.rook.src} alt={CREW_ART.rook.alt} className={styles.rookArt} draggable={false} /> : null}
+        </div>
+      )}
     </motion.section>
   );
 }

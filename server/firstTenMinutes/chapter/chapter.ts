@@ -4,14 +4,21 @@ import type { FindingPayload, FindingView } from "../../../shared/firstTenMinute
 import {
   DRAFT_APPROACHES,
   LETTER_STEPS,
+  approachesFor,
+  chapterKind,
+  chapterTitle,
   composeDraft,
+  composeEstimateDraft,
+  traysProblem,
   type ChapterCard,
   type ChapterOpportunity,
   type ChapterView,
   type DraftApproach,
   type DraftView,
+  type EstimateTrays,
   type LetterStep,
 } from "../../../shared/firstTenMinutesChapter";
+import { suggestionRules } from "../../../shared/firstTenMinutesCrew";
 import { journeyEvents, recordEvent } from "../events";
 import { firstTenDb, setJourneyStage, type JourneyRow } from "../store";
 import { firstTenDrafts } from "../schema";
@@ -44,6 +51,8 @@ export function chapterOpportunity(findings: readonly FindingView[]): ChapterOpp
   const service = linked(opportunity.payload.serviceId, "service");
   const route = linked(opportunity.payload.routeId, "route");
   const place = linked(opportunity.payload.placeId, "place");
+  const estimate = linked(opportunity.payload.estimateId ?? null, "estimate");
+  const scope = linked(opportunity.payload.scopeId ?? null, "scope");
   const person = request.payload.from;
   return {
     id: opportunity.id,
@@ -65,7 +74,24 @@ export function chapterOpportunity(findings: readonly FindingView[]): ChapterOpp
       ? { findingId: place.id, name: place.payload.name, category: place.payload.category, lat: place.payload.lat, lng: place.payload.lng }
       : null,
     along: opportunity.payload.along,
+    estimate: estimate
+      ? {
+          findingId: estimate.id,
+          title: estimate.payload.title,
+          client: estimate.payload.client,
+          areas: estimate.payload.areas,
+          at: estimate.payload.at,
+          sources: estimate.sources,
+        }
+      : null,
+    scope: scope ? { ...card(scope, scope.payload.quote, scope.payload.at), first: scope.payload.first, later: scope.payload.later } : null,
   };
+}
+
+/** The message at the table, composed for the chapter it belongs to. The estimate's needs the person's trays. */
+function composeFor(opportunity: ChapterOpportunity, approach: DraftApproach, now: Date, trays: EstimateTrays | null): { subject: string; body: string } | null {
+  if (approach === "focused" || approach === "question") return trays ? composeEstimateDraft(opportunity, approach, trays) : null;
+  return composeDraft(opportunity, approach, now);
 }
 
 async function draftRow(journeyId: string) {
@@ -74,7 +100,12 @@ async function draftRow(journeyId: string) {
   return row ?? null;
 }
 
-function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, opportunity: ChapterOpportunity | null, now: Date): DraftView {
+function draftView(
+  row: NonNullable<Awaited<ReturnType<typeof draftRow>>>,
+  opportunity: ChapterOpportunity | null,
+  now: Date,
+  trays: EstimateTrays | null
+): DraftView {
   return {
     approach: row.approach,
     to: { name: row.recipientName, address: row.recipientAddress },
@@ -85,7 +116,12 @@ function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, oppor
     handedOffAt: row.handedOffAt?.toISOString() ?? null,
     reportedSentAt: row.reportedSentAt?.toISOString() ?? null,
     verifiedSentAt: row.verifiedSentAt?.toISOString() ?? null,
-    approaches: opportunity ? DRAFT_APPROACHES.map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
+    approaches: opportunity
+      ? approachesFor(opportunity).flatMap(approach => {
+          const composed = composeFor(opportunity, approach, now, trays);
+          return composed ? [{ approach, body: composed.body }] : [];
+        })
+      : [],
   };
 }
 
@@ -96,17 +132,25 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   const steps = new Set<LetterStep>();
   let revealed = false;
   let letterWritten = false;
+  let trays: EstimateTrays | null = null;
   for (const event of events) {
     if (event.kind === "chapter_revealed") revealed = true;
     if (event.kind === "letter_written") letterWritten = true;
     const step = (event.payloadJson as { step?: string } | null)?.step;
     if (event.kind === "letter_step" && LETTER_STEPS.includes(step as LetterStep)) steps.add(step as LetterStep);
+    if (event.kind === "estimate_arranged") {
+      const arranged = event.payloadJson as Partial<EstimateTrays> | null;
+      if (Array.isArray(arranged?.thisJob) && Array.isArray(arranged?.later)) trays = { thisJob: arranged.thisJob, later: arranged.later };
+    }
   }
   const row = await draftRow(journey.id);
   return {
     opportunity,
-    progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten },
-    draft: row ? draftView(row, opportunity, now) : null,
+    kind: chapterKind(opportunity),
+    title: chapterTitle(opportunity),
+    closedDays: suggestionRules(reading.findings).closedDays,
+    progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten, trays },
+    draft: row ? draftView(row, opportunity, now, trays) : null,
   };
 }
 
@@ -133,12 +177,32 @@ export async function recordChapterStep(journey: JourneyRow, step: "revealed" | 
   return chapterView(journey);
 }
 
-/** "Now. Yours." The draft at the writing table, composed from the findings, once the letter is written. */
-export async function prepareDraft(journey: JourneyRow, now = new Date()): Promise<ChapterView> {
+/**
+ * The estimate on the cart: every room on one of the two trays, something on each. The arrangement is the person's
+ * and is kept; the cart fits through the arch only once the scope is separated, and nothing is taken out.
+ */
+export async function arrangeEstimate(journey: JourneyRow, trays: EstimateTrays): Promise<ChapterView> {
+  const view = await chapterView(journey);
+  if (!view.opportunity || view.kind !== "scope") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "There's no estimate on the cart." });
+  const problem = traysProblem(view.opportunity, trays);
+  if (problem) throw new TRPCError({ code: "BAD_REQUEST", message: problem });
+  if (view.draft) throw new TRPCError({ code: "CONFLICT", message: "The estimate has already gone through the arch." });
+  await recordEvent(journey.id, "estimate_arranged", { thisJob: trays.thisJob, later: trays.later });
+  return chapterView(journey);
+}
+
+/**
+ * "Now. Yours." The draft at the writing table, composed from the findings: Rook's message once the old request is on
+ * today's route, Hazel's once the letter is written, or the estimate once it fits through the arch.
+ */
+export async function prepareDraft(journey: JourneyRow, now = new Date(), approach?: DraftApproach): Promise<ChapterView> {
   const view = await chapterView(journey, now);
   if (!view.opportunity) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "There's no conversation to pick up yet." });
   if (!view.draft) {
-    const composed = composeDraft(view.opportunity, "still_wanted", now);
+    const first: DraftApproach = view.kind === "scope" ? "focused" : "still_wanted";
+    const chosen = approach && approachesFor(view.opportunity).includes(approach) ? approach : first;
+    const composed = composeFor(view.opportunity, chosen, now, view.progress.trays);
+    if (!composed) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "It still won't fit through the arch." });
     const db = await firstTenDb();
     await db
       .insert(firstTenDrafts)
@@ -149,12 +213,12 @@ export async function prepareDraft(journey: JourneyRow, now = new Date()): Promi
         recipientAddress: view.opportunity.person.address,
         subject: composed.subject,
         body: composed.body,
-        approach: "still_wanted",
+        approach: chosen,
         edited: false,
         status: "prepared",
       })
       .onDuplicateKeyUpdate({ set: { journeyId: journey.id } });
-    await recordEvent(journey.id, "draft_prepared", { opportunityId: view.opportunity.id, approach: "still_wanted", to: view.opportunity.person.address });
+    await recordEvent(journey.id, "draft_prepared", { opportunityId: view.opportunity.id, approach: chosen, to: view.opportunity.person.address });
   }
   if (journey.stage === "chapter" || journey.stage === "portrait") await setJourneyStage(journey.id, "table");
   return chapterView(journey, now);
@@ -175,7 +239,8 @@ export async function changeDraft(
     throw new TRPCError({ code: "CONFLICT", message: "This message has already left the table." });
   }
   const approach = change.approach ?? view.draft.approach;
-  const composed = composeDraft(view.opportunity, approach, now).body;
+  if (!approachesFor(view.opportunity).includes(approach)) throw new TRPCError({ code: "BAD_REQUEST", message: "That's not a way this message can go." });
+  const composed = composeFor(view.opportunity, approach, now, view.progress.trays)?.body ?? view.draft.body;
   // the person's words when they gave them; a new approach composed afresh; otherwise the message as it stands
   const body = change.body?.trim() ? change.body.trim() : change.approach ? composed : view.draft.body;
   const db = await firstTenDb();

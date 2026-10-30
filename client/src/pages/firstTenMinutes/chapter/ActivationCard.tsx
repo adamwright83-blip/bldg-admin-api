@@ -45,7 +45,7 @@ export function ActivationCard({
       <p className={styles.activationWaiting}>{ACTIVATION_COPY.waiting}</p>
       {activation.example ? (
         <p className={styles.activationOffer} data-testid="first-ten-activation-example">
-          This is Nina's example, so nothing here is activated or sent.{" "}
+          This is {activation.exampleOwner ?? "an"}'s example, so nothing here is activated or sent.{" "}
           <button type="button" className={styles.inlineLink} onClick={onBringYourOwn}>
             Bring your own
           </button>

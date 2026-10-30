@@ -15,8 +15,10 @@ export type ActivationOffer = {
 };
 
 export type ActivationView = {
-  /** Nina's example: nothing activates and nothing is sent */
+  /** an example (Nina's or Dev's): nothing activates and nothing is sent */
   example: boolean;
+  /** whose example it is, to say so */
+  exampleOwner: string | null;
   /** billing is open, so activation comes before the message leaves the table */
   required: boolean;
   offer: ActivationOffer | null;

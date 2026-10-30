@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { invokeLLM } from "../../_core/llm";
-import exampleExtraction from "../../../shared/firstTenMinutesExampleExtraction.json";
+import ninaExtraction from "../../../shared/firstTenMinutesExampleExtraction.json";
+import devExtraction from "../../../shared/firstTenMinutesExampleDevExtraction.json";
+import type { ExampleKey } from "../../../shared/firstTenMinutesExample";
 import { conversationExtractionSchema, workExtractionSchema, type Extractor } from "./extract";
 
 /**
@@ -30,14 +32,17 @@ export function claudeExtractor(journeyId: string): Extractor {
   };
 }
 
-/** Nina's example: the readings as written for her invented corpus, verified like any other. No model is called. */
-export function exampleExtractor(): Extractor {
+const EXTRACTIONS: Record<ExampleKey, { conversations: unknown; work: unknown }> = { nina: ninaExtraction, dev: devExtraction };
+
+/** An example: the readings as written for its invented corpus, verified like any other. No model is called. */
+export function exampleExtractor(key: ExampleKey = "nina"): Extractor {
+  const extraction = EXTRACTIONS[key];
   return {
     async conversations() {
-      return conversationExtractionSchema.parse(exampleExtraction.conversations);
+      return conversationExtractionSchema.parse(extraction.conversations);
     },
     async work() {
-      return workExtractionSchema.parse(exampleExtraction.work);
+      return workExtractionSchema.parse(extraction.work);
     },
   };
 }

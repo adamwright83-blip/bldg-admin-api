@@ -6,8 +6,9 @@ import {
   connectErrorCode,
   type ConnectionProvider,
   type FirstTenAvailability,
+  type JourneyKind,
 } from "@shared/firstTenMinutes";
-import { EXAMPLE_LABEL } from "@shared/firstTenMinutesExample";
+import { exampleOf } from "@shared/firstTenMinutesExample";
 import {
   clearFirstTenCredentials,
   readFirstTenCredentials,
@@ -22,6 +23,7 @@ import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
 import { RevelationScene } from "./chapter/RevelationScene";
 import { LetterScene } from "./chapter/LetterScene";
+import { EstimateScene } from "./chapter/EstimateScene";
 import { DraftTable } from "./chapter/DraftTable";
 import { ActivationCard } from "./chapter/ActivationCard";
 import { SendDesk } from "./chapter/SendDesk";
@@ -102,7 +104,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     setCredentials(null);
   }, [journey.isError, journey.error]);
 
-  async function startJourney(kind: "own" | "example"): Promise<FirstTenCredentials> {
+  async function startJourney(kind: JourneyKind): Promise<FirstTenCredentials> {
     const result = await start.mutateAsync({ requestId: newRequestId(), kind });
     saveFirstTenCredentials(result.credentials);
     setCredentials(result.credentials);
@@ -122,10 +124,10 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     }
   }
 
-  async function exploreExample() {
+  async function exploreExample(kind: "example" | "example_dev") {
     setNotice(null);
     try {
-      await startJourney("example");
+      await startJourney(kind);
       captureProductEvent("onboarding_source_connected", { kind: "example", funnel_step: "first_ten" });
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : "The example didn't open. Please try again.");
@@ -145,7 +147,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   }
 
   const view = journey.data ?? null;
-  const example = view?.kind === "example";
+  const exampleBusiness = view ? exampleOf(view.kind) : null;
+  const example = Boolean(exampleBusiness);
   const hasConnection = Boolean(view?.connections.length);
   const reading = useReading(credentials, hasConnection);
   const [closer, setCloser] = useState(false);
@@ -190,7 +193,11 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     retry: false,
     refetchInterval: query => (query.state.data?.status === "writing" ? 1200 : false),
   });
-  const portraitBasis = reading.view?.findings.map(finding => `${finding.id}:${finding.status}:${finding.correction ?? ""}`).join("|") ?? "";
+  // what the page rests on, content included: a later reading can change a finding under the same id
+  const portraitBasis =
+    reading.view?.findings
+      .map(finding => `${finding.id}:${finding.status}:${finding.correction ?? ""}:${JSON.stringify(finding.payload)}:${finding.sources.map(source => source.ref).join(",")}`)
+      .join("|") ?? "";
   const writePortrait = useCallback(() => {
     if (!credentials) return;
     preparePortrait.mutate(credentials, { onSuccess: next => utils.system.firstTenMinutes.portrait.setData(credentials, next) });
@@ -201,6 +208,14 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     writePortrait();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crewFinished, readingComplete, portraitBasis, writePortrait]);
+  // A correction made while Claire was writing couldn't start a new page then; once she has finished, ask again. The
+  // server writes again only if what the page rests on has changed, so this settles after one more page at most.
+  const wasWriting = useRef(false);
+  useEffect(() => {
+    const writing = portrait.data?.status === "writing";
+    if (wasWriting.current && !writing && portrait.data?.status === "ready") writePortrait();
+    wasWriting.current = writing;
+  }, [portrait.data?.status, writePortrait]);
   const page = portrait.data && (portrait.data.status === "ready" || portrait.data.status === "kept") ? portrait.data : null;
   const keptJustNow = useRef(false);
 
@@ -224,6 +239,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const chapter = trpc.system.firstTenMinutes.chapter.useQuery(credentials!, { enabled: Boolean(credentials) && portraitKept, retry: false });
   const chapterStep = trpc.system.firstTenMinutes.chapterStep.useMutation();
   const prepareDraft = trpc.system.firstTenMinutes.prepareDraft.useMutation();
+  const arrangeEstimate = trpc.system.firstTenMinutes.arrangeEstimate.useMutation();
   const changeDraft = trpc.system.firstTenMinutes.changeDraft.useMutation();
   const declineDraft = trpc.system.firstTenMinutes.declineDraft.useMutation();
   const setChapter = (next: ChapterView) => {
@@ -344,13 +360,47 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
   }
 
+  // "The Friday That Didn't Exist": once the old request is on today's route, the next move is the person's, and Rook
+  // already has the message at the table. A reload in between finds it ready too.
+  const timeChapterReady = chapter.data?.kind === "time" && chapter.data.progress.revealed && !chapter.data.draft;
+  useEffect(() => {
+    if (!credentials || !timeChapterReady || prepareDraft.isPending) return;
+    prepareDraft.mutate(credentials, { onSuccess: setChapter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [credentials, timeChapterReady]);
+
   function renderChapter() {
     const data = chapter.data;
     if (!data || !opportunity || !credentials) return null;
+    if (data.kind === "scope" && !data.draft) {
+      return (
+        <EstimateScene
+          opportunity={opportunity}
+          title={data.title}
+          revealed={data.progress.revealed}
+          trays={data.progress.trays}
+          onRevealed={() => step("revealed")}
+          onArrange={async trays => setChapter(await arrangeEstimate.mutateAsync({ ...credentials, ...trays }))}
+          onReady={approach => prepareDraft.mutate({ ...credentials, approach }, { onSuccess: setChapter })}
+        />
+      );
+    }
     if (!data.progress.revealed) {
-      return <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />;
+      return (
+        <RevelationScene
+          opportunity={opportunity}
+          businessName={businessName}
+          now={new Date()}
+          kind={data.kind}
+          title={data.title}
+          closedDays={data.closedDays}
+          onPickUp={() => void step("revealed")}
+        />
+      );
     }
     if (!data.draft) {
+      // Rook is putting the message on the table
+      if (data.kind === "time") return null;
       return (
         <LetterScene
           steps={data.progress.steps}
@@ -373,7 +423,16 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
         >
           {renderTableFoot()}
         </DraftTable>
-        {outcome ? <ClosingBeat outcome={outcome} /> : null}
+        {outcome ? (
+          <ClosingBeat
+            outcome={outcome}
+            kind={data.kind}
+            opportunity={opportunity}
+            businessName={businessName}
+            closedDays={data.closedDays}
+            trays={data.progress.trays}
+          />
+        ) : null}
         <button type="button" className={sendStyles.backToPage} disabled={openFirstChapter.isPending} onClick={() => void backToPage()} data-testid="first-ten-back-to-page">
           Back to your page
         </button>
@@ -463,7 +522,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
         slackReady={availability.slack}
         notice={notice}
         onConnect={provider => void connect(provider)}
-        onExample={() => void exploreExample()}
+        onExample={kind => void exploreExample(kind)}
         onIncludes={setIncludes}
       />
     );
@@ -474,7 +533,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
       <span className={styles.mark} aria-hidden="true">JOYSTICK</span>
       {example ? (
         <div className={styles.exampleTag} data-testid="first-ten-example-label">
-          <span>{EXAMPLE_LABEL}</span>
+          <span>{exampleBusiness?.label}</span>
           <button type="button" onClick={bringYourOwn}>
             Bring your own
           </button>

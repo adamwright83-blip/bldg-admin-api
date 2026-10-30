@@ -767,3 +767,14 @@
   letter-spacing: 0.08em;
   fill: #8e2f22;
 }
+
+/* the chapter's delivery cart, rolled onto the route */
+.deliveryCart rect {
+  fill: #c98a35;
+  stroke: #6b4a1f;
+  stroke-width: 1.5;
+}
+
+.deliveryCart circle {
+  fill: #3a2a1c;
+}

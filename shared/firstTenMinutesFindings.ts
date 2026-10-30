@@ -44,11 +44,17 @@ export type FindingKind =
   | "route"
   | "rhythm"
   | "contrast"
+  | "estimate"
+  | "scope"
   | "opportunity";
 
 export type OpportunityType = "became_possible" | "deserves_finishing" | "within_reach" | "unanswered";
 
 export type RouteStop = { label: string; location: string; lat: number | null; lng: number | null };
+
+/** One line of an estimate, in the document's own words; `open` when the document leaves it unresolved ("TBD"). */
+export type EstimateLine = { text: string; amount: string | null; open: boolean };
+export type EstimateArea = { name: string; lines: EstimateLine[] };
 
 export type FindingPayload =
   | { kind: "business"; name: string }
@@ -86,6 +92,10 @@ export type FindingPayload =
   | { kind: "rhythm"; word: string; days: number[]; count: number; titles: string[] }
   /** two requests side by side that show what different people are buying */
   | { kind: "contrast"; aLine: string; bLine: string; aRequestId: string; bRequestId: string }
+  /** an estimate the person is still working on: its areas and lines, every word the document's own */
+  | { kind: "estimate"; title: string; client: string | null; areas: EstimateArea[]; at: string }
+  /** a client saying what to do first and what can wait, in their own words ("Let's do the garage first; the house can wait.") */
+  | { kind: "scope"; from: PersonRef; quote: string; first: string; later: string; at: string }
   | {
       kind: "opportunity";
       type: OpportunityType;
@@ -97,6 +107,9 @@ export type FindingPayload =
       placeId: string | null;
       /** how the route meets the place: on the same street, or a stop within a few hundred metres */
       along: "street" | "nearby" | null;
+      /** an estimate that still mixes what the client asked for first with what can wait, and what they said */
+      estimateId?: string | null;
+      scopeId?: string | null;
       summary: string;
     };
 

@@ -85,6 +85,8 @@ export function PlacesMap({
   showRoute,
   threadFrom,
   crossing = null,
+  keptClosed = null,
+  cart = false,
 }: {
   title: string | null;
   pins: PlacePin[];
@@ -97,6 +99,10 @@ export function PlacesMap({
   threadFrom: string | null;
   /** the chapter's crossing: a paper bridge from the route to a pin, folded shut (with its sign) or open */
   crossing?: { pinId: string; open: boolean; sign: string | null } | null;
+  /** a crossing the person keeps closed by their own rule ("SUNDAY — CLOSED"): it stays folded, whatever else opens */
+  keptClosed?: string | null;
+  /** the delivery cart, rolled into place at the start of the route */
+  cart?: boolean;
 }) {
   const reduce = useReducedMotion();
   const width = 600;
@@ -203,6 +209,32 @@ export function PlacesMap({
           </g>
         ))}
         {crossing ? <Crossing crossing={crossing} pins={pinPoints} stops={stopPoints} reduce={reduce} /> : null}
+        {keptClosed && stopPoints.length ? (
+          <g transform={`translate(${stopPoints[stopPoints.length - 1].x + 30} ${stopPoints[stopPoints.length - 1].y + 34})`} data-testid="first-ten-kept-closed">
+            <rect className={styles.crossingPlank} x={-4} y={-5} width={9} height={10} rx={2} />
+            <g transform="translate(0 -16)" className={styles.crossingSign}>
+              <path d="M0 0 L 0 16" />
+              <rect x={-(keptClosed.length * 3.4 + 10)} y={-22} width={keptClosed.length * 6.8 + 20} height={20} rx={2} />
+              <text y={-8} textAnchor="middle">
+                {keptClosed}
+              </text>
+            </g>
+          </g>
+        ) : null}
+        {cart && stopPoints.length ? (
+          <motion.g
+            data-testid="first-ten-cart-on-route"
+            initial={reduce ? false : { x: -80, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 60, damping: 13, delay: 0.5 }}
+          >
+            <g transform={`translate(${cartAt(stopPoints).x - 13} ${cartAt(stopPoints).y - 10})`} className={styles.deliveryCart} aria-hidden="true">
+              <rect x={0} y={0} width={26} height={13} rx={2} />
+              <circle cx={6} cy={16} r={4} />
+              <circle cx={20} cy={16} r={4} />
+            </g>
+          </motion.g>
+        ) : null}
         {slip && title ? (
           <g className={styles.mapTitle}>
             <rect x={slip.x} y={slip.y} width={slip.width} height={slip.height} />
@@ -219,6 +251,16 @@ export function PlacesMap({
       </svg>
     </div>
   );
+}
+
+/** Where the delivery cart waits: just before the route's first stop, along the route, clear of the stop's label. */
+function cartAt(stops: Array<{ x: number; y: number }>): { x: number; y: number } {
+  const [first, second] = stops;
+  if (!second) return { x: first.x - 30, y: first.y + 18 };
+  const dx = first.x - second.x;
+  const dy = first.y - second.y;
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: first.x + (dx / length) * 34, y: first.y + (dy / length) * 34 };
 }
 
 /**
