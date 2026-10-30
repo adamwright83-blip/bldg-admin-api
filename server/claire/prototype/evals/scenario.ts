@@ -138,9 +138,9 @@ export type Scenario = {
     /** The operator's headline goal as read_goal_progress returns it. Absent: no goal on record. */
     /**
      * `current` with `caveats` is a real but incomplete count (a source is behind): read_goal_progress
-     * returns it as a minimum (current_is_minimum), with CleanCloud reaching `countedThroughDaysAgo` days ago.
+     * returns it as partial (current_is_partial), with CleanCloud reaching `countedThroughDaysAgo` days ago.
      */
-    goal?: { objective: string; targetValue: number; startedAt: number | null; current: number | null; currentNote?: string; caveats?: string[]; countedThroughDaysAgo?: number };
+    goal?: { objective: string; targetValue: number; startedAt: number | null; current: number | null; currentNote?: string; caveats?: string[]; countedThroughDaysAgo?: number; startedAtInexact?: boolean };
   };
   operator: ScriptedOperator | SimulatedOperator;
   expect: ScenarioExpectation;

@@ -62,8 +62,8 @@ describe("Claire's business numbers read the whole company, the same way as her 
     const context = contextWith(["default", "laundry_farm"]);
     const goal = (await executeTool(context, "read_goal_progress", {})).output as Record<string, unknown>;
     const numbers = (await executeTool(context, "read_business_numbers", { metric: "active_customers", period: "trailing_days", trailing_days: 30 })).output as Record<string, unknown>;
-    expect(goal).toMatchObject({ current: 3, current_is_complete: false, current_is_minimum: true, to_go: 47 });
-    expect(numbers).toMatchObject({ count: 3, complete: false, at_least: true, books: ["Laundry Farm", "Laundry Butler"] });
+    expect(goal).toMatchObject({ current: 3, current_is_complete: false, current_is_partial: true, to_go: null, short_by_count_so_far: 47 });
+    expect(numbers).toMatchObject({ count: 3, complete: false, partial: true, books: ["Laundry Farm", "Laundry Butler"] });
     expect(numbers.caveats).toEqual(goal.caveats);
     expect(numbers.caveats).toEqual(["CleanCloud records only reach 2026-10-26; nothing newer has been imported."]);
   });

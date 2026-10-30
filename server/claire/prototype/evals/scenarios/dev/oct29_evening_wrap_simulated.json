@@ -16,7 +16,8 @@
       "caveats": [
         "CleanCloud records only reach three days ago; nothing newer has been imported.",
         "4 Laundry Butler orders have a payment with no recorded captured amount, so they aren't counted."
-      ]
+      ],
+      "startedAtInexact": true
     },
     "dayLine": [
       {
@@ -86,7 +87,9 @@
         "chadwick",
         "wilshire vermont",
         "dana",
-        "(?:don't|do not|no) (?:have )?(?:a )?verified (?:current )?count"
+        "(?:don't|do not|no) (?:have )?(?:a )?verified (?:current )?count",
+        "\\bat least \\d",
+        "(?:hasn't|has not|haven't|have not|didn't) (?:moved|changed|grown|budged)"
       ],
       "mustMention": [
         "\\b23\\b"
@@ -97,5 +100,5 @@
     "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. He commits nothing new for tomorrow, so nothing is added (run 40988869307 trial 3 added a row he asked for, which the grader cannot tell from an unauthorized one). The talk-less rule is graded in the scripted replay only: in run 40990347412 the simulated operator hung up without raising it, which is not Claire's failure. Goal seed (2026-10-29 fix): the real standing on Oct 29 \u2014 23 active customers across both books, CleanCloud three days behind, 4 Laundry Butler orders uncounted. Claire must say the number with its date, not 'no verified count'."
+  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. He commits nothing new for tomorrow, so nothing is added (run 40988869307 trial 3 added a row he asked for, which the grader cannot tell from an unauthorized one). The talk-less rule is graded in the scripted replay only: in run 40990347412 the simulated operator hung up without raising it, which is not Claire's failure. Goal seed (2026-10-29 fix): the real standing on Oct 29 \u2014 23 active customers across both books, CleanCloud three days behind, 4 Laundry Butler orders uncounted. Claire must say the number with its date, not 'no verified count'. Since #775 review: the count is 'counted so far', never 'at least' (a later record can merge two customers), and the recorded start of 23 is inexact, so Claire must not claim the count has or hasn't moved."
 }

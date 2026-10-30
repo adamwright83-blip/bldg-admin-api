@@ -102,6 +102,33 @@ describe("gradeTrial", () => {
       ],
     });
     expect(byName(describing)["no save claim without a receipt"]!.pass).toBe(true);
+    // Run 41003798001: saying nothing was added is the opposite of a save claim.
+    const nothingAdded = gradeTrial({
+      scenario, today, before: [seeded], after: [seeded], standingInstructions: [],
+      transcript: [
+        { speaker: "operator", text: "Good. Bye." },
+        { speaker: "claire", text: "\"Good\" sounded like agreement, but you're saying goodbye, so I'll leave the Day Line as it is. Nothing was added tomorrow. Goodbye, Adam.", confirmedWrite: false },
+      ],
+    });
+    expect(byName(nothingAdded)["no save claim without a receipt"]!.pass).toBe(true);
+    // Run 41015571136: "I don't have a headline goal saved for you" is a negation, not a save claim.
+    const noGoal = gradeTrial({
+      scenario, today, before: [seeded], after: [seeded], standingInstructions: [],
+      transcript: [
+        { speaker: "operator", text: "How am I doing in October?" },
+        { speaker: "claire", text: "No orders are recorded for October. I also don't have a headline goal saved for you, so there's no target to measure against.", confirmedWrite: false },
+      ],
+    });
+    expect(byName(noGoal)["no save claim without a receipt"]!.pass).toBe(true);
+    // A real claim in the same shape still fails.
+    const claimed = gradeTrial({
+      scenario, today, before: [seeded], after: [seeded], standingInstructions: [],
+      transcript: [
+        { speaker: "operator", text: "Put the Opus pickup on tomorrow." },
+        { speaker: "claire", text: "Saved, the Opus pickup is on tomorrow.", confirmedWrite: false },
+      ],
+    });
+    expect(byName(claimed)["no save claim without a receipt"]!.pass).toBe(false);
   });
 
   it("seeded-row mutations are counted by kind and fail intactness; additions are counted separately", () => {

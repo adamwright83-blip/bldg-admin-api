@@ -91,7 +91,7 @@ describe("scheduled calls on the native-tool engine", () => {
     expect(lastClaireText.value).toBe(result.speak);
     // The goal tool's result went back to the model before it spoke.
     const sent = requests[1]!.messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
-    expect(JSON.parse(String(sent[0]!.content))).toMatchObject({ status: "ok", target: 50, started_at: 23, current: null, current_is_complete: false, caveats: ["active-customer count is partial"] });
+    expect(JSON.parse(String(sent[0]!.content))).toMatchObject({ status: "ok", target: 50, started_at: 23, current: null, current_is_complete: false, to_go: null, short_by_count_so_far: null, caveats: ["active-customer count is partial"] });
     // The thread starts with the notice, then Claire's opening: the operator's first answer continues it.
     expect(messages[0]).toMatchObject({ role: "user" });
     expect(String(messages[0]!.content)).toContain("not from Adam");
