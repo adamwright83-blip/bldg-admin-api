@@ -589,7 +589,9 @@ describe("driver Day Line on the Claire call", () => {
       new URL("../../agents/persistentOperator/operatorAppointmentExecution.ts", import.meta.url),
       "utf8"
     );
-    expect(source).toContain("const briefing = await buildShowrunnerBriefing(");
+    // Brain V2 builds the briefing; an operator on the native-tool switch gets the model-written opening instead.
+    expect(source).toContain("const briefing = native ? null : await buildShowrunnerBriefing(");
+    expect(source).toContain("{ nativeToolPurpose: purpose }");
     expect(source).toContain("composeShowrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null })");
     expect(source).toContain("briefing.openingAskedCarried = opening.askedCarried;");
     expect(source).toContain("openingOverride: opening.text");
