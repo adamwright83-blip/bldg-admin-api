@@ -63,7 +63,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Contracts
-        run: pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes
+        run: pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes client/src/pages/firstTenMinutes
       - name: Migrate the disposable database, twice (idempotent)
         run: |
           node scripts/migrate.mjs

@@ -54,7 +54,8 @@ test("connecting Google comes back connected, survives a reload, and disconnects
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-connect-google").click();
   await expect(page).toHaveURL(/\/joystick-start$/);
-  await expect(page.getByTestId("first-ten-understanding")).toBeVisible();
+  // the crew begins reading at once (and, once it has read enough, steps in)
+  await expect(page.getByTestId("first-ten-understanding").or(page.getByTestId("first-ten-crew-scene"))).toBeVisible();
   await expect(page.getByTestId("first-ten-google-account")).toHaveText("owner@first-ten.example · Gmail, Calendar and Drive");
   await shots("04-connected", page, testInfo);
 
@@ -109,7 +110,7 @@ test("the example is labelled on screen and can be left for your own world", asy
   await page.getByRole("button", { name: "Let's find out" }).click();
   await page.getByTestId("first-ten-example").click();
   await expect(page.getByTestId("first-ten-example-label")).toContainText("Example: Nina's flower studio, invented. Nothing here is yours.");
-  await expect(page.getByTestId("first-ten-understanding")).toBeVisible();
+  await expect(page.getByTestId("first-ten-understanding").or(page.getByTestId("first-ten-crew-scene"))).toBeVisible();
   await shots("05-example", page, testInfo);
 
   await page.getByRole("button", { name: "Bring your own" }).click();

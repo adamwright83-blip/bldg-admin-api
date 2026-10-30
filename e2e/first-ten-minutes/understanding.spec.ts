@@ -22,54 +22,47 @@ test.beforeEach(async ({ page, request }) => {
   await page.getByRole("button", { name: "Let's find out" }).click();
 });
 
-async function expectNamesOnTheObjects(page: Page) {
-  const scene = page.getByTestId("first-ten-understanding");
-  await expect(scene).toHaveAttribute("data-status", "complete", { timeout: 60_000 });
-  await expect(scene.locator('[data-object="map"]')).toContainText("Wildroot Flowers");
-  await expect(scene.locator('[data-object="notebook"]')).toContainText("Jules Moreau");
-  await expect(scene.locator('[data-object="folder"]')).toContainText("Weekly Friday delivery");
-  await expect(scene.locator('[data-object="photograph"]')).toContainText("blue jug");
-  for (const who of ["sable", "rook", "mara", "luma"]) await expect(scene.locator(`[data-crew="${who}"]`)).toBeVisible();
-}
-
-test("the example: the crew reads Nina's world and real names land on their objects", async ({ page }, testInfo) => {
+test("the example: Nina's world is read, and the crew steps in with her own words", async ({ page }, testInfo) => {
   await page.getByTestId("first-ten-example").click();
-  await expectNamesOnTheObjects(page);
+  const scene = page.getByTestId("first-ten-crew-scene");
+  await expect(scene.getByTestId("first-ten-object-rule")).toContainText("No more Sunday deliveries.", { timeout: 60_000 });
   await shots("10-reading-done", page, testInfo);
 
-  // a source on tap: where the map's name came from
-  await page.locator('[data-object="map"]').click();
-  const source = page.getByTestId("first-ten-source");
-  await expect(source).toContainText("You, to Sam Okafor");
-  await expect(source).toContainText("Wildroot Flowers · Silver Lake");
-  await source.getByRole("button", { name: "Close" }).click();
-
-  await page.getByTestId("first-ten-look-closer").click();
-  const found = page.getByTestId("first-ten-findings");
-  await expect(found).toContainText("Your rule: No more Sunday deliveries.");
-  await expect(found).toContainText("Elena Ruiz asked in April, before you offered weekly Friday delivery. You offer it now.");
-  await expect(found).toContainText("You tend to finish with a real question: “Would Friday suit?” “Shall I bring two?”");
-  await shots("11-what-the-crew-found", page, testInfo);
+  // a source on tap: where Nina's words came from
+  await scene.getByTestId("first-ten-object-rule").click();
+  const note = page.getByTestId("first-ten-finding-note");
+  await expect(note).toContainText("You, to Jules Moreau");
+  await expect(note).toContainText("No more Sunday deliveries.");
 });
 
-test("your own account: Gmail, Calendar, Drive and the model are read, and only verified words come back", async ({ page, request }, testInfo) => {
-  await request.post(`${FAKE}/__control`, { data: { googleEmail: "nina@wildrootflowers.example" } });
+test("your own account: the reading works in the open, and only verified words come back", async ({ page, request }, testInfo) => {
+  await request.post(`${FAKE}/__control`, { data: { googleEmail: "nina@wildrootflowers.example", conversationsDelayMs: 6000 } });
   await page.getByTestId("first-ten-connect-google").click();
-  await expectNamesOnTheObjects(page);
-  await shots("12-own-reading-done", page, testInfo);
-  const calls = await (await request.get(`${FAKE}/__model-calls`)).json();
-  expect(calls.calls).toEqual(["conversations", "work"]);
-  await page.getByTestId("first-ten-look-closer").click();
-  await expect(page.getByTestId("first-ten-findings")).toContainText("Friday delivery: Café Lumen, Juniper Yoga, Mercer");
+
+  // while the model reads the conversations the line says so, and names from the sent mail are already on the objects
+  const reading = page.getByTestId("first-ten-understanding");
+  await expect(reading).toContainText("Following the conversations you keep coming back to.", { timeout: 30_000 });
+  await expect(reading.locator('[data-object="notebook"]')).toContainText("Jules Moreau");
+  await expect(reading.locator('[data-object="photograph"]')).toContainText("blue jug");
+  await shots("12-own-reading", page, testInfo);
+
+  // then the crew steps in with Nina's own words, checked against her mail, after exactly two model calls
+  const scene = page.getByTestId("first-ten-crew-scene");
+  await expect(scene.getByTestId("first-ten-object-rule")).toContainText("No more Sunday deliveries.", { timeout: 60_000 });
+  await expect
+    .poll(async () => (await (await request.get(`${FAKE}/__model-calls`)).json()).calls, { timeout: 30_000 })
+    .toEqual(["conversations", "work"]);
 });
 
-test("when the model is down, the crew still finishes with what it can count, and says so", async ({ page, request }) => {
+test("when the model is down, the crew still steps in with what it can count, and says so", async ({ page, request }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await request.post(`${FAKE}/__control`, { data: { googleEmail: "nina@wildrootflowers.example", modelFails: true } });
   await page.getByTestId("first-ten-connect-google").click();
-  const scene = page.getByTestId("first-ten-understanding");
-  await expect(scene).toHaveAttribute("data-status", "complete", { timeout: 60_000 });
-  await expect(scene).toContainText("Some of your conversations couldn't be read closely just now.");
-  await expect(scene.locator('[data-object="notebook"]')).toContainText("Jules Moreau");
-  await expect(scene.locator('[data-object="photograph"]')).toContainText("blue jug");
-  await expect(scene.locator('[data-object="map"]')).toHaveAttribute("data-named", "no");
+  const scene = page.getByTestId("first-ten-crew-scene");
+  // Rook's habit is counted from the sent mail, no model needed; with no rule read, Sable waits
+  await expect(scene.getByTestId("first-ten-object-strips")).toContainText("Would Friday suit", { timeout: 60_000 });
+  await expect(scene.getByTestId("first-ten-object-rule")).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-reading-notes")).toContainText("Some of your conversations couldn't be read closely just now.", {
+    timeout: 90_000,
+  });
 });

@@ -68,6 +68,8 @@ const defaults = () => ({
   deny: false,
   slackTeam: "First Ten Workspace",
   modelFails: false,
+  // the email reading takes this long to come back, so a test can watch the reading while it works
+  conversationsDelayMs: 0,
 });
 let control = defaults();
 const revoked = [];
@@ -192,8 +194,10 @@ const server = http.createServer(async (req, res) => {
     const request = JSON.parse(body || "{}");
     const system = typeof request.system === "string" ? request.system : JSON.stringify(request.system ?? "");
     if (control.modelFails) return send(res, 500, { type: "error", error: { type: "api_error", message: "stand-in failure" } });
-    const answer = system.includes("owner's email") ? extraction.conversations : extraction.work;
-    modelCalls.push(system.includes("owner's email") ? "conversations" : "work");
+    const conversations = system.includes("owner's email");
+    if (conversations && control.conversationsDelayMs) await new Promise(resolve => setTimeout(resolve, control.conversationsDelayMs));
+    const answer = conversations ? extraction.conversations : extraction.work;
+    modelCalls.push(conversations ? "conversations" : "work");
     return send(res, 200, {
       id: `msg_fake_${modelCalls.length}`,
       type: "message",
