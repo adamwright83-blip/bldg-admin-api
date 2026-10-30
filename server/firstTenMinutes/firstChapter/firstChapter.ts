@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type { DraftView } from "../../../shared/firstTenMinutesChapter";
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import {
   checkClaireAnswer,
@@ -14,7 +15,7 @@ import {
 } from "../../../shared/firstTenMinutesFirstChapter";
 import { assertAiSpendAvailable, trackModelUsage } from "../../agents/costTracking";
 import { ClaireToolTurnError, openClaireFirstChapterSession } from "../../claire/prototype/claireToolLoop";
-import { verifyDraft } from "../activation/activation";
+import { isThePreparedMessage, verifyDraft } from "../activation/activation";
 import { chapterView } from "../chapter/chapter";
 import { journeyEvents, recordEvent } from "../events";
 import { setJourneyStage, type JourneyRow } from "../store";
@@ -40,14 +41,20 @@ export async function firstChapterView(journey: JourneyRow): Promise<FirstChapte
 }
 
 /** Has the recipient written since the message went? Read from the person's own mail, when it can be. */
-async function replyState(journey: JourneyRow, address: string, since: string | null): Promise<ReplyState> {
+/**
+ * Has the recipient written back about this message since it went? Read from the person's own mail: a reply on the
+ * message's subject is a reply. Other mail from them since is neither a reply nor proof there isn't one.
+ */
+async function replyState(journey: JourneyRow, draft: DraftView): Promise<ReplyState> {
+  const since = draft.verifiedSentAt ?? draft.reportedSentAt ?? draft.handedOffAt;
   if (!since) return { kind: "unknown" };
   const access = await googleAccessFor(journey);
   if (!access) return { kind: "unknown" };
   try {
-    const [first] = await gmailReader(access).receivedFrom(address, new Date(new Date(since).getTime() - 60_000));
-    if (!first) return { kind: "none" };
-    return { kind: "replied", at: first.at.toISOString(), excerpt: replyExcerpt(first.text) };
+    const mail = await gmailReader(access).receivedFrom(draft.to.address, new Date(new Date(since).getTime() - 60_000));
+    const reply = mail.find(item => isThePreparedMessage(item, { subject: draft.subject, body: "" }));
+    if (reply) return { kind: "replied", at: reply.at.toISOString(), excerpt: replyExcerpt(reply.text) };
+    return mail.length ? { kind: "unknown" } : { kind: "none" };
   } catch {
     return { kind: "unknown" };
   }
@@ -125,7 +132,7 @@ export async function askClaire(
       const chapter = pending ? await chapterView(journey) : before;
       const draft = chapter.draft ?? before.draft!;
       const out = draft.status === "reported_sent" || draft.status === "verified_sent";
-      const reply = out ? await replyState(journey, draft.to.address, draft.verifiedSentAt ?? draft.reportedSentAt ?? draft.handedOffAt) : ({ kind: "unknown" } as const);
+      const reply = out ? await replyState(journey, draft) : ({ kind: "unknown" } as const);
       facts = firstChapterFacts(chapter.opportunity ?? before.opportunity!, draft, reply, { timeZone: zone, lookedInSent });
       return facts;
     })());

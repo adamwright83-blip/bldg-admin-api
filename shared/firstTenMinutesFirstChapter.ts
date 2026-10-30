@@ -103,7 +103,7 @@ export function replyExcerpt(text: string): string {
 // ------------------------------------------------------------------ what Claire reads, and what she may say
 
 /** Where the message is, in words that can't be misread. */
-export type MessageState = "ready_not_sent" | "kept_for_later" | "opened_in_their_mail" | "they_said_they_sent_it" | "in_their_sent_folder";
+export type MessageState = "ready_not_sent" | "kept_for_later" | "opened_in_their_mail" | "copied_by_them" | "they_said_they_sent_it" | "in_their_sent_folder";
 
 /**
  * What Claire reads before she answers: the records as they are now. Words are verbatim; times are already in the
@@ -123,7 +123,8 @@ export type FirstChapterFacts = {
     words: string;
     version: "as_drafted" | "the_shorter_one" | "the_one_offering_to_start" | "their_own_words";
     state: MessageState;
-    openedInTheirMail: string | null;
+    /** when it was opened in their mail or copied */
+    leftTheTable: string | null;
     theySaidSent: string | null;
     inSentFolderSince: string | null;
   };
@@ -150,7 +151,9 @@ export function firstChapterFacts(
       : draft.status === "declined"
         ? "kept_for_later"
         : draft.status === "handed_off"
-          ? "opened_in_their_mail"
+          ? draft.handedOffVia === "copy"
+            ? "copied_by_them"
+            : "opened_in_their_mail"
           : draft.status === "reported_sent"
             ? "they_said_they_sent_it"
             : "in_their_sent_folder";
@@ -170,7 +173,7 @@ export function firstChapterFacts(
       words: draft.body,
       version: draft.edited ? "their_own_words" : draft.approach === "short" ? "the_shorter_one" : draft.approach === "offer_start" ? "the_one_offering_to_start" : "as_drafted",
       state,
-      openedInTheirMail: at(draft.handedOffAt),
+      leftTheTable: at(draft.handedOffAt),
       theySaidSent: at(draft.reportedSentAt),
       inSentFolderSince: at(draft.verifiedSentAt),
     },
@@ -256,7 +259,7 @@ export function checkClaireAnswer(answer: string, facts: FirstChapterFacts): Ans
     if (facts.recipientWroteBack.answer !== "no") problems.push({ kind: "wrote_back", text: claim.sentence });
   }
 
-  const times = [facts.message.openedInTheirMail, facts.message.theySaidSent, facts.message.inSentFolderSince, said?.when ?? null]
+  const times = [facts.message.leftTheTable, facts.message.theySaidSent, facts.message.inSentFolderSince, said?.when ?? null]
     .filter((text): text is string => Boolean(text))
     .map(text => plainText(text).replace(/\./g, ""));
   for (const match of answer.matchAll(/\b\d{1,2}:\d{2}\s?[ap]\.?m\.?/gi)) {

@@ -31,6 +31,7 @@ function draft(overrides: Partial<DraftView> = {}): DraftView {
     handedOffAt: null,
     reportedSentAt: null,
     verifiedSentAt: null,
+    handedOffVia: null,
     approaches: [],
     ...overrides,
   };
@@ -85,7 +86,7 @@ describe("what Claire reads, and what she may say", () => {
         words: ASTRA,
         version: "as_drafted",
         state: "in_their_sent_folder",
-        openedInTheirMail: "yesterday at 10:02 AM",
+        leftTheTable: "yesterday at 10:02 AM",
         theySaidSent: null,
         inSentFolderSince: "yesterday at 10:05 AM",
       },
@@ -93,7 +94,9 @@ describe("what Claire reads, and what she may say", () => {
       recipientWroteBack: { answer: "yes", when: "at 9:12 AM", words: "Yes — we'd love a Friday standing order." },
     });
     const opened = firstChapterFacts(opportunity, draft({ status: "handed_off", handedOffAt: "2026-10-29T17:02:00Z" }), { kind: "unknown" }, { timeZone: null, lookedInSent: false, now: NOW });
-    expect(opened.message).toMatchObject({ state: "opened_in_their_mail", openedInTheirMail: null });
+    expect(opened.message).toMatchObject({ state: "opened_in_their_mail", leftTheTable: null });
+    const copied = firstChapterFacts(opportunity, draft({ status: "handed_off", handedOffAt: "2026-10-29T17:02:00Z", handedOffVia: "copy" }), { kind: "unknown" }, { ...LA, lookedInSent: true });
+    expect(copied.message).toMatchObject({ state: "copied_by_them", leftTheTable: "at 10:02 AM" });
     expect(opened).toMatchObject({ sentFolder: "could_not_look", recipientWroteBack: { answer: "not_known" }, request: { askedIn: null } });
     const ownWords = firstChapterFacts(opportunity, draft({ edited: true, body: "Shall I bring a sample?", status: "declined" }), { kind: "unknown" }, { ...LA, lookedInSent: false });
     expect(ownWords.message).toMatchObject({ version: "their_own_words", state: "kept_for_later", words: "Shall I bring a sample?" });

@@ -329,11 +329,12 @@ rather than spoken. On the page there is no workspace yet, so she is offered one
 
 - **The request** in the asker's words, and when it came ("April 2026").
 - **The message as it stands**, word for word: as drafted, the version chosen, or the person's own words.
-- **Where it is**: ready and not sent, kept for later, opened in their mail, they said they sent it, or in their Sent
-  folder. Before she reads, the Sent folder is looked at again whenever the message has left the table. The read says
+- **Where it is**: ready and not sent, kept for later, opened in their mail, copied to send, they said they sent it,
+  or in their Sent folder. Before she reads, the Sent folder is looked at again whenever the message has left the table. The read says
   whether that look happened, so she says a message isn't there only when she looked.
 - **Whether the recipient has written back since**, read from their own mail with the read-only access they already
-  gave, in the recipient's words past the greeting.
+  gave, in the recipient's words past the greeting. A reply on the message's subject is a reply; other mail from them
+  since is neither a reply nor proof there isn't one, so she doesn't say either.
 - **Times already in the person's zone**, or none when the browser gave no real zone.
 
 The prompt holds her to that record. The page then checks what she wrote against what she read (`checkClaireAnswer`),

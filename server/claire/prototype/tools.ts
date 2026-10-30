@@ -214,7 +214,7 @@ export const CLAIRE_FIRST_CHAPTER_TOOLS: Anthropic.Tool[] = [
   {
     name: "read_first_chapter",
     description:
-      "Read what happened with the conversation the person picked up in their first ten minutes, as the records stand now: who asked and their words, the person's reply back then, what they offer now, the message as it stands (its exact words, and whether it is as drafted, the version they chose, or their own words), where it is (ready and not sent, kept for later, opened in their mail, they said they sent it, or in their Sent folder), whether their Sent folder was looked at just now and what it showed, and whether the recipient has written back, in the recipient's words. Times are already in the person's zone; when a time is null, give none.",
+      "Read what happened with the conversation the person picked up in their first ten minutes, as the records stand now: who asked and their words, the person's reply back then, what they offer now, the message as it stands (its exact words, and whether it is as drafted, the version they chose, or their own words), where it is (ready and not sent, kept for later, opened in their mail, copied by them to send, they said they sent it, or in their Sent folder), whether their Sent folder was looked at just now and what it showed, and whether the recipient has written back about it, in the recipient's words. Times are already in the person's zone; when a time is null, give none.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];

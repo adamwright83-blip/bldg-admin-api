@@ -112,9 +112,10 @@ function fakeClaire(facts) {
   else parts.push(`You kept the reply as it was drafted: ${words}`);
   if (facts.message.state === "ready_not_sent") parts.push("It's ready, and it hasn't been sent.");
   if (facts.message.state === "kept_for_later") parts.push("You decided it could wait. It hasn't been sent.");
-  if (facts.message.state === "opened_in_their_mail") {
+  if (facts.message.state === "opened_in_their_mail" || facts.message.state === "copied_by_them") {
+    const left = facts.message.state === "copied_by_them" ? "You copied it" : "You opened it in your Gmail";
     parts.push(
-      `You opened it in your Gmail${at(facts.message.openedInTheirMail)}. ${
+      `${left}${at(facts.message.leftTheTable)}. ${
         facts.sentFolder === "looked_just_now_not_there"
           ? "It isn't in your Sent folder, so as far as I can tell it hasn't gone yet."
           : "I couldn't look in your Sent folder just now, so I don't know yet whether it went."
