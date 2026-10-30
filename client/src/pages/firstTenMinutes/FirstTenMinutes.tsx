@@ -26,11 +26,14 @@ import { DraftTable } from "./chapter/DraftTable";
 import { ActivationCard } from "./chapter/ActivationCard";
 import { SendDesk } from "./chapter/SendDesk";
 import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
+import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
+import { draftStatusLine } from "@shared/firstTenMinutesActivation";
 import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
 import portraitStyles from "./portrait/portrait.module.css";
+import sendStyles from "./chapter/send.module.css";
 
 /**
  * JOYSTICK's first ten minutes (docs/goldline/FIRST_TEN_MINUTES_BUILD.md). Astra's flow, in the presentation Adam
@@ -231,7 +234,10 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
       ? (reading.view.findings.find(finding => finding.payload.kind === "business")!.payload as { name: string }).name
       : null;
   const opportunity = chapter.data?.opportunity ?? null;
-  const inChapter = Boolean(chapterOpen && opportunity && chapter.data);
+  // "Your first chapter": back on their portrait, unless they went out to the courtyard again
+  const [atCourtyard, setAtCourtyard] = useState(false);
+  const onFirstChapter = view?.stage === "first_chapter" && !atCourtyard;
+  const inChapter = Boolean(chapterOpen && opportunity && chapter.data) && !onFirstChapter;
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -303,6 +309,36 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     );
   }
 
+  // the person returns to their portrait, where a new entry has appeared, and Claire is there to ask
+  const firstChapter = trpc.system.firstTenMinutes.firstChapter.useQuery(credentials!, {
+    enabled: Boolean(credentials) && hasDraft && view?.stage === "first_chapter",
+    retry: false,
+  });
+  const openFirstChapter = trpc.system.firstTenMinutes.openFirstChapter.useMutation();
+  const askClaire = trpc.system.firstTenMinutes.askClaire.useMutation();
+
+  async function backToPage() {
+    if (!credentials) return;
+    const next = await openFirstChapter.mutateAsync(credentials);
+    if (next) utils.system.firstTenMinutes.firstChapter.setData(credentials, next);
+    await journey.refetch();
+    setAtCourtyard(false);
+    window.scrollTo({ top: 0 });
+  }
+
+  function toCourtyard() {
+    setAtCourtyard(true);
+    window.scrollTo({ top: 0 });
+  }
+
+  async function ask() {
+    if (!credentials) return;
+    const next = await askClaire.mutateAsync({ ...credentials, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    if (next) utils.system.firstTenMinutes.firstChapter.setData(credentials, next);
+    // Claire looks in the Sent folder before she answers, so the message's own line may have changed too
+    await chapter.refetch();
+  }
+
   async function step(which: "revealed" | LetterStep | "letter_written") {
     if (!credentials) return;
     setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
@@ -338,6 +374,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           {renderTableFoot()}
         </DraftTable>
         {outcome ? <ClosingBeat outcome={outcome} /> : null}
+        <button type="button" className={sendStyles.backToPage} disabled={openFirstChapter.isPending} onClick={() => void backToPage()} data-testid="first-ten-back-to-page">
+          Back to your page
+        </button>
       </>
     );
   }
@@ -390,7 +429,14 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               onKeep={() => onPortrait({ answer: "keep" })}
               onChange={(key, to) => onPortrait({ answer: "change", key, to })}
               onRestore={key => onPortrait({ answer: "restore", key })}
-            />
+              entry={
+                onFirstChapter && firstChapter.data && chapter.data?.draft ? (
+                  <FirstChapterEntry entry={firstChapter.data.entry} status={draftStatusLine(chapter.data.draft.status, chapter.data.draft)} />
+                ) : undefined
+              }
+            >
+              {onFirstChapter && firstChapter.data ? <AskClaire view={firstChapter.data} onAsk={ask} onCourtyard={toCourtyard} /> : null}
+            </PortraitPage>
           ) : null}
           {crewFinished && portrait.data?.status === "failed" ? (
             <p className={portraitStyles.quietNote} data-testid="first-ten-portrait-failed">

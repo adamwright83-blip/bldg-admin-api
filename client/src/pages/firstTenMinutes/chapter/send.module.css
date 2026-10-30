@@ -233,3 +233,22 @@
     width: 34%;
   }
 }
+
+/* ------------------------------------------------------------------ back to the person's page */
+
+.backToPage {
+  justify-self: center;
+  margin-top: 18px;
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  color: rgba(251, 245, 232, 0.88) !important;
+  font-size: 16px;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: rgba(251, 245, 232, 0.35);
+}
+
+.backToPage:hover {
+  text-decoration-color: rgba(251, 245, 232, 0.85);
+}
