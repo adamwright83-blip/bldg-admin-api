@@ -34,6 +34,10 @@ function fakeStripe(state: { event: unknown; subscription: unknown; created?: { 
   } as never;
 }
 
+// today's billing tables and its core entitlement keep their historical names (docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md)
+const LEGACY_DAYFORGE_TABLE = (name: string) => `dayforge_saas_${name}`; // legacy table prefix
+const LEGACY_DAYFORGE_CORE = "dayforge_core";
+
 describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
   let db: mysql.Connection;
   const suffix = Date.now().toString(36);
@@ -44,20 +48,20 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     db = await mysql.createConnection(url);
     await import("../journeys");
     await db.execute(
-      `INSERT INTO dayforge_saas_billing_plans (planKey,displayName,stripePriceId,trialDays,rulesJson,entitlementsJson,active)
+      `INSERT INTO ${LEGACY_DAYFORGE_TABLE("billing_plans")} (planKey,displayName,stripePriceId,trialDays,rulesJson,entitlementsJson,active)
        VALUES (?,?,?,7,?,?,true)`,
-      [planKey, "JOYSTICK", `price_${planKey}`, JSON.stringify({}), JSON.stringify(["dayforge_core"])]
+      [planKey, "JOYSTICK", `price_${planKey}`, JSON.stringify({}), JSON.stringify([LEGACY_DAYFORGE_CORE])]
     );
   }, 60_000);
 
   afterAll(async () => {
     if (!db) return;
-    await db.execute("DELETE FROM dayforge_saas_billing_plans WHERE planKey = ?", [planKey]);
+    await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("billing_plans")} WHERE planKey = ?`, [planKey]);
     if (tenantId) {
-      for (const table of ["dayforge_saas_entitlements", "dayforge_saas_subscriptions", "dayforge_saas_memberships"]) {
+      for (const table of ["entitlements", "subscriptions", "memberships"].map(LEGACY_DAYFORGE_TABLE)) {
         await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [tenantId]).catch(() => undefined);
       }
-      await db.execute("DELETE FROM dayforge_saas_tenants WHERE id = ?", [tenantId]).catch(() => undefined);
+      await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [tenantId]).catch(() => undefined);
     }
     await db.end();
   });
@@ -94,7 +98,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     expect((await activationView(journey, credentials)).status).toBe("checkout_pending");
     expect((await journeyById(journey.id))!.stage).toBe("activation");
 
-    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test";
+    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test"; // the legacy-named webhook secret
     const created = Math.floor(Date.now() / 1000);
     const subscription = {
       id: `sub_first_ten_${suffix}`,

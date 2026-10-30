@@ -44,6 +44,16 @@ function appUrl(): string {
   );
 }
 
+/** Where today's checkout returns, for callers outside billing (the first ten minutes). */
+export function legacyDayforgeBillingAppUrl(): string {
+  return appUrl();
+}
+
+/** The configured billing secret key, unchecked, for callers that check its mode themselves. */
+export function legacyDayforgeBillingSecretKey(): string | undefined {
+  return process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY;
+}
+
 export async function createLegacyDayforgeSubscriptionCheckout(input: {
   sessionId: string;
   resumeToken: string;
