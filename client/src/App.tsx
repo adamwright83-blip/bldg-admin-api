@@ -40,6 +40,8 @@ const LegacyDayforgeLanding = lazy(() => import("./pages/LegacyDayforgeLanding")
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
+// Prototype, development builds only: compiled out of production (docs/goldline/prototypes/FRIDAY_CIRCUIT.md)
+const FridayCircuitPrototype = import.meta.env.DEV ? lazy(() => import("./pages/prototypes/fridayCircuit/FridayCircuitRoute")) : null;
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
 // /joystick-start: today's funnel, or JOYSTICK's first ten minutes when JOYSTICK_FIRST_TEN_MINUTES opens it.
 const JoystickStartRoute = lazy(() => import("./pages/firstTenMinutes/JoystickStartRoute"));
@@ -500,6 +502,13 @@ function AdminHostRouter() {
       <Route path="/dayforge" component={LegacyDayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      {FridayCircuitPrototype ? (
+        <Route path="/prototypes/friday-circuit">
+          <Suspense fallback={<PublicLandingFallback />}>
+            <FridayCircuitPrototype />
+          </Suspense>
+        </Route>
+      ) : null}
       <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -844,6 +853,13 @@ function Router() {
       <Route path="/dayforge" component={LegacyDayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      {FridayCircuitPrototype ? (
+        <Route path="/prototypes/friday-circuit">
+          <Suspense fallback={<PublicLandingFallback />}>
+            <FridayCircuitPrototype />
+          </Suspense>
+        </Route>
+      ) : null}
       <Route path="/joystick" component={JoystickLandingRoute} />
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
