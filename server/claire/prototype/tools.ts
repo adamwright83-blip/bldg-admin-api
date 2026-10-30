@@ -180,7 +180,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "read_goal_progress",
     description:
-      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and today's count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is what the available records show today, not a final count and not a guaranteed minimum: say it as counted so far (\"23 counted so far\") and, briefly or when asked, which records are behind (sources, caveats). Never say \"at least\", never present it as final, and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why. When started_at_note is set, the starting figure came from an older, inexact count: mention it only as \"recorded at the start\" and never say they have or haven't moved by comparing it with current. The same numbers come from read_business_numbers with metric active_customers.",
+      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and today's count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is what the available records show today, not a final count and not a guaranteed minimum: say it as counted so far (\"23 counted so far\") and, briefly or when asked, which records are behind (sources, caveats). to_go is then null; short_by_count_so_far is only the gap to the target from that count (\"27 short by the count so far\"), never a verified distance. Never say \"at least\", never present it as final, and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why. When started_at_note is set, the starting figure came from an older, inexact count: mention it only as \"recorded at the start\" and never say they have or haven't moved by comparing it with current. The same numbers come from read_business_numbers with metric active_customers.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -581,7 +581,10 @@ async function readGoal(ctx: ToolContext) {
     current_is_partial: progress.standing?.partial ?? false,
     sources: progress.standing?.sources ?? [],
     caveats: progress.standing?.caveats ?? (progress.currentNote ? [progress.currentNote] : []),
-    to_go: (progress.standing?.value ?? progress.currentValue) === null ? null : Math.max(0, progress.targetValue - (progress.standing?.value ?? progress.currentValue)!),
+    // A partial count is not a verified distance: to_go is only for a complete count (#778 review).
+    to_go: progress.currentValue === null ? null : Math.max(0, progress.targetValue - progress.currentValue),
+    short_by_count_so_far:
+      progress.currentValue === null && progress.standing?.value != null ? Math.max(0, progress.targetValue - progress.standing.value) : null,
   };
 }
 
