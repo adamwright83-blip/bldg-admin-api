@@ -712,8 +712,17 @@
     top: 4%;
   }
 
+  /* at the foot of the table, with his line beside him rather than floating off to the top */
   .tableRook {
     position: static;
-    margin-top: 40px;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .tableRook .say {
+    position: static;
+    min-width: 0;
+    max-width: none;
   }
 }
