@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askedAbout, composeDraft, lowerFirst, whenAsked } from "../../../shared/firstTenMinutesChapter";
+import { DRAFT_APPROACHES, approachesFor, askedAbout, composeDraft, lowerFirst, whenAsked } from "../../../shared/firstTenMinutesChapter";
 import { asViews, exampleReading } from "../testSupport/exampleReading";
 import { chapterOpportunity } from "./chapter";
 
@@ -37,6 +37,21 @@ describe("the first chapter (Nina)", () => {
       "Hi Elena — our weekly Friday delivery is up and running now, and the Friday route already goes past the Larkspur Hotel. Would you like to be on it?"
     );
     expect(composeDraft(opportunity, "short", NOW).body).toBe("Hi Elena — we have a weekly Friday delivery now. Still interested?");
+  });
+
+  it("claims nothing new when no service is on record: it only picks the conversation up", async () => {
+    const opportunity = chapterOpportunity(await nina())!;
+    expect(approachesFor(opportunity)).toEqual(DRAFT_APPROACHES);
+    const asked = { ...opportunity, service: null };
+    expect(approachesFor(asked)).toEqual(["still_wanted", "short"]);
+    expect(composeDraft(asked, "still_wanted", NOW).body).toBe(
+      "Hi Elena — you asked earlier this year about Friday flowers. Is that still something you're looking for at the hotel?"
+    );
+    expect(composeDraft(asked, "short", NOW).body).toBe("Hi Elena — still looking for Friday flowers?");
+    // and when the request was never answered, the message says so rather than pretending otherwise
+    expect(composeDraft({ ...asked, reply: null }, "still_wanted", NOW).body).toBe(
+      "Hi Elena — you asked earlier this year about Friday flowers, and I never got back to you. Is that still something you're looking for at the hotel?"
+    );
   });
 
   it("has no chapter when the request it rests on was said to be wrong", async () => {

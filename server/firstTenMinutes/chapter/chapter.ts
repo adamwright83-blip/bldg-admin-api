@@ -2,8 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import type { FindingPayload, FindingView } from "../../../shared/firstTenMinutesFindings";
 import {
-  DRAFT_APPROACHES,
   LETTER_STEPS,
+  approachesFor,
   composeDraft,
   type ChapterCard,
   type ChapterOpportunity,
@@ -82,7 +82,7 @@ function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, oppor
     body: row.body,
     edited: row.edited,
     status: row.status,
-    approaches: opportunity ? DRAFT_APPROACHES.map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
+    approaches: opportunity ? approachesFor(opportunity).map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
   };
 }
 
@@ -172,6 +172,7 @@ export async function changeDraft(
     throw new TRPCError({ code: "CONFLICT", message: "This message has already left the table." });
   }
   const approach = change.approach ?? view.draft.approach;
+  if (!approachesFor(view.opportunity).includes(approach)) throw new TRPCError({ code: "BAD_REQUEST", message: "That's not a way this message can go." });
   const composed = composeDraft(view.opportunity, approach, now).body;
   // the person's words when they gave them; a new approach composed afresh; otherwise the message as it stands
   const body = change.body?.trim() ? change.body.trim() : change.approach ? composed : view.draft.body;

@@ -85,7 +85,8 @@ export function RevelationScene({
   }, [phase, shown, today, span, reduce]);
 
   const weekday = opportunity.route ? WEEKDAYS[opportunity.route.weekday] : null;
-  const sign = `${(weekday ?? opportunity.reply?.missing ?? "").toUpperCase()} — UNAVAILABLE`.replace(/^ — /, "");
+  // the sign says what wasn't there then, and only when something wasn't
+  const sign = opportunity.reply?.missing ? `${(weekday ?? opportunity.reply.missing).toUpperCase()} — UNAVAILABLE` : null;
   const pins: PlacePin[] =
     opportunity.place && opportunity.place.lat !== null && opportunity.place.lng !== null
       ? [{ findingId: opportunity.place.findingId, name: opportunity.place.name, lat: opportunity.place.lat, lng: opportunity.place.lng, asked: null }]

@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
-import { DRAFT_APPROACHES, DRAFT_APPROACH_NAMES, type ChapterOpportunity, type DraftApproach, type DraftView } from "@shared/firstTenMinutesChapter";
+import { DRAFT_APPROACH_NAMES, approachesFor, type ChapterOpportunity, type DraftApproach, type DraftView } from "@shared/firstTenMinutesChapter";
 import { CREW_ART } from "../crew";
 import { sourceDate } from "../SourceNote";
 import styles from "./chapter.module.css";
@@ -31,7 +31,8 @@ export function DraftTable({
   const declined = draft.status === "declined";
   const who = opportunity.firstName ?? opportunity.person.name ?? opportunity.person.address;
   const where = opportunity.place?.category ? ` at the ${opportunity.place.category}` : "";
-  const nextApproach = DRAFT_APPROACHES[(DRAFT_APPROACHES.indexOf(draft.approach) + 1) % DRAFT_APPROACHES.length];
+  const approaches = approachesFor(opportunity);
+  const nextApproach = approaches.length > 1 ? approaches[(approaches.indexOf(draft.approach) + 1) % approaches.length] : null;
 
   async function act(work: () => Promise<void>) {
     setBusy(true);
@@ -143,9 +144,11 @@ export function DraftTable({
               >
                 Edit
               </button>
-              <button type="button" disabled={busy} title={DRAFT_APPROACH_NAMES[nextApproach]} onClick={() => void act(() => onChange({ approach: nextApproach }))}>
-                Try another way
-              </button>
+              {nextApproach ? (
+                <button type="button" disabled={busy} title={DRAFT_APPROACH_NAMES[nextApproach]} onClick={() => void act(() => onChange({ approach: nextApproach }))}>
+                  Try another way
+                </button>
+              ) : null}
               <button type="button" disabled={busy} onClick={() => void act(onDecline)}>
                 Not now
               </button>

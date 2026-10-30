@@ -241,6 +241,11 @@ hand; Hazel and Pip are the courtyard's own art.
 
 The draft is composed only from the findings, with no model call. The person can edit it, "Try another way" (offer to
 start; keep it short), or say "Not now", which keeps it unsent and lets them bring it back. Nothing is sent from here.
+The message claims only what is on record:
+
+- **No service on record.** There is nothing new to offer, so the message only picks the conversation up. If the request
+  was never answered, it says so ("and I never got back to you"). The only ways it can go are to ask, or to ask briefly.
+- **The crossing's sign.** It reads "FRIDAY — UNAVAILABLE" only when the reply named something that was missing.
 The draft is stored in `first_ten_drafts` (migration 0156), whose hand-off columns stay empty until the next slice. Each
 beat of the chapter is appended to `first_ten_events`, so a reload carries on where the person left off.
 

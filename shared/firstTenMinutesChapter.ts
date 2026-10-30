@@ -101,15 +101,31 @@ export function composeDraft(opportunity: ChapterOpportunity, approach: DraftApp
     opportunity.route && opportunity.place && opportunity.along
       ? `, and the ${WEEKDAYS[opportunity.route.weekday]} route already goes past ${theName(opportunity.place.name)}`
       : "";
+  const about = askedAbout(opportunity.request.subject, opportunity.request.wants);
+  // Without a service on record there is nothing new to offer: the message picks the conversation up and claims nothing.
+  if (!opportunity.service) {
+    const unanswered = !opportunity.reply;
+    return approach === "short"
+      ? { subject, body: `${hello} still looking for ${about}?` }
+      : {
+          subject,
+          body: `${hello} you asked ${whenAsked(opportunity.request.at, now)} about ${about}${unanswered ? ", and I never got back to you" : ""}. Is that still something you're looking for${atThePlace}?`,
+        };
+  }
   switch (approach) {
     case "still_wanted":
       return {
         subject,
-        body: `${hello} you asked ${whenAsked(opportunity.request.at, now)} about ${askedAbout(opportunity.request.subject, opportunity.request.wants)}. We now have ${article(service)} ${service}. Is that still something you're looking for${atThePlace}?`,
+        body: `${hello} you asked ${whenAsked(opportunity.request.at, now)} about ${about}. We now have ${article(service)} ${service}. Is that still something you're looking for${atThePlace}?`,
       };
     case "offer_start":
       return { subject, body: `${hello} our ${service} is up and running now${passes}. Would you like to be on it?` };
     case "short":
       return { subject, body: `${hello} we have ${article(service)} ${service} now. Still interested?` };
   }
+}
+
+/** The ways the message can go. Nothing new to offer without a service on record: ask, or ask briefly. */
+export function approachesFor(opportunity: ChapterOpportunity | null): readonly DraftApproach[] {
+  return opportunity && !opportunity.service ? (["still_wanted", "short"] as const) : DRAFT_APPROACHES;
 }
