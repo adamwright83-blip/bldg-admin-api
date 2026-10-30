@@ -180,6 +180,11 @@ export function isThePreparedMessage(item: { subject: string; text: string }, pr
   return opening.length >= 20 && plainWords(item.text).includes(opening);
 }
 
+/** The newest of these on the prepared message's subject: a reply to it, and the last word on where things stand. */
+export function latestOnSubject<T extends { subject: string; text: string; at: Date }>(mail: readonly T[], subject: string): T | null {
+  return mail.filter(item => isThePreparedMessage(item, { subject, body: "" })).sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
+}
+
 /**
  * Look in the person's own Sent folder for the prepared message, to the recipient, since it left the table. Found:
  * verified, with the message's id. Not found: nothing changes.

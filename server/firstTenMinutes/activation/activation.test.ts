@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { draftStatusLine } from "../../../shared/firstTenMinutesActivation";
-import { isThePreparedMessage } from "./activation";
+import { isThePreparedMessage, latestOnSubject } from "./activation";
 
 const PREPARED = {
   subject: "Re: Friday flowers?",
@@ -16,6 +16,19 @@ describe("the message leaving the table", () => {
     // other mail to the same person, after the hand-off, is not the message
     expect(isThePreparedMessage({ subject: "Invoice for the gala", text: "Hi Elena, the invoice for Saturday is attached." }, PREPARED)).toBe(false);
     expect(isThePreparedMessage({ subject: "", text: "Thanks!" }, { subject: "", body: "Thanks!" })).toBe(false);
+  });
+
+  it("takes the newest reply on the message's subject: where things stand is the last word", () => {
+    const mail = [
+      { subject: "Re: Friday flowers?", text: "Yes please, let's start this Friday.", at: new Date("2026-10-29T16:00:00Z") },
+      { subject: "RE: Friday flowers?", text: "Actually, we'll have to hold off for now.", at: new Date("2026-10-29T18:00:00Z") },
+      { subject: "Lunch?", text: "Free for lunch on Monday?", at: new Date("2026-10-29T19:00:00Z") },
+    ];
+    expect(latestOnSubject(mail, PREPARED.subject)?.text).toBe("Actually, we'll have to hold off for now.");
+    // newest by when it was written, whatever order the mail comes in
+    expect(latestOnSubject([...mail].reverse(), PREPARED.subject)?.text).toBe("Actually, we'll have to hold off for now.");
+    // other mail from them is not a reply
+    expect(latestOnSubject(mail.slice(2), PREPARED.subject)).toBeNull();
   });
 
   it("says how it left: opened in their mail, or copied", () => {
