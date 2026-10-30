@@ -60,6 +60,19 @@ describe("scheduled calls on the native-tool engine", () => {
     expect(prompt).toContain("that is a rule about you, not a request for the plan again");
   });
 
+  it("reads a Brain V2 role-feedback rule in the operator's words, never as its fixed obligation (Oct 29)", async () => {
+    const roleFeedback = {
+      id: "r1", tenantId: "t", canonicalOperatorId: "c", operatorUserId: "op", kind: "role_feedback", subjectKey: "role_feedback:chief_of_staff", version: 1, status: "active",
+      text: "The operator said Claire is not doing her job as chief of staff. Obligation: open every call with the goal and the plan, then ask for what is missing.",
+      quote: "your job is to trick them into doing the work that they think they hate.", payload: { obligation: "open_with_goal_and_plan" }, createdAt: "2026-10-30T07:32:05.000Z", sourceConversationKey: "k", sourceTurnId: "t",
+    };
+    const store = { listActive: async () => [roleFeedback], append: async () => { throw new Error("no writes"); } } as unknown as StandingInstructionStore;
+    const { prompt } = await buildSystemPromptWithRules({ ...ctx([]), standingInstructionStore: store }, { operatorName: "Adam", businessName: "Laundry Farm", callKind: "evening_debrief" });
+    expect(prompt).toContain('in their words (read it as how to help them act, not as a script): "your job is to trick them into doing the work that they think they hate."');
+    expect(prompt).not.toContain("OBLIGATION");
+    expect(prompt).not.toContain("open every call with the goal and the plan");
+  });
+
   it("opens with a goal read, and the call-start notice never counts as the operator's words", async () => {
     const operatorTurns: string[] = [];
     const messages: Anthropic.MessageParam[] = [];
@@ -78,7 +91,7 @@ describe("scheduled calls on the native-tool engine", () => {
     expect(lastClaireText.value).toBe(result.speak);
     // The goal tool's result went back to the model before it spoke.
     const sent = requests[1]!.messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
-    expect(JSON.parse(String(sent[0]!.content))).toMatchObject({ status: "ok", target: 50, started_at: 23, current: null, current_note: "active-customer count is partial" });
+    expect(JSON.parse(String(sent[0]!.content))).toMatchObject({ status: "ok", target: 50, started_at: 23, current: null, current_is_complete: false, caveats: ["active-customer count is partial"] });
     // The thread starts with the notice, then Claire's opening: the operator's first answer continues it.
     expect(messages[0]).toMatchObject({ role: "user" });
     expect(String(messages[0]!.content)).toContain("not from Adam");

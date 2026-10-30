@@ -577,7 +577,8 @@ function dollarsToCents(total: unknown): number | null {
   return Math.round(value * 100);
 }
 
-async function membershipTenantIds(operatorUserId: string): Promise<string[]> {
+/** The tenants the operator may read: platform access, else active memberships. Also used by Claire's goal standing. */
+export async function membershipTenantIds(operatorUserId: string): Promise<string[]> {
   if (!operatorUserId.trim()) return [];
   try {
     const [{ getUserByOpenId }, { resolveAccessibleTenantIdsForUser }] = await Promise.all([

@@ -176,7 +176,18 @@ async function main() {
     return {
       readMacroGoal: async () => (goal ? { id: `eval-goal:${scenario.id}`, objective: goal.objective, metricKey: "active_customers", unit: "customers", targetValue: goal.targetValue, targetDate: null } : null),
       readRunBaseline: async () => goal?.startedAt ?? null,
-      readCurrentValue: async () => (goal?.current != null ? { value: goal.current, note: null } : { value: null, note: goal?.currentNote ?? "no verified current count" }),
+      readCurrentValue: async () => {
+        if (goal?.current != null && goal.caveats?.length) {
+          const through = new Date(Date.now() - (goal.countedThroughDaysAgo ?? 0) * 86_400_000).toISOString().slice(0, 10);
+          const today = new Date().toISOString().slice(0, 10);
+          return {
+            value: null,
+            note: goal.caveats.join(" "),
+            standing: { value: goal.current, complete: false, atLeast: true, windowEnd: today, sources: [{ source: "CleanCloud", through, current: false }, { source: "Laundry Butler", through: null, current: true }], tenants: ["default", "laundry_farm"], caveats: goal.caveats },
+          };
+        }
+        return goal?.current != null ? { value: goal.current, note: null } : { value: null, note: goal?.currentNote ?? "no verified current count" };
+      },
     };
   }
 
