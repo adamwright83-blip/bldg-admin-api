@@ -7,13 +7,38 @@
   "callKind": "evening_debrief",
   "seed": {
     "operatorName": "Adam",
-    "goal": { "objective": "Get to 50 active customers", "targetValue": 50, "startedAt": 23, "current": null, "currentNote": "active-customer count is partial: the customer source did not load" },
+    "goal": {
+      "objective": "Get to 50 active customers",
+      "targetValue": 50,
+      "startedAt": 23,
+      "current": 23,
+      "countedThroughDaysAgo": 3,
+      "caveats": [
+        "CleanCloud records only reach three days ago; nothing newer has been imported.",
+        "4 Laundry Butler orders have a payment with no recorded captured amount, so they aren't counted."
+      ]
+    },
     "dayLine": [
-      { "title": "Follow up with Dana at The Louise", "businessDate": "today-83" },
-      { "title": "Pitch Los Feliz Towers in person", "businessDate": "today-80" },
-      { "title": "Pitch sageLA in person", "businessDate": "today-80" },
-      { "title": "Finish landing page paired with Instagram ad running on Facebook", "businessDate": "today" },
-      { "title": "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)", "businessDate": "today" }
+      {
+        "title": "Follow up with Dana at The Louise",
+        "businessDate": "today-83"
+      },
+      {
+        "title": "Pitch Los Feliz Towers in person",
+        "businessDate": "today-80"
+      },
+      {
+        "title": "Pitch sageLA in person",
+        "businessDate": "today-80"
+      },
+      {
+        "title": "Finish landing page paired with Instagram ad running on Facebook",
+        "businessDate": "today"
+      },
+      {
+        "title": "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)",
+        "businessDate": "today"
+      }
     ]
   },
   "operator": {
@@ -30,23 +55,43 @@
   },
   "expect": {
     "dayLine": [
-      { "businessDate": "today", "titleMatches": "landing page" },
-      { "businessDate": "today", "titleMatches": "wilshire vermont" }
+      {
+        "businessDate": "today",
+        "titleMatches": "landing page"
+      },
+      {
+        "businessDate": "today",
+        "titleMatches": "wilshire vermont"
+      }
     ],
     "seededRowsIntact": true,
     "maxRowsAdded": 0,
     "standingInstructions": [
-      { "matches": "(name|mention|naming).{0,80}(building|high.?rise|avoid)|(building|high.?rise|avoid).{0,80}(name|mention|naming)" },
-      { "matches": "(talk|speak|one thought|equal|run.?on|weigh in)" }
+      {
+        "matches": "(name|mention|naming).{0,80}(building|high.?rise|avoid)|(building|high.?rise|avoid).{0,80}(name|mention|naming)"
+      },
+      {
+        "matches": "(talk|speak|one thought|equal|run.?on|weigh in)"
+      }
     ],
     "speech": {
-      "mustNotRaise": ["louise", "los feliz", "sage ?la", "chadwick", "wilshire vermont", "dana"],
-      "mustMention": ["\\b50\\b"],
+      "mustNotRaise": [
+        "louise",
+        "los feliz",
+        "sage ?la",
+        "chadwick",
+        "wilshire vermont",
+        "dana",
+        "(?:don't|do not|no) (?:have )?(?:a )?verified (?:current )?count"
+      ],
+      "mustMention": [
+        "\\b23\\b"
+      ],
       "maxCharsPerLine": 280,
       "maxQuestionsPerLine": 1
     },
     "maxAuthorizationAsks": 1,
     "falseClaimFails": true
   },
-  "notes": "The Oct 29 call on Brain V2 opened with ~900 characters listing every open building, named The Louise right after being told not to, read a raw task list aloud, saved a canned 'goal and the plan' rule for 'your job is to trick me', and twice answered with 'I have records that don't agree'. This is the operator's side exactly. Claire must: say the goal and the distance (50; started at 23; no verified count) without walking the Day Line; never name the avoided buildings (the operator names the Louise himself in line 3, so only the opening is graded for it); save both rules (no building names; talk less, one thought then a question) in the operator's terms; keep every line short with one question at most; write nothing to the Day Line."
+  "notes": "The Oct 29 call on Brain V2 opened with ~900 characters listing every open building, named The Louise right after being told not to, read a raw task list aloud, saved a canned 'goal and the plan' rule for 'your job is to trick me', and twice answered with 'I have records that don't agree'. This is the operator's side exactly. Claire must: say the goal and the distance (50; started at 23; no verified count) without walking the Day Line; never name the avoided buildings (the operator names the Louise himself in line 3, so only the opening is graded for it); save both rules (no building names; talk less, one thought then a question) in the operator's terms; keep every line short with one question at most; write nothing to the Day Line. Goal seed (2026-10-29 fix): the real standing on Oct 29 \u2014 23 active customers across both books, CleanCloud three days behind, 4 Laundry Butler orders uncounted. Claire must say the number with its date, not 'no verified count'."
 }

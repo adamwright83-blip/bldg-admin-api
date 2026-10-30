@@ -84,7 +84,14 @@ export async function buildSystemPromptWithRules(ctx: ToolContext, input: Claire
   const clock = new Intl.DateTimeFormat("en-US", { timeZone: ctx.timeZone, hour: "numeric", minute: "2-digit" }).format(now);
   const store = ctx.standingInstructionStore ?? drizzleStandingInstructionStore();
   const instructions = await store.listActive({ tenantId: ctx.tenantId, canonicalOperatorId: ctx.canonicalOperatorId }).catch(() => []);
-  const view = buildStandingInstructionsView(instructions, { now, timeZone: ctx.timeZone });
+  // Brain V2 records role feedback with a fixed obligation text ("open every call with the goal and
+  // the plan") whatever the operator said (Oct 29: from "your job is to trick them into doing the
+  // work"). Here it is read in the operator's own words; the fixed text is never an obligation.
+  const roleFeedback = instructions.filter(record => record.kind === "role_feedback" && record.quote.trim());
+  const view = buildStandingInstructionsView(instructions.filter(record => record.kind !== "role_feedback"), { now, timeZone: ctx.timeZone });
+  const roleFeedbackSection = roleFeedback.length
+    ? `Feedback they have given about your role, in their words (read it as how to help them act, not as a script): ${roleFeedback.map(record => `"${record.quote.trim().replace(/\s+/g, " ").slice(0, 300)}"`).join(" ")}`
+    : null;
   const snapshot = await dayLineSnapshot(ctx, today);
   const heldTopics = heldTopicsFrom(instructions);
 
@@ -106,7 +113,8 @@ Work described across the call belongs to one batch: when the authorization come
     `Truth: a thing is on the Day Line only if a receipt in this conversation says applied or already_present. Say what landed and, if anything failed or was refused, say which and why. Never say something is saved before the receipt, and never later deny or doubt a save the receipt confirmed; if unsure, read the day. Business figures come only from read_business_numbers; if it has no records, say so; never invent a number or a comparison.`,
     `What you can do, if asked: read and change the Day Line (add, move, finish, remove work on any day), read the business numbers from the ledger, read their goal and how far they are from it, and keep standing rules about how you work. What you cannot do: send texts or emails, make calls, book or buy anything, or act outside this call. Answer a capabilities question plainly in those terms.`,
     `Standing rules: when the operator gives you a durable rule about how you behave on calls, save it with save_standing_instruction and follow it from that moment. Feedback about how you talk counts: if they say the way you put something makes them less likely to do it (naming work they have been avoiding, talking too much, pushing the plan harder), that is a rule about you, not a request for the plan again. Save it in their terms and change how you talk right away. Rules already in force:`,
-    view.section ?? "none.",
+    view.section ?? (roleFeedbackSection ? null : "none."),
+    roleFeedbackSection,
     `Existing work: when the operator refers to work as already on the list ("move the Dubois job", "put it back", "the Medeco order") and you do not know its day, call find_day_line_item first, then change that row by id. Never add a new row for work that already exists. If an add comes back needs_resolution, the same work is on another day: ask whether they mean that one (then move it) or a separate job (then re-send with confirm_new true). The same job on two days is legitimate when they say so.`,
     `"Next Friday", "Thursday", "the 3rd" are dates: pass them to the tool as said, the server resolves them, you read the date back. Ask only when a day is genuinely vague.`,
     `When the operator is done, call end_call and say a short goodbye. Done means they say so (goodbye, that's all, I'm done, talk tomorrow); "that's good", "okay" or "sounds good" is agreement, not a goodbye, so keep the call going. A rule about how to open a call governs the opening, not how long the call lasts.`,
@@ -298,7 +306,32 @@ const CLOSING_ONLY = /^(?:(?:good ?night|goodbye|bye|take care|talk (?:to you )?
  * sign-off alone, so an answer given beside end_call survives and planning
  * narration before a write does not get read aloud.
  */
+/** "Goodnight." and "Goodnight, Adam." are the same sign-off. */
+function closingKey(sentence: string): string {
+  return sentence.toLowerCase().replace(/,\s*[a-z]+[.!]*$/, "").replace(/[^a-z ]/g, "").trim();
+}
+
+/** Drops a sign-off sentence that repeats an earlier one in the same reply (e2e 2026-10-29: "Goodnight. Goodnight, Adam."). */
+function withoutRepeatedClosings(text: string): string {
+  const seen = new Set<string>();
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter(sentence => {
+      if (!CLOSING_ONLY.test(sentence.trim())) return true;
+      const key = closingKey(sentence);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(" ")
+    .trim();
+}
+
 export function assembleSpeech(rounds: readonly (readonly string[])[]): string {
+  return withoutRepeatedClosings(assembleRounds(rounds));
+}
+
+function assembleRounds(rounds: readonly (readonly string[])[]): string {
   const final = rounds.length ? rounds[rounds.length - 1]! : [];
   const finalText = final.join(" ").trim();
   if (finalText && !CLOSING_ONLY.test(finalText)) return finalText;

@@ -11,6 +11,10 @@
  *   current   the verified active-customer metric, only when the goal measures
  *             active customers and that metric is complete; otherwise null, and
  *             Claire says she has no verified current count.
+ *   standing  the same count with its completeness, the last day the records
+ *             reach and why it may be low (activeCustomerStanding.ts), across
+ *             the company's books. Lets Claire say "23 as of the 26th" instead
+ *             of nothing when a source is behind.
  *
  * The goals compartment separately carries the objective as advice
  * (`goal_recommendation`). This item lets the plan SPEAK the numbers.
@@ -28,6 +32,8 @@ export type GoalProgress = {
   currentValue: number | null;
   /** Why currentValue is null, when it is. */
   currentNote: string | null;
+  /** The count read so far, with its caveats. Null when the metric has no standing reader. */
+  standing: import("../activeCustomerStanding").ActiveCustomerStanding | null;
 };
 
 export type GoalProgressReaders = {
@@ -40,9 +46,10 @@ export type GoalProgressReaders = {
     targetDate: string | null;
   } | null>;
   readRunBaseline: (input: { tenantId: string; macroGoalId: string }) => Promise<number | null>;
-  readCurrentValue: (input: { tenantId: string; metricKey: string; now: Date; timeZone: string }) => Promise<{
+  readCurrentValue: (input: { tenantId: string; operatorUserId: string; metricKey: string; now: Date; timeZone: string }) => Promise<{
     value: number | null;
     note: string | null;
+    standing?: import("../activeCustomerStanding").ActiveCustomerStanding | null;
   }>;
 };
 
@@ -55,8 +62,8 @@ export async function readGoalProgress(
   const [baseline, current] = await Promise.all([
     readers.readRunBaseline({ tenantId: input.tenantId, macroGoalId: goal.id }).catch(() => null),
     readers
-      .readCurrentValue({ tenantId: input.tenantId, metricKey: goal.metricKey, now: input.now, timeZone: input.timeZone })
-      .catch(() => ({ value: null, note: "current count unreadable" })),
+      .readCurrentValue({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, metricKey: goal.metricKey, now: input.now, timeZone: input.timeZone })
+      .catch(() => ({ value: null, note: "current count unreadable", standing: null })),
   ]);
   return {
     goalId: goal.id,
@@ -68,6 +75,7 @@ export async function readGoalProgress(
     baselineValue: baseline,
     currentValue: current.value,
     currentNote: current.value === null ? current.note ?? "no verified current count" : null,
+    standing: current.standing ?? null,
   };
 }
 
@@ -91,12 +99,12 @@ export const productionGoalProgressReaders: GoalProgressReaders = {
     return readMacroGoalRunBaseline(input);
   },
   readCurrentValue: async input => {
-    if (input.metricKey !== "active_customers") return { value: null, note: "no verified current count for this goal's metric" };
-    const { getActiveCustomerMetric } = await import("../activeCustomerMetric");
-    const metric = await getActiveCustomerMetric({ tenantId: input.tenantId, now: input.now, timeZone: input.timeZone });
-    return metric.completeness === "complete" && metric.value !== null
-      ? { value: metric.value, note: null }
-      : { value: null, note: `active-customer count is ${metric.completeness}` };
+    if (input.metricKey !== "active_customers") return { value: null, note: "no verified current count for this goal's metric", standing: null };
+    const { getActiveCustomerStanding } = await import("../activeCustomerStanding");
+    const standing = await getActiveCustomerStanding({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, now: input.now, timeZone: input.timeZone });
+    return standing.complete && standing.value !== null
+      ? { value: standing.value, note: null, standing }
+      : { value: null, note: standing.caveats.join(" ") || "active-customer count is incomplete", standing };
   },
 };
 

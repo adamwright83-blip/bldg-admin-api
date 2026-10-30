@@ -24,6 +24,11 @@ describe("assembleSpeech", () => {
     expect(assembleSpeech([["Bye, Adam. Good luck with the landing page tomorrow."], ["Bye, Adam."]])).toBe("Bye, Adam. Good luck with the landing page tomorrow.");
   });
 
+  it("does not say the same sign-off twice, with or without the name (e2e 2026-10-29)", () => {
+    expect(assembleSpeech([["Talk tomorrow, Adam. Goodnight."], ["Goodnight, Adam."]])).toBe("Talk tomorrow, Adam. Goodnight.");
+    expect(assembleSpeech([["Talk tomorrow, Adam. Goodnight. Goodnight, Adam."]])).toBe("Talk tomorrow, Adam. Goodnight.");
+  });
+
   it("a plain final answer with no tools is spoken as is", () => {
     expect(assembleSpeech([["Tomorrow has two things: the pack walk and the husky meet-and-greet."]])).toBe("Tomorrow has two things: the pack walk and the husky meet-and-greet.");
   });

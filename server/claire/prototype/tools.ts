@@ -171,7 +171,7 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "read_goal_progress",
     description:
-      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and the verified current count. current is null when no verified count exists; current_note then says why (for example the customer source did not load). Say the goal and the distance in one short sentence; when current is null, say you don't have a verified count yet and never estimate one.",
+      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and the current count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is still the real count from the records that could be read, through counted_through: say it with that date (\"23 as of the 26th\") and, only if they ask why, the caveats; never present it as final and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -483,9 +483,11 @@ async function readGoal(ctx: ToolContext) {
     target: progress.targetValue,
     target_date: progress.targetDate,
     started_at: progress.baselineValue,
-    current: progress.currentValue,
-    current_note: progress.currentNote,
-    to_go: progress.currentValue === null ? null : Math.max(0, progress.targetValue - progress.currentValue),
+    current: progress.standing?.value ?? progress.currentValue,
+    current_is_complete: progress.currentValue !== null,
+    counted_through: progress.standing?.countedThrough ?? null,
+    caveats: progress.standing?.caveats ?? (progress.currentNote ? [progress.currentNote] : []),
+    to_go: (progress.standing?.value ?? progress.currentValue) === null ? null : Math.max(0, progress.targetValue - (progress.standing?.value ?? progress.currentValue)!),
   };
 }
 

@@ -136,7 +136,11 @@ export type Scenario = {
     dayLine: SeedDayLineRow[];
     standingInstructions?: SeedStandingInstruction[];
     /** The operator's headline goal as read_goal_progress returns it. Absent: no goal on record. */
-    goal?: { objective: string; targetValue: number; startedAt: number | null; current: number | null; currentNote?: string };
+    /**
+     * `current` with `caveats` is a real but incomplete count (a source is behind): read_goal_progress
+     * returns it with current_is_complete false and counted_through `countedThrough` days ago.
+     */
+    goal?: { objective: string; targetValue: number; startedAt: number | null; current: number | null; currentNote?: string; caveats?: string[]; countedThroughDaysAgo?: number };
   };
   operator: ScriptedOperator | SimulatedOperator;
   expect: ScenarioExpectation;
