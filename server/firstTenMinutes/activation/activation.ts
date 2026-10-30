@@ -5,7 +5,7 @@ import { offerWords, gmailComposeUrl, type ActivationView } from "../../../share
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { advertisedOfferForPlan } from "../../saas/joystickStripeOffer";
 import { assertNewBusinessIdentity, assertTestModeCheckoutKey } from "../../saas/paidCustomerLifecycle";
-import { createLegacyDayforgeSubscriptionCheckout } from "../../saas/saasBilling";
+import { createLegacyDayforgeSubscriptionCheckout, legacyDayforgeBillingAppUrl, legacyDayforgeBillingSecretKey } from "../../saas/saasBilling";
 import { listPublicSaasPlans, requireOnboardingSession, saveFirstTenOnboardingIdentity } from "../../saas/saasStore";
 import { chapterView } from "../chapter/chapter";
 import { recordEvent } from "../events";
@@ -25,11 +25,10 @@ import { understandingView } from "../understanding/view";
 
 type Stripe = Parameters<typeof createLegacyDayforgeSubscriptionCheckout>[0]["stripe"];
 
-/** The origin today's checkout returns to (server/saas/saasBilling.ts appUrl()). */
+/** The origin today's checkout returns to. */
 function billingReturnOrigin(): string {
-  const configured = process.env.DAYFORGE_BILLING_APP_URL?.replace(/\/$/, "") || "https://admin.bldg.chat";
   try {
-    return new URL(configured).origin;
+    return new URL(legacyDayforgeBillingAppUrl()).origin;
   } catch {
     return "https://admin.bldg.chat";
   }
@@ -93,7 +92,7 @@ export async function beginActivation(
   const chapter = await chapterView(journey);
   if (!chapter.draft) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "There's nothing at the table yet." });
   const checked = assertNewBusinessIdentity(identity);
-  if (!stripe) assertTestModeCheckoutKey(process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY);
+  if (!stripe) assertTestModeCheckoutKey(legacyDayforgeBillingSecretKey());
   const session = await requireOnboardingSession(credentials);
   if (session.status === "draft") {
     await saveFirstTenOnboardingIdentity({ ...credentials, expectedVersion: session.version, ...checked });
