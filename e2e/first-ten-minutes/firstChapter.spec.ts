@@ -3,7 +3,8 @@ import { FAKE, begin, connectOwn, toTheTable } from "./journey";
 
 /**
  * Slice 7, "Your first chapter": back on their portrait, a new entry has appeared from what the person actually did,
- * with the message's real status. Claire answers "Where did we leave things with Elena?" exactly, and remembers.
+ * with the message's real status. Claire answers "Where did we leave things with Elena?" through her engine, from what
+ * she reads (the stand-in model writes from it), and remembers.
  * "Tomorrow, we'll pick up from here." The courtyard stays open; no chore list appears.
  */
 // Nina is in Los Angeles: Claire gives times in her zone
@@ -16,7 +17,7 @@ async function shots(name: string, page: Page, testInfo: { project: { name: stri
   await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-${name}.png`, fullPage: true });
 }
 
-test("your own account: the entry, the message as it really stands, and Claire's exact answer, remembered", async ({ page, request, context }, testInfo) => {
+test("your own account: the entry, the message as it really stands, and Claire's answer from what she read, remembered", async ({ page, request, context }, testInfo) => {
   test.setTimeout(300_000);
   await begin(page, request);
   await connectOwn(page, request);
@@ -43,10 +44,17 @@ test("your own account: the entry, the message as it really stands, and Claire's
   await expect(page.getByTestId("first-ten-tomorrow")).toHaveCount(0);
   await shots("60-first-chapter", page, testInfo);
 
-  // Claire, with a suggested question; her answer is exact
+  // Claire, with a suggested question. An answer that says what the records don't is never shown
+  await request.post(`${FAKE}/__control`, { data: { claireOverclaims: true } });
+  await page.getByTestId("first-ten-ask-claire").click();
+  await expect(page.getByTestId("first-ten-claire-trouble")).toHaveText("Claire can't answer that properly right now. Try again in a moment.", { timeout: 20_000 });
+  await expect(page.getByTestId("first-ten-claire-answer")).toHaveCount(0);
+  await request.post(`${FAKE}/__control`, { data: { claireOverclaims: false } });
+
+  // her answer comes from what she read: the request, the message as it stands, where it is
   await page.getByTestId("first-ten-ask-claire").click();
   const answer = page.getByTestId("first-ten-claire-answer");
-  await expect(answer).toContainText(`You picked up Elena's Friday request from April. You kept the reply as it was drafted: “${ASTRA}” It's in your Sent folder, sent at`, {
+  await expect(answer).toContainText(`You picked up Elena's Friday request from April 2026. You kept the reply as it was drafted: “${ASTRA}” It's in your Sent folder, sent at`, {
     timeout: 20_000,
   });
   await expect(answer).toContainText("Elena hasn't written back yet.");

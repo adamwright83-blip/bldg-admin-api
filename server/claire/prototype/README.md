@@ -45,6 +45,14 @@ CI: `.github/workflows/claire-prototype-eval.yml` (manual, `CLAIRE_TEST_ANTHROPI
 A scenario passes when all trials pass (pass^k). Passing the dev and sealed sets
 justifies a larger evaluation and a design review, not a production swap.
 
+## On the first-chapter page (JOYSTICK's first ten minutes)
+
+`openClaireFirstChapterSession` runs the same tool loop on the person's page in their first ten minutes
+(`docs/goldline/FIRST_TEN_MINUTES_BUILD.md`, slice 7), written rather than spoken. There is no workspace yet, so the
+context carries no tenant or operator. The session offers one tool, `read_first_chapter` (`CLAIRE_FIRST_CHAPTER_TOOLS`),
+and the loop refuses any tool a session doesn't offer before it runs. The caller (`server/firstTenMinutes/firstChapter`)
+supplies the read and checks the written answer against it.
+
 ## On the phone (production seam)
 
 `voiceEngine.ts` is the seam between the Twilio call (`server/claire/claireTwilio.ts`:

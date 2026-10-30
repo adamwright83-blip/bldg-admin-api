@@ -28,21 +28,22 @@ export function FirstChapterEntry({ entry, status }: { entry: string; status: st
 }
 
 /**
- * Claire, with a suggested question. Her answer is exact and kept. Then a small invitation, and the courtyard if they
- * want it. No chore list.
+ * Claire, with a suggested question. Her answer comes from what she read, and is kept. Then a small invitation, and the
+ * courtyard if they want it. No chore list.
  */
 export function AskClaire({ view, onAsk, onCourtyard }: { view: FirstChapterView; onAsk: () => Promise<void>; onCourtyard: () => void }) {
   const reduce = useReducedMotion();
   const [asking, setAsking] = useState(false);
-  const [trouble, setTrouble] = useState(false);
+  const [trouble, setTrouble] = useState<string | null>(null);
 
   async function ask() {
     setAsking(true);
-    setTrouble(false);
+    setTrouble(null);
     try {
       await onAsk();
-    } catch {
-      setTrouble(true);
+    } catch (error) {
+      const code = (error as { data?: { code?: string } } | null)?.data?.code;
+      setTrouble(code === "TOO_MANY_REQUESTS" ? "Claire has answered this. Tomorrow, we'll pick up from here." : "Claire can't answer that properly right now. Try again in a moment.");
     } finally {
       setAsking(false);
     }
@@ -84,7 +85,11 @@ export function AskClaire({ view, onAsk, onCourtyard }: { view: FirstChapterView
           </button>
         </div>
       )}
-      {trouble ? <p className={styles.quietNote}>Claire couldn't look just now. Try again in a moment.</p> : null}
+      {trouble ? (
+        <p className={styles.quietNote} data-testid="first-ten-claire-trouble">
+          {trouble}
+        </p>
+      ) : null}
       <div className={styles.claireLinks}>
         {view.answer ? (
           <button type="button" disabled={asking} onClick={() => void ask()} data-testid="first-ten-ask-again">

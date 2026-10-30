@@ -1,9 +1,10 @@
 /**
  * "Your first chapter" (docs/goldline/FIRST_TEN_MINUTES_BUILD.md, slice 7): the person returns to their portrait and a
- * new entry has appeared. Claire answers "Where did we leave things with Elena?" from the records alone: what the
- * person did, their own words, and the real state of the message. "Tomorrow, we'll pick up from here."
+ * new entry has appeared. Claire answers "Where did we leave things with Elena?" through her engine
+ * (server/claire/prototype), from what she reads here: what the person did, their own words, and the real state of the
+ * message. "Tomorrow, we'll pick up from here."
  */
-import { DRAFT_APPROACHES, lowerFirst, type ChapterOpportunity, type DraftView } from "./firstTenMinutesChapter";
+import { lowerFirst, type ChapterOpportunity, type DraftView } from "./firstTenMinutesChapter";
 
 export const FIRST_CHAPTER_TITLE = "Your first chapter";
 export const TOMORROW = "Tomorrow, we'll pick up from here.";
@@ -97,61 +98,6 @@ export function replyExcerpt(text: string): string {
     if (excerpt.length >= 40) break;
   }
   return excerpt.length > 160 ? `${excerpt.slice(0, 157).trimEnd()}…` : excerpt;
-}
-
-/**
- * Claire's answer: concise and exact. What the person did, the message as it stands (their own words, or the version
- * they chose), and only what is known of where it is now: she says it isn't in the Sent folder only when she looked.
- * Times are given in the person's zone, or not at all.
- */
-export function claireAnswer(
-  opportunity: ChapterOpportunity,
-  draft: DraftView,
-  reply: ReplyState,
-  options: { timeZone: string | null; lookedInSent: boolean; now?: Date }
-): string {
-  const name = who(opportunity);
-  const zone = knownTimeZone(options.timeZone);
-  const now = options.now ?? new Date();
-  const asked = zone ? new Date(opportunity.request.at).toLocaleDateString("en-US", { month: "long", timeZone: zone }) : null;
-  const parts = [`You picked up ${requestLabel(opportunity)}${asked ? ` from ${asked}` : ""}.`];
-  if (draft.edited) parts.push(`You put the reply in your own words: “${draft.body}”`);
-  else if (draft.approach !== DRAFT_APPROACHES[0]) parts.push(`You chose ${draft.approach === "short" ? "the shorter reply" : "the reply offering to start"}: “${draft.body}”`);
-  else parts.push(`You kept the reply as it was drafted: “${draft.body}”`);
-  switch (draft.status) {
-    case "prepared":
-      parts.push("It's ready, and it hasn't been sent.");
-      break;
-    case "declined":
-      parts.push("You decided it could wait. It hasn't been sent.");
-      break;
-    case "handed_off":
-      parts.push(
-        `You opened it in your Gmail${when(draft.handedOffAt, zone, now)}. ${
-          options.lookedInSent
-            ? "It isn't in your Sent folder, so as far as I can tell it hasn't gone yet."
-            : "I couldn't look in your Sent folder just now, so I don't know yet whether it went."
-        }`
-      );
-      break;
-    case "reported_sent":
-      parts.push(
-        `You told me you sent it${when(draft.reportedSentAt, zone, now)}. ${
-          options.lookedInSent ? "I haven't found it in your Sent folder." : "I couldn't look in your Sent folder just now."
-        }`
-      );
-      break;
-    case "verified_sent": {
-      const sent = when(draft.verifiedSentAt, zone, now);
-      parts.push(sent ? `It's in your Sent folder, sent${sent}.` : "It's in your Sent folder.");
-      break;
-    }
-  }
-  if (draft.status === "reported_sent" || draft.status === "verified_sent") {
-    if (reply.kind === "none") parts.push(`${name} hasn't written back yet.`);
-    if (reply.kind === "replied") parts.push(`${name} wrote back${when(reply.at, zone, now)}${reply.excerpt ? `: “${reply.excerpt}”` : "."}`);
-  }
-  return parts.join(" ");
 }
 
 // ------------------------------------------------------------------ what Claire reads, and what she may say

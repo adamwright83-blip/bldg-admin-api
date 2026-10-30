@@ -322,19 +322,31 @@ kept as they left it. A new entry has appeared on the page:
 - **The message's actual status**, the same line the writing table shows ("Prepared. Not sent.", "Opened in your
   mail at 3:42 PM. JOYSTICK didn't send it.", "In your Sent folder, 3:44 PM.").
 
-**Claire is available with a suggested question**: "Where did we leave things with Elena?". Her answer is composed from
-the records, not generated, so it is exact:
+**Claire is available with a suggested question**: "Where did we leave things with Elena?". She answers through her
+engine (`server/claire/prototype/`, `openClaireFirstChapterSession`), the same tool loop she uses on the phone, written
+rather than spoken. On the page there is no workspace yet, so she is offered one tool and nothing else:
+`read_first_chapter`, which returns the records as they stand now (`firstChapterFacts`):
 
-- **The request:** "You picked up Elena's Friday request from April."
-- **The message as it stands:** kept as drafted, the version they chose, or put in their own words, quoted in full.
-- **Where it is now, and only what is known.** Before answering she looks in their Sent folder again. She says a
-  message isn't there only when she looked; if she couldn't, she says that instead.
-- **Whether the recipient has written back since.** This is read from their own mail with the read-only access they
-  already gave, quoted verbatim past the greeting.
-- **Times are given in the person's own time zone, or not at all.**
+- **The request** in the asker's words, and when it came ("April 2026").
+- **The message as it stands**, word for word: as drafted, the version chosen, or the person's own words.
+- **Where it is**: ready and not sent, kept for later, opened in their mail, they said they sent it, or in their Sent
+  folder. Before she reads, the Sent folder is looked at again whenever the message has left the table. The read says
+  whether that look happened, so she says a message isn't there only when she looked.
+- **Whether the recipient has written back since**, read from their own mail with the read-only access they already
+  gave, in the recipient's words past the greeting.
+- **Times already in the person's zone**, or none when the browser gave no real zone.
 
-The answer is kept (`claire_answered` in `first_ten_events`), so she remembers what she said after a reload. "Ask again"
-answers from the records as they are then. "Tomorrow, we'll pick up from here." follows her answer. "The courtyard"
+The prompt holds her to that record. The page then checks what she wrote against what she read (`checkClaireAnswer`),
+as defence in depth: the checks detect, they don't decide what is true. A quote must be verbatim. "You sent it" needs
+the person's word, and "it went" needs their Sent folder. The Sent folder and a reply are mentioned only as they stand,
+times only as recorded, and the machinery never. If something doesn't hold she writes the answer once more from the
+read. An answer that still doesn't hold, or that never read the records, is not shown: the page says "Claire can't
+answer that properly right now." Her tokens are attributed to the journey (`first_ten:<journey>`), like the reading,
+and a journey gets at most twelve answers.
+
+The answer is kept with what it rests on (`claire_answered` in `first_ten_events`, with the read), so she remembers what
+she said after a reload; an answer not shown is recorded as `claire_unanswered`. "Ask again" reads the records as they
+are then. "Tomorrow, we'll pick up from here." follows her answer. "The courtyard"
 returns to the writing table and the closing beat, and no list of chores appears anywhere. The journey's stage is
 `first_chapter` from the person's first return.
 
