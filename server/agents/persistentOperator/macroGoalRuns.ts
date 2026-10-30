@@ -137,6 +137,22 @@ export async function readMacroGoalRunBaseline(input: {
   return row?.baselineValue == null ? null : Number(row.baselineValue);
 }
 
+/** How the run's baseline was observed: an exact observation, or a recorded/partial one that later counts may not reproduce. */
+export async function readMacroGoalRunBaselineQuality(input: {
+  tenantId: string;
+  macroGoalId: string;
+}): Promise<{ precision: string | null; coverage: string | null; startedAt: Date | null } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ precision: macroGoalRuns.baselinePrecision, coverage: macroGoalRuns.baselineCoverage, startedAt: macroGoalRuns.startedAt })
+    .from(macroGoalRuns)
+    .where(and(eq(macroGoalRuns.tenantId, input.tenantId), eq(macroGoalRuns.macroGoalId, input.macroGoalId)))
+    .orderBy(desc(macroGoalRuns.updatedAt))
+    .limit(1);
+  return row ? { precision: row.precision ?? null, coverage: row.coverage ?? null, startedAt: row.startedAt ?? null } : null;
+}
+
 export function parseAuthoritativeMetricObservation(
   value: unknown
 ): AuthoritativeMetricObservation {

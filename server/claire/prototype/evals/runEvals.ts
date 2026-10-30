@@ -176,6 +176,7 @@ async function main() {
     return {
       readMacroGoal: async () => (goal ? { id: `eval-goal:${scenario.id}`, objective: goal.objective, metricKey: "active_customers", unit: "customers", targetValue: goal.targetValue, targetDate: null } : null),
       readRunBaseline: async () => goal?.startedAt ?? null,
+      readRunBaselineQuality: async () => (goal?.startedAtInexact ? { precision: "recorded_only", coverage: "partial", startedAt: new Date("2026-09-30T11:54:15Z") } : { precision: "exact", coverage: "complete", startedAt: null }),
       readCurrentValue: async () => {
         if (goal?.current != null && goal.caveats?.length) {
           const through = new Date(Date.now() - (goal.countedThroughDaysAgo ?? 0) * 86_400_000).toISOString().slice(0, 10);
@@ -183,7 +184,7 @@ async function main() {
           return {
             value: null,
             note: goal.caveats.join(" "),
-            standing: { value: goal.current, complete: false, atLeast: true, windowEnd: today, sources: [{ source: "CleanCloud", through, current: false }, { source: "Laundry Butler", through: null, current: true }], tenants: ["default", "laundry_farm"], caveats: goal.caveats },
+            standing: { value: goal.current, complete: false, partial: true, windowEnd: today, sources: [{ source: "CleanCloud", through, current: false }, { source: "Laundry Butler", through: null, current: true }], tenants: ["default", "laundry_farm"], caveats: goal.caveats },
           };
         }
         return goal?.current != null ? { value: goal.current, note: null } : { value: null, note: goal?.currentNote ?? "no verified current count" };

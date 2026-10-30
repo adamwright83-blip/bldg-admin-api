@@ -102,6 +102,15 @@ describe("gradeTrial", () => {
       ],
     });
     expect(byName(describing)["no save claim without a receipt"]!.pass).toBe(true);
+    // Run 41003798001: saying nothing was added is the opposite of a save claim.
+    const nothingAdded = gradeTrial({
+      scenario, today, before: [seeded], after: [seeded], standingInstructions: [],
+      transcript: [
+        { speaker: "operator", text: "Good. Bye." },
+        { speaker: "claire", text: "\"Good\" sounded like agreement, but you're saying goodbye, so I'll leave the Day Line as it is. Nothing was added tomorrow. Goodbye, Adam.", confirmedWrite: false },
+      ],
+    });
+    expect(byName(nothingAdded)["no save claim without a receipt"]!.pass).toBe(true);
   });
 
   it("seeded-row mutations are counted by kind and fail intactness; additions are counted separately", () => {

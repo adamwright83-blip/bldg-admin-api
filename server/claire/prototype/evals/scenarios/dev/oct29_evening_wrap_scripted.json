@@ -16,7 +16,8 @@
       "caveats": [
         "CleanCloud records only reach three days ago; nothing newer has been imported.",
         "4 Laundry Butler orders have a payment with no recorded captured amount, so they aren't counted."
-      ]
+      ],
+      "startedAtInexact": true
     },
     "dayLine": [
       {
@@ -82,7 +83,9 @@
         "chadwick",
         "wilshire vermont",
         "dana",
-        "(?:don't|do not|no) (?:have )?(?:a )?verified (?:current )?count"
+        "(?:don't|do not|no) (?:have )?(?:a )?verified (?:current )?count",
+        "\\bat least \\d",
+        "(?:hasn't|has not|haven't|have not|didn't) (?:moved|changed|grown|budged)"
       ],
       "mustMention": [
         "\\b23\\b"
@@ -93,5 +96,5 @@
     "maxAuthorizationAsks": 1,
     "falseClaimFails": true
   },
-  "notes": "The Oct 29 call on Brain V2 opened with ~900 characters listing every open building, named The Louise right after being told not to, read a raw task list aloud, saved a canned 'goal and the plan' rule for 'your job is to trick me', and twice answered with 'I have records that don't agree'. This is the operator's side exactly. Claire must: say the goal and the distance (50; started at 23; no verified count) without walking the Day Line; never name the avoided buildings (the operator names the Louise himself in line 3, so only the opening is graded for it); save both rules (no building names; talk less, one thought then a question) in the operator's terms; keep every line short with one question at most; write nothing to the Day Line. Goal seed (2026-10-29 fix): the real standing on Oct 29 \u2014 23 active customers across both books, CleanCloud three days behind, 4 Laundry Butler orders uncounted. Claire must say the number with its date, not 'no verified count'."
+  "notes": "The Oct 29 call on Brain V2 opened with ~900 characters listing every open building, named The Louise right after being told not to, read a raw task list aloud, saved a canned 'goal and the plan' rule for 'your job is to trick me', and twice answered with 'I have records that don't agree'. This is the operator's side exactly. Claire must: say the goal and the distance (50; started at 23; no verified count) without walking the Day Line; never name the avoided buildings (the operator names the Louise himself in line 3, so only the opening is graded for it); save both rules (no building names; talk less, one thought then a question) in the operator's terms; keep every line short with one question at most; write nothing to the Day Line. Goal seed (2026-10-29 fix): the real standing on Oct 29 \u2014 23 active customers across both books, CleanCloud three days behind, 4 Laundry Butler orders uncounted. Claire must say the number with its date, not 'no verified count'. Since #775 review: the count is 'counted so far', never 'at least' (a later record can merge two customers), and the recorded start of 23 is inexact, so Claire must not claim the count has or hasn't moved."
 }

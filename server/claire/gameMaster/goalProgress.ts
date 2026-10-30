@@ -29,6 +29,12 @@ export type GoalProgress = {
   targetValue: number;
   targetDate: string | null;
   baselineValue: number | null;
+  /**
+   * Set when the baseline was not an exact observation (Oct 29: 23 was recorded on Sept 30 as
+   * recorded_only/partial by pre-tenant-split code; today's rules give 20 for that date). Claire
+   * says where it came from and never reads progress from comparing it with today's count.
+   */
+  baselineNote: string | null;
   currentValue: number | null;
   /** Why currentValue is null, when it is. */
   currentNote: string | null;
@@ -46,6 +52,7 @@ export type GoalProgressReaders = {
     targetDate: string | null;
   } | null>;
   readRunBaseline: (input: { tenantId: string; macroGoalId: string }) => Promise<number | null>;
+  readRunBaselineQuality?: (input: { tenantId: string; macroGoalId: string }) => Promise<{ precision: string | null; coverage: string | null; startedAt: Date | null } | null>;
   readCurrentValue: (input: { tenantId: string; operatorUserId: string; metricKey: string; now: Date; timeZone: string }) => Promise<{
     value: number | null;
     note: string | null;
@@ -59,8 +66,9 @@ export async function readGoalProgress(
 ): Promise<GoalProgress | null> {
   const goal = await readers.readMacroGoal({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
   if (!goal) return null;
-  const [baseline, current] = await Promise.all([
+  const [baseline, quality, current] = await Promise.all([
     readers.readRunBaseline({ tenantId: input.tenantId, macroGoalId: goal.id }).catch(() => null),
+    (readers.readRunBaselineQuality?.({ tenantId: input.tenantId, macroGoalId: goal.id }) ?? Promise.resolve(null)).catch(() => null),
     readers
       .readCurrentValue({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, metricKey: goal.metricKey, now: input.now, timeZone: input.timeZone })
       .catch(() => ({ value: null, note: "current count unreadable", standing: null })),
@@ -73,6 +81,10 @@ export async function readGoalProgress(
     targetValue: goal.targetValue,
     targetDate: goal.targetDate,
     baselineValue: baseline,
+    baselineNote:
+      baseline !== null && quality && quality.precision !== "exact"
+        ? `Recorded${quality.startedAt ? ` on ${quality.startedAt.toISOString().slice(0, 10)}` : ""} by an earlier count marked ${[quality.precision, quality.coverage].filter(Boolean).join(", ") || "inexact"}; it may not match how customers are counted today, so it is not a measure of progress.`
+        : null,
     currentValue: current.value,
     currentNote: current.value === null ? current.note ?? "no verified current count" : null,
     standing: current.standing ?? null,
@@ -97,6 +109,10 @@ export const productionGoalProgressReaders: GoalProgressReaders = {
   readRunBaseline: async input => {
     const { readMacroGoalRunBaseline } = await import("../../agents/persistentOperator/macroGoalRuns");
     return readMacroGoalRunBaseline(input);
+  },
+  readRunBaselineQuality: async input => {
+    const { readMacroGoalRunBaselineQuality } = await import("../../agents/persistentOperator/macroGoalRuns");
+    return readMacroGoalRunBaselineQuality(input);
   },
   readCurrentValue: async input => {
     if (input.metricKey !== "active_customers") return { value: null, note: "no verified current count for this goal's metric", standing: null };

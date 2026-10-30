@@ -17,8 +17,10 @@
  *
  * The count is always TODAY's 30-day window over the records that could be
  * read (PR #775 review: a today-window count labeled "as of the 26th" is
- * neither). Missing records can only leave customers out, so an incomplete
- * count is a minimum: "at least 23", with the sources that are behind.
+ * neither). An incomplete count is "counted so far", NOT a minimum: a missing
+ * record can add a customer, but it can also link two counted identities (one
+ * order with a phone, one with an email, the missing one with both) and merge
+ * them. So it is reported as partial, with the sources that are behind.
  * Never throws for a missing source: what could not be read, including the
  * coverage check itself, becomes a caveat and the count is incomplete.
  */
@@ -35,8 +37,8 @@ export type ActiveCustomerStanding = {
   value: number | null;
   /** Every book loaded, every paid order verified, coverage readable, and every held source current. */
   complete: boolean;
-  /** Incomplete but readable: the true count today is at least `value`. */
-  atLeast: boolean;
+  /** Incomplete but readable: `value` is what the available records show, not a bound on the true count. */
+  partial: boolean;
   /** Business-local day the 30-day window ends (today). */
   windowEnd: string;
   /** How far each held source reaches; `current` false when it is behind or unknown. */
@@ -123,7 +125,7 @@ export async function getActiveCustomerStanding(
   return {
     value: readable ? population.count : null,
     complete,
-    atLeast: Boolean(readable) && !complete,
+    partial: Boolean(readable) && !complete,
     windowEnd: span.end,
     sources: sources.filter((entry, index) => sources.findIndex(other => other.source === entry.source && other.through === entry.through && other.current === entry.current) === index),
     tenants,
