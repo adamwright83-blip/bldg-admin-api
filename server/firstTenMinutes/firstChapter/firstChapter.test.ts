@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DraftView } from "../../../shared/firstTenMinutesChapter";
-import { claireAnswer, firstChapterEntry, firstChapterQuestion, knownTimeZone, replyExcerpt } from "../../../shared/firstTenMinutesFirstChapter";
+import {
+  checkClaireAnswer,
+  claireAnswer,
+  firstChapterEntry,
+  firstChapterFacts,
+  firstChapterQuestion,
+  knownTimeZone,
+  replyExcerpt,
+} from "../../../shared/firstTenMinutesFirstChapter";
 import { asViews, exampleReading } from "../testSupport/exampleReading";
 import { chapterOpportunity } from "../chapter/chapter";
 
@@ -100,3 +108,69 @@ describe("your first chapter (Nina)", () => {
     expect(replyExcerpt("")).toBe("");
   });
 });
+
+describe("what Claire reads, and what she may say", () => {
+  it("reads the records as they are now: words verbatim, times in the person's zone or not at all", async () => {
+    const opportunity = await elena();
+    const sent = draft({ status: "verified_sent", handedOffAt: "2026-10-28T17:02:00Z", verifiedSentAt: "2026-10-28T17:05:00Z" });
+    expect(firstChapterFacts(opportunity, sent, { kind: "replied", at: "2026-10-29T16:12:00Z", excerpt: "Yes — we'd love a Friday standing order." }, { ...LA, lookedInSent: true })).toEqual({
+      question: "Where did we leave things with Elena?",
+      recipient: { name: "Elena Ruiz", firstName: "Elena", address: "elena@larkspurhotel.example" },
+      request: { label: "Elena's Friday request", words: "Could you do fresh arrangements every Friday?", askedIn: "April 2026" },
+      replyThen: "We're only doing events at the moment. Ask me again once we have a Friday delivery.",
+      offerNow: "Weekly Friday delivery",
+      message: {
+        to: "Elena Ruiz <elena@larkspurhotel.example>",
+        subject: "Re: Friday flowers?",
+        words: ASTRA,
+        version: "as_drafted",
+        state: "in_their_sent_folder",
+        openedInTheirMail: "yesterday at 10:02 AM",
+        theySaidSent: null,
+        inSentFolderSince: "yesterday at 10:05 AM",
+      },
+      sentFolder: "found_it",
+      recipientWroteBack: { answer: "yes", when: "at 9:12 AM", words: "Yes — we'd love a Friday standing order." },
+    });
+    const opened = firstChapterFacts(opportunity, draft({ status: "handed_off", handedOffAt: "2026-10-29T17:02:00Z" }), { kind: "unknown" }, { timeZone: null, lookedInSent: false, now: NOW });
+    expect(opened.message).toMatchObject({ state: "opened_in_their_mail", openedInTheirMail: null });
+    expect(opened).toMatchObject({ sentFolder: "could_not_look", recipientWroteBack: { answer: "not_known" }, request: { askedIn: null } });
+    const ownWords = firstChapterFacts(opportunity, draft({ edited: true, body: "Shall I bring a sample?", status: "declined" }), { kind: "unknown" }, { ...LA, lookedInSent: false });
+    expect(ownWords.message).toMatchObject({ version: "their_own_words", state: "kept_for_later", words: "Shall I bring a sample?" });
+    expect(ownWords.sentFolder).toBe("not_relevant");
+  });
+
+  it("passes an answer that says only what the records hold", async () => {
+    const opportunity = await elena();
+    const facts = firstChapterFacts(opportunity, draft(), { kind: "unknown" }, { ...LA, lookedInSent: false });
+    expect(checkClaireAnswer(`You picked up Elena's Friday request from April. Your reply is ready as drafted: “${ASTRA}” It hasn't been sent.`, facts)).toEqual([]);
+    const told = firstChapterFacts(opportunity, draft({ status: "reported_sent", handedOffAt: "2026-10-29T17:02:00Z", reportedSentAt: "2026-10-29T17:04:00Z" }), { kind: "none" }, { ...LA, lookedInSent: true });
+    expect(checkClaireAnswer("You told me you sent it at 10:04 AM, but it isn't in your Sent folder yet. Elena hasn't written back.", told)).toEqual([]);
+    const opened = firstChapterFacts(opportunity, draft({ status: "handed_off", handedOffAt: "2026-10-29T17:02:00Z" }), { kind: "unknown" }, { ...LA, lookedInSent: false });
+    expect(checkClaireAnswer("You opened it in your Gmail at 10:02 AM. I couldn't look in your Sent folder just now, so I don't know whether it went.", opened)).toEqual([]);
+    const replied = firstChapterFacts(opportunity, draft({ status: "verified_sent", verifiedSentAt: "2026-10-28T17:05:00Z" }), { kind: "replied", at: "2026-10-29T16:12:00Z", excerpt: "Yes — we'd love a Friday standing order." }, { ...LA, lookedInSent: true });
+    expect(checkClaireAnswer("It's in your Sent folder, sent yesterday at 10:05 AM. Elena wrote back at 9:12 AM: “Yes — we'd love a Friday standing order.”", replied)).toEqual([]);
+  });
+
+  it("catches a misquote, a send that didn't happen, a Sent folder or a reply it didn't see, an invented time, and the machinery", async () => {
+    const opportunity = await elena();
+    const ready = firstChapterFacts(opportunity, draft(), { kind: "unknown" }, { ...LA, lookedInSent: false });
+    const kinds = (answer: string, facts = ready) => checkClaireAnswer(answer, facts).map(problem => problem.kind);
+    expect(kinds("Your reply says “Hi Elena, Friday delivery is live now!”")).toEqual(["misquote"]);
+    expect(kinds("You sent it this morning.")).toEqual(["sent"]);
+    expect(kinds("It was sent to Elena.")).toEqual(["sent"]);
+    expect(kinds("I sent it for you.")).toEqual(["sent"]);
+    expect(kinds("It's in your Sent folder.")).toEqual(["sent_folder"]);
+    expect(kinds("It isn't in your Sent folder.")).toEqual(["sent_folder"]);
+    expect(kinds("Elena replied yesterday.")).toEqual(["wrote_back"]);
+    expect(kinds("Elena hasn't written back yet.")).toEqual(["wrote_back"]);
+    expect(kinds("It's ready since 9:15 AM.")).toEqual(["time"]);
+    expect(kinds("The tool says it's ready.")).toEqual(["machinery"]);
+    // the person's word is enough for "you sent it", never for "it went"
+    const told = firstChapterFacts(opportunity, draft({ status: "reported_sent", reportedSentAt: "2026-10-29T17:04:00Z" }), { kind: "unknown" }, { ...LA, lookedInSent: true });
+    expect(kinds("You told me you sent it at 10:04 AM.", told)).toEqual([]);
+    expect(kinds("It went out at 10:04 AM.", told)).toEqual(["sent"]);
+    expect(kinds("It's in your Sent folder.", told)).toEqual(["sent_folder"]);
+  });
+});
+
