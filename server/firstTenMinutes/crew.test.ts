@@ -6,6 +6,7 @@ import {
   pluralTitle,
   ruleDays,
   suggestionRules,
+  turnNow,
   waitingCompanions,
 } from "../../shared/firstTenMinutesCrew";
 import type { FindingView } from "../../shared/firstTenMinutesFindings";
@@ -66,6 +67,21 @@ describe("the crew gets acquainted (Nina)", () => {
     expect(crewLines(sable)).toEqual(["Still on?"]);
     const noPlaces = (await nina()).map(finding => (finding.payload.kind === "place" ? { ...finding, status: "dismissed" as const } : finding));
     expect(buildReveals(noPlaces).some(reveal => reveal.companion === "mara")).toBe(false);
+  });
+
+  it("keeps Sable's turn through her answer, even when it crosses out the only words she had", async () => {
+    const noPromise = (await nina()).filter(finding => finding.payload.kind !== "promise");
+    const sable = turnNow(buildReveals(noPromise), [], noPromise);
+    expect(sable).toMatchObject({ companion: "sable", kind: "rule", quote: "No more Sunday deliveries." });
+
+    const changed = noPromise.map(finding => (finding.payload.kind === "rule" ? { ...finding, status: "changed" as const } : finding));
+    const reveals = buildReveals(changed);
+    // nothing of hers is left to reveal, but she says her line about the crossed-out words before Mara steps in
+    expect(reveals.some(reveal => reveal.companion === "sable")).toBe(false);
+    const still = turnNow(reveals, [], changed, sable);
+    expect(still).toMatchObject({ companion: "sable", kind: "rule", quote: "No more Sunday deliveries." });
+    expect(still?.companion === "sable" && still.finding.status).toBe("changed");
+    expect(turnNow(reveals, ["sable"], changed, sable)?.companion).toBe("mara");
   });
 
   it("turns a confirmed rule into what later suggestions must respect", async () => {
