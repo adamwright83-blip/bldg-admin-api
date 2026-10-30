@@ -92,6 +92,9 @@ function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, oppor
     body: row.body,
     edited: row.edited,
     status: row.status,
+    handedOffAt: row.handedOffAt?.toISOString() ?? null,
+    reportedSentAt: row.reportedSentAt?.toISOString() ?? null,
+    verifiedSentAt: row.verifiedSentAt?.toISOString() ?? null,
     approaches: opportunity ? approachesFor(opportunity).map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
   };
 }

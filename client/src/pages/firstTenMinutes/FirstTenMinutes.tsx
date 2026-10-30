@@ -23,6 +23,9 @@ import { PortraitPage } from "./portrait/PortraitPage";
 import { RevelationScene } from "./chapter/RevelationScene";
 import { LetterScene } from "./chapter/LetterScene";
 import { DraftTable } from "./chapter/DraftTable";
+import { ActivationCard } from "./chapter/ActivationCard";
+import { SendDesk } from "./chapter/SendDesk";
+import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
 import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
@@ -36,16 +39,18 @@ import portraitStyles from "./portrait/portrait.module.css";
  * The server keeps the journey (stage, connections, and later everything the crew finds and the person decides), so
  * a reload, a Google or Slack consent screen, or a Stripe checkout lands back in the same place.
  */
-type ReturnNotice = { connected: ConnectionProvider | null; error: string | null };
+type ReturnNotice = { connected: ConnectionProvider | null; error: string | null; checkout: "success" | "cancelled" | null };
 
 function readReturn(): ReturnNotice {
   const params = new URLSearchParams(window.location.search);
   const connected = params.get("connected");
   const code = connectErrorCode(params.get("connect_error"));
-  if (connected || code) window.history.replaceState(null, "", window.location.pathname);
+  const checkout = params.get("checkout");
+  if (connected || code || checkout || params.get("session")) window.history.replaceState(null, "", window.location.pathname);
   return {
     connected: connected === "google" || connected === "slack" ? connected : null,
     error: code ? CONNECT_ERRORS[code] : null,
+    checkout: checkout === "success" || checkout === "cancelled" ? checkout : null,
   };
 }
 
@@ -240,6 +245,76 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const opportunity = chapter.data?.opportunity ?? null;
   const inChapter = Boolean(chapterOpen && opportunity && chapter.data);
 
+  // keeping the crew, and the message leaving the table
+  const hasDraft = Boolean(chapter.data?.draft);
+  const activation = trpc.system.firstTenMinutes.activation.useQuery(credentials!, {
+    enabled: Boolean(credentials) && hasDraft,
+    retry: false,
+    refetchInterval: query => (query.state.data?.status === "checkout_pending" ? 2000 : false),
+  });
+  const beginActivation = trpc.system.firstTenMinutes.beginActivation.useMutation();
+  const handOffDraft = trpc.system.firstTenMinutes.handOffDraft.useMutation();
+  const reportDraft = trpc.system.firstTenMinutes.reportDraft.useMutation();
+  const verifyDraft = trpc.system.firstTenMinutes.verifyDraft.useMutation();
+  const [notYet, setNotYet] = useState(false);
+  const verify = useCallback(async () => {
+    if (!credentials) return;
+    setChapter(await verifyDraft.mutateAsync(credentials));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [credentials]);
+
+  function closingOutcome(): ClosingOutcome | null {
+    const status = chapter.data?.draft?.status;
+    if (status === "reported_sent" || status === "verified_sent") return "sent";
+    if (status === "declined") return "not_now";
+    if (status === "handed_off" && notYet) return "not_yet";
+    return null;
+  }
+
+  function renderTableFoot() {
+    const draft = chapter.data?.draft;
+    const view = activation.data;
+    if (!draft || !view || !credentials) return null;
+    const mustActivate = view.required && view.status !== "active";
+    return (
+      <>
+        {returned.checkout === "cancelled" && view.status !== "active" ? (
+          <p className={styles.quiet} data-testid="first-ten-checkout-cancelled">
+            Checkout closed. Nothing was charged; everything here is saved.
+          </p>
+        ) : null}
+        {view.example || mustActivate || (!view.required && draft.status === "prepared") ? (
+          view.status === "checkout_pending" ? (
+            <p className={styles.quiet} data-testid="first-ten-checkout-pending">
+              Your crew is being kept. This takes a moment.
+            </p>
+          ) : (
+            <ActivationCard
+              activation={view}
+              onBringYourOwn={bringYourOwn}
+              onContinue={async identity => {
+                const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
+                window.location.assign(url);
+              }}
+            />
+          )
+        ) : null}
+        {!view.example && !mustActivate ? (
+          <SendDesk
+            draft={draft}
+            activation={view}
+            onHandOff={async channel => setChapter(await handOffDraft.mutateAsync({ ...credentials, channel }))}
+            onReport={async outcome => {
+              if (outcome === "not_yet") setNotYet(true);
+              setChapter(await reportDraft.mutateAsync({ ...credentials, outcome }));
+            }}
+            onVerify={verify}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   async function step(which: "revealed" | LetterStep | "letter_written") {
     if (!credentials) return;
     setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
@@ -263,13 +338,19 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
         />
       );
     }
+    const outcome = closingOutcome();
     return (
-      <DraftTable
-        opportunity={opportunity}
-        draft={data.draft}
-        onChange={async (change: { approach?: DraftApproach; body?: string }) => setChapter(await changeDraft.mutateAsync({ ...credentials, ...change }))}
-        onDecline={async () => setChapter(await declineDraft.mutateAsync(credentials))}
-      />
+      <>
+        <DraftTable
+          opportunity={opportunity}
+          draft={data.draft}
+          onChange={async (change: { approach?: DraftApproach; body?: string }) => setChapter(await changeDraft.mutateAsync({ ...credentials, ...change }))}
+          onDecline={async () => setChapter(await declineDraft.mutateAsync(credentials))}
+        >
+          {renderTableFoot()}
+        </DraftTable>
+        {outcome ? <ClosingBeat outcome={outcome} /> : null}
+      </>
     );
   }
 

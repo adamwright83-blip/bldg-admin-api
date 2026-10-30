@@ -97,6 +97,8 @@ function fakePortrait(corpusText) {
 }
 
 const modelCalls = [];
+/** what the person "sent from Gmail" during a test, after JOYSTICK handed the message over */
+const sentLater = [];
 
 const defaults = () => ({
   googleScopes: ALL_GOOGLE_SCOPES,
@@ -149,9 +151,25 @@ const server = http.createServer(async (req, res) => {
     control = defaults();
     revoked.length = 0;
     modelCalls.length = 0;
+    sentLater.length = 0;
     return send(res, 200, { ok: true });
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
+  // the person sends the message from their own Gmail: it lands in their Sent folder, now
+  if (path === "/__send-from-gmail" && req.method === "POST") {
+    const input = JSON.parse(body || "{}");
+    sentLater.push({
+      id: `m-sent-later-${sentLater.length + 1}`,
+      threadId: "t-sent-later",
+      date: new Date().toISOString(),
+      from: { name: corpus.owner.name, email: corpus.owner.email },
+      to: [{ name: input.toName ?? "", email: input.to }],
+      subject: input.subject ?? "",
+      body: input.body ?? "",
+      attachments: [],
+    });
+    return send(res, 200, { ok: true });
+  }
 
   // ---------------------------------------------------------------- Google
   if (path === "/accounts.google.com/o/oauth2/v2/auth") return consent(url, res, "fake-google-code");
@@ -180,15 +198,22 @@ const server = http.createServer(async (req, res) => {
   // ---------------------------------------------------------------- Gmail, Calendar, Drive (Nina's invented corpus)
   if (path === "/gmail.googleapis.com/gmail/v1/users/me/profile") return send(res, 200, { emailAddress: control.googleEmail });
   if (path === "/gmail.googleapis.com/gmail/v1/users/me/messages") {
-    const sent = /(^|\s)in:sent\b/.test(url.searchParams.get("q") ?? "");
-    const ids = corpus.messages.filter(message => (message.from.email === corpus.owner.email) === sent).map(message => ({ id: message.id, threadId: message.threadId }));
+    const q = url.searchParams.get("q") ?? "";
+    const sent = /(^|\s)in:sent\b/.test(q);
+    const to = q.match(/(?:^|\s)to:(\S+)/)?.[1]?.toLowerCase() ?? null;
+    const after = Number(q.match(/(?:^|\s)after:(\d+)/)?.[1] ?? 0) * 1000;
+    const ids = [...corpus.messages, ...sentLater]
+      .filter(message => (message.from.email === corpus.owner.email) === sent)
+      .filter(message => !to || message.to.some(recipient => recipient.email.toLowerCase() === to))
+      .filter(message => !after || new Date(message.date).getTime() >= after)
+      .map(message => ({ id: message.id, threadId: message.threadId }));
     return send(res, 200, { messages: ids.reverse(), resultSizeEstimate: ids.length });
   }
   const attachment = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)\/attachments\/([^/]+)$/);
   if (attachment) return send(res, 200, { data: TINY_JPEG.toString("base64url"), size: TINY_JPEG.length });
   const one = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)$/);
   if (one) {
-    const message = corpus.messages.find(candidate => candidate.id === decodeURIComponent(one[1]));
+    const message = [...corpus.messages, ...sentLater].find(candidate => candidate.id === decodeURIComponent(one[1]));
     return message ? send(res, 200, gmailMessage(message)) : send(res, 404, { error: "not found" });
   }
   if (path === "/www.googleapis.com/calendar/v3/calendars/primary/events") {

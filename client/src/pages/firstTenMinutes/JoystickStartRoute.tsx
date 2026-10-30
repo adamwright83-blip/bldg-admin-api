@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { firstTenShownTo } from "@shared/firstTenMinutes";
-import { readPreviewOptIn, sessionBelongsToTodaysFunnel } from "./draftStorage";
+import { adoptFirstTenHandoff, readPreviewOptIn, sessionBelongsToTodaysFunnel } from "./draftStorage";
 
 const JoystickAcquisitionPage = lazy(() => import("../JoystickAcquisitionPage"));
 const FirstTenMinutes = lazy(() => import("./FirstTenMinutes"));
@@ -16,7 +16,11 @@ export default function JoystickStartRoute() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-  const optedIn = useMemo(() => readPreviewOptIn(), []);
+  // a journey carried here from another origin is adopted before anything else reads the stored draft
+  const optedIn = useMemo(() => {
+    adoptFirstTenHandoff();
+    return readPreviewOptIn();
+  }, []);
   const todaysReturn = useMemo(() => sessionBelongsToTodaysFunnel(window.location.search), []);
 
   if (availability.isLoading) return <div style={{ minHeight: "100vh", background: "#1e1712" }} />;
