@@ -84,6 +84,20 @@ export function legPoints(leg: Leg, junction: Junction): { points: Point[]; deli
   return { points: [AT[leg.from], ...through, AT[leg.to]], deliverAt: null };
 }
 
+/**
+ * The whole round trip as one line, lit once the courier is home: out on THEN, round the hotel on NOW, home on THEN.
+ * Clockwise (studio, P, hotel, Q, studio) when it came home from Q; the other way round when it came home from P.
+ */
+export function circuitRoute(homeFrom: Pad): Point[] {
+  const clockwise = homeFrom !== "P";
+  const first: Pad = clockwise ? "P" : "Q";
+  const second: Pad = clockwise ? "Q" : "P";
+  const out = legPoints({ kind: "docked", from: "S", to: first, path: ["S", "J", first], delivers: false }, clockwise ? "west-north" : "west-east");
+  const across = legPoints({ kind: "docked", from: first, to: second, path: [first, "H", second], delivers: true }, "west-east");
+  const back = legPoints({ kind: "docked", from: second, to: "S", path: [second, "J", "S"], delivers: false }, clockwise ? "west-east" : "west-north");
+  return [...out.points, ...across.points.slice(1), ...back.points.slice(1)];
+}
+
 /** Distance along a polyline, and the point and heading at a fraction of it. */
 export function polyline(points: Point[]) {
   const lengths = points.slice(1).map((point, i) => Math.hypot(point.x - points[i].x, point.y - points[i].y));

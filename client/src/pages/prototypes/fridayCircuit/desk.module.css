@@ -1,0 +1,378 @@
+/*
+ * The writing desk: the studio's dated papers, red ink, a thread, and the choice. It takes the whole screen, so the
+ * reveal and the three choices sit in view on a phone without scrolling.
+ */
+
+.desk {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  place-items: center;
+  padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px))
+    max(14px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  background:
+    radial-gradient(90% 70% at 50% 35%, rgba(255, 214, 150, 0.1), transparent 70%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0) 0 46px, rgba(0, 0, 0, 0.07) 46px 48px),
+    linear-gradient(180deg, #5a3d26, #3a2718 70%, #2d1e13);
+  color: var(--paper, #fbf5e8);
+}
+
+.inner {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 18px;
+}
+
+/* ------------------------------------------------------------------ the papers */
+
+.papers {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 26px;
+  align-items: start;
+}
+
+.paper {
+  padding: 16px 18px 18px;
+  border-radius: 3px;
+  background: var(--paper, #fbf5e8);
+  color: var(--ink, #2a2119);
+  box-shadow: 0 18px 34px -20px rgba(0, 0, 0, 0.9);
+}
+
+.paper:nth-child(1) {
+  rotate: -1.6deg;
+  background: #f4ead4;
+}
+
+.paper:nth-child(2) {
+  rotate: 0.8deg;
+  background: #f4ead4;
+}
+
+.paper:nth-child(3) {
+  rotate: -0.6deg;
+}
+
+.paper p {
+  margin: 0;
+}
+
+.when {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e2f22;
+}
+
+.who {
+  margin-top: 2px !important;
+  font-size: 12.5px;
+  color: var(--ink-soft, #6a5a48);
+}
+
+.words {
+  margin-top: 10px !important;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.inked {
+  background-image: linear-gradient(#b3261e, #b3261e);
+  background-repeat: no-repeat;
+  background-position: 0 92%;
+  background-size: 0% 0.13em;
+}
+
+.thread {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.thread path {
+  fill: none;
+  stroke: #b3261e;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+.thread circle {
+  fill: #b3261e;
+}
+
+/* ------------------------------------------------------------------ the choice */
+
+.decision {
+  justify-self: center;
+  width: min(560px, 100%);
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+.decisionHead {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(251, 245, 232, 0.72);
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 10px;
+}
+
+.buttons button {
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 1px solid rgba(251, 245, 232, 0.5);
+  border-radius: 999px;
+  background: rgba(29, 21, 15, 0.35);
+  color: var(--paper, #fbf5e8);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.buttons button:focus-visible {
+  outline: 3px solid #f3d27a;
+  outline-offset: 2px;
+}
+
+.buttons .primary {
+  border-color: var(--paper, #fbf5e8);
+  background: var(--paper, #fbf5e8);
+  color: var(--ink, #2a2119);
+  font-family: Fraunces, Georgia, serif;
+  font-size: 18px;
+  font-weight: 600;
+  box-shadow: 0 12px 26px -12px rgba(0, 0, 0, 0.9);
+}
+
+/* ------------------------------------------------------------------ what the choice leaves */
+
+.outcome {
+  justify-self: center;
+  width: min(560px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.letter {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  /* the stamp has its own room at the foot, clear of the words */
+  padding: 14px 18px 50px;
+  border-radius: 3px;
+  background: var(--paper, #fbf5e8);
+  color: var(--ink, #2a2119);
+  text-align: left;
+  box-shadow: 0 18px 34px -20px rgba(0, 0, 0, 0.9);
+}
+
+.letter p {
+  margin: 0;
+}
+
+.letterLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a5a12;
+}
+
+.letterhead {
+  margin-top: 6px !important;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.letterTo {
+  margin-top: 2px !important;
+  font-size: 12.5px;
+  color: var(--ink-soft, #6a5a48);
+}
+
+.letterWords {
+  margin-top: 8px !important;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.stamp {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  padding: 4px 10px;
+  border: 3px double #b3261e;
+  border-radius: 6px;
+  color: #b3261e;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  rotate: -9deg;
+  opacity: 0.9;
+}
+
+.note,
+.line {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  font-style: italic;
+  line-height: 1.45;
+  color: rgba(251, 245, 232, 0.88);
+}
+
+.note {
+  font-size: 15px;
+}
+
+/* a folded letter, waiting; or the edge of a drawer, closing */
+.folded {
+  width: 120px;
+  height: 22px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fbf5e8 0 48%, #e7dcc4 52% 100%);
+  box-shadow: 0 10px 16px -10px rgba(0, 0, 0, 0.9);
+  transform-origin: 50% 100%;
+}
+
+.drawer {
+  width: 180px;
+  height: 26px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #6b4a2c, #4a3220);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.12),
+    0 10px 16px -10px rgba(0, 0, 0, 0.9);
+  position: relative;
+}
+
+.drawer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  width: 26px;
+  height: 6px;
+  translate: -50% 0;
+  border-radius: 3px;
+  background: var(--brass, #c98a35);
+}
+
+.sample {
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f3d27a;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 20px;
+}
+
+.nav button {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: rgba(251, 245, 232, 0.85);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ phones: one column, all of it in view */
+
+@media (max-width: 760px) {
+  .desk {
+    align-items: start;
+  }
+
+  .inner {
+    gap: 12px;
+  }
+
+  .papers {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .paper {
+    padding: 9px 12px 11px;
+  }
+
+  .when {
+    font-size: 11px;
+  }
+
+  .who {
+    font-size: 11.5px;
+  }
+
+  .words {
+    margin-top: 5px !important;
+    font-size: 15px;
+    line-height: 1.38;
+  }
+
+  .buttons {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .buttons .primary {
+    grid-column: 1 / -1;
+  }
+
+  .buttons button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .buttons .primary {
+    font-size: 17px;
+  }
+
+  .letter {
+    padding: 11px 14px 46px;
+  }
+
+  .letterWords {
+    font-size: 15px;
+  }
+
+  .note,
+  .line {
+    font-size: 15px;
+  }
+
+  .note {
+    font-size: 14px;
+  }
+}

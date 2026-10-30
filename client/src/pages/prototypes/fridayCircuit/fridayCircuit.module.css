@@ -89,6 +89,11 @@
   user-select: none;
 }
 
+.boardViewport {
+  overflow: hidden;
+  border-radius: 20px;
+}
+
 .mapBase {
   fill: #d9c49c;
 }
@@ -275,6 +280,21 @@
   fill: none;
   stroke: #8c7a62;
   stroke-width: 1.2;
+}
+
+.envelope .envelopeCard {
+  fill: #fffaf0;
+  stroke: #8c7a62;
+  stroke-width: 0.8;
+}
+
+.envelope .envelopeLines {
+  stroke: #b9a98e;
+  stroke-width: 0.9;
+}
+
+.envelope .envelopeFlap {
+  fill: #f3ead6;
 }
 
 .bell path,
@@ -505,7 +525,7 @@
   color: var(--ink-soft);
 }
 
-/* ------------------------------------------------------------------ after the circuit, and the correspondence */
+/* ------------------------------------------------------------------ after the circuit */
 
 .completion {
   width: min(760px, 100%);
@@ -523,89 +543,6 @@
 .solvedOnce {
   font-size: 15px;
   color: rgba(251, 245, 232, 0.6);
-}
-
-.correspondence {
-  display: grid;
-  gap: 14px;
-}
-
-.papers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.invitation {
-  padding: 18px 20px 20px;
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 20px 40px -24px rgba(0, 0, 0, 0.9);
-}
-
-.invitationHead {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.invitationWords {
-  margin: 0;
-  font-family: Fraunces, Georgia, serif;
-  font-size: 20px;
-  line-height: 1.45;
-}
-
-.choices {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px 18px;
-}
-
-.choices button {
-  padding: 9px 16px;
-  border: 1px solid rgba(251, 245, 232, 0.4);
-  border-radius: 999px;
-  background: none;
-  color: var(--paper);
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.choices button[aria-pressed="true"] {
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.draft {
-  padding: 14px 16px;
-  border: 1px dashed rgba(251, 245, 232, 0.5);
-  border-radius: 6px;
-}
-
-.draftLabel {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: #f3d27a;
-}
-
-.draftWords {
-  margin: 0;
-  font-family: Fraunces, Georgia, serif;
-  font-size: 17px;
-  line-height: 1.5;
-}
-
-.choiceNote {
-  margin: 0;
-  text-align: center;
-  font-family: Fraunces, Georgia, serif;
-  font-style: italic;
-  color: rgba(251, 245, 232, 0.8);
 }
 
 .scrim {
@@ -635,17 +572,6 @@
   color: rgba(251, 245, 232, 0.7);
 }
 
-.close {
-  justify-self: center;
-  padding: 6px 2px;
-  border: 0;
-  background: none;
-  color: rgba(251, 245, 232, 0.85);
-  text-decoration: underline;
-  text-underline-offset: 5px;
-  cursor: pointer;
-}
-
 .footer {
   display: flex;
   flex-wrap: wrap;
@@ -653,6 +579,173 @@
   gap: 8px 18px;
   font-size: 12px;
   color: rgba(251, 245, 232, 0.45);
+}
+
+/* ------------------------------------------------------------------ home: the lit round trip, the postmark, the card */
+
+.ghostBend {
+  --plate: #e4e3cc;
+  pointer-events: none;
+}
+
+.routeHalo,
+.routeLine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.routeHalo {
+  stroke: rgba(255, 211, 107, 0.42);
+  stroke-width: 30;
+}
+
+.routeLine {
+  stroke: #ffd36b;
+  stroke-width: 9;
+}
+
+.postmark {
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.postmarkRing,
+.postmarkRingThin {
+  fill: none;
+  stroke: #8e2f22;
+}
+
+.postmarkRing {
+  stroke-width: 6;
+}
+
+.postmarkRingThin {
+  stroke-width: 2.5;
+}
+
+.postmarkRule {
+  stroke: #8e2f22;
+  stroke-width: 3;
+}
+
+.postmarkText {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  fill: #8e2f22;
+}
+
+.chapterCard {
+  position: absolute;
+  inset: 12px;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(29, 21, 15, 0.74);
+  text-align: center;
+}
+
+.chapterKicker {
+  margin: 0 0 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #f3d27a;
+}
+
+.chapterTitle {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(24px, 3.6vw, 40px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--paper);
+}
+
+.correction,
+.struck {
+  position: relative;
+  display: inline-block;
+}
+
+.strike {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  top: 54%;
+  height: max(3px, 0.08em);
+  border-radius: 2px;
+  background: #e0473a;
+  transform-origin: 0 50%;
+  rotate: -4deg;
+}
+
+.inserted {
+  position: absolute;
+  left: 50%;
+  bottom: 70%;
+  translate: -50% 0;
+  rotate: -6deg;
+  font-size: 0.82em;
+  white-space: nowrap;
+  color: #ff6b5a;
+}
+
+.chapterAgain {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: rgba(251, 245, 232, 0.9);
+  font-size: 16px;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  cursor: pointer;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* while the ending plays on the board, a tap anywhere on it moves it along */
+.advance {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  padding: 0;
+  border: 0;
+  border-radius: 30px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.advance:focus-visible {
+  outline: 3px solid #f3d27a;
+  outline-offset: -3px;
+}
+
+.controlsDone {
+  opacity: 0.35;
+  transition: opacity 0.4s ease;
+}
+
+.completion {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
 }
 
 /* ------------------------------------------------------------------ phones */
@@ -695,6 +788,26 @@
     bottom: -12px;
   }
 
+  .boardViewport {
+    border-radius: 13px;
+  }
+
+  .chapterCard {
+    inset: 6px;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 13px;
+  }
+
+  .chapterKicker {
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+
+  .chapterTitle {
+    font-size: 22px;
+  }
+
   /* over the empty corner above the studio, clear of the junction and the courier */
   .rookSay {
     left: 10px;
@@ -717,7 +830,4 @@
     font-size: 32px;
   }
 
-  .papers {
-    grid-template-columns: 1fr;
-  }
 }

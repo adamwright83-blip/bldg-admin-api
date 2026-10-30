@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INITIAL, afterLeg, reachable, release, retry, slide, turn, type Junction, type PuzzleState } from "./model";
+import { AT, DELIVERY_POINT, circuitRoute } from "./geometry";
 
 /** Turn the junction until it reads `to`. */
 function turnTo(state: PuzzleState, to: Junction): PuzzleState {
@@ -83,5 +84,23 @@ describe("the clockwork circuit", () => {
     expect(turn(won)).toBe(won);
     expect(slide(won, "now")).toBe(won);
     expect(retry(won)).toBe(won);
+  });
+
+  it("lights the round trip it actually made, from the studio round the hotel and home", () => {
+    const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y) < 1;
+    for (const homeFrom of ["Q", "P"] as const) {
+      const route = circuitRoute(homeFrom);
+      expect(near(route[0], AT.S)).toBe(true);
+      expect(near(route[route.length - 1], AT.S)).toBe(true);
+      expect(route.some(point => near(point, AT.P))).toBe(true);
+      expect(route.some(point => near(point, AT.Q))).toBe(true);
+      // past the hotel, where the invitation was handed over
+      expect(route.some(point => Math.hypot(point.x - DELIVERY_POINT.x, point.y - DELIVERY_POINT.y) < 12)).toBe(true);
+    }
+    // clockwise when it came home from Q: P comes before Q on the way round
+    const clockwise = circuitRoute("Q");
+    expect(clockwise.findIndex(point => near(point, AT.P))).toBeLessThan(clockwise.findIndex(point => near(point, AT.Q)));
+    const counter = circuitRoute("P");
+    expect(counter.findIndex(point => near(point, AT.Q))).toBeLessThan(counter.findIndex(point => near(point, AT.P)));
   });
 });

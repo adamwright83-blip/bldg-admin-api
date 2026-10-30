@@ -24,6 +24,10 @@ export const NOW_PAPER = {
   ],
 } as const;
 
+/** What the desk underlines, each quoted from its paper: April's promise, and September's fact. */
+export const PROMISE = "Ask me again once we have a Friday delivery.";
+export const FACT = "weekly Friday delivery";
+
 /** The old invitation the courier carries: Elena's April message, which opens once it has made its journey. */
 export const INVITATION = { from: "Elena Ruiz · The Larkspur Hotel", when: "Apr 18", subject: "Friday flowers?", words: THEN_PAPER.items[0].words } as const;
 

@@ -1,8 +1,9 @@
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { INITIAL, afterLeg, canRelease, release, retry, slide, turn, type Layer, type Leg, type Pad, type PuzzleState } from "./model";
-import { AT, BOARD, HOTEL_BEND, JR, PORT, THEN_TRACKS, junctionRail, legPoints, polyline, railPath, type Point } from "./geometry";
-import { INVITATION, NOW_PAPER, PLACE_NAMES, SAMPLE_DRAFT, SAMPLE_LABEL, THEN_PAPER } from "./sample";
+import { AT, BOARD, HOTEL_BEND, JR, PORT, THEN_TRACKS, circuitRoute, junctionRail, legPoints, polyline, railPath, type Point } from "./geometry";
+import { NOW_PAPER, PLACE_NAMES, SAMPLE_LABEL, THEN_PAPER } from "./sample";
+import { Desk, type Choice } from "./Desk";
 import styles from "./fridayCircuit.module.css";
 
 /**
@@ -10,11 +11,16 @@ import styles from "./fridayCircuit.module.css";
  * story canon, and not part of onboarding: an isolated page for finding out whether this little machine is enjoyable
  * to work, and whether THEN and NOW are both needed to make it work. Controls are only the junction, the layer
  * switch, wind and release, retry and reset. No timer, no highlighted next move, no announcement of what it means.
+ *
+ * The ending (Adam's approval, 2026-10-30): the courier comes home and the round trip lights up, postmarked; CHAPTER
+ * COMPLETE, and the title corrects itself; the envelope left at the hotel opens there; then the studio's own dated
+ * papers on the writing desk, with no explanation, and the choice. A tap moves it along at any point.
  */
 export type Variant = "letters" | "neutral";
-type Choice = "reply" | "later" | "not_for_me";
 type Moment = "idle" | "winding" | "running" | "bump" | "bell" | "spin";
 type Saved = { state: PuzzleState; solvedOnce: boolean };
+/** home and lit, chapter complete, the hotel's envelope opens, the writing desk */
+type Ending = "homecoming" | "chapter" | "hotel" | "desk";
 
 const PUZZLE_KEY = (variant: Variant) => `joystick.prototype.fridayCircuit.${variant}.puzzle.v1`;
 /** the sample business choice, kept apart from the puzzle */
@@ -38,10 +44,10 @@ function store(key: string, value: unknown) {
   }
 }
 
-/** A little clockwork, made in the browser: the bell, a click as the junction turns, a ratchet as it's wound. */
+/** A little clockwork, made in the browser: the bell, a click as the junction turns, a ratchet as it's wound, a chime home. */
 function useClockworkSounds() {
   const context = useRef<AudioContext | null>(null);
-  return useCallback((kind: "bell" | "click" | "wind") => {
+  return useCallback((kind: "bell" | "click" | "wind" | "chime") => {
     try {
       const Audio = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Audio) return;
@@ -64,6 +70,9 @@ function useClockworkSounds() {
         tone(4186, now, 0.6, 0.02, "sine");
       } else if (kind === "click") {
         tone(1300, now, 0.05, 0.05);
+      } else if (kind === "chime") {
+        // three brass notes, rising: not the indignant bell
+        [1568, 2093, 2637].forEach((frequency, i) => tone(frequency, now + i * 0.13, 1.6, 0.05, "sine"));
       } else {
         for (let i = 0; i < 5; i += 1) tone(900 + i * 60, now + i * 0.09, 0.04, 0.04);
       }
@@ -95,7 +104,10 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
   const [hint, setHint] = useState(false);
   const [lastAction, setLastAction] = useState(() => Date.now());
   const [reading, setReading] = useState<"then" | "now" | null>(null);
-  const [correspondence, setCorrespondence] = useState(false);
+  // a reload after the win reopens where it ends (the desk, or the plain version's card), without replaying it
+  const [ending, setEnding] = useState<Ending | null>(() => (saved.state.complete ? (letters ? "desk" : "chapter") : null));
+  /** the ending is playing now, rather than reopened */
+  const [fresh, setFresh] = useState(false);
   const rookSaidFailure = useRef(false);
   const rookSaidSuccess = useRef(saved.state.complete);
 
@@ -134,6 +146,19 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
     const timer = window.setTimeout(() => setRook(null), 4200);
     return () => window.clearTimeout(timer);
   }, [rook]);
+
+  // the ending plays itself along; a tap moves it on sooner
+  const nextBeat = (beat: Ending): Ending | null => (beat === "homecoming" ? "chapter" : beat === "chapter" ? (letters ? "hotel" : null) : beat === "hotel" ? "desk" : null);
+  useEffect(() => {
+    if (!fresh || !ending) return;
+    const next = nextBeat(ending);
+    if (!next) return;
+    const hold = { homecoming: reduce ? 900 : 1500, chapter: reduce ? 1100 : 1800, hotel: reduce ? 600 : 1300, desk: 0 }[ending];
+    const timer = window.setTimeout(() => setEnding(next), hold);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ending, fresh, reduce]);
+  const advance = () => setEnding(current => (current ? nextBeat(current) ?? current : current));
 
   function failed(kind: "bump" | "bell" | "spin") {
     setFailures(count => {
@@ -220,6 +245,9 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
     commit({ ...next, delivered: delivered || next.delivered });
     if (next.complete) {
       setHint(false);
+      sound("chime");
+      setFresh(true);
+      setEnding("homecoming");
       if (!rookSaidSuccess.current) {
         rookSaidSuccess.current = true;
         setRook(ROOK_SUCCESS);
@@ -263,6 +291,9 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
     setEnvelope("carried");
     setMoment("idle");
     setRook(null);
+    setEnding(null);
+    setFresh(false);
+    rookSaidSuccess.current = false;
     commit(INITIAL);
   }
 
@@ -271,13 +302,27 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
     store(CHOICE_KEY, { choice: next, at: new Date().toISOString() });
   }
 
+  /** A new round: the machine as found, and the sample's choice open again. */
+  function playAgain() {
+    reset();
+    setChoice(null);
+    try {
+      window.localStorage.removeItem(CHOICE_KEY);
+    } catch {
+      /* nothing stored, nothing to forget */
+    }
+  }
+
   const solved = state.complete;
   const delivered = state.delivered;
   const stuck = Boolean(state.stuck);
   const canSlide = !busy && !stuck && !solved;
+  // the round trip, lit once it's home; drawn as it happens, or already drawn when reopened
+  const playing = fresh && ending === "homecoming";
+  const envelopeOpen = letters && solved && ending !== "homecoming" && ending !== "chapter";
 
   return (
-    <main className={styles.page} data-testid="friday-circuit" data-variant={variant}>
+    <main className={styles.page} data-testid="friday-circuit" data-variant={variant} data-ending={ending ?? "none"}>
       <header className={styles.header}>
         {letters ? (
           <p className={styles.sample} data-testid="sample-label">
@@ -286,8 +331,16 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
         ) : null}
         <h1 className={styles.instruction}>Deliver the invitation. Bring the courier home.</h1>
         {letters ? (
-          <button type="button" className={styles.straight} onClick={() => setCorrespondence(true)} data-testid="go-correspondence">
-            Go straight to the correspondence
+          <button
+            type="button"
+            className={styles.straight}
+            onClick={() => {
+              setFresh(!solved);
+              setEnding("desk");
+            }}
+            data-testid="go-correspondence"
+          >
+            {solved ? "Open the correspondence" : "Go straight to the correspondence"}
           </button>
         ) : null}
       </header>
@@ -296,55 +349,80 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
         {letters ? <Paper side="then" onRead={() => setReading("then")} /> : null}
 
         <div className={styles.boardFrame}>
-          <svg
-            className={styles.board}
-            viewBox={`0 0 ${BOARD.width} ${BOARD.height}`}
-            data-testid="circuit-board"
-            data-layer={state.layer}
-            role="group"
-            aria-label="The tabletop map"
-          >
-            <defs>
-              <clipPath id="fc-board">
-                <rect x="10" y="10" width={BOARD.width - 20} height={BOARD.height - 20} rx="22" />
-              </clipPath>
-            </defs>
-            <rect x="10" y="10" width={BOARD.width - 20} height={BOARD.height - 20} rx="22" className={styles.mapBase} />
+          <div className={styles.boardViewport}>
+            {/* at the hotel, the table leans in to where the envelope was left */}
+            <motion.div
+              initial={false}
+              animate={{ scale: ending === "hotel" && !reduce ? 1.9 : 1 }}
+              transition={{ duration: 1.05, ease: [0.4, 0, 0.2, 1] }}
+              // aimed so the hotel, its name and the envelope at its door all stay in view
+              style={{ originX: 0.96, originY: 0.17 }}
+            >
+              <svg
+                className={styles.board}
+                viewBox={`0 0 ${BOARD.width} ${BOARD.height}`}
+                data-testid="circuit-board"
+                data-layer={state.layer}
+                role="group"
+                aria-label="The tabletop map"
+              >
+                <defs>
+                  <clipPath id="fc-board">
+                    <rect x="10" y="10" width={BOARD.width - 20} height={BOARD.height - 20} rx="22" />
+                  </clipPath>
+                  <radialGradient id="fc-glow">
+                    <stop offset="0%" stopColor="#ffe3a0" stopOpacity="0.95" />
+                    <stop offset="100%" stopColor="#ffd36b" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <rect x="10" y="10" width={BOARD.width - 20} height={BOARD.height - 20} rx="22" className={styles.mapBase} />
 
-            <g clipPath="url(#fc-board)">
-              {/* THEN: the lower tracks, and no hotel tracks at all */}
-              <Plate layer="then" active={state.layer === "then"} reduce={Boolean(reduce)}>
-                {THEN_TRACKS.map((points, index) => (
-                  <Rail key={index} points={points} />
+                <g clipPath="url(#fc-board)">
+                  {/* THEN: the lower tracks, and no hotel tracks at all */}
+                  <Plate layer="then" active={state.layer === "then"} reduce={Boolean(reduce)}>
+                    {THEN_TRACKS.map((points, index) => (
+                      <Rail key={index} points={points} />
+                    ))}
+                  </Plate>
+                  {/* NOW: the hotel tracks; the lower tracks are withdrawn and only their outlines remain */}
+                  <Plate layer="now" active={state.layer === "now"} reduce={Boolean(reduce)}>
+                    {THEN_TRACKS.map((points, index) => (
+                      <path key={index} d={railPath(points)} className={styles.outline} data-withdrawn="yes" />
+                    ))}
+                    <Rail points={HOTEL_BEND} />
+                  </Plate>
+                  {/* home: THEN and NOW together for once, and the round trip lit as one line */}
+                  {solved ? (
+                    <>
+                      <motion.g className={styles.ghostBend} initial={playing ? { opacity: 0 } : false} animate={{ opacity: 0.55 }} transition={{ duration: 0.5 }}>
+                        <Rail points={HOTEL_BEND} />
+                      </motion.g>
+                      <RouteGlow points={circuitRoute(state.lastPad ?? "Q")} draw={playing && !reduce} />
+                    </>
+                  ) : null}
+                </g>
+
+                <Hotel name={names.H} delivered={delivered} opened={envelopeOpen} opening={fresh && ending === "hotel"} reduce={Boolean(reduce)} />
+                {(["S", "P", "Q"] as const).map(pad => (
+                  <DockPad key={pad} pad={pad} label={pad === "S" ? names.S : null} />
                 ))}
-              </Plate>
-              {/* NOW: the hotel tracks; the lower tracks are withdrawn and only their outlines remain */}
-              <Plate layer="now" active={state.layer === "now"} reduce={Boolean(reduce)}>
-                {THEN_TRACKS.map((points, index) => (
-                  <path key={index} d={railPath(points)} className={styles.outline} data-withdrawn="yes" />
-                ))}
-                <Rail points={HOTEL_BEND} />
-              </Plate>
-            </g>
+                <Turntable junction={state.junction} layer={state.layer} disabled={busy || solved} onTurn={turnJunction} reduce={Boolean(reduce)} />
 
-            <Hotel name={names.H} delivered={delivered} />
-            {(["S", "P", "Q"] as const).map(pad => (
-              <DockPad key={pad} pad={pad} label={pad === "S" ? names.S : null} />
-            ))}
-            <Turntable junction={state.junction} layer={state.layer} disabled={busy || solved} onTurn={turnJunction} reduce={Boolean(reduce)} />
-
-            <motion.g style={{ x, y: lifted }} data-testid="courier" data-at={state.at} data-moment={moment} data-envelope={delivered ? "delivered" : envelope}>
-              <g transform="scale(1.45)">
-                <motion.g style={{ scaleX: facing }}>
-                  <Courier wheel={wheel} winding={moment === "winding"} envelope={delivered ? null : envelope} reduce={Boolean(reduce)} />
+                <motion.g style={{ x, y: lifted }} data-testid="courier" data-at={state.at} data-moment={moment} data-envelope={delivered ? "delivered" : envelope}>
+                  <g transform="scale(1.45)">
+                    <motion.g style={{ scaleX: facing }}>
+                      <Courier wheel={wheel} winding={moment === "winding"} envelope={delivered ? null : envelope} reduce={Boolean(reduce)} />
+                    </motion.g>
+                  </g>
                 </motion.g>
-              </g>
-            </motion.g>
-            <AnimatePresence>{moment === "bell" ? <Bell key="bell" /> : null}</AnimatePresence>
-          </svg>
+                <AnimatePresence>{moment === "bell" ? <Bell key="bell" /> : null}</AnimatePresence>
+                {solved ? <Postmark stamp={playing && !reduce} /> : null}
+              </svg>
+            </motion.div>
+          </div>
 
           <AnimatePresence>
-            {rook ? (
+            {rook && (ending === null || ending === "homecoming") ? (
               <motion.p
                 key={rook}
                 className={styles.rookSay}
@@ -359,12 +437,22 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
             ) : null}
           </AnimatePresence>
           <img src={rookSrc} alt="Rook" className={styles.rook} draggable={false} />
+
+          <AnimatePresence>
+            {ending === "chapter" ? (
+              <ChapterCard key="chapter" letters={letters} play={fresh && !reduce} onPlayAgain={playAgain} />
+            ) : null}
+          </AnimatePresence>
+          {/* while the ending plays on the board, a tap anywhere on it moves it along */}
+          {fresh && (ending === "homecoming" || (ending === "chapter" && letters) || ending === "hotel") ? (
+            <button type="button" className={styles.advance} onClick={advance} aria-label="Continue" data-testid="advance" />
+          ) : null}
         </div>
 
         {letters ? <Paper side="now" onRead={() => setReading("now")} /> : null}
       </div>
 
-      <div className={styles.controls} data-testid="controls">
+      <div className={`${styles.controls} ${solved ? styles.controlsDone : ""}`} data-testid="controls">
         <div className={styles.lever} role="radiogroup" aria-label="Map layer" data-layer={state.layer}>
           {(["then", "now"] as const).map(layer => (
             <button
@@ -401,38 +489,34 @@ export default function FridayCircuit({ variant = "letters", rookSrc = "/assets/
         ) : null}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {solved ? (
-          <motion.section
-            className={styles.completion}
-            data-testid="completion"
-            initial={reduce ? false : { opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: reduce ? 0 : 0.6 }}
-          >
-            {letters ? (
-              <Correspondence choice={choice} onChoose={choose} showPapers={false} />
-            ) : (
-              <p className={styles.plainWin}>Delivered, and home.</p>
-            )}
-          </motion.section>
-        ) : saved.solvedOnce ? (
-          <p className={styles.solvedOnce} data-testid="solved-once">
-            You've brought it home before.
-          </p>
-        ) : null}
-      </AnimatePresence>
+      {solved && ending === null ? (
+        <section className={styles.completion} data-testid="completion">
+          <p className={styles.plainWin}>Delivered, and home.</p>
+          <button type="button" className={styles.quiet} onClick={playAgain} data-testid="play-again">
+            Play again
+          </button>
+        </section>
+      ) : !solved && saved.solvedOnce ? (
+        <p className={styles.solvedOnce} data-testid="solved-once">
+          You've brought it home before.
+        </p>
+      ) : null}
 
       {reading ? <PaperSheet side={reading} onClose={() => setReading(null)} /> : null}
-      {correspondence ? (
-        <div className={styles.scrim} role="dialog" aria-modal="true" aria-label="The correspondence" onClick={() => setCorrespondence(false)}>
-          <div className={styles.sheet} onClick={event => event.stopPropagation()} data-testid="correspondence">
-            <Correspondence choice={choice} onChoose={choose} showPapers />
-            <button type="button" className={styles.close} onClick={() => setCorrespondence(false)}>
-              Back to the map
-            </button>
-          </div>
-        </div>
+      {ending === "desk" ? (
+        <Desk
+          choice={choice}
+          onChoose={choose}
+          fresh={fresh}
+          reduce={Boolean(reduce)}
+          solved={solved}
+          onPlayAgain={playAgain}
+          onBack={() => {
+            setEnding(null);
+            setFresh(false);
+          }}
+          onWithoutLetters={onVariant ? () => onVariant("neutral") : undefined}
+        />
       ) : null}
 
       <footer className={styles.footer}>
@@ -495,7 +579,7 @@ function DockPad({ pad, label }: { pad: Pad; label: string | null }) {
   );
 }
 
-function Hotel({ name, delivered }: { name: string; delivered: boolean }) {
+function Hotel({ name, delivered, opened, opening, reduce }: { name: string; delivered: boolean; opened: boolean; opening: boolean; reduce: boolean }) {
   const { x, y } = AT.H;
   return (
     <g className={styles.hotel} aria-label={name}>
@@ -511,12 +595,105 @@ function Hotel({ name, delivered }: { name: string; delivered: boolean }) {
       </text>
       <AnimatePresence>
         {delivered ? (
-          <motion.g key="letter" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} data-testid="hotel-envelope">
-            <Envelope x={x + 46} y={y - 22} upright={false} />
+          <motion.g key="letter" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} data-testid="hotel-envelope" data-opened={opened ? "yes" : "no"}>
+            {opened ? <OpenedEnvelope x={x + 46} y={y - 22} play={opening && !reduce} /> : <Envelope x={x + 46} y={y - 22} upright={false} />}
           </motion.g>
         ) : null}
       </AnimatePresence>
     </g>
+  );
+}
+
+/** The envelope the courier left at the hotel, opening where it lies: the flap lifts and its card rises, in a little light. */
+function OpenedEnvelope({ x, y, play }: { x: number; y: number; play: boolean }) {
+  return (
+    <g transform={`translate(${x + 10} ${y + 6.5}) scale(2.1) translate(-10 -6.5)`} className={styles.envelope} data-testid="hotel-opening">
+      <motion.circle cx="10" cy="2" r="22" fill="url(#fc-glow)" initial={play ? { opacity: 0 } : false} animate={{ opacity: play ? [0, 0.95, 0.55] : 0.4 }} transition={{ duration: 1.1 }} />
+      <rect width="20" height="13" rx="1.5" />
+      {/* the card, rising out of it */}
+      <motion.g initial={play ? { y: 0 } : false} animate={{ y: -9 }} transition={{ delay: play ? 0.35 : 0, duration: 0.55, ease: "easeOut" }}>
+        <rect x="3" y="-1" width="14" height="10" rx="0.8" className={styles.envelopeCard} />
+        <path d="M5.5 2.5 H14.5 M5.5 5 H12" className={styles.envelopeLines} />
+      </motion.g>
+      <path d="M0 13 L10 6 L20 13" />
+      {/* the flap, lifted */}
+      <motion.path d="M0 0 L10 -8 L20 0" className={styles.envelopeFlap} initial={play ? { scaleY: -1 } : false} animate={{ scaleY: 1 }} transition={{ duration: 0.4 }} style={{ originY: 1 }} />
+    </g>
+  );
+}
+
+/** The round trip, out on THEN, round the hotel on NOW and home on THEN, lit as one line. */
+function RouteGlow({ points, draw }: { points: Point[]; draw: boolean }) {
+  const d = railPath(points);
+  return (
+    <g data-testid="route-glow">
+      <motion.path d={d} className={styles.routeHalo} initial={{ pathLength: draw ? 0 : 1 }} animate={{ pathLength: 1 }} transition={{ duration: draw ? 1.15 : 0, ease: "easeInOut" }} />
+      <motion.path d={d} className={styles.routeLine} initial={{ pathLength: draw ? 0 : 1 }} animate={{ pathLength: 1 }} transition={{ duration: draw ? 1.15 : 0, ease: "easeInOut" }} />
+    </g>
+  );
+}
+
+/** Franked inside the loop it made. */
+function Postmark({ stamp }: { stamp: boolean }) {
+  const cx = 640;
+  const cy = 330;
+  return (
+    <motion.g
+      className={styles.postmark}
+      data-testid="postmark"
+      initial={stamp ? { opacity: 0, scale: 1.7 } : false}
+      animate={{ opacity: 0.9, scale: 1 }}
+      transition={stamp ? { delay: 0.8, type: "spring", stiffness: 420, damping: 18 } : { duration: 0 }}
+    >
+      <g transform={`rotate(-11 ${cx} ${cy})`}>
+        <circle cx={cx} cy={cy} r="112" className={styles.postmarkRing} />
+        <circle cx={cx} cy={cy} r="100" className={styles.postmarkRingThin} />
+        <text x={cx} y={cy - 10} textAnchor="middle" className={styles.postmarkText}>
+          DELIVERED
+        </text>
+        <path d={`M ${cx - 72} ${cy + 4} H ${cx + 72}`} className={styles.postmarkRule} />
+        <text x={cx} y={cy + 40} textAnchor="middle" className={styles.postmarkText}>
+          RETURNED
+        </text>
+      </g>
+    </motion.g>
+  );
+}
+
+/**
+ * CHAPTER COMPLETE. With the letters, the title corrects itself in red ink: the player has made Friday possible.
+ * The plain version ends here, with the same card and no story.
+ */
+function ChapterCard({ letters, play, onPlayAgain }: { letters: boolean; play: boolean; onPlayAgain: () => void }) {
+  return (
+    <motion.div className={styles.chapterCard} data-testid="chapter-card" initial={play ? { opacity: 0 } : false} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+      <p className={styles.chapterKicker}>Chapter complete</p>
+      {letters ? (
+        <p className={styles.chapterTitle}>
+          <span className={styles.srOnly}>The Friday That Does Exist</span>
+          <span aria-hidden="true">
+            The Friday That{" "}
+            <span className={styles.correction} data-testid="title-correction">
+              <span className={styles.struck}>
+                Didn't
+                <motion.span className={styles.strike} initial={play ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ delay: play ? 0.45 : 0, duration: 0.25 }} />
+              </span>
+              <motion.span className={styles.inserted} initial={play ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }} transition={{ delay: play ? 0.75 : 0, duration: 0.3 }}>
+                Does
+              </motion.span>
+            </span>{" "}
+            Exist
+          </span>
+        </p>
+      ) : (
+        <>
+          <p className={styles.chapterTitle}>Delivered, and home.</p>
+          <button type="button" className={styles.chapterAgain} onClick={onPlayAgain} data-testid="play-again">
+            Play again
+          </button>
+        </>
+      )}
+    </motion.div>
   );
 }
 
@@ -633,7 +810,7 @@ function KeyIcon({ turning }: { turning: boolean }) {
   );
 }
 
-// ------------------------------------------------------------------ the paper artifacts and the correspondence
+// ------------------------------------------------------------------ the paper artifacts
 
 function Paper({ side, onRead }: { side: "then" | "now"; onRead: () => void }) {
   const paper = side === "then" ? THEN_PAPER : NOW_PAPER;
@@ -661,52 +838,6 @@ function PaperSheet({ side, onClose }: { side: "then" | "now"; onClose: () => vo
         <Paper side={side} onRead={onClose} />
         <p className={styles.sheetNote}>{SAMPLE_LABEL}</p>
       </div>
-    </div>
-  );
-}
-
-function Correspondence({ choice, onChoose, showPapers }: { choice: Choice | null; onChoose: (choice: Choice) => void; showPapers: boolean }) {
-  return (
-    <div className={styles.correspondence}>
-      {showPapers ? (
-        <div className={styles.papers}>
-          <Paper side="then" onRead={() => undefined} />
-          <Paper side="now" onRead={() => undefined} />
-        </div>
-      ) : null}
-      <article className={styles.invitation} data-testid="invitation">
-        <p className={styles.invitationHead}>
-          {INVITATION.from} · {INVITATION.when} · “{INVITATION.subject}”
-        </p>
-        <p className={styles.invitationWords}>“{INVITATION.words}”</p>
-      </article>
-      <div className={styles.choices}>
-        {(
-          [
-            ["reply", "Prepare a reply"],
-            ["later", "Keep for later"],
-            ["not_for_me", "Not for me"],
-          ] as const
-        ).map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={choice === value} onClick={() => onChoose(value)} data-testid={`choice-${value}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {choice === "reply" ? (
-        <div className={styles.draft} data-testid="sample-draft">
-          <p className={styles.draftLabel}>Sample draft · invented example · not sent, and nothing here can send it</p>
-          <p className={styles.draftWords}>{SAMPLE_DRAFT}</p>
-        </div>
-      ) : choice === "later" ? (
-        <p className={styles.choiceNote} data-testid="choice-note">
-          Kept for later.
-        </p>
-      ) : choice === "not_for_me" ? (
-        <p className={styles.choiceNote} data-testid="choice-note">
-          Set aside.
-        </p>
-      ) : null}
     </div>
   );
 }
