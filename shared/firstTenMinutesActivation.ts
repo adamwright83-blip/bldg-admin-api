@@ -61,7 +61,10 @@ export function gmailComposeUrl(input: { to: string; subject: string; body: stri
 }
 
 /** What the person is told about the message, from what actually happened. */
-export function draftStatusLine(status: DraftStatus, at: { handedOffAt: string | null; reportedSentAt: string | null; verifiedSentAt: string | null }): string | null {
+export function draftStatusLine(
+  status: DraftStatus,
+  at: { handedOffAt: string | null; reportedSentAt: string | null; verifiedSentAt: string | null; handedOffVia?: "gmail" | "copy" | null }
+): string | null {
   const time = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : null;
   switch (status) {
@@ -70,7 +73,7 @@ export function draftStatusLine(status: DraftStatus, at: { handedOffAt: string |
     case "declined":
       return "Not now. It stays here, unsent.";
     case "handed_off":
-      return `Opened in your mail${at.handedOffAt ? ` at ${time(at.handedOffAt)}` : ""}. JOYSTICK didn't send it.`;
+      return `${at.handedOffVia === "copy" ? "Copied" : "Opened in your mail"}${at.handedOffAt ? ` at ${time(at.handedOffAt)}` : ""}. JOYSTICK didn't send it.`;
     case "reported_sent":
       return "You said you sent it.";
     case "verified_sent":

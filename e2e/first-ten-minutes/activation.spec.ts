@@ -68,6 +68,27 @@ test("your own account: the offer stated plainly, Gmail opens with the exact mes
   await expect(page.getByTestId("first-ten-send-status")).toContainText("In your Sent folder", { timeout: 60_000 });
 });
 
+test("when the browser won't copy, the message stays at the table until it's copied by hand", async ({ page, request }) => {
+  test.setTimeout(300_000);
+  await begin(page, request);
+  await connectOwn(page, request);
+  await toTheTable(page);
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new Error("not allowed"));
+  });
+  await page.getByRole("button", { name: "Copy the message" }).click();
+  const byHand = page.getByTestId("first-ten-copy-by-hand");
+  await expect(byHand).toContainText("Your browser didn't let JOYSTICK copy it. Copy it from here:");
+  await expect(byHand.getByLabel("Your message")).toHaveValue(/Subject: Re: Friday flowers\?\n\nHi Elena — you asked earlier this year about Friday flowers\./);
+  // nothing left the table, and both ways are still there
+  await expect(page.getByTestId("first-ten-send")).toHaveAttribute("data-status", "prepared");
+  await expect(page.getByRole("button", { name: "Open in Gmail" })).toBeVisible();
+  await byHand.getByRole("button", { name: "I've copied it" }).click();
+  await expect(page.getByTestId("first-ten-send-status")).toContainText("Copied at");
+  await expect(page.getByTestId("first-ten-send-status")).toContainText("JOYSTICK didn't send it.");
+  await expect(page.getByTestId("first-ten-send-status")).not.toContainText("Opened in your mail");
+});
+
 test("Nina's example is never activated and never sends", async ({ page, request }, testInfo) => {
   test.setTimeout(240_000);
   await begin(page, request);

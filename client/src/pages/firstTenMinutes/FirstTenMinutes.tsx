@@ -284,7 +284,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           </p>
         ) : null}
         {view.example || mustActivate || (!view.required && draft.status === "prepared") ? (
-          view.status === "checkout_pending" ? (
+          // back from a paid checkout, the workspace is on its way; otherwise an open checkout can be picked up again
+          view.status === "checkout_pending" && returned.checkout === "success" ? (
             <p className={styles.quiet} data-testid="first-ten-checkout-pending">
               Your crew is being kept. This takes a moment.
             </p>

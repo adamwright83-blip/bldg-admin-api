@@ -22,8 +22,10 @@ export function SendDesk({
   onVerify: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // the browser wouldn't copy it: the message is shown to copy by hand, and stays at the table until they have
+  const [copyByHand, setCopyByHand] = useState(false);
   const recipient = draft.to.name?.split(/\s+/)[0] ?? draft.to.address;
+  const message = `To: ${draft.to.name ? `${draft.to.name} <${draft.to.address}>` : draft.to.address}\nSubject: ${draft.subject}\n\n${draft.body}`;
   const waiting = draft.status === "handed_off" || draft.status === "reported_sent";
 
   // back from their mail, look in their Sent folder (and every little while, while it's out)
@@ -54,12 +56,11 @@ export function SendDesk({
   }
 
   async function copy() {
-    const text = `To: ${draft.to.name ? `${draft.to.name} <${draft.to.address}>` : draft.to.address}\nSubject: ${draft.subject}\n\n${draft.body}`;
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
+      await navigator.clipboard.writeText(message);
     } catch {
-      setCopied(false);
+      setCopyByHand(true);
+      return;
     }
     await act(() => onHandOff("copy"));
   }
@@ -85,12 +86,20 @@ export function SendDesk({
               Copy the message
             </button>
           </div>
+          {copyByHand ? (
+            <div className={styles.copyByHand} data-testid="first-ten-copy-by-hand">
+              <p className={styles.sendSays}>Your browser didn't let JOYSTICK copy it. Copy it from here:</p>
+              <textarea readOnly value={message} rows={7} aria-label="Your message" onFocus={event => event.currentTarget.select()} />
+              <button type="button" disabled={busy} onClick={() => void act(() => onHandOff("copy"))}>
+                I've copied it
+              </button>
+            </div>
+          ) : null}
         </>
       ) : (
         <>
           <p className={styles.sendStatus} data-testid="first-ten-send-status">
             {status}
-            {copied ? " Copied." : ""}
           </p>
           {draft.status === "handed_off" ? (
             <div className={styles.tableActions} data-testid="first-ten-did-it-go">

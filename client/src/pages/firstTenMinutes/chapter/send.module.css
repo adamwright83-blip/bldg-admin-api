@@ -127,6 +127,26 @@
   font-style: italic;
 }
 
+.copyByHand {
+  display: grid;
+  gap: 8px;
+}
+
+.copyByHand textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(43, 33, 24, 0.25);
+  border-radius: 8px;
+  background: #fffaf0;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.copyByHand button {
+  justify-self: start;
+}
+
 .sendAsk {
   font-weight: 600;
   color: var(--ink);

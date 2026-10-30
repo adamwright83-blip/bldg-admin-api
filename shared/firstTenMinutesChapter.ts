@@ -48,6 +48,8 @@ export type DraftView = {
   handedOffAt: string | null;
   reportedSentAt: string | null;
   verifiedSentAt: string | null;
+  /** how it left the table: their own Gmail opened with it, or they copied it */
+  handedOffVia: "gmail" | "copy" | null;
   /** the composed text of each approach, so "Try another way" shows exactly what would change */
   approaches: Array<{ approach: DraftApproach; body: string }>;
 };

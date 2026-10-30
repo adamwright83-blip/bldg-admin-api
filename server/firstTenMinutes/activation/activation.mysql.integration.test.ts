@@ -98,6 +98,18 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     expect((await activationView(journey, credentials)).status).toBe("checkout_pending");
     expect((await journeyById(journey.id))!.stage).toBe("activation");
 
+    // back from a cancelled checkout, continuing picks the same checkout up again; nothing new is created
+    state.created = undefined;
+    const resumed = await beginActivation(
+      journey,
+      credentials,
+      { businessName: "Wildroot Flowers", contactName: "Nina Vale", ownerEmail: `nina-${suffix}@wildrootflowers.example`, timeZone: "America/Los_Angeles" },
+      fakeStripe(state)
+    );
+    expect(resumed.url).toBe("https://checkout.stripe.example/first-ten");
+    expect(state.created).toBeUndefined();
+    expect((await activationView(journey, credentials)).status).toBe("checkout_pending");
+
     process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test"; // the legacy-named webhook secret
     const created = Math.floor(Date.now() / 1000);
     const subscription = {

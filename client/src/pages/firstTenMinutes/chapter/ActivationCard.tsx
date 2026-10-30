@@ -21,6 +21,8 @@ export function ActivationCard({
   const [ownerEmail, setOwnerEmail] = useState(activation.identity.ownerEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // a checkout already opened keeps the identity it was opened with; continuing picks that checkout up again
+  const pending = activation.status === "checkout_pending";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -73,15 +75,15 @@ export function ActivationCard({
           <div className={styles.activationFields}>
             <label>
               Business
-              <input value={businessName} onChange={event => setBusinessName(event.target.value)} maxLength={255} required />
+              <input value={businessName} onChange={event => setBusinessName(event.target.value)} maxLength={255} required readOnly={pending} />
             </label>
             <label>
               Your name
-              <input value={contactName} onChange={event => setContactName(event.target.value)} maxLength={255} required />
+              <input value={contactName} onChange={event => setContactName(event.target.value)} maxLength={255} required readOnly={pending} />
             </label>
             <label>
               Email
-              <input type="email" value={ownerEmail} onChange={event => setOwnerEmail(event.target.value)} maxLength={320} required />
+              <input type="email" value={ownerEmail} onChange={event => setOwnerEmail(event.target.value)} maxLength={320} required readOnly={pending} />
             </label>
           </div>
           <button type="submit" className={styles.activationButton} disabled={busy}>

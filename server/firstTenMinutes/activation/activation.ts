@@ -154,9 +154,35 @@ export async function reportDraft(journey: JourneyRow, outcome: "sent" | "not_ye
   await recordEvent(journey.id, outcome === "sent" ? "draft_reported_sent" : "draft_not_sent_yet", {});
 }
 
+const plainSubject = (subject: string) =>
+  subject
+    .trim()
+    .replace(/^(?:(?:re|fwd?|aw|sv)\s*:\s*)+/i, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+const plainWords = (text: string) =>
+  text
+    .replace(/[“”"]/g, "")
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 /**
- * Look in the person's own Sent folder for a message to the recipient since it left the table. Found: verified, with
- * the message's id. Not found: nothing changes.
+ * The prepared message, not just any mail to the same person: the same subject, or its opening words. The person may
+ * edit it in their own mail; if they changed both, it isn't claimed, and their own word ("I sent it") still counts.
+ */
+export function isThePreparedMessage(item: { subject: string; text: string }, prepared: { subject: string; body: string }): boolean {
+  const subject = plainSubject(prepared.subject);
+  if (subject && plainSubject(item.subject) === subject) return true;
+  const opening = plainWords(prepared.body).slice(0, 60);
+  return opening.length >= 20 && plainWords(item.text).includes(opening);
+}
+
+/**
+ * Look in the person's own Sent folder for the prepared message, to the recipient, since it left the table. Found:
+ * verified, with the message's id. Not found: nothing changes.
  */
 export async function verifyDraft(journey: JourneyRow): Promise<boolean> {
   const row = await draftRow(journey.id);
@@ -164,7 +190,9 @@ export async function verifyDraft(journey: JourneyRow): Promise<boolean> {
   const access = await googleAccessFor(journey);
   if (!access) return false;
   const since = row.handedOffAt.getTime() - 60_000;
-  const found = (await gmailReader(access).sentTo(row.recipientAddress, new Date(since))).find(item => item.at.getTime() >= since);
+  const found = (await gmailReader(access).sentTo(row.recipientAddress, new Date(since))).find(
+    item => item.at.getTime() >= since && isThePreparedMessage(item, row)
+  );
   if (!found) return false;
   const db = await firstTenDb();
   await db
