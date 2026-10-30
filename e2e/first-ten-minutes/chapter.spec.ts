@@ -95,12 +95,15 @@ test("the Friday that didn't exist, Hazel's proper letter, and the real draft at
   await expect(courtyard).toHaveAttribute("data-step", "4");
   await shots("43-inked", page, testInfo);
 
+  // the table opens only once the draft is prepared: when that fails, it can be tried again without a reload
+  await page.route(/system\.firstTenMinutes\.prepareDraft/, route => route.abort(), { times: 1 });
   await page.getByRole("button", { name: "Give Hazel the quill" }).click();
   await expect(say).toContainText("Is that a quill? Inked? Then sit. Write. I'm listening.");
   await expect(page.getByTestId("first-ten-hazel-reply")).toContainText("Dear Hazel");
   await expect(say).toContainText("Complaint withdrawn.", { timeout: 15_000 });
   await expect(say).toContainText("I'm keeping the stamp.", { timeout: 10_000 });
   await expect(say).toContainText("Now. Yours.", { timeout: 10_000 });
+  await page.getByTestId("first-ten-table-retry").click({ timeout: 15_000 });
 
   // the same table, now for Nina's business: the real recipient and the exact message
   const draft = page.getByTestId("first-ten-draft");

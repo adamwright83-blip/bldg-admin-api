@@ -29,17 +29,27 @@ function card(finding: FindingView, quote: string, at: string): ChapterCard {
   return { findingId: finding.id, quote, at, sources: finding.sources };
 }
 
-/** The strongest opportunity still standing, with the findings it rests on, or null. */
-export function chapterOpportunity(findings: readonly FindingView[]): ChapterOpportunity | null {
+/**
+ * The strongest opportunity still standing, with the findings it rests on, or null. Once a draft exists the chapter
+ * stays with the conversation it was written for: a later reading or correction never readdresses the message to
+ * someone else, and if that conversation no longer stands there is no chapter.
+ */
+export function chapterOpportunity(
+  findings: readonly FindingView[],
+  drafted: { opportunityId: string; recipientAddress: string } | null = null
+): ChapterOpportunity | null {
   const byId = new Map(findings.map(finding => [finding.id, finding]));
-  const opportunity = findings.find((finding): finding is Of<"opportunity"> => finding.payload.kind === "opportunity" && live(finding));
+  const opportunity = findings.find(
+    (finding): finding is Of<"opportunity"> =>
+      finding.payload.kind === "opportunity" && live(finding) && (!drafted || finding.id === drafted.opportunityId)
+  );
   if (!opportunity) return null;
   const linked = <K extends FindingPayload["kind"]>(id: string | null, kind: K) => {
     const finding = id ? byId.get(id) : undefined;
     return finding && live(finding) && finding.payload.kind === kind ? (finding as Of<K>) : null;
   };
   const request = linked(opportunity.payload.requestId, "request");
-  if (!request) return null;
+  if (!request || (drafted && request.payload.from.address !== drafted.recipientAddress)) return null;
   const reply = linked(opportunity.payload.replyId, "reply");
   const service = linked(opportunity.payload.serviceId, "service");
   const route = linked(opportunity.payload.routeId, "route");
@@ -88,7 +98,8 @@ function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, oppor
 
 export async function chapterView(journey: JourneyRow, now = new Date()): Promise<ChapterView> {
   const reading = await understandingView(journey.id);
-  const opportunity = chapterOpportunity(reading.findings);
+  const row = await draftRow(journey.id);
+  const opportunity = chapterOpportunity(reading.findings, row);
   const events = await journeyEvents(journey.id);
   const steps = new Set<LetterStep>();
   let revealed = false;
@@ -99,7 +110,6 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
     const step = (event.payloadJson as { step?: string } | null)?.step;
     if (event.kind === "letter_step" && LETTER_STEPS.includes(step as LetterStep)) steps.add(step as LetterStep);
   }
-  const row = await draftRow(journey.id);
   return {
     opportunity,
     progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten },

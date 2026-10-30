@@ -48,7 +48,8 @@ export function LetterScene({
   carrying: string;
   onStep: (step: LetterStep) => Promise<void>;
   onWritten: () => Promise<void>;
-  onYours: () => void;
+  /** prepares the real draft; the table opens once it resolves */
+  onYours: () => Promise<unknown>;
 }) {
   // reduced motion shortens what moves, never the time to read a line
   const reduce = useReducedMotion();
@@ -63,6 +64,7 @@ export function LetterScene({
   const [busy, setBusy] = useState(false);
   const lastProgress = useRef(Date.now());
   const yoursCalled = useRef(false);
+  const [handOffFailed, setHandOffFailed] = useState(false);
 
   // the opening: Hazel, Rook, Hazel, one line at a time
   useEffect(() => {
@@ -94,7 +96,7 @@ export function LetterScene({
         if (yoursCalled.current) return;
         yoursCalled.current = true;
         setPhase("done");
-        onYours();
+        handOff();
       }, reduce ? 1600 : 2000);
       return () => window.clearTimeout(timer);
     }
@@ -119,6 +121,12 @@ export function LetterScene({
     }, 2000);
     return () => window.clearInterval(timer);
   }, [phase, at]);
+
+  // "Now. Yours.": the table opens once the draft is prepared; if that fails, the person can try again without a reload
+  function handOff() {
+    setHandOffFailed(false);
+    onYours().catch(() => setHandOffFailed(true));
+  }
 
   async function use(step: LetterStep) {
     if (phase !== "explore" || busy) return;
@@ -294,6 +302,11 @@ export function LetterScene({
           </motion.p>
         ) : null}
       </AnimatePresence>
+      {handOffFailed ? (
+        <button type="button" className={`${styles.pickUp} ${styles.tableRetry}`} data-testid="first-ten-table-retry" onClick={handOff}>
+          Try again
+        </button>
+      ) : null}
     </section>
   );
 }

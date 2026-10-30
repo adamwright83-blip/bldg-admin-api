@@ -259,7 +259,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
           onStep={which => step(which)}
           onWritten={() => step("letter_written")}
-          onYours={() => prepareDraft.mutate(credentials, { onSuccess: setChapter })}
+          onYours={() => prepareDraft.mutateAsync(credentials).then(setChapter)}
         />
       );
     }

@@ -54,6 +54,15 @@ describe("the first chapter (Nina)", () => {
     );
   });
 
+  it("stays with the conversation its draft was written for", async () => {
+    const findings = await nina();
+    const elena = chapterOpportunity(findings)!;
+    expect(chapterOpportunity(findings, { opportunityId: elena.id, recipientAddress: "elena@larkspurhotel.example" })?.id).toBe(elena.id);
+    // a later reading or correction never readdresses the message: another conversation, or another person, is no chapter
+    expect(chapterOpportunity(findings, { opportunityId: "another-opportunity", recipientAddress: "elena@larkspurhotel.example" })).toBeNull();
+    expect(chapterOpportunity(findings, { opportunityId: elena.id, recipientAddress: "someone@else.example" })).toBeNull();
+  });
+
   it("has no chapter when the request it rests on was said to be wrong", async () => {
     const findings = (await nina()).map(finding =>
       finding.payload.kind === "request" && finding.payload.quote.startsWith("Could you do fresh") ? { ...finding, status: "dismissed" as const } : finding
