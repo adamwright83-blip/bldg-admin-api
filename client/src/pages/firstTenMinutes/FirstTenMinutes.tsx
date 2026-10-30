@@ -178,7 +178,11 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     retry: false,
     refetchInterval: query => (query.state.data?.status === "writing" ? 1200 : false),
   });
-  const portraitBasis = reading.view?.findings.map(finding => `${finding.id}:${finding.status}:${finding.correction ?? ""}`).join("|") ?? "";
+  // what the page rests on, content included: a later reading can change a finding under the same id
+  const portraitBasis =
+    reading.view?.findings
+      .map(finding => `${finding.id}:${finding.status}:${finding.correction ?? ""}:${JSON.stringify(finding.payload)}:${finding.sources.map(source => source.ref).join(",")}`)
+      .join("|") ?? "";
   const writePortrait = useCallback(() => {
     if (!credentials) return;
     preparePortrait.mutate(credentials, { onSuccess: next => utils.system.firstTenMinutes.portrait.setData(credentials, next) });
@@ -189,6 +193,14 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     writePortrait();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crewFinished, readingComplete, portraitBasis, writePortrait]);
+  // A correction made while Claire was writing couldn't start a new page then; once she has finished, ask again. The
+  // server writes again only if what the page rests on has changed, so this settles after one more page at most.
+  const wasWriting = useRef(false);
+  useEffect(() => {
+    const writing = portrait.data?.status === "writing";
+    if (wasWriting.current && !writing && portrait.data?.status === "ready") writePortrait();
+    wasWriting.current = writing;
+  }, [portrait.data?.status, writePortrait]);
   const page = portrait.data && (portrait.data.status === "ready" || portrait.data.status === "kept") ? portrait.data : null;
 
   async function onPortrait(input: { answer: "keep" } | { answer: "change"; key: string; to: string | null } | { answer: "restore"; key: string }) {

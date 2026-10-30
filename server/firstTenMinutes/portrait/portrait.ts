@@ -15,13 +15,23 @@ import { claudePortraitWriter, examplePortraitWriter } from "./writers";
  * kept it and what it rests on has changed: a finding corrected, a rule confirmed.
  */
 
-/** What the portrait rests on: every finding still standing, with what the person said about it. */
+/**
+ * What the portrait rests on: every finding still standing, what it says and where it came from, with what the person
+ * said about it. A later reading can change a finding's content under the same id (Slack added, a calendar rhythm
+ * recounted), and that changes the basis too.
+ */
 export function portraitBasis(findings: readonly FindingView[]): string {
   const standing = portraitFindings(findings)
-    .map(finding => [finding.id, finding.status, finding.correction ?? ""])
+    .map(finding => [
+      finding.id,
+      finding.status,
+      finding.correction ?? "",
+      JSON.stringify(finding.payload),
+      finding.sources.map(source => `${source.provider}:${source.ref}:${source.excerpt}`).join("|"),
+    ])
     .sort((a, b) => a[0].localeCompare(b[0]));
   return createHash("sha256")
-    .update(JSON.stringify(["portrait-v1", firstNameFor(findings), standing]))
+    .update(JSON.stringify(["portrait-v2", firstNameFor(findings), standing]))
     .digest("hex");
 }
 

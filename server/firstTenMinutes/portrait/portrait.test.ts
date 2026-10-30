@@ -131,6 +131,12 @@ describe("Claire's portrait (Nina)", () => {
     const confirmed = findings.map(finding => (finding.payload.kind === "rule" ? { ...finding, status: "confirmed" as const } : finding));
     expect(portraitBasis(findings)).toBe(portraitBasis([...findings].reverse()));
     expect(portraitBasis(confirmed)).not.toBe(portraitBasis(findings));
+    // a later reading can change what a finding says under the same id (a rhythm recounted); that changes it too
+    const recounted = findings.map(finding =>
+      finding.payload.kind === "rhythm" ? { ...finding, payload: { ...finding.payload, count: finding.payload.count + 1 } } : finding
+    );
+    expect(recounted.some(finding => finding.payload.kind === "rhythm")).toBe(true);
+    expect(portraitBasis(recounted)).not.toBe(portraitBasis(findings));
   });
 });
 
