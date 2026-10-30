@@ -7,6 +7,7 @@ import {
   buildReveals,
   crewLines,
   suggestionRules,
+  turnNow,
   type Reveal,
 } from "@shared/firstTenMinutesCrew";
 import {
@@ -42,6 +43,9 @@ const OBJECT_OF: Record<CompanionId, ObjectKey> = {
 /** Where a settled object rests: left or right of the stage. */
 const SIDE: Record<ObjectKey, "left" | "right"> = { rule: "left", map: "left", strips: "right", cards: "right", photo: "right", notebook: "left" };
 
+/** A finding that still stands: the person hasn't said it changed or isn't right. */
+const live = (finding: FindingView | undefined) => Boolean(finding && finding.status !== "changed" && finding.status !== "dismissed");
+
 function stepKey(journeyId: string) {
   return `joystick_first_ten_crew:${journeyId}`;
 }
@@ -70,7 +74,6 @@ export function CrewScene({
   const reduce = useReducedMotion();
   const final = view.status === "complete" || view.status === "failed";
   const reveals = useMemo(() => buildReveals(view.findings, { final }), [view.findings, final]);
-  const byCompanion = useMemo(() => new Map(reveals.map(reveal => [reveal.companion, reveal])), [reveals]);
   // what is drawn on the desk: everything revealed so far, corrected or not
   const onDesk = useMemo(
     () => new Map(buildReveals(view.findings, { final, includeCorrected: true }).map(reveal => [reveal.companion, reveal])),
@@ -84,12 +87,11 @@ export function CrewScene({
   const [changing, setChanging] = useState(false);
   const [newRule, setNewRule] = useState("");
   const [aside, setAside] = useState<{ who: CompanionId; line: string } | null>(null);
+  // a turn the person has answered stays that companion's until their line back is said
+  const [underWay, setUnderWay] = useState<Reveal | null>(null);
   const finishedOnce = useRef(false);
 
-  const current: Reveal | null = useMemo(() => {
-    const next = CREW_ORDER.find(who => byCompanion.has(who) && !seen.includes(who));
-    return next ? byCompanion.get(next)! : null;
-  }, [byCompanion, seen]);
+  const current: Reveal | null = useMemo(() => turnNow(reveals, seen, view.findings, underWay), [reveals, seen, view.findings, underWay]);
   const lines = current ? crewLines(current) : [];
   const sableWaiting = current?.companion === "sable" && current.finding.status === "proposed";
 
@@ -115,6 +117,7 @@ export function CrewScene({
     setSeen(list => [...list, current.companion]);
     setBeat(0);
     setAfter(null);
+    setUnderWay(null);
   }, [beat, current, lines.length, after]);
 
   // The director: holds each beat for a moment, never while the person is reading a source or answering Sable.
@@ -135,6 +138,8 @@ export function CrewScene({
   async function answerSable(answer: "confirm" | "change", correction?: string) {
     if (!current || current.companion !== "sable") return;
     setAnswering(true);
+    // "That's changed" can cross out the only words she had: she still says her line about them before Mara steps in
+    setUnderWay(current);
     try {
       await onAnswer(current.finding.id, answer, correction);
       setAfter(answer === "confirm" ? SABLE_AFTER.confirmed : SABLE_AFTER.changed);
@@ -178,13 +183,14 @@ export function CrewScene({
   const orren = onDesk.get("orren") as Extract<Reveal, { companion: "orren" }> | undefined;
   const ilex = onDesk.get("ilex") as Extract<Reveal, { companion: "ilex" }> | undefined;
   const rules = suggestionRules(view.findings);
-  const routeShown = Boolean(orren && (seen.includes("orren") || current?.companion === "orren" || current?.companion === "ilex"));
+  // a route the person corrected is no longer drawn as theirs, on the map or in the week
+  const route = orren && live(orren.finding) ? orren : undefined;
+  const routeShown = Boolean(route && (seen.includes("orren") || current?.companion === "orren" || current?.companion === "ilex"));
   const sableShown = Boolean(sable && (seen.includes("sable") || current?.companion === "sable"));
   const businessName = objectNames(view.findings).map;
   const request = ilex ? view.findings.find(finding => finding.id === (ilex.finding.payload.kind === "opportunity" ? ilex.finding.payload.requestId : "")) : undefined;
 
   function renderObject(key: ObjectKey, big: boolean) {
-    const live = (finding: FindingView | undefined) => Boolean(finding && finding.status !== "changed" && finding.status !== "dismissed");
     switch (key) {
       case "rule":
         if (!sable) return null;
@@ -209,9 +215,9 @@ export function CrewScene({
               pins={(mara?.pins ?? []).filter(pin => live(view.findings.find(finding => finding.id === pin.findingId)))}
               unpinned={mara?.unpinned ?? []}
               clustered={Boolean(mara?.clustered)}
-              route={orren?.stops ?? null}
+              route={route?.stops ?? null}
               showRoute={routeShown}
-              highlight={orren?.meets && routeShown ? orren.meets.placeFindingId : null}
+              highlight={route?.meets && routeShown ? route.meets.placeFindingId : null}
               threadFrom={current?.companion === "ilex" || seen.includes("ilex") ? ilex?.placeFindingId ?? null : null}
             />
           </ObjectFrame>
@@ -284,7 +290,7 @@ export function CrewScene({
 
   return (
     <section className={styles.scene} data-testid="first-ten-crew-scene" data-current={current?.companion ?? "none"} ref={sceneRef}>
-      <div className={styles.weekRow}>{sableShown ? <WeekStrip routeDay={orren ? orren.weekday : null} closedDays={rules.closedDays} /> : null}</div>
+      <div className={styles.weekRow}>{sableShown ? <WeekStrip routeDay={route ? route.weekday : null} closedDays={rules.closedDays} /> : null}</div>
       <LayoutGroup>
         <div className={styles.desk}>
           <div className={styles.side} data-side="left">

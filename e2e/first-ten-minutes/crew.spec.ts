@@ -92,7 +92,8 @@ test("“That's changed” keeps Nina's new words, crosses the old ones out, and
   await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "That's changed" }).click();
   await page.getByLabel("What's true now?").fill("Sundays are fine in wedding season.");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(line(page)).toContainText("Then I'll cross it out.");
+  // Sable says it, about her own words, before anyone else steps in
+  await expect(page.getByTestId("first-ten-crew").locator('[data-crew="sable"]').getByTestId("first-ten-crew-line")).toContainText("Then I'll cross it out.");
   await expect(page.getByTestId("first-ten-object-rule")).toHaveAttribute("data-corrected", "yes");
   await expect(page.getByTestId("first-ten-week").locator('[data-day="Sunday"]')).toHaveAttribute("data-state", "open");
 
@@ -101,6 +102,26 @@ test("“That's changed” keeps Nina's new words, crosses the old ones out, and
   const note = page.getByTestId("first-ten-finding-note");
   await expect(note).toContainText("No more Sunday deliveries.");
   await expect(note).toContainText("You said: “Sundays are fine in wedding season.”");
+});
+
+test("a route Nina says isn't right is no longer drawn as hers", async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openExample(page);
+  await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+  const scene = page.getByTestId("first-ten-crew-scene");
+  const friday = page.getByTestId("first-ten-week").locator('[data-day="Friday"]');
+  await expect(line(page)).toContainText("Your Friday deliveries already pass this street.", { timeout: 60_000 });
+  await expect(scene.locator('[data-route="drawn"]')).toHaveCount(1);
+  await expect(friday).toHaveAttribute("data-state", "route");
+
+  await scene.getByTestId("first-ten-object-map").click();
+  const route = page.getByTestId("first-ten-finding-note").locator('[data-finding="route"]');
+  await route.getByRole("button", { name: "Not quite right?" }).click();
+  await route.getByRole("button", { name: "That's not right" }).click();
+  await expect(line(page)).toContainText("Rerouted.");
+  await expect(scene.locator('[data-route="drawn"]')).toHaveCount(0);
+  await expect(friday).toHaveAttribute("data-state", "open");
 });
 
 test("any object opens to its source, and a correction takes it off the desk", async ({ page }) => {

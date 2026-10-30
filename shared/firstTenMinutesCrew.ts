@@ -197,6 +197,26 @@ export function waitingCompanions(reveals: readonly Reveal[]): CompanionId[] {
   return CREW_ORDER.filter(companion => !present.has(companion));
 }
 
+/**
+ * Whose turn it is: the first companion, in order, with something to reveal who hasn't had their turn. A turn under
+ * way is kept to its end, with its finding as it stands now: Sable's answer can cross out the very words she pointed
+ * at, and she still says her line about them before anyone else steps in.
+ */
+export function turnNow(
+  reveals: readonly Reveal[],
+  seen: readonly CompanionId[],
+  findings: readonly FindingView[],
+  underWay: Reveal | null = null
+): Reveal | null {
+  if (underWay && !seen.includes(underWay.companion)) {
+    if (underWay.companion === "mara") return underWay;
+    const finding = findings.find(candidate => candidate.id === underWay.finding.id) ?? underWay.finding;
+    return { ...underWay, finding };
+  }
+  const next = CREW_ORDER.find(who => !seen.includes(who) && reveals.some(reveal => reveal.companion === who));
+  return reveals.find(reveal => reveal.companion === next) ?? null;
+}
+
 function clustered(pins: PlacePin[], radiusMetres = 2_500): boolean {
   const centre = { lat: pins.reduce((sum, pin) => sum + pin.lat, 0) / pins.length, lng: pins.reduce((sum, pin) => sum + pin.lng, 0) / pins.length };
   const rad = (value: number) => (value * Math.PI) / 180;
