@@ -1,4 +1,4 @@
-import { int, json, mysqlTable, text, timestamp, uniqueIndex, index, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, json, mysqlTable, text, timestamp, uniqueIndex, index, varchar } from "drizzle-orm/mysql-core";
 import type { ConnectionProvider, JourneyKind, JourneyStage } from "../../shared/firstTenMinutes";
 import type {
   CompanionId,
@@ -10,6 +10,7 @@ import type {
   UnderstandingView,
 } from "../../shared/firstTenMinutesFindings";
 import type { PortraitLine, PortraitStatus } from "../../shared/firstTenMinutesPortrait";
+import type { DraftApproach, DraftStatus } from "../../shared/firstTenMinutesChapter";
 
 /** drizzle/0152_first_ten_journeys.sql, applied by scripts/migrate.mjs. */
 export const firstTenJourneys = mysqlTable(
@@ -131,6 +132,25 @@ export const firstTenPortraits = mysqlTable("first_ten_portraits", {
   writtenBy: varchar("written_by", { length: 16 }),
   leaseUntil: timestamp("lease_until"),
   keptAt: timestamp("kept_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+/** drizzle/0156_first_ten_drafts.sql: the real message prepared at the writing table (one per journey). */
+export const firstTenDrafts = mysqlTable("first_ten_drafts", {
+  journeyId: varchar("journey_id", { length: 36 }).primaryKey(),
+  opportunityId: varchar("opportunity_id", { length: 36 }).notNull(),
+  recipientName: varchar("recipient_name", { length: 255 }),
+  recipientAddress: varchar("recipient_address", { length: 320 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  body: text("body").notNull(),
+  approach: varchar("approach", { length: 32 }).$type<DraftApproach>().notNull(),
+  edited: boolean("edited").notNull().default(false),
+  status: varchar("status", { length: 24 }).$type<DraftStatus>().notNull(),
+  handedOffAt: timestamp("handed_off_at"),
+  reportedSentAt: timestamp("reported_sent_at"),
+  verifiedSentAt: timestamp("verified_sent_at"),
+  verifiedMessageId: varchar("verified_message_id", { length: 191 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

@@ -200,6 +200,55 @@ not yet kept and only when what it rests on changes. Every change and the keep a
 
 **AI spend:** one call per page, attributed per journey like the reading.
 
+## The revelation and "A Proper Letter" (slice 5)
+
+Once the person keeps Claire's page, the first chapter begins. It is built on the strongest opportunity still standing
+and the findings it rests on (`server/firstTenMinutes/chapter/`): the request, the person's reply, what they offer now,
+their route and the place.
+
+**The revelation, played rather than announced.** A desk calendar turns back to the month they were asked. Elena's
+request is pinned on the day, with Nina's reply beneath it, in their own words. On Mara's map the crossing from the
+route to the hotel is folded shut, with its sign ("FRIDAY — UNAVAILABLE"), and Rook tries it: "Well, that's
+inconvenient." The person turns the calendar to today, where their own announcement of the Friday delivery is pinned
+and Orren's route is drawn. They bring the invitation onto today's map (drag it, or tap it) and the crossing unfolds.
+Rook: "Oh. Well, look at that." Nobody explains it. A quiet "Why?" opens the full explanation with its sources (Astra's
+"Someone already asked for what you now offer."), and "Pick up the story" leads on.
+
+**"A Proper Letter".** The Silver Lake courtyard, from its painting, with Hazel's errand from the courtyard game
+(`reunionQuests.ts`, "squirrel_hoa_letter"): its steps, their order (`applyStepItem`) and their lines as written there,
+opened and closed with Astra's lines.
+
+- Hazel: "A letter? Excellent. I have several opinions about letters." / "Mine requires a proper response. In ink.
+  With a quill." Rook: "You have a pen." Hazel: "I said proper."
+- Pip shaken bare-handed says ow, and Sable offers "Thick. Knitted. Currently protecting a teapot." She also offers it
+  if the player is stuck.
+- The tea cosy becomes an oversized glove, Pip shivers, a quill floats down, and the ink lands on Hazel's complaint.
+- Hazel reads the player's reply, straightens it and stamps it: "Complaint withdrawn." / "I'm keeping the stamp." /
+  "Now. Yours."
+
+The player carries the unfinished conversation as a folded card in their pocket. The 3D courtyard itself is for
+signed-in operators and needs WebGL, so this chapter is a 2D stage on the onboarding page. The props are drawn by
+hand; Hazel and Pip are the courtyard's own art.
+
+**The writing table, for real.** The same table becomes the place where the real message is prepared:
+
+- The boundary is plain: "Your business · Elena at the hotel".
+- The old request and reply sit beside what Nina offers now.
+- The real recipient and the exact message are on view: To: Elena Ruiz <elena@larkspurhotel.example>, Re: Friday
+  flowers?, "Hi Elena — you asked earlier this year about Friday flowers. We now have a weekly Friday delivery. Is that
+  still something you're looking for at the hotel?"
+- Rook: "Short enough to answer."
+
+The draft is composed only from the findings, with no model call. The person can edit it, "Try another way" (offer to
+start; keep it short), or say "Not now", which keeps it unsent and lets them bring it back. Nothing is sent from here.
+The message claims only what is on record:
+
+- **No service on record.** There is nothing new to offer, so the message only picks the conversation up. If the request
+  was never answered, it says so ("and I never got back to you"). The only ways it can go are to ask, or to ask briefly.
+- **The crossing's sign.** It reads "FRIDAY — UNAVAILABLE" only when the reply named something that was missing.
+The draft is stored in `first_ten_drafts` (migration 0156), whose hand-off columns stay empty until the next slice. Each
+beat of the chapter is appended to `first_ten_events`, so a reload carries on where the person left off.
+
 ## Slices
 
 | # | Slice | State |
@@ -207,8 +256,8 @@ not yet kept and only when what it rests on changes. Every change and the keep a
 | 1 | Connect: Google and Slack OAuth, what connecting includes, the labelled example | merged |
 | 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | merged |
 | 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | merged |
-| 4 | Claire's portrait: "That sounds like me / Let me change something" | this PR |
-| 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | |
+| 4 | Claire's portrait: "That sounds like me / Let me change something" | merged |
+| 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | this PR |
 | 6 | Activation at the moment of value: the draft, scene and decision survive checkout | |
 | 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | |
 | 8 | Part 3: "The Friday That Didn't Exist", "The Estimate That Wouldn't Fit", "Here is what changed because you arrived" | |

@@ -12,7 +12,13 @@ export type JourneyEventKind =
   | "finding_changed"
   | "finding_dismissed"
   | "portrait_kept"
-  | "portrait_changed";
+  | "portrait_changed"
+  | "chapter_revealed"
+  | "letter_step"
+  | "letter_written"
+  | "draft_prepared"
+  | "draft_changed"
+  | "draft_declined";
 
 export async function recordEvent(journeyId: string, kind: JourneyEventKind, payload: Record<string, unknown>): Promise<void> {
   const db = await firstTenDb();

@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Slice 4: Claire's portrait. When the crew has had its say, the scene settles and one page appears: Astra's portrait
  * for Nina, word for word, every line resting on her records. "Let me change something" puts the person's words in
- * place of a line; "That sounds like me" keeps it, and a reload finds it kept, the crew not introducing itself again.
+ * place of a line; "That sounds like me" keeps it, and the chapter follows; a reload goes on from there.
  */
 const FAKE = "http://127.0.0.1:4999";
 
@@ -45,7 +45,7 @@ const NINA = [
   "The next hotel conversation should fit the business you're building now.",
 ];
 
-test("Nina's portrait: Astra's page, changed in Nina's own hand, kept, and still kept after a reload", async ({ page }, testInfo) => {
+test("Nina's portrait: Astra's page, changed in Nina's own hand, and kept", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await page.getByTestId("first-ten-example").click();
   const portrait = await throughTheCrew(page, "Still the rule");
@@ -76,10 +76,11 @@ test("Nina's portrait: Astra's page, changed in Nina's own hand, kept, and still
   await expect(page.getByTestId("first-ten-portrait-controls")).toHaveCount(0);
   await shots("32-portrait-kept", page, testInfo);
 
-  // a reload: the page is still kept, with Nina's words, and the crew doesn't introduce itself again
+  // kept, the page gives way to what Claire wanted to show; a reload goes on from there, the crew not introducing
+  // itself again (the kept page, with Nina's words, is checked on MySQL in portrait.mysql.integration.test.ts)
+  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 20_000 });
   await page.reload();
-  await expect(page.getByTestId("first-ten-portrait")).toHaveAttribute("data-status", "kept", { timeout: 60_000 });
-  await expect(page.getByTestId("first-ten-portrait").locator('[data-line="p2.s1"]')).toContainText("Jules builds the big pieces. I do the rest.");
+  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("first-ten-crew-line")).toHaveCount(0);
 });
 

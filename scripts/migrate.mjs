@@ -5827,5 +5827,15 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0156: JOYSTICK's first ten minutes, the real message prepared at the writing table (never sent from here). Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0156_first_ten_drafts.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes drafts");
+  await assertRequiredColumns("first_ten_drafts", [
+    "journey_id", "opportunity_id", "recipient_name", "recipient_address", "subject", "body", "approach", "edited", "status",
+    "handed_off_at", "reported_sent_at", "verified_sent_at", "verified_message_id", "created_at", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();
