@@ -1,4 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { isJoystickSignupMode } from "../../shared/firstTenMinutes";
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
 import type { SaasSubscriptionStatus } from "../../shared/saasTenant";
@@ -43,6 +44,16 @@ function appUrl(): string {
   );
 }
 
+/** Where today's checkout returns, for callers outside billing (the first ten minutes). */
+export function legacyDayforgeBillingAppUrl(): string {
+  return appUrl();
+}
+
+/** The configured billing secret key, unchecked, for callers that check its mode themselves. */
+export function legacyDayforgeBillingSecretKey(): string | undefined {
+  return process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY;
+}
+
 export async function createLegacyDayforgeSubscriptionCheckout(input: {
   sessionId: string;
   resumeToken: string;
@@ -55,10 +66,9 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   if (!customerEmail) {
     throw new Error("Complete account identity before checkout");
   }
-  const returnPath =
-    existingOnboarding.onboardingMode === "joystick_generic"
-      ? "/joystick-start"
-      : "/dayforge-onboarding";
+  const returnPath = isJoystickSignupMode(existingOnboarding.onboardingMode)
+    ? "/joystick-start"
+    : "/dayforge-onboarding";
   const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   if (existingOnboarding.stripeCheckoutSessionId) {
     if (existingOnboarding.planKey !== input.planKey) {

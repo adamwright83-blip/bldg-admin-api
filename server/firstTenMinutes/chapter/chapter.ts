@@ -84,7 +84,12 @@ async function draftRow(journeyId: string) {
   return row ?? null;
 }
 
-function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, opportunity: ChapterOpportunity | null, now: Date): DraftView {
+function draftView(
+  row: NonNullable<Awaited<ReturnType<typeof draftRow>>>,
+  opportunity: ChapterOpportunity | null,
+  now: Date,
+  handedOffVia: DraftView["handedOffVia"]
+): DraftView {
   return {
     approach: row.approach,
     to: { name: row.recipientName, address: row.recipientAddress },
@@ -92,6 +97,10 @@ function draftView(row: NonNullable<Awaited<ReturnType<typeof draftRow>>>, oppor
     body: row.body,
     edited: row.edited,
     status: row.status,
+    handedOffAt: row.handedOffAt?.toISOString() ?? null,
+    reportedSentAt: row.reportedSentAt?.toISOString() ?? null,
+    verifiedSentAt: row.verifiedSentAt?.toISOString() ?? null,
+    handedOffVia,
     approaches: opportunity ? approachesFor(opportunity).map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
   };
 }
@@ -104,8 +113,13 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   const steps = new Set<LetterStep>();
   let revealed = false;
   let letterWritten = false;
+  let handedOffVia: DraftView["handedOffVia"] = null;
   for (const event of events) {
     if (event.kind === "chapter_revealed") revealed = true;
+    if (event.kind === "draft_handed_off") {
+      const channel = (event.payloadJson as { channel?: string } | null)?.channel;
+      handedOffVia = channel === "copy" ? "copy" : "gmail";
+    }
     if (event.kind === "letter_written") letterWritten = true;
     const step = (event.payloadJson as { step?: string } | null)?.step;
     if (event.kind === "letter_step" && LETTER_STEPS.includes(step as LetterStep)) steps.add(step as LetterStep);
@@ -113,7 +127,7 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   return {
     opportunity,
     progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten },
-    draft: row ? draftView(row, opportunity, now) : null,
+    draft: row ? draftView(row, opportunity, now, handedOffVia) : null,
   };
 }
 

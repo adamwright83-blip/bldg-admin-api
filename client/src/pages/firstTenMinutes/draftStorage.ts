@@ -37,6 +37,25 @@ export function saveFirstTenCredentials(credentials: FirstTenCredentials): void 
   }, undefined);
 }
 
+const HANDOFF = /^#first-ten=([0-9a-f-]{36})\.([A-Za-z0-9_-]{32,128})$/;
+
+/**
+ * A journey carried here from another origin (checkout returns to one origin only): its credentials arrive in the
+ * URL fragment, which is never sent to a server, are kept, and the fragment is cleared at once.
+ */
+export function adoptFirstTenHandoff(): boolean {
+  if (typeof window === "undefined") return false;
+  const match = window.location.hash.match(HANDOFF);
+  if (!match) return false;
+  saveFirstTenCredentials({ sessionId: match[1], resumeToken: match[2] });
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return true;
+}
+
+export function firstTenHandoffUrl(origin: string, credentials: FirstTenCredentials): string {
+  return `${origin}/joystick-start?crew=1#first-ten=${credentials.sessionId}.${credentials.resumeToken}`;
+}
+
 export function clearFirstTenCredentials(): void {
   safely(() => {
     sessionStorage.removeItem(CREDENTIALS_KEY);

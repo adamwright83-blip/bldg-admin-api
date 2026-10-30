@@ -15,6 +15,7 @@ import { understandingView } from "./understanding/view";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
+import { activationView, beginActivation, handOffDraft, reportDraft, verifyDraft } from "./activation/activation";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
 const credentials = z.object({
@@ -224,6 +225,61 @@ export const firstTenMinutesRouter = router({
     assertFirstTenOpen();
     const { journey } = await requireJourney(input);
     return declineDraft(journey);
+  }),
+
+  /**
+   * Keeping the crew: the actual offer, what JOYSTICK knows of the person, and whether this journey is active. While
+   * billing is open, a message leaves the table only once it is.
+   */
+  activation: publicProcedure.input(credentials).query(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return activationView(journey, input);
+  }),
+
+  /** "Continue with JOYSTICK": identity on the signup draft, then today's checkout, which returns here. */
+  beginActivation: publicProcedure
+    .input(
+      credentials.extend({
+        businessName: z.string().trim().min(1).max(255),
+        contactName: z.string().trim().min(1).max(255),
+        ownerEmail: z.string().trim().email().max(320),
+        timeZone: z.string().trim().min(1).max(64),
+      })
+    )
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      const { sessionId, resumeToken, ...identity } = input;
+      return beginActivation(journey, { sessionId, resumeToken }, identity);
+    }),
+
+  /** The message leaves the table: the person's own Gmail opens with it ready, or they copy it. Nothing is sent. */
+  handOffDraft: publicProcedure
+    .input(credentials.extend({ channel: z.enum(["gmail", "copy"]) }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      await handOffDraft(journey, input, input.channel);
+      return chapterView(journey);
+    }),
+
+  /** "Did it go?": the person's own answer, recorded as theirs. */
+  reportDraft: publicProcedure
+    .input(credentials.extend({ outcome: z.enum(["sent", "not_yet"]) }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      await reportDraft(journey, input.outcome);
+      return chapterView(journey);
+    }),
+
+  /** Look in the person's own Sent folder for the message. */
+  verifyDraft: publicProcedure.input(credentials).mutation(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    await verifyDraft(journey);
+    return chapterView(journey);
   }),
 
   /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */
