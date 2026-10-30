@@ -292,7 +292,8 @@ export async function applyDayLineChanges(
     try {
       if (change.op === "add") {
         // A bare yes binds only to the work the offer named; an item the offer did not mention is not authorized by it.
-        if (verdict.bareAck && changesOutsideOffer(ctx.lastClaireText(), [change.title]).length) {
+        const turns = ctx.operatorTurns();
+        if (verdict.bareAck && changesOutsideOffer(ctx.lastClaireText(), [change.title], turns.length >= 2 ? turns[turns.length - 2]! : null).length) {
           receipts.push({ ...base, status: "refused", businessDate, day, reason: `not authorized: "${authorizedQuote}" answers your offer, and your offer did not name "${change.title}"; ask about it plainly` });
           continue;
         }

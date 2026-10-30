@@ -109,7 +109,7 @@ Work described across the call belongs to one batch: when the authorization come
     view.section ?? "none.",
     `Existing work: when the operator refers to work as already on the list ("move the Dubois job", "put it back", "the Medeco order") and you do not know its day, call find_day_line_item first, then change that row by id. Never add a new row for work that already exists. If an add comes back needs_resolution, the same work is on another day: ask whether they mean that one (then move it) or a separate job (then re-send with confirm_new true). The same job on two days is legitimate when they say so.`,
     `"Next Friday", "Thursday", "the 3rd" are dates: pass them to the tool as said, the server resolves them, you read the date back. Ask only when a day is genuinely vague.`,
-    `When the operator is done, call end_call and say a short goodbye.`,
+    `When the operator is done, call end_call and say a short goodbye. Done means they say so (goodbye, that's all, I'm done, talk tomorrow); "that's good", "okay" or "sounds good" is agreement, not a goodbye, so keep the call going. A rule about how to open a call governs the opening, not how long the call lasts.`,
   ]
     .filter((section): section is string => Boolean(section))
     .join("\n\n");

@@ -47,6 +47,18 @@ describe("identifyingTokens", () => {
   });
 });
 
+describe("a bare yes to an offer that points back with 'it'", () => {
+  it("binds to the work the operator asked about in the turn Claire answered (yes_binds_to_offer, runs 40988869307/40990347412)", () => {
+    const offer = "Yes, I'd put it on today, since it keeps slipping. Want me to add it?";
+    const asked = "I keep forgetting to email Dana about the Louise contract renewal. Should that go on today?";
+    expect(changesOutsideOffer(offer, ["Email Dana about the Louise contract renewal"], asked)).toEqual([]);
+    // Work the operator did not ask about stays unbound.
+    expect(changesOutsideOffer(offer, ["Call the flour rep"], asked)).toEqual(["Call the flour rep"]);
+    // Without the operator's turn, the old rule holds.
+    expect(changesOutsideOffer(offer, ["Email Dana about the Louise contract renewal"])).toEqual(["Email Dana about the Louise contract renewal"]);
+  });
+});
+
 describe("a bare yes binds only to the work the offer named", () => {
   it("offer named the Dana email: yes writes the Dana email, not a second item", () => {
     const offer = "I'd put it on today. Want me to add \"Email Dana about the Louise contract renewal\" to today's Day Line?";

@@ -74,11 +74,6 @@
       "Finish landing page paired with Instagram ad running on Facebook"
     ],
     "maxRowsAdded": 0,
-    "standingInstructions": [
-      {
-        "matches": "(talk|speak|one thing|one thought|lecture|let (me|him|adam) talk)"
-      }
-    ],
     "speech": {
       "mustNotRaise": [
         "louise",
@@ -97,5 +92,5 @@
     "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. He commits nothing new for tomorrow, so nothing is added (run 40988869307 trial 3 added a row he asked for, which the grader cannot tell from an unauthorized one)."
+  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. He commits nothing new for tomorrow, so nothing is added (run 40988869307 trial 3 added a row he asked for, which the grader cannot tell from an unauthorized one). The talk-less rule is graded in the scripted replay only: in run 40990347412 the simulated operator hung up without raising it, which is not Claire's failure."
 }
