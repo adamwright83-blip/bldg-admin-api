@@ -187,6 +187,9 @@ export function gmailReader(access: GoogleAccess, deps: Deps = {}) {
     /** messages the person sent to `address` since `since`, from their own Sent folder */
     sentTo: async (address: string, since: Date): Promise<MailItem[]> =>
       (await read(`in:sent to:${address} after:${Math.floor(since.getTime() / 1000)}`, 10)).items,
+    /** messages from `address` to the person since `since`: has someone written back */
+    receivedFrom: async (address: string, since: Date): Promise<MailItem[]> =>
+      (await read(`from:${address} -in:sent -in:chats after:${Math.floor(since.getTime() / 1000)}`, 10)).items,
     async attachment(messageId: string, attachmentId: string): Promise<Buffer> {
       const body = await client.json<{ data?: string }>(
         `${GMAIL}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`

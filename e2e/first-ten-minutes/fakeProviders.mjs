@@ -96,9 +96,46 @@ function fakePortrait(corpusText) {
   };
 }
 
+/**
+ * The stand-in model as Claire on the first-chapter page: it writes from what read_first_chapter returned, the way a
+ * faithful answer would. With `claireOverclaims` it says the message went and was answered, which the page must refuse.
+ */
+function fakeClaire(facts) {
+  if (control.claireOverclaims) return "It went out this morning, and Elena replied.";
+  const name = facts.recipient.firstName ?? facts.recipient.name ?? facts.recipient.address;
+  const at = time => (time ? ` ${time}` : "");
+  const words = `“${facts.message.words}”`;
+  const parts = [`You picked up ${facts.request.label}${facts.request.askedIn ? ` from ${facts.request.askedIn}` : ""}.`];
+  if (facts.message.version === "their_own_words") parts.push(`You put the reply in your own words: ${words}`);
+  else if (facts.message.version === "the_shorter_one") parts.push(`You chose the shorter reply: ${words}`);
+  else if (facts.message.version === "the_one_offering_to_start") parts.push(`You chose the reply offering to start: ${words}`);
+  else parts.push(`You kept the reply as it was drafted: ${words}`);
+  if (facts.message.state === "ready_not_sent") parts.push("It's ready, and it hasn't been sent.");
+  if (facts.message.state === "kept_for_later") parts.push("You decided it could wait. It hasn't been sent.");
+  if (facts.message.state === "opened_in_their_mail" || facts.message.state === "copied_by_them") {
+    const left = facts.message.state === "copied_by_them" ? "You copied it" : "You opened it in your Gmail";
+    parts.push(
+      `${left}${at(facts.message.leftTheTable)}. ${
+        facts.sentFolder === "looked_just_now_not_there"
+          ? "It isn't in your Sent folder, so as far as I can tell it hasn't gone yet."
+          : "I couldn't look in your Sent folder just now, so I don't know yet whether it went."
+      }`
+    );
+  }
+  if (facts.message.state === "they_said_they_sent_it") {
+    parts.push(`You told me you sent it${at(facts.message.theySaidSent)}. ${facts.sentFolder === "looked_just_now_not_there" ? "I haven't found it in your Sent folder." : "I couldn't look in your Sent folder just now."}`);
+  }
+  if (facts.message.state === "in_their_sent_folder") parts.push(facts.message.inSentFolderSince ? `It's in your Sent folder, sent ${facts.message.inSentFolderSince}.` : "It's in your Sent folder.");
+  if (facts.recipientWroteBack.answer === "no") parts.push(`${name} hasn't written back yet.`);
+  if (facts.recipientWroteBack.answer === "yes") parts.push(`${name} wrote back${at(facts.recipientWroteBack.when)}: “${facts.recipientWroteBack.words}”`);
+  return parts.join(" ");
+}
+
 const modelCalls = [];
 /** what the person "sent from Gmail" during a test, after JOYSTICK handed the message over */
 const sentLater = [];
+/** what someone wrote back to the person during a test */
+const receivedLater = [];
 
 const defaults = () => ({
   googleScopes: ALL_GOOGLE_SCOPES,
@@ -106,6 +143,8 @@ const defaults = () => ({
   deny: false,
   slackTeam: "First Ten Workspace",
   modelFails: false,
+  // Claire's answer on the first-chapter page says what the records don't
+  claireOverclaims: false,
   // the email reading takes this long to come back, so a test can watch the reading while it works
   conversationsDelayMs: 0,
 });
@@ -152,6 +191,7 @@ const server = http.createServer(async (req, res) => {
     revoked.length = 0;
     modelCalls.length = 0;
     sentLater.length = 0;
+    receivedLater.length = 0;
     return send(res, 200, { ok: true });
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
@@ -164,6 +204,22 @@ const server = http.createServer(async (req, res) => {
       date: new Date().toISOString(),
       from: { name: corpus.owner.name, email: corpus.owner.email },
       to: [{ name: input.toName ?? "", email: input.to }],
+      subject: input.subject ?? "",
+      body: input.body ?? "",
+      attachments: [],
+    });
+    return send(res, 200, { ok: true });
+  }
+
+  // someone writes back to the person: it lands in their inbox, now
+  if (path === "/__reply-from" && req.method === "POST") {
+    const input = JSON.parse(body || "{}");
+    receivedLater.push({
+      id: `m-received-later-${receivedLater.length + 1}`,
+      threadId: "t-sent-later",
+      date: new Date().toISOString(),
+      from: { name: input.fromName ?? "", email: input.from },
+      to: [{ name: corpus.owner.name, email: corpus.owner.email }],
       subject: input.subject ?? "",
       body: input.body ?? "",
       attachments: [],
@@ -201,10 +257,12 @@ const server = http.createServer(async (req, res) => {
     const q = url.searchParams.get("q") ?? "";
     const sent = /(^|\s)in:sent\b/.test(q);
     const to = q.match(/(?:^|\s)to:(\S+)/)?.[1]?.toLowerCase() ?? null;
+    const from = q.match(/(?:^|\s)from:(\S+)/)?.[1]?.toLowerCase() ?? null;
     const after = Number(q.match(/(?:^|\s)after:(\d+)/)?.[1] ?? 0) * 1000;
-    const ids = [...corpus.messages, ...sentLater]
+    const ids = [...corpus.messages, ...sentLater, ...receivedLater]
       .filter(message => (message.from.email === corpus.owner.email) === sent)
       .filter(message => !to || message.to.some(recipient => recipient.email.toLowerCase() === to))
+      .filter(message => !from || message.from.email.toLowerCase() === from)
       .filter(message => !after || new Date(message.date).getTime() >= after)
       .map(message => ({ id: message.id, threadId: message.threadId }));
     return send(res, 200, { messages: ids.reverse(), resultSizeEstimate: ids.length });
@@ -213,7 +271,7 @@ const server = http.createServer(async (req, res) => {
   if (attachment) return send(res, 200, { data: TINY_JPEG.toString("base64url"), size: TINY_JPEG.length });
   const one = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)$/);
   if (one) {
-    const message = [...corpus.messages, ...sentLater].find(candidate => candidate.id === decodeURIComponent(one[1]));
+    const message = [...corpus.messages, ...sentLater, ...receivedLater].find(candidate => candidate.id === decodeURIComponent(one[1]));
     return message ? send(res, 200, gmailMessage(message)) : send(res, 404, { error: "not found" });
   }
   if (path === "/www.googleapis.com/calendar/v3/calendars/primary/events") {
@@ -250,11 +308,30 @@ const server = http.createServer(async (req, res) => {
       : { status: "ZERO_RESULTS", results: [] });
   }
 
-  // ---------------------------------------------------------------- Anthropic (the model's two readings of Nina's corpus, and Claire's portrait)
+  // ---------------------------------------------------------------- Anthropic (the model's two readings of Nina's corpus, Claire's portrait, and Claire on the page)
   if (path === "/anthropic/v1/messages" && req.method === "POST") {
     const request = JSON.parse(body || "{}");
     const system = typeof request.system === "string" ? request.system : JSON.stringify(request.system ?? "");
     if (control.modelFails) return send(res, 500, { type: "error", error: { type: "api_error", message: "stand-in failure" } });
+    // Claire on the first-chapter page, through her engine's tool loop: she reads first, then writes from what she read
+    if (system.includes("Call read_first_chapter first")) {
+      const last = (request.messages ?? []).at(-1);
+      const result = Array.isArray(last?.content) ? last.content.find(part => part.type === "tool_result") : null;
+      modelCalls.push("claire");
+      const reply = content => ({
+        id: `msg_fake_${modelCalls.length}`,
+        type: "message",
+        role: "assistant",
+        model: request.model,
+        content,
+        stop_reason: content.some(part => part.type === "tool_use") ? "tool_use" : "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 900, output_tokens: 120 },
+      });
+      if (!result) return send(res, 200, reply([{ type: "tool_use", id: `toolu_fake_${modelCalls.length}`, name: "read_first_chapter", input: {} }]));
+      const read = typeof result.content === "string" ? result.content : (result.content ?? []).map(part => part.text ?? "").join("");
+      return send(res, 200, reply([{ type: "text", text: fakeClaire(JSON.parse(read)) }]));
+    }
     const conversations = system.includes("owner's email");
     const portrait = system.includes("Give the whole picture its language");
     if (conversations && control.conversationsDelayMs) await new Promise(resolve => setTimeout(resolve, control.conversationsDelayMs));

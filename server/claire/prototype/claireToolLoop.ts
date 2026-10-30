@@ -14,7 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropicMessagesClient, createAnthropicMessage } from "../../_core/anthropicMessages";
 import { modelRequestShape } from "../../_core/modelCapabilities";
 import { buildStandingInstructionsView, drizzleStandingInstructionStore } from "../../agents/daphne/standingInstructions";
-import { CLAIRE_PROTOTYPE_TOOLS, executeTool, readDayLineRows, type ToolContext, type ToolEvent } from "./tools";
+import { CLAIRE_FIRST_CHAPTER_TOOLS, CLAIRE_PROTOTYPE_TOOLS, executeTool, readDayLineRows, type ToolContext, type ToolEvent } from "./tools";
 import { checkSpeech, heldTopicsFrom, restateInstruction, withoutOffendingSentences, type HeldTopic } from "./speechGuard";
 import { addDaysYmd, businessDateToday } from "./spokenDate";
 
@@ -141,6 +141,8 @@ export type ClaireToolTurnSession = {
   messages: Anthropic.MessageParam[];
   operatorTurns: string[];
   lastClaireText: { value: string | null };
+  /** The tools this session offers (a call offers CLAIRE_PROTOTYPE_TOOLS). A tool it doesn't offer is refused, never run. */
+  tools?: Anthropic.Tool[];
 };
 
 export function anthropicClient(): Anthropic {
@@ -160,6 +162,7 @@ export async function runClaireToolTurn(
   options: { operatorSpoke?: boolean } = {}
 ): Promise<ClaireTurnResult> {
   const { client, model, systemPrompt, heldTopics, ctx, messages, operatorTurns } = session;
+  const tools = session.tools ?? CLAIRE_PROTOTYPE_TOOLS;
   const shape = modelRequestShape(model, {});
   const startedAt = Date.now();
   const messagesBefore = messages.length;
@@ -186,7 +189,7 @@ export async function runClaireToolTurn(
         max_tokens: 600,
         ...(shape as Record<string, unknown>),
         system: systemPrompt,
-        tools: CLAIRE_PROTOTYPE_TOOLS,
+        tools,
         tool_choice: { type: "auto" },
         messages,
       });
@@ -205,10 +208,14 @@ export async function runClaireToolTurn(
         let output: unknown;
         let wrote = false;
         try {
-          const executed = await executeTool(ctx, use.name, (use.input ?? {}) as Record<string, unknown>);
-          output = executed.output;
-          wrote = executed.wrote;
-          if (executed.endCall) endCall = true;
+          if (!tools.some(tool => tool.name === use.name)) {
+            output = { status: "refused", reason: "That isn't available here." };
+          } else {
+            const executed = await executeTool(ctx, use.name, (use.input ?? {}) as Record<string, unknown>);
+            output = executed.output;
+            wrote = executed.wrote;
+            if (executed.endCall) endCall = true;
+          }
         } catch (error) {
           output = { status: "failed", reason: error instanceof Error ? error.message : String(error) };
         }
@@ -296,6 +303,60 @@ export async function openClaireSession(
     turn: utterance => runClaireToolTurn(session, utterance),
     open: callKind === "inbound" ? null : () => runClaireToolTurn(session, scheduledCallKickoff(callKind, input.operatorName), { operatorSpoke: false }),
   };
+}
+
+/**
+ * Claire on the person's page in their first ten minutes: written, not spoken, answering the one question on the page
+ * from read_first_chapter alone.
+ */
+export function firstChapterPagePrompt(input: { personName: string | null; businessName: string | null; question: string }): string {
+  const person = input.personName ?? "the person";
+  return [
+    `You are Claire, chief of staff to ${person}${input.businessName ? `, who runs ${input.businessName}` : ""}. They have just come back to their page in JOYSTICK and asked you, in writing: "${input.question}" You answer on the page, not on a call.`,
+    `Call read_first_chapter first. Everything you say about the conversation, the message and where it is comes from what it returns; anything it doesn't say, you don't know.`,
+    `Write two to four short sentences in plain words, with no lists or headings: what they did, the message as it stands, and where it is now. Quote the message, and any reply, exactly as given, in quotation marks.`,
+    `Say the message went only as the record shows it. If they said they sent it, say they told you so. Say it is in their Sent folder only when it was found there, and that it isn't only when you looked just now and it wasn't; if you couldn't look, say so. Say the recipient wrote back only when the record has their words, and that they haven't only when the record says so. Give a time only as the record gives it; when it gives none, give no time.`,
+    `Don't offer to send, schedule or follow up; you can't do those here. Don't guess what the recipient will do, and don't mention how you know.`,
+  ].join("\n\n");
+}
+
+/**
+ * The same tool loop on the person's first-chapter page (docs/goldline/FIRST_TEN_MINUTES_BUILD.md, slice 7). There is
+ * no workspace yet, so the context carries no tenant or operator; the only tool offered reads the first chapter, and
+ * any other is refused before it runs.
+ */
+export async function openClaireFirstChapterSession(input: {
+  personName: string | null;
+  businessName: string | null;
+  question: string;
+  timeZone: string | null;
+  readFirstChapter: () => Promise<unknown>;
+  now?: () => Date;
+  model?: string;
+  client?: Anthropic;
+}): Promise<ClaireSession> {
+  const client = input.client ?? anthropicClient();
+  const model = input.model ?? CLAIRE_PROTOTYPE_MODEL;
+  const operatorTurns: string[] = [];
+  const lastClaireText = { value: null as string | null };
+  const ctx: ToolContext = {
+    tenantId: "",
+    operatorUserId: "",
+    dayDirectorActorId: "",
+    canonicalOperatorId: "",
+    timeZone: input.timeZone ?? "UTC",
+    now: input.now ?? (() => new Date()),
+    conversationId: newConversationId(),
+    nextTurnId: () => randomUUID(),
+    operatorTurns: () => operatorTurns,
+    lastClaireText: () => lastClaireText.value,
+    callRowIds: new Set<string>(),
+    readFirstChapter: input.readFirstChapter,
+  };
+  const systemPrompt = firstChapterPagePrompt(input);
+  const messages: Anthropic.MessageParam[] = [];
+  const session: ClaireToolTurnSession = { client, model, systemPrompt, heldTopics: [], ctx, messages, operatorTurns, lastClaireText, tools: CLAIRE_FIRST_CHAPTER_TOOLS };
+  return { conversationId: ctx.conversationId, model, systemPrompt, messages, turn: utterance => runClaireToolTurn(session, utterance), open: null };
 }
 
 const CLOSING_ONLY = /^(?:(?:good ?night|goodbye|bye|take care|talk (?:to you )?(?:soon|later|tomorrow)|get some rest|sleep well|have a good (?:one|night|evening)|you're welcome|anytime|thanks|thank you|later)[,.!]*\s*(?:[A-Z][a-z]+[,.!]*\s*)?)+$/i;

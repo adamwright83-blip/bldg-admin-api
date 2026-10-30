@@ -16,6 +16,7 @@ import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, handOffDraft, reportDraft, verifyDraft } from "./activation/activation";
+import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
 const credentials = z.object({
@@ -281,6 +282,29 @@ export const firstTenMinutesRouter = router({
     await verifyDraft(journey);
     return chapterView(journey);
   }),
+
+  /** "Your first chapter": the new entry on the person's portrait, and what Claire last said about it. */
+  firstChapter: publicProcedure.input(credentials).query(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return firstChapterView(journey);
+  }),
+
+  /** The person returns to their portrait. */
+  openFirstChapter: publicProcedure.input(credentials).mutation(async ({ input }) => {
+    assertFirstTenOpen();
+    const { journey } = await requireJourney(input);
+    return openFirstChapter(journey);
+  }),
+
+  /** "Where did we leave things with Elena?", answered from the records, in the person's own time zone. */
+  askClaire: publicProcedure
+    .input(credentials.extend({ timeZone: z.string().trim().max(64).optional() }))
+    .mutation(async ({ input }) => {
+      assertFirstTenOpen();
+      const { journey } = await requireJourney(input);
+      return askClaire(journey, input.timeZone ?? null);
+    }),
 
   /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */
   findingPicture: publicProcedure

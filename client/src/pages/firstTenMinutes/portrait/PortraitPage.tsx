@@ -16,12 +16,18 @@ export function PortraitPage({
   onKeep,
   onChange,
   onRestore,
+  entry,
+  children,
 }: {
   view: PortraitView;
   findings: FindingView[];
   onKeep: () => Promise<void>;
   onChange: (key: string, to: string | null) => Promise<void>;
   onRestore: (key: string) => Promise<void>;
+  /** a new entry on the page, once there is one (the person's first chapter) */
+  entry?: React.ReactNode;
+  /** what follows the page: Claire, available to ask */
+  children?: React.ReactNode;
 }) {
   const reduce = useReducedMotion();
   const [changing, setChanging] = useState(false);
@@ -120,6 +126,7 @@ export function PortraitPage({
             </motion.span>
           ) : null}
         </div>
+        {entry}
       </motion.article>
       {!kept ? (
         <div className={styles.controls} data-testid="first-ten-portrait-controls">
@@ -139,6 +146,7 @@ export function PortraitPage({
           </button>
         </div>
       ) : null}
+      {children}
     </div>
   );
 }

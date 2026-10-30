@@ -311,6 +311,46 @@ there. JOYSTICK doesn't send it." Behind it:
 
 Each time, "Pip retrieves the tea cosy and settles underneath it."
 
+## Your first chapter (slice 7)
+
+"Back to your page" sits under the writing table once there is a draft, and returns the person to Claire's portrait,
+kept as they left it. A new entry has appeared on the page:
+
+- **"Your first chapter"**, then Astra's entry, written from what the person actually did: "You revisited Elena's
+  Friday request and prepared a reply using the weekly service you now offer." If they decided it could wait, it says
+  that instead.
+- **The message's actual status**, the same line the writing table shows ("Prepared. Not sent.", "Opened in your
+  mail at 3:42 PM. JOYSTICK didn't send it.", "In your Sent folder, 3:44 PM.").
+
+**Claire is available with a suggested question**: "Where did we leave things with Elena?". She answers through her
+engine (`server/claire/prototype/`, `openClaireFirstChapterSession`), the same tool loop she uses on the phone, written
+rather than spoken. On the page there is no workspace yet, so she is offered one tool and nothing else:
+`read_first_chapter`, which returns the records as they stand now (`firstChapterFacts`):
+
+- **The request** in the asker's words, and when it came ("April 2026").
+- **The message as it stands**, word for word: as drafted, the version chosen, or the person's own words.
+- **Where it is**: ready and not sent, kept for later, opened in their mail, copied to send, they said they sent it,
+  or in their Sent folder. Before she reads, the Sent folder is looked at again whenever the message has left the table. The read says
+  whether that look happened, so she says a message isn't there only when she looked.
+- **Whether the recipient has written back since**, read from their own mail with the read-only access they already
+  gave, in the recipient's words past the greeting. A reply on the message's subject is a reply; other mail from them
+  since is neither a reply nor proof there isn't one, so she doesn't say either.
+- **Times already in the person's zone**, or none when the browser gave no real zone.
+
+The prompt holds her to that record. The page then checks what she wrote against what she read (`checkClaireAnswer`),
+as defence in depth: the checks detect, they don't decide what is true. A quote must be verbatim. "You sent it" needs
+the person's word, and "it went" needs their Sent folder. The Sent folder and a reply are mentioned only as they stand,
+times only as recorded, and the machinery never. If something doesn't hold she writes the answer once more from the
+read. An answer that still doesn't hold, or that never read the records, is not shown: the page says "Claire can't
+answer that properly right now." Her tokens are attributed to the journey (`first_ten:<journey>`), like the reading,
+and a journey gets at most twelve answers.
+
+The answer is kept with what it rests on (`claire_answered` in `first_ten_events`, with the read), so she remembers what
+she said after a reload; an answer not shown is recorded as `claire_unanswered`. "Ask again" reads the records as they
+are then. "Tomorrow, we'll pick up from here." follows her answer. "The courtyard"
+returns to the writing table and the closing beat, and no list of chores appears anywhere. The journey's stage is
+`first_chapter` from the person's first return.
+
 ## Slices
 
 | # | Slice | State |
@@ -320,8 +360,8 @@ Each time, "Pip retrieves the tea cosy and settles underneath it."
 | 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | merged |
 | 4 | Claire's portrait: "That sounds like me / Let me change something" | merged |
 | 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | merged |
-| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | this PR |
-| 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | |
+| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | merged |
+| 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | this PR |
 | 8 | Part 3: "The Friday That Didn't Exist", "The Estimate That Wouldn't Fit", "Here is what changed because you arrived" | |
 
 ## Verification

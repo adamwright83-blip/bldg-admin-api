@@ -59,6 +59,8 @@ export type ToolContext = {
     readCompanyView?: typeof readLaundryFarmCompanyView;
     runQuery?: typeof runBusinessQuery;
   };
+  /** Claire on the person's first-chapter page only: what happened with the conversation they picked up, as it stands now. */
+  readFirstChapter?: () => Promise<unknown>;
 };
 
 export type DayLineRow = { id: string; title: string; status: "open" | "completed"; businessDate: string; detail: string | null };
@@ -200,6 +202,19 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
   {
     name: "end_call",
     description: "Call this when the operator is done (they say bye, that's all, hang up). Your final text is spoken before the line closes.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+];
+
+/**
+ * Claire on the person's page in their first ten minutes (docs/goldline/FIRST_TEN_MINUTES_BUILD.md, slice 7): one
+ * read and nothing else. There is no Day Line, ledger or workspace there yet, so none of the call's tools are offered.
+ */
+export const CLAIRE_FIRST_CHAPTER_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "read_first_chapter",
+    description:
+      "Read what happened with the conversation the person picked up in their first ten minutes, as the records stand now: who asked and their words, the person's reply back then, what they offer now, the message as it stands (its exact words, and whether it is as drafted, the version they chose, or their own words), where it is (ready and not sent, kept for later, opened in their mail, copied by them to send, they said they sent it, or in their Sent folder), whether their Sent folder was looked at just now and what it showed, and whether the recipient has written back about it, in the recipient's words. Times are already in the person's zone; when a time is null, give none.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
@@ -635,6 +650,8 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
     }
     case "end_call":
       return { output: { status: "ending" }, wrote: false, endCall: true };
+    case "read_first_chapter":
+      return { output: ctx.readFirstChapter ? await ctx.readFirstChapter() : { status: "unavailable" }, wrote: false };
     default:
       return { output: { status: "unknown_tool", name }, wrote: false };
   }
