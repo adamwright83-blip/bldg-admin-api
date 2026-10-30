@@ -52,6 +52,9 @@ describe.skipIf(!allowed)("your first chapter on MySQL", () => {
   beforeAll(async () => {
     db = await mysql.createConnection(url);
     await import("../journeys");
+    // Claire's engine is a large module graph: load it here, not inside the test's five seconds.
+    await import("./firstChapter");
+    await import("../../claire/prototype/claireToolLoop");
   }, 60_000);
   afterAll(async () => {
     await db?.end();
