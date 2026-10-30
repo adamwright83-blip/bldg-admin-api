@@ -65,6 +65,22 @@ A Stripe return for a draft that belongs to today's funnel always lands on today
    Google requires a privacy policy that covers Google user data and its Limited Use, a demo video of the consent
    flow, and a CASA (Tier 2) security assessment by an approved assessor, renewed yearly.
 
+### Billing (for "Continue with JOYSTICK"; nothing here is set by an agent)
+
+The first ten minutes use today's JOYSTICK billing as it stands. Until these are set, the card says plainly that
+JOYSTICK isn't taking payment yet, and nothing is charged. On Railway → `bldg-admin-api` → production → Variables:
+
+- `DAYFORGE_BILLING_STRIPE_SECRET_KEY` (legacy name): today's checkout opens only with a Stripe **test** key (`sk_test_…`); live
+  keys stay refused until `docs/JOYSTICK-SAAS-LAUNCH-OPS.md` is done.
+- `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET` (legacy name): the signing secret of a Stripe webhook endpoint at
+  `https://admin.bldg.chat/api/dayforge/billing/stripe-webhook` (legacy path; event `checkout.session.completed` and the
+  subscription events today's billing handles).
+- `DAYFORGE_STRIPE_PRICE_ID`, `DAYFORGE_STRIPE_PLAN_KEY=joystick-growth-standard`, `DAYFORGE_STRIPE_TRIAL_DAYS=7` (legacy names): the
+  monthly plan the card states ($49 a month, seven days free). Full steps are in
+  `docs/legacy-dayforge-saas-onboarding-billing.md` and `docs/legacy-dayforge-production-rollout.md`.
+- `DAYFORGE_BILLING_APP_URL` (legacy name): leave unset (checkout returns to `admin.bldg.chat`). A journey begun on another origin
+  is carried there before checkout.
+
 ### Slack (api.slack.com/apps)
 
 1. **Create New App → From scratch**, name JOYSTICK.
@@ -244,6 +260,52 @@ start; keep it short), or say "Not now", which keeps it unsent and lets them bri
 The draft is stored in `first_ten_drafts` (migration 0156), whose hand-off columns stay empty until the next slice. Each
 beat of the chapter is appended to `first_ten_events`, so a reload carries on where the person left off.
 
+## Keeping the crew, and the message leaving the table (slice 6)
+
+At the writing table, once the message has value, the person can keep their crew. The card says "Keep your crew.
+Continue your story." and "Your business portrait, this conversation, and everything you've prepared will be waiting
+here." It then states the actual offer plainly, from the live plan: "7 days free, then $49 a month. Card required. One
+plan. Cancel anytime." for `joystick-growth-standard`. What JOYSTICK already knows (business, name, email) is shown for
+the person to confirm, and "Continue with JOYSTICK" leads to checkout.
+
+- **Checkout is today's** (`server/saas`), on the journey's own signup draft. Changes to billing code:
+  - A first-ten draft takes its identity without the prepay questions (`saveFirstTenOnboardingIdentity`).
+  - It counts as ready for checkout and for provisioning by the same rule as a JOYSTICK signup.
+  - Stripe returns it to `/joystick-start`.
+  - The webhook provisions the workspace exactly as for any JOYSTICK signup, minus seeding the prepay answers it
+    doesn't have, and the journey records its tenant.
+- **The return lands on the prepared message.** The draft, the scene and every decision live on the server, so
+  they survive checkout. A cancelled checkout says "Checkout closed. Nothing was charged; everything here is saved."
+- **One origin.** Today's checkout returns to one origin (the legacy-named `DAYFORGE_BILLING_APP_URL`, default `admin.bldg.chat`), while a
+  draft's credentials live in the browser on the origin where it began. A journey begun elsewhere is carried to the
+  return origin first: "Continue on admin.bldg.chat" moves its credentials in the URL fragment, which no server ever
+  sees, and the page there adopts them and clears the fragment.
+- **No billing plan, no paywall.** Without a plan (production today) the card says "JOYSTICK isn't taking payment
+  yet. Everything here is saved." and the message can still leave. With a plan, it leaves only once the journey is
+  active.
+- **Nina's example** never activates and never sends.
+
+**The message leaves the person's way.** "Your message to Elena opens in your own Gmail, ready to send. You send it
+there. JOYSTICK doesn't send it." Behind it:
+
+- **Open in Gmail.** Gmail's own compose window opens with the real recipient, subject and exact text (`authuser`
+  picks the connected account). The person can also copy the message.
+- **What is recorded.** Only what is known: that the message was opened in their mail ("Opened in your mail at 3:42
+  PM. JOYSTICK didn't send it."), and what they answer to "Did it go?" ("I sent it" / "Not yet").
+- **What their Sent folder shows.** On their return, and every little while, JOYSTICK looks in their own Sent folder
+  for a message to the recipient since the hand-off, using the read-only Gmail access they gave. "In your Sent
+  folder, 3:44 PM." appears only when it is there.
+- **Never "sent" unless it was.** The draft's status, and the times it left, was reported and was found, are kept
+  in `first_ten_drafts`, and every step is in `first_ten_events`.
+
+**The closing beat answers what actually happened**, in the courtyard:
+
+- **Sent**, by their word or by their Sent folder: "Hazel notices the ink on your hand." / "You'll get used to that."
+- **Not yet:** "It'll keep. Ink does."
+- **Not now:** "Some letters are better kept."
+
+Each time, "Pip retrieves the tea cosy and settles underneath it."
+
 ## Slices
 
 | # | Slice | State |
@@ -252,8 +314,8 @@ beat of the chapter is appended to `first_ten_events`, so a reload carries on wh
 | 2 | Understanding: the job that reads the sources into sourced findings, progress that tracks the work | merged |
 | 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | merged |
 | 4 | Claire's portrait: "That sounds like me / Let me change something" | merged |
-| 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | this PR |
-| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | |
+| 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | merged |
+| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | this PR |
 | 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | |
 | 8 | Part 3: "The Friday That Didn't Exist", "The Estimate That Wouldn't Fit", "Here is what changed because you arrived" | |
 

@@ -114,7 +114,8 @@ test("the Friday that didn't exist, Hazel's proper letter, and the real draft at
   await expect(page.getByTestId("first-ten-table-line")).toContainText("Short enough to answer.");
   await expect(draft).toHaveAttribute("data-status", "prepared");
   // nothing claims it was sent
-  await expect(page.getByText(/\bsent\b/i)).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-send-status")).toHaveCount(0);
+  await expect(page.getByText(/In your Sent folder|You said you sent it/)).toHaveCount(0);
   await shots("44-draft", page, testInfo);
 
   // another way, then Nina's own words, then not now, then back

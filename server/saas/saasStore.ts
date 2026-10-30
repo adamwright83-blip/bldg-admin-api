@@ -527,6 +527,72 @@ export async function saveJoystickOnboardingIdentity(input: {
   return requireOnboardingSession(input);
 }
 
+/**
+ * The owner's identity on a first-ten draft (JOYSTICK's first ten minutes), the same configuration a JOYSTICK signup
+ * gets, without the prepay questions: the crew's reading of their own sources took their place.
+ */
+export async function saveFirstTenOnboardingIdentity(input: {
+  sessionId: string;
+  resumeToken: string;
+  expectedVersion: number;
+  businessName: string;
+  contactName: string;
+  ownerEmail: string;
+  timeZone: string;
+}) {
+  const session = await requireOnboardingSession(input);
+  if (session.onboardingMode !== FIRST_TEN_ONBOARDING_MODE || session.status !== "draft") {
+    throw new Error("This signup isn't waiting for account setup");
+  }
+  const businessName = input.businessName.trim();
+  const contactName = input.contactName.trim();
+  const ownerEmail = normalizeSaasEmail(input.ownerEmail);
+  if (!businessName || !contactName || !ownerEmail) {
+    throw new Error("Business and owner identity are required before checkout");
+  }
+  const slug = joystickTechnicalSlug(businessName, session.id);
+  const configuration: SaasTenantOnboardingConfiguration & { kind: typeof FIRST_TEN_ONBOARDING_MODE } = {
+    kind: FIRST_TEN_ONBOARDING_MODE,
+    businessName,
+    slug,
+    contactName,
+    contactEmail: ownerEmail,
+    contactPhone: null,
+    website: null,
+    timeZone: input.timeZone.trim() || "UTC",
+    brandName: businessName,
+    logoUrl: null,
+    primaryColor: "#111111",
+    proposalTemplateKey: null,
+    locations: [],
+    services: [],
+    importProviderKey: null,
+  };
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(legacyDayforgeSaasOnboardingSessions)
+    .set({
+      businessName,
+      slug,
+      ownerEmail,
+      configurationJson: configuration,
+      currentStep: "checkout",
+      version: input.expectedVersion + 1,
+    })
+    .where(
+      and(
+        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
+        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+      )
+    );
+  if (affectedRows(result) !== 1) {
+    throw new Error("Onboarding changed in another session; reload before checkout");
+  }
+  return requireOnboardingSession(input);
+}
+
 function onboardingSessionCanCheckout(session: Awaited<ReturnType<typeof requireOnboardingSession>>): boolean {
   const configuration = session.configurationJson as (SaasTenantOnboardingConfiguration & { kind?: string }) | null;
   if (!configuration) return false;
@@ -538,6 +604,12 @@ function onboardingSessionCanCheckout(session: Awaited<ReturnType<typeof require
       session.draftPreviewJson &&
       joystickDraftComplete(joystickDraftAnswers(session)) &&
       configuration.kind === "joystick_generic"
+    );
+  }
+  // JOYSTICK's first ten minutes: the crew's reading stands in for the prepay preview; identity is all checkout needs
+  if (session.onboardingMode === FIRST_TEN_ONBOARDING_MODE) {
+    return Boolean(
+      session.businessName?.trim() && session.slug?.trim() && session.ownerEmail?.trim() && configuration.kind === FIRST_TEN_ONBOARDING_MODE
     );
   }
   return onboardingConfigurationIsOperational(configuration);
@@ -948,9 +1020,10 @@ export async function provisionTenantFromSubscription(input: {
   const configuration =
     session.configurationJson as (SaasTenantOnboardingConfiguration & { kind?: string }) | null;
   const isJoystickGeneric = session.onboardingMode === "joystick_generic";
+  const isJoystickSignup = isJoystickGeneric || session.onboardingMode === FIRST_TEN_ONBOARDING_MODE;
   if (
     !configuration ||
-    (isJoystickGeneric
+    (isJoystickSignup
       ? !onboardingSessionCanCheckout(session as Awaited<ReturnType<typeof requireOnboardingSession>>)
       : !onboardingConfigurationIsOperational(configuration))
   ) {

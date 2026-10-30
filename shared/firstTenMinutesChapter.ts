@@ -44,6 +44,10 @@ export type DraftView = {
   body: string;
   edited: boolean;
   status: DraftStatus;
+  /** when the message left the table, what the person said, what their Sent folder showed (ISO), or null */
+  handedOffAt: string | null;
+  reportedSentAt: string | null;
+  verifiedSentAt: string | null;
   /** the composed text of each approach, so "Try another way" shows exactly what would change */
   approaches: Array<{ approach: DraftApproach; body: string }>;
 };

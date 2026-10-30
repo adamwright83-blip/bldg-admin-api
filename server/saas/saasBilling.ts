@@ -1,4 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
+import { isJoystickSignupMode } from "../../shared/firstTenMinutes";
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
 import type { SaasSubscriptionStatus } from "../../shared/saasTenant";
@@ -55,10 +56,9 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   if (!customerEmail) {
     throw new Error("Complete account identity before checkout");
   }
-  const returnPath =
-    existingOnboarding.onboardingMode === "joystick_generic"
-      ? "/joystick-start"
-      : "/dayforge-onboarding";
+  const returnPath = isJoystickSignupMode(existingOnboarding.onboardingMode)
+    ? "/joystick-start"
+    : "/dayforge-onboarding";
   const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   if (existingOnboarding.stripeCheckoutSessionId) {
     if (existingOnboarding.planKey !== input.planKey) {

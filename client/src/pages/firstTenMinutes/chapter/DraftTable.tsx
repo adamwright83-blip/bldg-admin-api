@@ -122,7 +122,7 @@ export function DraftTable({
         )}
       </div>
 
-      {!editing ? (
+      {!editing && (draft.status === "prepared" || declined) ? (
         <div className={styles.tableActions}>
           {declined ? (
             <>
