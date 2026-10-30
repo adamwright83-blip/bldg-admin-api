@@ -8,6 +8,8 @@ export function findingLine(payload: FindingPayload): string {
   switch (payload.kind) {
     case "business":
       return payload.name;
+    case "owner":
+      return `You sign as ${payload.name}`;
     case "person":
       return `${payload.person.name ?? payload.person.address}: you wrote ${payload.sent}, they wrote ${payload.received}`;
     case "rule":
@@ -28,6 +30,8 @@ export function findingLine(payload: FindingPayload): string {
       return `${payload.name ?? payload.fileName}, sent ${payload.uses} times`;
     case "route":
       return `${payload.title}: ${payload.stops.map(stop => stop.label).join(", ")}`;
+    case "rhythm":
+      return `${payload.titles.join(", ")}: ${payload.days.map(day => `${WEEKDAYS[day]}s`).join(" and ")}`;
     case "contrast":
       return `${payload.aLine} ${payload.bLine}`;
     case "opportunity":
@@ -43,13 +47,17 @@ const ORDER: FindingPayload["kind"][] = [
   "contrast",
   "place",
   "route",
+  "rhythm",
   "image",
   "service",
   "request",
   "reply",
   "person",
   "business",
+  "owner",
 ];
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** Everything the crew found, each with where it came from. */
 export function FindingsSheet({ findings, onClose }: { findings: FindingView[]; onClose: () => void }) {

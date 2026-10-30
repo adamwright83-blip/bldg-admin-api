@@ -772,3 +772,8 @@
   text-underline-offset: 6px;
   text-decoration-color: rgba(251, 245, 232, 0.4);
 }
+
+/* the crew's scene, in the desk's own flow until something settles over it */
+.holder {
+  display: contents;
+}

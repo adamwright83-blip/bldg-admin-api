@@ -1,6 +1,6 @@
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { findingIds, type DraftFinding } from "../understanding/draft";
-import { habitFindings, imageFindings, peopleFindings, routeFindings } from "../understanding/deterministic";
+import { habitFindings, imageFindings, ownerFindings, peopleFindings, rhythmFindings, routeFindings } from "../understanding/deterministic";
 import { exampleGeocoder, exampleReaders } from "../understanding/exampleReaders";
 import { exampleExtractor } from "../understanding/extractors";
 import { CONVERSATIONS_SYSTEM, conversationCorpus, verifyConversations, verifyWork, workCorpus } from "../understanding/extract";
@@ -23,10 +23,12 @@ export async function exampleReading(journeyId = "journey-under-test") {
   const { corpus, items } = conversationCorpus(sent, received, owner);
   const conversations = verifyConversations(await extractor.conversations({ system: CONVERSATIONS_SYSTEM, corpus }), items, owner, ids);
   let all = mergeDrafts([
+    ...ownerFindings(sent, owner, ids),
     ...peopleFindings(sent, received, owner, ids),
     ...habitFindings(sent, ids),
     ...imageFindings(sent, ids),
     ...routeFindings(events, ids),
+    ...rhythmFindings(events, ids),
     ...conversations,
   ]);
   const work = await extractor.work({ system: "", corpus: workCorpus({ files, slack: [], events, verified: all }) });

@@ -46,11 +46,11 @@ test("your own account: the reading works in the open, and only verified words c
   await expect(reading.locator('[data-object="photograph"]')).toContainText("blue jug");
   await shots("12-own-reading", page, testInfo);
 
-  // then the crew steps in with Nina's own words, checked against her mail, after exactly two model calls
+  // then the crew steps in with Nina's own words, checked against her mail; the reading made exactly two model calls
   const scene = page.getByTestId("first-ten-crew-scene");
   await expect(scene.getByTestId("first-ten-object-rule")).toContainText("No more Sunday deliveries.", { timeout: 60_000 });
   await expect
-    .poll(async () => (await (await request.get(`${FAKE}/__model-calls`)).json()).calls, { timeout: 30_000 })
+    .poll(async () => ((await (await request.get(`${FAKE}/__model-calls`)).json()).calls as string[]).filter(call => call !== "portrait"), { timeout: 30_000 })
     .toEqual(["conversations", "work"]);
 });
 

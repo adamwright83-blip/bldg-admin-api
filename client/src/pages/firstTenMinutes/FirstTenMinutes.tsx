@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { captureProductEvent } from "@/lib/posthog";
 import {
@@ -19,8 +19,11 @@ import { UnderstandingScene } from "./UnderstandingScene";
 import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
 import { CrewScene } from "./crew/CrewScene";
+import { PortraitPage } from "./portrait/PortraitPage";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
+import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
+import portraitStyles from "./portrait/portrait.module.css";
 
 /**
  * JOYSTICK's first ten minutes (docs/goldline/FIRST_TEN_MINUTES_BUILD.md). Astra's flow, in the presentation Adam
@@ -41,6 +44,9 @@ function readReturn(): ReturnNotice {
     error: code ? CONNECT_ERRORS[code] : null,
   };
 }
+
+/** Stages past the crew's introductions: on a reload the crew doesn't introduce itself again. */
+const AFTER_CREW: ReadonlySet<JourneyStage> = new Set(["portrait", "chapter", "table", "activation", "first_chapter"]);
 
 function newRequestId(): string {
   return crypto.randomUUID();
@@ -160,6 +166,50 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     utils.system.firstTenMinutes.understanding.setData(credentials, next);
   }
 
+  // Claire's portrait: once the crew has introduced itself and the reading is complete. Asked again whenever the
+  // person's answers change what it rests on, until they keep it.
+  const pastCrew = Boolean(view && AFTER_CREW.has(view.stage));
+  const crewFinished = crewDone || pastCrew;
+  const readingComplete = reading.view?.status === "complete";
+  const preparePortrait = trpc.system.firstTenMinutes.preparePortrait.useMutation();
+  const answerPortrait = trpc.system.firstTenMinutes.answerPortrait.useMutation();
+  const portrait = trpc.system.firstTenMinutes.portrait.useQuery(credentials!, {
+    enabled: Boolean(credentials) && crewFinished && readingComplete,
+    retry: false,
+    refetchInterval: query => (query.state.data?.status === "writing" ? 1200 : false),
+  });
+  // what the page rests on, content included: a later reading can change a finding under the same id
+  const portraitBasis =
+    reading.view?.findings
+      .map(finding => `${finding.id}:${finding.status}:${finding.correction ?? ""}:${JSON.stringify(finding.payload)}:${finding.sources.map(source => source.ref).join(",")}`)
+      .join("|") ?? "";
+  const writePortrait = useCallback(() => {
+    if (!credentials) return;
+    preparePortrait.mutate(credentials, { onSuccess: next => utils.system.firstTenMinutes.portrait.setData(credentials, next) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [credentials]);
+  useEffect(() => {
+    if (!crewFinished || !readingComplete || portrait.data?.status === "kept") return;
+    writePortrait();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crewFinished, readingComplete, portraitBasis, writePortrait]);
+  // A correction made while Claire was writing couldn't start a new page then; once she has finished, ask again. The
+  // server writes again only if what the page rests on has changed, so this settles after one more page at most.
+  const wasWriting = useRef(false);
+  useEffect(() => {
+    const writing = portrait.data?.status === "writing";
+    if (wasWriting.current && !writing && portrait.data?.status === "ready") writePortrait();
+    wasWriting.current = writing;
+  }, [portrait.data?.status, writePortrait]);
+  const page = portrait.data && (portrait.data.status === "ready" || portrait.data.status === "kept") ? portrait.data : null;
+
+  async function onPortrait(input: { answer: "keep" } | { answer: "change"; key: string; to: string | null } | { answer: "restore"; key: string }) {
+    if (!credentials) return;
+    const next = await answerPortrait.mutateAsync({ ...credentials, ...input });
+    utils.system.firstTenMinutes.portrait.setData(credentials, next);
+    if (input.answer === "keep") void journey.refetch();
+  }
+
   // Slack added after the reading finished: read again, so the crew sees it too.
   const readingConnections = useRef<number | null>(null);
   useEffect(() => {
@@ -187,17 +237,37 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
             />
           ) : null}
           {crewReady && reading.view && view ? (
-            <CrewScene
-              journeyId={view.id}
-              view={reading.view}
-              picture={picture.data?.src ?? null}
-              onAnswer={answer}
-              onFinished={() => setCrewDone(true)}
-            />
+            <div className={page ? portraitStyles.settled : styles.holder} data-testid="first-ten-crew-holder" aria-hidden={page ? true : undefined}>
+              <CrewScene
+                journeyId={view.id}
+                view={reading.view}
+                picture={picture.data?.src ?? null}
+                introduced={pastCrew}
+                onAnswer={answer}
+                onFinished={() => setCrewDone(true)}
+              />
+            </div>
           ) : (
             <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
           )}
-          {crewDone ? (
+          {page && reading.view ? (
+            <PortraitPage
+              view={page}
+              findings={reading.view.findings}
+              onKeep={() => onPortrait({ answer: "keep" })}
+              onChange={(key, to) => onPortrait({ answer: "change", key, to })}
+              onRestore={key => onPortrait({ answer: "restore", key })}
+            />
+          ) : null}
+          {crewFinished && portrait.data?.status === "failed" ? (
+            <p className={portraitStyles.quietNote} data-testid="first-ten-portrait-failed">
+              Claire's page didn't come together just now.
+              <button type="button" onClick={writePortrait}>
+                Try again
+              </button>
+            </p>
+          ) : null}
+          {crewFinished && portrait.data?.status === "unavailable" ? (
             <button type="button" className={styles.endLink} onClick={() => setCloser(true)} data-testid="first-ten-look-closer">
               Look closer
             </button>
