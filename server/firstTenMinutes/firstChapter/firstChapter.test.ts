@@ -135,5 +135,17 @@ describe("what Claire reads, and what she may say", () => {
     expect(kinds("It went out at 10:04 AM.", told)).toEqual(["sent"]);
     expect(kinds("It's in your Sent folder.", told)).toEqual(["sent_folder"]);
   });
+
+  it("reads only what Claire says herself: a verbatim quotation is the record's words, not her claim", async () => {
+    const opportunity = await elena();
+    const theirs = "Hi Elena — you sent us a request in April, and I emailed back late. We can deliver at 9:00 AM every Friday. Shall we start?";
+    const ready = firstChapterFacts(opportunity, draft({ edited: true, body: theirs }), { kind: "unknown" }, { ...LA, lookedInSent: false });
+    const kinds = (answer: string) => checkClaireAnswer(answer, ready).map(problem => problem.kind);
+    expect(kinds(`You put the reply in your own words: “${theirs}” It hasn't been sent.`)).toEqual([]);
+    // what she says around the quotation is still hers
+    expect(kinds(`You put the reply in your own words: “${theirs}” You sent it at 9:00 AM.`)).toEqual(["sent", "time"]);
+    // a quotation that isn't verbatim proves nothing, so what it says is read as hers
+    expect(kinds("Your reply says “I sent it to Elena at 9:00 AM yesterday.”")).toEqual(["misquote", "sent", "time"]);
+  });
 });
 

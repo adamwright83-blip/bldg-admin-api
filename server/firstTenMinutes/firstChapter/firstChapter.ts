@@ -15,7 +15,7 @@ import {
 } from "../../../shared/firstTenMinutesFirstChapter";
 import { assertAiSpendAvailable, trackModelUsage } from "../../agents/costTracking";
 import { ClaireToolTurnError, openClaireFirstChapterSession } from "../../claire/prototype/claireToolLoop";
-import { isThePreparedMessage, verifyDraft } from "../activation/activation";
+import { latestOnSubject, verifyDraft } from "../activation/activation";
 import { chapterView } from "../chapter/chapter";
 import { journeyEvents, recordEvent } from "../events";
 import { setJourneyStage, type JourneyRow } from "../store";
@@ -40,10 +40,10 @@ export async function firstChapterView(journey: JourneyRow): Promise<FirstChapte
   };
 }
 
-/** Has the recipient written since the message went? Read from the person's own mail, when it can be. */
 /**
  * Has the recipient written back about this message since it went? Read from the person's own mail: a reply on the
- * message's subject is a reply. Other mail from them since is neither a reply nor proof there isn't one.
+ * message's subject is a reply, and the newest is where things stand. Other mail from them since is neither a reply
+ * nor proof there isn't one.
  */
 async function replyState(journey: JourneyRow, draft: DraftView): Promise<ReplyState> {
   const since = draft.verifiedSentAt ?? draft.reportedSentAt ?? draft.handedOffAt;
@@ -52,7 +52,7 @@ async function replyState(journey: JourneyRow, draft: DraftView): Promise<ReplyS
   if (!access) return { kind: "unknown" };
   try {
     const mail = await gmailReader(access).receivedFrom(draft.to.address, new Date(new Date(since).getTime() - 60_000));
-    const reply = mail.find(item => isThePreparedMessage(item, { subject: draft.subject, body: "" }));
+    const reply = latestOnSubject(mail, draft.subject);
     if (reply) return { kind: "replied", at: reply.at.toISOString(), excerpt: replyExcerpt(reply.text) };
     return mail.length ? { kind: "unknown" } : { kind: "none" };
   } catch {

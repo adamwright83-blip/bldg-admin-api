@@ -225,21 +225,24 @@ export function checkClaireAnswer(answer: string, facts: FirstChapterFacts): Ans
   const sources = [facts.message.words, facts.message.subject, facts.request.words, facts.replyThen, facts.offerNow, said?.words ?? null]
     .filter((text): text is string => Boolean(text))
     .map(plainText);
-  for (const match of answer.matchAll(/[“"]([^”"]{8,})[”"]/g)) {
-    const quoted = plainText(match[1]).replace(/[.,;:!?…]+$/, "");
-    if (!sources.some(source => source.includes(quoted))) problems.push({ kind: "misquote", text: match[1] });
-  }
+  const quotation = /[“"]([^”"]{8,})[”"]/g;
+  const verbatim = (quoted: string) => sources.some(source => source.includes(plainText(quoted).replace(/[.,;:!?…]+$/, "")));
+  for (const match of answer.matchAll(quotation)) if (!verbatim(match[1])) problems.push({ kind: "misquote", text: match[1] });
+  // A verbatim quotation is the record's words, not Claire's claim ("you sent us a request in April", "9:00 AM every
+  // Friday"): the checks below read only what she says herself. Its closing punctuation stays, so a sentence still ends
+  // where the quotation ended it. A quotation that isn't verbatim proves nothing and is read as hers.
+  const own = answer.replace(quotation, (whole, quoted: string) => (verbatim(quoted) ? `“…${/[.?!]$/.exec(quoted.trim())?.[0] ?? ""}”` : whole));
 
   const state = facts.message.state;
-  for (const claim of claims(answer, /\b(?:you|they)\s+(?:sent|mailed|emailed)\b/i)) {
+  for (const claim of claims(own, /\b(?:you|they)\s+(?:sent|mailed|emailed)\b/i)) {
     if (!claim.negated && state !== "they_said_they_sent_it" && state !== "in_their_sent_folder") problems.push({ kind: "sent", text: claim.sentence });
   }
-  for (const claim of claims(answer, /\b(?:was|been|is|got)\s+sent\b|\bwent out\b|\bhas gone\b|\bit's gone\b|\bI\s+(?:sent|mailed|emailed)\b/i)) {
+  for (const claim of claims(own, /\b(?:was|been|is|got)\s+sent\b|\bwent out\b|\bhas gone\b|\bit's gone\b|\bI\s+(?:sent|mailed|emailed)\b/i)) {
     const mine = /^I\s/i.test(claim.text);
     if (!claim.negated && (mine || state !== "in_their_sent_folder")) problems.push({ kind: "sent", text: claim.sentence });
   }
 
-  for (const claim of claims(answer, /\bsent folder\b/i)) {
+  for (const claim of claims(own, /\bsent folder\b/i)) {
     const couldNotLook = /\b(?:couldn't|could not|can't|cannot|wasn't able to|unable to)\s+(?:look|check|search|see)\b/i.test(claim.sentence);
     const allowed = couldNotLook
       ? facts.sentFolder === "could_not_look"
@@ -251,21 +254,21 @@ export function checkClaireAnswer(answer: string, facts: FirstChapterFacts): Ans
 
   const names = [facts.recipient.firstName, facts.recipient.name].filter((name): name is string => Boolean(name)).map(escape);
   const who = `(?:${[...names, "she", "he", "they"].join("|")})`;
-  for (const claim of claims(answer, new RegExp(`\\b${who}\\s+(?:has\\s+|have\\s+)?(?:wrote back|written back|replied|responded|answered|got back to you)\\b`, "i"))) {
+  for (const claim of claims(own, new RegExp(`\\b${who}\\s+(?:has\\s+|have\\s+)?(?:wrote back|written back|replied|responded|answered|got back to you)\\b`, "i"))) {
     if (!claim.negated && !said) problems.push({ kind: "wrote_back", text: claim.sentence });
   }
   const notYet = new RegExp(`\\b${who}\\s+(?:hasn't|has not|haven't|have not|didn't|did not)\\s+(?:written back|write back|replied|reply|responded|respond|answered|answer|got back|gotten back)\\b|\\bno reply\\b`, "i");
-  for (const claim of claims(answer, notYet)) {
+  for (const claim of claims(own, notYet)) {
     if (facts.recipientWroteBack.answer !== "no") problems.push({ kind: "wrote_back", text: claim.sentence });
   }
 
   const times = [facts.message.leftTheTable, facts.message.theySaidSent, facts.message.inSentFolderSince, said?.when ?? null]
     .filter((text): text is string => Boolean(text))
     .map(text => plainText(text).replace(/\./g, ""));
-  for (const match of answer.matchAll(/\b\d{1,2}:\d{2}\s?[ap]\.?m\.?/gi)) {
+  for (const match of own.matchAll(/\b\d{1,2}:\d{2}\s?[ap]\.?m\.?/gi)) {
     if (!times.some(time => time.includes(plainText(match[0]).replace(/\./g, "")))) problems.push({ kind: "time", text: match[0] });
   }
 
-  for (const match of answer.matchAll(/\bread_first_chapter\b|\b(?:tool|database|JSON|system prompt)\b/gi)) problems.push({ kind: "machinery", text: match[0] });
+  for (const match of own.matchAll(/\bread_first_chapter\b|\b(?:tool|database|JSON|system prompt)\b/gi)) problems.push({ kind: "machinery", text: match[0] });
   return problems;
 }
