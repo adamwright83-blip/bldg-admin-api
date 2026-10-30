@@ -22,6 +22,16 @@ describe("checkSpeech", () => {
     expect(checkSpeech("I won't mention the licensing item, per your standing rule, and I'll just report the rest.", { heldTopics, operatorTurns: ["Anything this week I should be bracing for?"] }).length).toBeGreaterThan(0);
   });
 
+  it("flags Claire narrating her own method (eval runs 11 and 40988869307)", () => {
+    const problems = checkSpeech("This is a question, so I answer it and offer once. I'd go with the customer list. Want me to put it on tomorrow?", { heldTopics: [], operatorTurns: ["What would you do?"] });
+    expect(problems).toEqual([{ kind: "narrates_method", sentence: "This is a question, so I answer it and offer once." }]);
+    expect(checkSpeech("This is dictation, so I'll write all three now.", { heldTopics: [], operatorTurns: ["Three things."] }).map(p => p.kind)).toEqual(["narrates_method"]);
+    expect(withoutOffendingSentences("This is a question, so I answer it and offer once. I'd go with the customer list.", problems)).toBe("I'd go with the customer list.");
+    // Ordinary answers that mention a question are not narration.
+    expect(checkSpeech("That's a good question. I'd start with the customer list.", { heldTopics: [], operatorTurns: ["What first?"] })).toEqual([]);
+    expect(checkSpeech("This is the one I'd do first: the customer list.", { heldTopics: [], operatorTurns: ["What first?"] })).toEqual([]);
+  });
+
   it("is quiet when the operator raised the topic first, and on ordinary speech", () => {
     expect(checkSpeech("The magazine interview is Saturday at two.", { heldTopics, operatorTurns: ["What's the deal with the magazine interview?"] })).toEqual([]);
     expect(checkSpeech("Tomorrow you have the pack walk and the husky meet-and-greet. Sunday is clear.", { heldTopics, operatorTurns: ["What's on tomorrow?"] })).toEqual([]);

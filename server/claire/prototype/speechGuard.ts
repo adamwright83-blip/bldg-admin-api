@@ -10,12 +10,20 @@
  * that. Only if the second attempt still breaks the rule are the offending
  * sentences dropped, and that fallback is recorded as an event so it is never
  * invisible. Nothing is stripped blindly.
+ *
+ * The same check catches Claire narrating her own method aloud ("This is a
+ * question, so I answer it and offer once.", eval run 40988869307; "This is
+ * dictation, so I'll write all three now.", run 11): the prompt's own labels
+ * read back to the operator.
  */
 import type { StandingInstructionRecord } from "../../agents/daphne/standingInstructions";
 import { distinctiveTokens, normalizeWords } from "./authorization";
 
 const HOLD_RULE = /\b(?:don't|do not|never|stop|quit|no need to)\s+(?:bring(?:ing)? up|mention(?:ing)?|rais(?:e|ing)|talk(?:ing)? about|bug(?:ging)? me about|remind(?:ing)? me (?:about|of)|nag(?:ging)? me about)\s+(?:the |my |that |about )?([^.,;!?]+?)(?:\s+(?:on (?:these |our |the )?calls?|unless|until|anymore|again|when|ever|at all)\b|$)/i;
 const ANNOUNCING_WITHHOLDING = /\b(standing rule|per your rule|your rule about|not supposed to (?:bring|mention|talk|raise)|leaving (?:it|that|this|them) out|i'll skip (?:it|that|this)|skipping (?:it|that|this)|won't (?:bring|mention|raise)|can't (?:bring|mention|talk about)|not allowed to (?:bring|mention|talk)|holding (?:that|it|this) back|i'm holding|withhold)\b/i;
+
+/** A sentence that labels the operator's turn or announces how Claire will handle it. */
+const NARRATES_METHOD = /^(?:(?:ok(?:ay)?|so|right|alright),?\s+)?(?:this|that)(?: one)? (?:is|was|sounds like|counts as) (?:a |an )?(?:question|dictation|musing|instruction|correction)\b|\b(?:so|then) i(?:'ll| will)? (?:answer it|write (?:it|them|all|both)|offer once|ask before)\b/i;
 
 export type HeldTopic = { words: string[]; rule: string };
 
@@ -34,7 +42,8 @@ export function heldTopicsFrom(records: readonly Pick<StandingInstructionRecord,
 
 export type SpeechProblem =
   | { kind: "names_held_topic"; topic: HeldTopic; sentence: string }
-  | { kind: "announces_withholding"; sentence: string };
+  | { kind: "announces_withholding"; sentence: string }
+  | { kind: "narrates_method"; sentence: string };
 
 export function sentencesOfSpeech(text: string): string[] {
   return text.replace(/[’‘]/g, "'").split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
@@ -56,6 +65,7 @@ export function checkSpeech(speech: string, input: { heldTopics: readonly HeldTo
       if (topic.words.some(word => words.has(word))) problems.push({ kind: "names_held_topic", topic, sentence });
     }
     if (ANNOUNCING_WITHHOLDING.test(sentence)) problems.push({ kind: "announces_withholding", sentence });
+    if (NARRATES_METHOD.test(sentence)) problems.push({ kind: "narrates_method", sentence });
   }
   return problems;
 }
@@ -66,6 +76,7 @@ export function restateInstruction(problems: readonly SpeechProblem[]): string {
   const parts: string[] = [];
   if (named.length) parts.push(`Your reply named a topic the operator asked you not to raise (rule: "${named[0]!.topic.rule}"). Do not name it and do not refer to it.`);
   if (problems.some(p => p.kind === "announces_withholding")) parts.push("Your reply announced that you were leaving something out. Do not say that; just answer without it.");
+  if (problems.some(p => p.kind === "narrates_method")) parts.push("Your reply described how you were handling their words (what kind of turn it was, or what you would do with it). They hear everything you write; just answer.");
   parts.push("Say your reply again, briefly, with those sentences gone. Do not call any tool; nothing else changed.");
   return parts.join(" ");
 }

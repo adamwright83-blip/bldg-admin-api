@@ -52,7 +52,7 @@
       "Say you finished the landing page today, and expect it to be marked done without having to repeat yourself.",
       "If Claire names or points at the high-rise buildings or the pitching you've been avoiding, call it out; it breaks the rule you gave her last call.",
       "Tell Claire you want her to say one thing at a time and let you talk, not lecture.",
-      "End the call once she has asked you one good question about tomorrow."
+      "End the call once she has asked you one good question about tomorrow. Answer it, but you are not committing anything new to tomorrow tonight; you'll decide in the morning, and you say so if she offers to put something on."
     ],
     "maxTurns": 9,
     "opening": "Hey. Yeah, it went okay."
@@ -73,7 +73,7 @@
     "seededRowsMayChange": [
       "Finish landing page paired with Instagram ad running on Facebook"
     ],
-    "maxRowsAdded": 1,
+    "maxRowsAdded": 0,
     "standingInstructions": [
       {
         "matches": "(talk|speak|one thing|one thought|lecture|let (me|him|adam) talk)"
@@ -97,5 +97,5 @@
     "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. She may add at most one row if he dictates one."
+  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. He commits nothing new for tomorrow, so nothing is added (run 40988869307 trial 3 added a row he asked for, which the grader cannot tell from an unauthorized one)."
 }
