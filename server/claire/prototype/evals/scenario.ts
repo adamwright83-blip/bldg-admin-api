@@ -102,6 +102,10 @@ export type ScenarioExpectation = {
     mustNotRaise?: string[];
     /** Regexes that must appear in at least one Claire line. */
     mustMention?: string[];
+    /** Upper bound on the length of every Claire line, in characters (the operator asked her to talk less). */
+    maxCharsPerLine?: number;
+    /** Upper bound on question marks in a single Claire line (one thought, then one question). */
+    maxQuestionsPerLine?: number;
   };
   /**
    * Maximum number of Claire lines that ask the operator to authorize Day Line
@@ -121,10 +125,18 @@ export type Scenario = {
   source?: string;
   /** Local wall-clock time of the call, HH:mm in the tenant time zone. Informs the prototype only. */
   localTime?: string;
+  /**
+   * A call Claire places on a schedule: she speaks first, and the operator's lines answer her
+   * opening. Absent: an inbound call, the operator speaks first. Runs on the prototype only;
+   * Brain V2's scheduled path needs the showrunner and is not driven by this runner.
+   */
+  callKind?: "evening_debrief" | "morning_readiness";
   seed: {
     operatorName?: string;
     dayLine: SeedDayLineRow[];
     standingInstructions?: SeedStandingInstruction[];
+    /** The operator's headline goal as read_goal_progress returns it. Absent: no goal on record. */
+    goal?: { objective: string; targetValue: number; startedAt: number | null; current: number | null; currentNote?: string };
   };
   operator: ScriptedOperator | SimulatedOperator;
   expect: ScenarioExpectation;
@@ -183,7 +195,10 @@ export function validateScenario(scenario: Scenario): string[] {
     (scenario.expect.absent?.length ?? 0) +
     (scenario.expect.standingInstructions?.length ?? 0) +
     (scenario.expect.speech?.mustNotRaise?.length ?? 0) +
-    (scenario.expect.speech?.mustMention?.length ?? 0);
+    (scenario.expect.speech?.mustMention?.length ?? 0) +
+    (scenario.expect.speech?.maxCharsPerLine ? 1 : 0) +
+    (scenario.expect.speech?.maxQuestionsPerLine ? 1 : 0);
+  if (scenario.callKind && !["evening_debrief", "morning_readiness"].includes(scenario.callKind)) problems.push("callKind must be evening_debrief or morning_readiness");
   if (checks === 0) problems.push("a scenario must assert at least one outcome");
   for (const row of [...scenario.seed.dayLine]) {
     try {

@@ -7,6 +7,7 @@ import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
 import { formatInTimeZone } from "date-fns-tz";
 import { startClairePreDriveCall } from "../../claire/claireTwilio";
+import { nativeToolClaireEnabledFor } from "../../claire/prototype/voiceEngine";
 import { checkClaireModelHealth, claireModelDownText } from "../../claire/claireModelHealth";
 import { sendOperatorArtifact } from "../../operatorArtifact/sendOperatorArtifact";
 import { executePersistentOperatorAction } from "./actionExecution";
@@ -347,44 +348,52 @@ export async function executeDailyClaireCall(input: {
     now,
     execute: async () => {
       if (!store) throw new Error("Operator appointment execution requires its durable store");
-      const briefing = await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
+      // An operator on the native-tool switch gets the native engine on scheduled calls too: the
+      // model opens the call from live reads (goal, Day Line), so no showrunner briefing, scripted
+      // opening or Daphne tone decision is prepared. The switch is read here, before dialing.
+      const native = nativeToolClaireEnabledFor({ tenantId: context.scope.tenantId, operatorUserId: identity.communicationOperatorUserId });
+      const briefing = native ? null : await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
       const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
       if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");
       // Daphne decision point (off unless DAPHNE_V2_DECISION_POINTS): recorded before the call
       // is placed; a Daphne failure never blocks or changes the call itself.
-      const daphneDecision = await prepareDaphneCallDecision({ identity, purpose, briefing, timeZone: step.timeZone, now });
-      const opening = composeShowrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null });
+      const daphneDecision = briefing ? await prepareDaphneCallDecision({ identity, purpose, briefing, timeZone: step.timeZone, now }) : null;
+      const opening = briefing ? composeShowrunnerOpening(briefing, { tone: daphneDecision?.tone ?? null }) : null;
       // The reply reader binds a bare "yes" to the carried item only if this opening asked about it.
-      briefing.openingAskedCarried = opening.askedCarried;
+      if (briefing && opening) briefing.openingAskedCarried = opening.askedCarried;
       const started = await startClairePreDriveCall({
         tenantId: context.scope.tenantId,
         actorId: identity.communicationOperatorUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
         timeZone: step.timeZone,
-        openingOverride: opening.text,
         sessionKindOverride: purpose,
-        showrunner: {
-          purpose,
-          tenantId: identity.tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
-          operatorUserId: identity.canonicalOpenId,
-          dayDirectorActorId: identity.dayDirectorActorId,
-          dayDirectorActorIds: identity.dayDirectorActorIds,
-          timeZone: step.timeZone,
-          businessDate,
-          briefing,
-          captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
-          replan: null,
-          turns: 0,
-          clockOffsetMs: now.getTime() - Date.now(),
-          daphneDecision,
-          // Not consumed here: placing a call is not delivering it. The voice turn handler consumes
-          // exactly this item once the operator is heard on this call (claireTwilio).
-          preparedOffered: (() => {
-            const spoken = preparedItemSpoken(briefing);
-            return spoken ? { ids: [spoken.id], consumedAt: null } : null;
-          })(),
-        },
+        ...(!briefing || !opening
+          ? { nativeToolPurpose: purpose }
+          : {
+              openingOverride: opening.text,
+              showrunner: {
+                purpose,
+                tenantId: identity.tenantId,
+                canonicalOperatorId: identity.canonicalOperatorId,
+                operatorUserId: identity.canonicalOpenId,
+                dayDirectorActorId: identity.dayDirectorActorId,
+                dayDirectorActorIds: identity.dayDirectorActorIds,
+                timeZone: step.timeZone,
+                businessDate,
+                briefing,
+                captured: { missionUpdates: [], developments: [], readinessNeeds: [] },
+                replan: null,
+                turns: 0,
+                clockOffsetMs: now.getTime() - Date.now(),
+                daphneDecision,
+                // Not consumed here: placing a call is not delivering it. The voice turn handler consumes
+                // exactly this item once the operator is heard on this call (claireTwilio).
+                preparedOffered: (() => {
+                  const spoken = preparedItemSpoken(briefing);
+                  return spoken ? { ids: [spoken.id], consumedAt: null } : null;
+                })(),
+              },
+            }),
       });
       return started;
     },

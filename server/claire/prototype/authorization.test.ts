@@ -37,12 +37,25 @@ describe("verifyOperatorAuthorization", () => {
 });
 
 describe("identifyingTokens", () => {
-  it("prefers proper names, falls back to non-generic nouns", async () => {
+  it("proper names plus non-generic nouns", async () => {
     const { identifyingTokens } = await import("./authorization");
     expect(identifyingTokens("Pitch The Chadwick in person")).toEqual(["chadwick"]);
     expect(identifyingTokens("Follow up with Dana at The Louise")).toEqual(["dana", "louise"]);
     expect(identifyingTokens("Pickup at OPUS")).toEqual(["opus"]);
     expect(identifyingTokens("Renew the business license")).toEqual(["business", "license"]);
+    expect(identifyingTokens("Finish landing page paired with Instagram ad running on Facebook")).toEqual(["instagram", "facebook", "landing", "page", "paired", "running"]);
+  });
+});
+
+describe("a bare yes to an offer that points back with 'it'", () => {
+  it("binds to the work the operator asked about in the turn Claire answered (yes_binds_to_offer, runs 40988869307/40990347412)", () => {
+    const offer = "Yes, I'd put it on today, since it keeps slipping. Want me to add it?";
+    const asked = "I keep forgetting to email Dana about the Louise contract renewal. Should that go on today?";
+    expect(changesOutsideOffer(offer, ["Email Dana about the Louise contract renewal"], asked)).toEqual([]);
+    // Work the operator did not ask about stays unbound.
+    expect(changesOutsideOffer(offer, ["Call the flour rep"], asked)).toEqual(["Call the flour rep"]);
+    // Without the operator's turn, the old rule holds.
+    expect(changesOutsideOffer(offer, ["Email Dana about the Louise contract renewal"])).toEqual(["Email Dana about the Louise contract renewal"]);
   });
 });
 
@@ -146,5 +159,14 @@ describe("authorizeExistingRowChange: conservative about work that predates the 
 
   it("a question about an existing item is not an instruction to change it", () => {
     expect(authorizeExistingRowChange({ op: "remove", rowId: "r-l", rowTitle: "Interview with the Whole Dog magazine writer", quote: "What's the deal with the magazine interview?", lastClaireText: null }).ok).toBe(false);
+  });
+
+  it("a title with brand names is still named by its plain words (Oct 29 eval: 'the landing page is done' was refused)", () => {
+    const rowTitle = "Finish landing page paired with Instagram ad running on Facebook";
+    for (const quote of ["The landing page is done, mark it complete.", "the landing page, yeah, I finished it today. It's done."]) {
+      expect(authorizeExistingRowChange({ op: "complete", rowId: "r-lp", rowTitle, quote, lastClaireText: null }).ok).toBe(true);
+    }
+    // Naming it without an action is still not an instruction.
+    expect(authorizeExistingRowChange({ op: "complete", rowId: "r-lp", rowTitle, quote: "How's the landing page looking?", lastClaireText: null }).ok).toBe(false);
   });
 });

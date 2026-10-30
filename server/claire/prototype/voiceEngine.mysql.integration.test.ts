@@ -225,4 +225,53 @@ describeMysql("native-tool Claire on the phone path (disposable MySQL, scripted 
     expect(claireMeta.every(meta => meta.engine === "native_tool")).toBe(true);
     expect(claireMeta[0]!.tools?.map(tool => tool.name)).toEqual(["apply_day_line_changes"]);
   }, 60_000);
+
+  it("a scheduled evening call: the model writes the opening from a goal read before dialing, the operator's answer continues that thread, and a mailbox never reaches the model", async () => {
+    const { openNativeToolScheduledConversationWithoutDialing, runRelayAuthoritativeTurn } = await import("../claireTwilio");
+    const { claireConversationStateStore } = await import("../turn/conversationStateStore");
+    const opening = "Evening, Adam. I don't have a goal on record for you yet. How did today go?";
+    script.push({ kind: "tool", name: "read_goal_progress", input: {} }, { kind: "text", text: opening });
+    const seenBefore = seen.length;
+    const opened = await openNativeToolScheduledConversationWithoutDialing({ tenantId: TENANT, actorId: OPERATOR, dayDirectorActorId: actorId, timeZone: ZONE, purpose: "evening_debrief" });
+    expect(opened.brief).toBe(opening);
+    // The model was told why it placed this call, and its goal read came back before it spoke.
+    expect(seen[seenBefore]!.system).toContain("scheduled evening wrap");
+    expect(JSON.stringify(seen[seenBefore + 1]!.messages)).toContain("no_goal");
+    type Saved = { nativeTool: { operatorTurns: string[]; messages: Array<{ role: string }> } | null; sessionKind?: string; showrunner?: unknown };
+    const saved = (await claireConversationStateStore().load<Saved>(`claire-call:${opened.conversationId}`))!.state;
+    expect(saved.sessionKind).toBe("evening_debrief");
+    expect(saved.showrunner ?? null).toBeNull();
+    // The call-start notice is not the operator's words.
+    expect(saved.nativeTool!.operatorTurns).toEqual([]);
+    expect(saved.nativeTool!.messages.at(-1)!.role).toBe("assistant");
+
+    // The operator answers; the native engine continues the same thread (no Brain V2: mocked to throw).
+    const callSid = `CA${randomUUID().replace(/-/g, "").slice(0, 32)}`;
+    script.push({ kind: "text", text: "Good. What's the one thing you want done first tomorrow?" });
+    const reply = await runRelayAuthoritativeTurn({ conversationId: opened.conversationId, utterance: "Pretty good, I finished the landing page.", token: opened.token, callSid });
+    expect(reply.speak).toBe("Good. What's the one thing you want done first tomorrow?");
+    const thread = JSON.stringify(seen.at(-1)!.messages);
+    expect(thread.indexOf(opening)).toBeGreaterThan(-1);
+    expect(thread.indexOf(opening)).toBeLessThan(thread.indexOf("Pretty good, I finished the landing page."));
+
+    // The ledger holds the model's opening as turn 0.
+    const [session] = await sql.query<mysql.RowDataPacket[]>("SELECT id, conversationKind FROM claire_conversation_sessions WHERE claireConversationId = ?", [opened.conversationId]);
+    expect(session[0]!.conversationKind).toBe("evening_debrief");
+    const [turns] = await sql.query<mysql.RowDataPacket[]>("SELECT speaker, text FROM claire_conversation_turns WHERE sessionId = ? ORDER BY ordinal", [session[0]!.id]);
+    expect(String(turns[0]!.text)).toContain(opening);
+
+    // A second scheduled call reaches a mailbox: the voicemail line is spoken and the model is never asked.
+    script.push({ kind: "text", text: "Evening, Adam. How did today go?" });
+    const mailbox = await openNativeToolScheduledConversationWithoutDialing({ tenantId: TENANT, actorId: OPERATOR, dayDirectorActorId: actorId, timeZone: ZONE, purpose: "evening_debrief" });
+    const callsBefore = seen.length;
+    const voicemail = await runRelayAuthoritativeTurn({
+      conversationId: mailbox.conversationId,
+      utterance: "The person you are trying to reach is not available. At the tone, please record your message.",
+      token: mailbox.token,
+      callSid: `CA${randomUUID().replace(/-/g, "").slice(0, 32)}`,
+    });
+    expect(voicemail.endCall).toBe(true);
+    expect(seen.length).toBe(callsBefore);
+    expect(script).toHaveLength(0);
+  }, 60_000);
 });

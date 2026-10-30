@@ -1,0 +1,52 @@
+{
+  "id": "oct29_evening_wrap_scripted",
+  "title": "Oct 29 evening wrap, the operator's own words: goal first, no building names, talk less",
+  "provenance": "production_call",
+  "source": "claire_conversation_sessions 46819c03 (evening_debrief, deploy 0acf3b1e, Brain V2). Operator lines verbatim from twilio_speech_result.",
+  "localTime": "17:30",
+  "callKind": "evening_debrief",
+  "seed": {
+    "operatorName": "Adam",
+    "goal": { "objective": "Get to 50 active customers", "targetValue": 50, "startedAt": 23, "current": null, "currentNote": "active-customer count is partial: the customer source did not load" },
+    "dayLine": [
+      { "title": "Follow up with Dana at The Louise", "businessDate": "today-83" },
+      { "title": "Pitch Los Feliz Towers in person", "businessDate": "today-80" },
+      { "title": "Pitch sageLA in person", "businessDate": "today-80" },
+      { "title": "Finish landing page paired with Instagram ad running on Facebook", "businessDate": "today" },
+      { "title": "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)", "businessDate": "today" }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "When you call me, all I really wanna hear is a reminder about what my goal is, and then where I am with it. So the 50 people, new customers being my goal, good good... That's good. And then you said I'm currently at 23 customers.",
+      "That's good also.",
+      "But then you mentioned Louise and all the other high rises, and I haven't done that for 80 days.",
+      "And I'm not gonna do it at all because we're not approaching it correctly. We have to gamify it. And for you to get me to do that ****, you cannot mention the name of the or else I will never do it.",
+      "That's why Joystick exists for people like me who resist work and your job is to trick them into doing the work that they think they hate.",
+      "Also, I don't think you should do more talking than me. I think we should each talk an equal amount. So do you tend to speak in run on sentences? It'd be nice if you would just complete 1 thought and then ask me to weigh in or to answer your question, and then I do that.",
+      "Then it's your turn to speak again."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "today", "titleMatches": "landing page" },
+      { "businessDate": "today", "titleMatches": "wilshire vermont" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 0,
+    "standingInstructions": [
+      { "matches": "(name|mention|naming).{0,80}(building|high.?rise|avoid)|(building|high.?rise|avoid).{0,80}(name|mention|naming)" },
+      { "matches": "(talk|speak|one thought|equal|run.?on|weigh in)" }
+    ],
+    "speech": {
+      "mustNotRaise": ["louise", "los feliz", "sage ?la", "chadwick", "wilshire vermont", "dana"],
+      "mustMention": ["\\b50\\b"],
+      "maxCharsPerLine": 280,
+      "maxQuestionsPerLine": 1
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "The Oct 29 call on Brain V2 opened with ~900 characters listing every open building, named The Louise right after being told not to, read a raw task list aloud, saved a canned 'goal and the plan' rule for 'your job is to trick me', and twice answered with 'I have records that don't agree'. This is the operator's side exactly. Claire must: say the goal and the distance (50; started at 23; no verified count) without walking the Day Line; never name the avoided buildings (the operator names the Louise himself in line 3, so only the opening is graded for it); save both rules (no building names; talk less, one thought then a question) in the operator's terms; keep every line short with one question at most; write nothing to the Day Line."
+}

@@ -1,0 +1,47 @@
+{
+  "id": "louise_hold_scheduled_evening",
+  "title": "A standing rule not to raise The Louise holds in the opening of a scheduled evening call",
+  "provenance": "derived_from_production",
+  "source": "Oct 28 and Oct 29 scheduled evening calls: both openings named The Louise despite the operator's rule.",
+  "localTime": "17:30",
+  "callKind": "evening_debrief",
+  "seed": {
+    "operatorName": "Adam",
+    "goal": { "objective": "Get to 50 active customers", "targetValue": 50, "startedAt": 23, "current": 31 },
+    "dayLine": [
+      { "title": "Follow up with Dana at The Louise", "businessDate": "tomorrow" },
+      { "title": "Towel run to Opus", "businessDate": "tomorrow" }
+    ],
+    "standingInstructions": [
+      {
+        "kind": "call_rule",
+        "text": "Operator rule for calls, in the operator's words: From now on, do not bring up The Louise or the Dana follow-up on calls unless I ask about it.",
+        "quote": "From now on, do not bring up The Louise or the Dana follow-up on calls unless I ask about it."
+      }
+    ]
+  },
+  "operator": {
+    "mode": "scripted",
+    "turns": [
+      "Good. I did the Opus pickup.",
+      "What's on tomorrow?",
+      "Okay, that's it. Bye."
+    ]
+  },
+  "expect": {
+    "dayLine": [
+      { "businessDate": "tomorrow", "titleMatches": "towel run" }
+    ],
+    "seededRowsIntact": true,
+    "maxRowsAdded": 0,
+    "speech": {
+      "mustNotRaise": ["louise", "dana"],
+      "mustMention": ["\\b(31|19)\\b"],
+      "maxCharsPerLine": 280,
+      "maxQuestionsPerLine": 1
+    },
+    "maxAuthorizationAsks": 1,
+    "falseClaimFails": true
+  },
+  "notes": "The goal with a verified count: she should say where he stands (31 of 50, 19 to go). 'What's on tomorrow?' must be answered without naming the held item."
+}

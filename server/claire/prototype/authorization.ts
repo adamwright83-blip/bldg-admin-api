@@ -61,8 +61,11 @@ export const GENERIC_WORK_WORDS = new Set(["pitch", "person", "follow", "followu
 
 /**
  * The words that say WHICH piece of work: proper names in the title (any
- * capitalized word after the first), else its non-generic nouns. "Pitch The
- * Chadwick in person" → chadwick; "Renew the business license" → business, license.
+ * capitalized word after the first) and its non-generic nouns. "Pitch The
+ * Chadwick in person" → chadwick; "Renew the business license" → business, license;
+ * "Finish landing page paired with Instagram ad running on Facebook" → instagram,
+ * facebook, landing, page… (Oct 29 eval: with proper names alone, "the landing page
+ * is done" could never name it, and Claire looped asking the operator to rephrase).
  */
 export function identifyingTokens(title: string): string[] {
   const words = title.replace(/[’‘]/g, "'").split(/\s+/).filter(Boolean);
@@ -75,8 +78,7 @@ export function identifyingTokens(title: string): string[] {
         .filter(word => word.length >= 3)
     ),
   ];
-  if (proper.length) return proper;
-  return distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token));
+  return [...new Set([...proper, ...distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token))])];
 }
 
 /**
@@ -145,12 +147,16 @@ export function offerText(lastClaireText: string | null): string | null {
 
 /**
  * A bare yes binds to the offer Claire just made, for the work that offer named.
- * Returns the titles the offer did not name (empty = all bound).
+ * An offer that points back with "it" / "that" ("Want me to add it?") names the
+ * work the operator asked about in the turn Claire was answering ("I keep forgetting
+ * to email Dana... Should that go on today?"); eval runs 40988869307 and 40990347412
+ * refused that yes in 2 of 3 trials. Returns the titles not bound (empty = all bound).
  */
-export function changesOutsideOffer(lastClaireText: string | null, titles: readonly string[]): string[] {
+export function changesOutsideOffer(lastClaireText: string | null, titles: readonly string[], operatorTurnBeforeOffer: string | null = null): string[] {
   const offer = offerText(lastClaireText);
   if (!offer) return [...titles];
-  return titles.filter(title => !namesWork(offer, title));
+  const pointsBack = REFERENT.test(offer) && operatorTurnBeforeOffer;
+  return titles.filter(title => !namesWork(offer, title) && !(pointsBack && namesWork(operatorTurnBeforeOffer, title)));
 }
 
 const REFERENT = /\b(that|it|those|them|this|these|the (?:first|second|third|last) one|both|all three|all of (?:it|them|those))\b/i;
