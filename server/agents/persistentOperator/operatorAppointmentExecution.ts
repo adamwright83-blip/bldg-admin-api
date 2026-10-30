@@ -7,6 +7,7 @@ import { loadStrategicProposal } from "../../strategy/strategicStore";
 import { WEEKDAY_STRATEGIC_PLANNING_ACTION } from "../../../shared/strategicCallAuthorization";
 import { formatInTimeZone } from "date-fns-tz";
 import { startClairePreDriveCall } from "../../claire/claireTwilio";
+import { nativeToolClaireEnabledFor } from "../../claire/prototype/voiceEngine";
 import { checkClaireModelHealth, claireModelDownText } from "../../claire/claireModelHealth";
 import { sendOperatorArtifact } from "../../operatorArtifact/sendOperatorArtifact";
 import { executePersistentOperatorAction } from "./actionExecution";
@@ -347,6 +348,21 @@ export async function executeDailyClaireCall(input: {
     now,
     execute: async () => {
       if (!store) throw new Error("Operator appointment execution requires its durable store");
+      // An operator on the native-tool switch gets the native engine on scheduled calls too: the
+      // model opens the call from live reads (goal, Day Line), so no showrunner briefing, scripted
+      // opening or Daphne tone decision is prepared. The switch is read here, before dialing.
+      if (nativeToolClaireEnabledFor({ tenantId: context.scope.tenantId, operatorUserId: identity.communicationOperatorUserId })) {
+        const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
+        if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");
+        return startClairePreDriveCall({
+          tenantId: context.scope.tenantId,
+          actorId: identity.communicationOperatorUserId,
+          dayDirectorActorId: identity.dayDirectorActorId,
+          timeZone: step.timeZone,
+          sessionKindOverride: purpose,
+          nativeToolPurpose: purpose,
+        });
+      }
       const briefing = await buildShowrunnerBriefing({ identity, purpose, timeZone: step.timeZone, now });
       const dispatchClaimed = await store.beginDailyCallDispatch(step, now);
       if (!dispatchClaimed) throw new Error("Daily call dispatch fence refused: authorization, window or duplicate check failed");

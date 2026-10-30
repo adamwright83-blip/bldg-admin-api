@@ -167,6 +167,16 @@ export function gradeTrial(input: {
     const hit = claireLines.find(turn => regex.test(turn.text));
     checks.push({ name: `mentions /${pattern}/`, pass: Boolean(hit), evidence: hit ? `"${hit.text}"` : "never said" });
   }
+  const maxChars = expect.speech?.maxCharsPerLine;
+  if (maxChars) {
+    const long = claireLines.filter(turn => turn.text.length > maxChars);
+    checks.push({ name: `every Claire line ≤ ${maxChars} characters`, pass: long.length === 0, evidence: long.length ? long.map(turn => `${turn.text.length}: "${turn.text}"`).join(" | ") : `longest ${Math.max(0, ...claireLines.map(turn => turn.text.length))}` });
+  }
+  const maxQuestions = expect.speech?.maxQuestionsPerLine;
+  if (maxQuestions) {
+    const stacked = claireLines.filter(turn => (turn.text.match(/\?/g) ?? []).length > maxQuestions);
+    checks.push({ name: `at most ${maxQuestions} question(s) per Claire line`, pass: stacked.length === 0, evidence: stacked.length ? stacked.map(turn => `"${turn.text}"`).join(" | ") : "ok" });
+  }
 
   // 7. False save claims and denials of real saves.
   let confirmedSoFar = false;

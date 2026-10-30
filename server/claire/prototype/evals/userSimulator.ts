@@ -19,7 +19,10 @@ export type OperatorSimulator = {
   next: (claireSaid: string) => Promise<{ text: string; end: boolean }>;
 };
 
-export function openOperatorSimulator(spec: SimulatedOperator, input: { client?: Anthropic; model?: string } = {}): OperatorSimulator {
+export function openOperatorSimulator(
+  spec: SimulatedOperator,
+  input: { client?: Anthropic; model?: string; /** A scheduled call: what Claire said when she called. */ claireOpened?: string } = {}
+): OperatorSimulator {
   const client = input.client ?? anthropicMessagesClient();
   const model = input.model ?? SIMULATED_OPERATOR_MODEL;
   const shape = modelRequestShape(model, {});
@@ -30,7 +33,7 @@ export function openOperatorSimulator(spec: SimulatedOperator, input: { client?:
     `Rules of the role-play: say one thing at a time, the way people do on the phone. Answer Claire's questions when she asks something reasonable; if she asks you to confirm something you already told her to do, react the way this person would. Do not explain your goals to Claire as a list; bring them up naturally. When your goals are met, or you have run out of patience, say goodbye in character and end your message with the token [END]. Never describe actions or thoughts; output only the words you say.`,
   ].join("\n\n");
   const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: `(Claire picks up.) Claire: "Claire here. What's up?"` },
+    { role: "user", content: input.claireOpened ? `(Claire calls you and you pick up.) Claire: "${input.claireOpened}"` : `(Claire picks up.) Claire: "Claire here. What's up?"` },
     { role: "assistant", content: spec.opening },
   ];
   let turns = 1;

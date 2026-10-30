@@ -118,9 +118,11 @@ import {
   NATIVE_TOOL_LOG,
   nativeToolClaireEnabledFor,
   newNativeToolCallState,
+  openNativeToolScheduledCall,
   runNativeToolVoiceTurn,
   toolEventSummary,
   type NativeToolCallState,
+  type ScheduledNativeToolCall,
 } from "./prototype/voiceEngine";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
@@ -923,6 +925,49 @@ async function runNativeToolCallTurn(input: {
 }
 
 /**
+ * A voicemail greeting or menu is not the operator. Recognised on an outbound call,
+ * Claire speaks the one bounded voicemail line and ends; a later prompt gets silence.
+ * Null when a person is on the line. Shared by Brain V2 and the native-tool engine.
+ */
+async function voicemailTurnResult(input: {
+  conversationId: string;
+  conversation: PreDriveConversation;
+  utterance: string;
+  rawTranscript: string | null;
+  callSid?: string;
+}): Promise<AuthoritativeClaireVoiceTurnResult | null> {
+  const { conversationId, conversation } = input;
+  const voicemail = voicemailTurnDecision({
+    utterance: [conversation.pendingFragment, input.utterance].filter(Boolean).join(" "),
+    outbound: isOutboundConversation(conversation),
+    alreadyDetected: Boolean(conversation.voicemailDetected),
+  });
+  if (voicemail.action !== "none") {
+    const speak = voicemail.action === "leave_message" ? voicemail.speak : "";
+    conversation.voicemailDetected = true;
+    conversation.pendingFragment = null;
+    conversation.fragmentHolds = 0;
+    conversation.touchedAt = Date.now();
+    await saveCall(conversationId, conversation);
+    console.info("[Claire] voicemail recognised in conversation", {
+      event: "claire_voicemail_detected",
+      conversationId,
+      sessionKind: conversation.sessionKind ?? null,
+      spoke: voicemail.action === "leave_message",
+    });
+    await endClaireCallLedger({
+      callSid: input.callSid,
+      claireConversationId: conversationId,
+      operatorText: input.rawTranscript ?? input.utterance,
+      claireText: speak,
+      reason: voicemail.reason,
+    });
+    return { speak, endCall: true, listenOnly: false, gatherTwiml: speak ? speakAndHangUp(speak) : amdHangupTwiml() };
+  }
+  return null;
+}
+
+/**
  * The one Claire voice-turn orchestration. Gather and Conversation Relay both
  * call this. Relay passes allowFragmentWait false so a final provider prompt
  * is not held as a Gather pause fragment.
@@ -943,43 +988,18 @@ export function runAuthoritativeClaireVoiceTurn(input: {
   const { conversationId, conversation, token } = input;
   const daphneSourceId=input.sourceEventId ?? `voice:${conversationId}:${conversation.turns+1}`;
   return (async () => {
-    // A call opened on the native-tool Claire stays on it. Nothing below (voicemail logic, the
-    // work ledger, Brain V2, V1) runs for such a call; its own failure handling speaks failures.
+    // A call opened on the native-tool Claire stays on it. Nothing below (the work ledger,
+    // Brain V2, V1) runs for such a call; its own failure handling speaks failures. The
+    // voicemail check does run first: a scheduled call can reach a mailbox, and a mailbox is
+    // not the operator.
     if (conversation.nativeTool) {
+      const voicemailResult = await voicemailTurnResult({ conversationId, conversation, utterance: input.utterance, rawTranscript: input.rawTranscript, callSid: input.callSid });
+      if (voicemailResult) return voicemailResult;
       return runNativeToolCallTurn({ conversationId, conversation, utterance: input.utterance, rawTranscript: input.rawTranscript, callSid: input.callSid, token });
     }
     try {
-      /**
-       * A voicemail greeting or menu is not the operator. Recognised on an outbound call,
-       * Claire speaks the one bounded voicemail line and ends; a later prompt gets silence.
-       */
-      const voicemail = voicemailTurnDecision({
-        utterance: [conversation.pendingFragment, input.utterance].filter(Boolean).join(" "),
-        outbound: isOutboundConversation(conversation),
-        alreadyDetected: Boolean(conversation.voicemailDetected),
-      });
-      if (voicemail.action !== "none") {
-        const speak = voicemail.action === "leave_message" ? voicemail.speak : "";
-        conversation.voicemailDetected = true;
-        conversation.pendingFragment = null;
-        conversation.fragmentHolds = 0;
-        conversation.touchedAt = Date.now();
-        await saveCall(conversationId, conversation);
-        console.info("[Claire] voicemail recognised in conversation", {
-          event: "claire_voicemail_detected",
-          conversationId,
-          sessionKind: conversation.sessionKind ?? null,
-          spoke: voicemail.action === "leave_message",
-        });
-        await endClaireCallLedger({
-          callSid: input.callSid,
-          claireConversationId: conversationId,
-          operatorText: input.rawTranscript ?? input.utterance,
-          claireText: speak,
-          reason: voicemail.reason,
-        });
-        return { speak, endCall: true, listenOnly: false, gatherTwiml: speak ? speakAndHangUp(speak) : amdHangupTwiml() };
-      }
+      const voicemailResult = await voicemailTurnResult({ conversationId, conversation, utterance: input.utterance, rawTranscript: input.rawTranscript, callSid: input.callSid });
+      if (voicemailResult) return voicemailResult;
       // A person answered and spoke: the opening (and any promise it kept) was delivered on this call.
       if (conversation.showrunner?.preparedOffered && !conversation.showrunner.preparedOffered.consumedAt) {
         const { consumeDeliveredPreparedItems } = await import("./showrunner/preparedDelivery");
@@ -1807,8 +1827,10 @@ async function persistClaireVoiceConversation(input: {
   strategicProposalRevision?: string | null;
   appointmentTimeZone?: string | null;
   nativeTool?: NativeToolCallState | null;
+  /** Set when the opening was written before the conversation was saved (a native-tool scheduled call). */
+  conversationId?: string;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
-  const conversationId = randomUUID();
+  const conversationId = input.conversationId ?? randomUUID();
   const hints = boundedHints(
     input.loadVocabulary === false
       ? undefined
@@ -1895,6 +1917,76 @@ export async function openPreparedClaireConversationWithoutDialing(input: {
   return { conversationId: opened.conversationId, token: opened.token, brief };
 }
 
+/**
+ * The native-tool engine's opening for a scheduled call, written before dialing. The
+ * conversation id is fixed here so the model's tool calls during the opening carry the
+ * same provenance as the rest of the call.
+ */
+async function prepareNativeToolScheduledOpening(input: {
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId?: string;
+  timeZone?: string;
+  purpose: ScheduledNativeToolCall;
+}): Promise<{ conversationId: string; opening: string; state: NativeToolCallState }> {
+  const conversationId = randomUUID();
+  const opened = await openNativeToolScheduledCall({
+    conversationId,
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
+    timeZone: input.timeZone || getDashboardTimeZone(),
+    state: newNativeToolCallState(),
+    purpose: input.purpose,
+  });
+  console.info(NATIVE_TOOL_LOG, JSON.stringify({
+    event: "engine_selected",
+    engine: "native_tool",
+    direction: "outbound",
+    purpose: input.purpose,
+    conversationId,
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    latencyMs: opened.latencyMs,
+    modelCalls: opened.modelCalls,
+    speechChars: opened.speak.length,
+    tools: toolEventSummary(opened.toolEvents),
+  }));
+  return { conversationId, opening: opened.speak, state: opened.state };
+}
+
+/**
+ * A native-tool scheduled call prepared exactly as startClairePreDriveCall prepares it (the
+ * model's opening, the call state, the ledger session and turn 0), without dialing. Used to
+ * verify scheduled calls end to end without telephone credit.
+ */
+export async function openNativeToolScheduledConversationWithoutDialing(input: {
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId: string;
+  timeZone: string;
+  purpose: ScheduledNativeToolCall;
+}): Promise<{ conversationId: string; token: string; brief: string }> {
+  const native = await prepareNativeToolScheduledOpening(input);
+  const opened = await persistClaireVoiceConversation({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    brief: native.opening,
+    context: inboundClaireCallBootstrapContext(input.actorId),
+    spokenOpening: spokenClaireText(native.opening, true),
+    sessionKindOverride: input.purpose,
+    showrunner: null,
+    appointmentTimeZone: input.timeZone,
+    conversationId: native.conversationId,
+    nativeTool: native.state,
+  });
+  await safeClaireLedger(() =>
+    persistSpokenTurn({ claireConversationId: opened.conversationId, speaker: "CLAIRE", text: spokenClaireText(native.opening, true), turnKey: 0 })
+  );
+  return { conversationId: opened.conversationId, token: opened.token, brief: native.opening };
+}
+
 export async function startClairePreDriveCall(input: {
   tenantId: string;
   actorId: string;
@@ -1912,17 +2004,25 @@ export async function startClairePreDriveCall(input: {
   weeklyPlanningAppointmentId?: string | null;
   strategicProposalId?: string | null;
   strategicProposalRevision?: string | null;
+  /**
+   * A scheduled morning or evening call on the native-tool engine: the model writes the opening
+   * from live reads and answers every turn; no Brain V2 opening or showrunner state is prepared.
+   */
+  nativeToolPurpose?: ScheduledNativeToolCall;
 }): Promise<{ callSid: string; brief: string; communicationReceiptId: string }> {
   const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
-  const generated = await generateClairePreDriveOutput({
-    tenantId: input.tenantId,
-    actorId: input.actorId,
-    timeZone: input.timeZone,
-    missionId: input.missionId,
-    dayDirectorActorId: input.dayDirectorActorId,
-  });
-  const context = generated.context;
-  const brief = input.openingOverride?.trim() || generated.brief;
+  const native = input.nativeToolPurpose ? await prepareNativeToolScheduledOpening({ ...input, purpose: input.nativeToolPurpose }) : null;
+  const generated = native
+    ? null
+    : await generateClairePreDriveOutput({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        timeZone: input.timeZone,
+        missionId: input.missionId,
+        dayDirectorActorId: input.dayDirectorActorId,
+      });
+  const context = generated?.context ?? inboundClaireCallBootstrapContext(input.actorId);
+  const brief = native?.opening ?? (input.openingOverride?.trim() || generated!.brief);
   const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -1939,6 +2039,7 @@ export async function startClairePreDriveCall(input: {
     strategicProposalId: input.strategicProposalId,
     strategicProposalRevision: input.strategicProposalRevision,
     appointmentTimeZone: input.timeZone ?? null,
+    ...(native ? { conversationId: native.conversationId, nativeTool: native.state, showrunner: null } : {}),
   });
   try {
     const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });

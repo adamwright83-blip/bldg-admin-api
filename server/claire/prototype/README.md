@@ -17,7 +17,7 @@ Anthropic guidance followed: [Building effective agents](https://www.anthropic.c
 | file | what |
 |---|---|
 | `spokenDate.ts` | Server-side "tomorrow / Friday / next Thursday / the 3rd" → business date; vague days refused. One weekday rule shared with the evals. |
-| `tools.ts` | Five tools: `read_day_line`, `apply_day_line_changes` (batch, per-item receipts, dedupe, read-back), `read_business_numbers`, `save_standing_instruction`, `end_call`. Writes go through `acceptProposalWithReceipt` with operator-instruction admission, `moveDayDirectorCommitment`, `completeDayDirectorCommitment`, `cancelDayLineItem`. |
+| `tools.ts` | Seven tools: `read_day_line`, `find_day_line_item`, `apply_day_line_changes` (batch, per-item receipts, dedupe, read-back), `read_business_numbers`, `read_goal_progress`, `save_standing_instruction`, `end_call`. Writes go through `acceptProposalWithReceipt` with operator-instruction admission, `moveDayDirectorCommitment`, `completeDayDirectorCommitment`, `cancelDayLineItem`. |
 | `claireToolLoop.ts` | The Messages API tool loop. Tool results stay in the thread for the whole call. |
 | `evals/scenario.ts` | Locked scenario format and grading semantics. |
 | `evals/grade.ts` | Code-based grader: final DB state, forbidden writes, seeded rows intact, false save claims, denials of confirmed saves, repeated authorization asks. |
@@ -54,8 +54,13 @@ transcript ledger.
 
 - **Who.** `CLAIRE_NATIVE_TOOL_OPERATOR_IDS` (comma list). `owner` = `OWNER_OPEN_ID`;
   `tenant:operator` scopes to one tenant; a bare id matches that operator anywhere.
-  Unset: nobody, everyone stays on Brain V2. Inbound calls only; Claire's scheduled
-  outbound calls stay on V2.
+  Unset: nobody, everyone stays on Brain V2. The same switch covers inbound calls and the
+  scheduled morning and evening calls (`executeDailyClaireCall`). Weekly planning calls stay on V2.
+- **Scheduled calls.** Read before dialing. The model writes the opening from live reads
+  (`read_goal_progress`, then the Day Line only if it needs it) after a call-start notice that is
+  never recorded as operator words, so nothing can be authorized by it. No showrunner briefing,
+  scripted opening or Daphne tone decision is prepared. The voicemail check runs before the model
+  on every outbound turn. Scenarios with `callKind` exercise this in the evals (prototype only).
 - **Rollback.** `CLAIRE_NATIVE_TOOL_KILL_SWITCH=1` (or emptying the list) puts the NEXT
   call back on V2. Railway restarts the service on a variable change (same build, no code
   deploy). A call already in progress never changes engine: the engine is chosen at pickup

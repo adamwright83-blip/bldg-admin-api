@@ -37,6 +37,8 @@ export type ClaireSession = {
   systemPrompt: string;
   messages: Anthropic.MessageParam[];
   turn: (utterance: string) => Promise<ClaireTurnResult>;
+  /** Scheduled calls only: Claire's opening, spoken before the operator says anything. Null on an inbound call. */
+  open: (() => Promise<ClaireTurnResult>) | null;
 };
 
 function weekdayName(ymd: string): string {
@@ -56,11 +58,27 @@ async function dayLineSnapshot(ctx: ToolContext, today: string): Promise<string>
   return lines.join("\n");
 }
 
-export async function buildSystemPrompt(ctx: ToolContext, input: { operatorName: string; businessName: string }): Promise<string> {
+/** Which call this is. Inbound: the operator rang Claire. The rest: Claire placed a scheduled call. */
+export type ClaireCallKind = "inbound" | "morning_readiness" | "evening_debrief";
+
+export type ClairePromptInput = { operatorName: string; businessName: string; callKind?: ClaireCallKind };
+
+/** Why Claire placed a scheduled call, and how she opens it. Inbound calls have none: the operator leads. */
+function scheduledCallSection(kind: ClaireCallKind, operatorName: string): string | null {
+  if (kind === "evening_debrief") {
+    return `This call: you placed ${operatorName}'s scheduled evening wrap and they just picked up, so you speak first. The point of the call is to hear what got done today and agree on the first move for tomorrow. Open with their goal and where they stand on it (read_goal_progress), in one sentence, then one question about today. Then listen. Do not walk through the Day Line in the opening; read it when the conversation needs it.`;
+  }
+  if (kind === "morning_readiness") {
+    return `This call: you placed ${operatorName}'s scheduled morning call and they just picked up, so you speak first. The point of the call is to make sure they know their first move today and to hear anything in its way. Open with their goal and where they stand on it (read_goal_progress), in one sentence, then one question. Then listen. Do not walk through the Day Line in the opening; read it when the conversation needs it.`;
+  }
+  return null;
+}
+
+export async function buildSystemPrompt(ctx: ToolContext, input: ClairePromptInput): Promise<string> {
   return (await buildSystemPromptWithRules(ctx, input)).prompt;
 }
 
-export async function buildSystemPromptWithRules(ctx: ToolContext, input: { operatorName: string; businessName: string }): Promise<{ prompt: string; heldTopics: HeldTopic[] }> {
+export async function buildSystemPromptWithRules(ctx: ToolContext, input: ClairePromptInput): Promise<{ prompt: string; heldTopics: HeldTopic[] }> {
   const now = ctx.now();
   const today = businessDateToday(now, ctx.timeZone);
   const clock = new Intl.DateTimeFormat("en-US", { timeZone: ctx.timeZone, hour: "numeric", minute: "2-digit" }).format(now);
@@ -71,7 +89,8 @@ export async function buildSystemPromptWithRules(ctx: ToolContext, input: { oper
   const heldTopics = heldTopicsFrom(instructions);
 
   const prompt = [
-    `You are Claire, chief of staff to ${input.operatorName}, who runs ${input.businessName}. You are on a phone call with them. Everything you write is spoken aloud, so keep it short: one to three sentences, plain words, at most one question, and never a list read out loud. Do not repeat a sentence you already said; if they say you are repeating yourself, say something new or stop.`,
+    `You are Claire, chief of staff to ${input.operatorName}, who runs ${input.businessName}. You are on a phone call with them. Everything you write is read aloud by a voice, and they answer by voice, so this is a conversation, not a briefing: say one thought, then stop or ask one question and let them talk. They should talk at least as much as you do, which usually means one or two short sentences from you. Plain words; never read a list aloud and never stack several updates in one turn. Do not repeat a sentence you already said; if they say you are repeating yourself, say something new or stop.`,
+    scheduledCallSection(input.callKind ?? "inbound", input.operatorName),
     `Calendar: it is ${weekdayName(today)} ${today}, ${clock} in ${ctx.timeZone}. Pass days to tools in the operator's own words ("tomorrow", "Friday", "the day after tomorrow"); the server turns them into dates. If a tool says a day is ambiguous, ask which day. Never pick a date the operator did not give.`,
     `The Day Line is the operator's list of committed work per day. Snapshot at the start of this call:\n${snapshot}\nAfter you change it, trust your receipts over this snapshot; read a day again when you need the current state.`,
     `Your job on the call: a chief of staff writes down what the boss dictates, and asks before writing what the boss only muses about. Three cases, by example:
@@ -85,13 +104,15 @@ Work described across the call belongs to one batch: when the authorization come
     `Speaking: do not narrate what you are about to do or how you read them ("I'll write these now", "this is a question, so…"); do it, then say the result. A standing rule not to raise a topic means you neither name it nor say you are leaving it out; just don't mention it.`,
     `One task, one row: when they restate the same work in other words ("finish the marketing challenge, which means I have to finish the landing page"), that is one item; title it by the concrete work and put the rest in the detail. Separate rows only for separate trips or separate deliverables.`,
     `Truth: a thing is on the Day Line only if a receipt in this conversation says applied or already_present. Say what landed and, if anything failed or was refused, say which and why. Never say something is saved before the receipt, and never later deny or doubt a save the receipt confirmed; if unsure, read the day. Business figures come only from read_business_numbers; if it has no records, say so; never invent a number or a comparison.`,
-    `What you can do, if asked: read and change the Day Line (add, move, finish, remove work on any day), read the business numbers from the ledger, and keep standing rules about how you work. What you cannot do: send texts or emails, make calls, book or buy anything, or act outside this call. Answer a capabilities question plainly in those terms.`,
-    `Standing rules: when the operator gives you a durable rule about how you behave on calls, save it with save_standing_instruction and follow it from that moment. Rules already in force:`,
+    `What you can do, if asked: read and change the Day Line (add, move, finish, remove work on any day), read the business numbers from the ledger, read their goal and how far they are from it, and keep standing rules about how you work. What you cannot do: send texts or emails, make calls, book or buy anything, or act outside this call. Answer a capabilities question plainly in those terms.`,
+    `Standing rules: when the operator gives you a durable rule about how you behave on calls, save it with save_standing_instruction and follow it from that moment. Feedback about how you talk counts: if they say the way you put something makes them less likely to do it (naming work they have been avoiding, talking too much, pushing the plan harder), that is a rule about you, not a request for the plan again. Save it in their terms and change how you talk right away. Rules already in force:`,
     view.section ?? "none.",
     `Existing work: when the operator refers to work as already on the list ("move the Dubois job", "put it back", "the Medeco order") and you do not know its day, call find_day_line_item first, then change that row by id. Never add a new row for work that already exists. If an add comes back needs_resolution, the same work is on another day: ask whether they mean that one (then move it) or a separate job (then re-send with confirm_new true). The same job on two days is legitimate when they say so.`,
     `"Next Friday", "Thursday", "the 3rd" are dates: pass them to the tool as said, the server resolves them, you read the date back. Ask only when a day is genuinely vague.`,
     `When the operator is done, call end_call and say a short goodbye.`,
-  ].join("\n\n");
+  ]
+    .filter((section): section is string => Boolean(section))
+    .join("\n\n");
   return { prompt, heldTopics };
 }
 
@@ -125,13 +146,18 @@ export function anthropicClient(): Anthropic {
  * does not start from a dangling tool_use; the utterance is dropped from
  * the record as well, because nothing was done with it.
  */
-export async function runClaireToolTurn(session: ClaireToolTurnSession, utterance: string): Promise<ClaireTurnResult> {
+export async function runClaireToolTurn(
+  session: ClaireToolTurnSession,
+  utterance: string,
+  options: { operatorSpoke?: boolean } = {}
+): Promise<ClaireTurnResult> {
   const { client, model, systemPrompt, heldTopics, ctx, messages, operatorTurns } = session;
   const shape = modelRequestShape(model, {});
   const startedAt = Date.now();
   const messagesBefore = messages.length;
   const turnsBefore = operatorTurns.length;
-  operatorTurns.push(utterance);
+  // A call-start notice is not the operator's words: it never enters the record that authorization quotes are checked against.
+  if (options.operatorSpoke !== false) operatorTurns.push(utterance);
   messages.push({ role: "user", content: utterance });
   const toolEvents: ToolEvent[] = [];
   let endCall = false;
@@ -235,9 +261,15 @@ export class ClaireToolTurnError extends Error {
   }
 }
 
+/** The first user message of a call Claire placed. The operator has not said anything yet. */
+export function scheduledCallKickoff(kind: Exclude<ClaireCallKind, "inbound">, operatorName: string): string {
+  const call = kind === "evening_debrief" ? "evening wrap" : "morning";
+  return `[Call connected: you placed ${operatorName}'s scheduled ${call} call and they just picked up. This note is from the phone system, not from ${operatorName}; they have not said anything yet. Speak first.]`;
+}
+
 export async function openClaireSession(
   baseCtx: Omit<ToolContext, "operatorTurns" | "lastClaireText" | "callRowIds">,
-  input: { operatorName: string; businessName: string; model?: string; client?: Anthropic }
+  input: { operatorName: string; businessName: string; model?: string; client?: Anthropic; callKind?: ClaireCallKind }
 ): Promise<ClaireSession> {
   const client = input.client ?? anthropicClient();
   const model = input.model ?? CLAIRE_PROTOTYPE_MODEL;
@@ -247,7 +279,15 @@ export async function openClaireSession(
   const { prompt: systemPrompt, heldTopics } = await buildSystemPromptWithRules(ctx, input);
   const messages: Anthropic.MessageParam[] = [];
   const session: ClaireToolTurnSession = { client, model, systemPrompt, heldTopics, ctx, messages, operatorTurns, lastClaireText };
-  return { conversationId: ctx.conversationId, model, systemPrompt, messages, turn: utterance => runClaireToolTurn(session, utterance) };
+  const callKind = input.callKind ?? "inbound";
+  return {
+    conversationId: ctx.conversationId,
+    model,
+    systemPrompt,
+    messages,
+    turn: utterance => runClaireToolTurn(session, utterance),
+    open: callKind === "inbound" ? null : () => runClaireToolTurn(session, scheduledCallKickoff(callKind, input.operatorName), { operatorSpoke: false }),
+  };
 }
 
 const CLOSING_ONLY = /^(?:(?:good ?night|goodbye|bye|take care|talk (?:to you )?(?:soon|later|tomorrow)|get some rest|sleep well|have a good (?:one|night|evening)|you're welcome|anytime|thanks|thank you|later)[,.!]*\s*(?:[A-Z][a-z]+[,.!]*\s*)?)+$/i;

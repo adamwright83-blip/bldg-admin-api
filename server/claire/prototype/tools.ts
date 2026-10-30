@@ -9,8 +9,8 @@
  * say exactly what landed. The server resolves spoken days to business dates
  * and refuses vague ones; the model never guesses a calendar date.
  *
- * Nothing here is wired into production Claire. It is exercised by the
- * evaluation runner against a disposable database.
+ * Used on the phone through voiceEngine.ts for operators on the native-tool
+ * switch, and by the evaluation runner against a disposable database.
  */
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -30,6 +30,7 @@ import { authorizeExistingRowChange, changesOutsideOffer, offerText, verifyOpera
 import { drizzleStandingInstructionStore, type StandingInstructionStore } from "../../agents/daphne/standingInstructions";
 import { addDaysYmd, businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
 import { matchWork, plausibleSameWork } from "./workMatch";
+import { productionGoalProgressReaders, readGoalProgress, type GoalProgressReaders } from "../gameMaster/goalProgress";
 
 export type ToolContext = {
   tenantId: string;
@@ -48,6 +49,7 @@ export type ToolContext = {
   /** Ids of rows this call added. Anything else on the Day Line predates the call and is changed only on an explicit, named instruction. */
   callRowIds: Set<string>;
   standingInstructionStore?: StandingInstructionStore;
+  goalProgressReaders?: GoalProgressReaders;
 };
 
 export type DayLineRow = { id: string; title: string; status: "open" | "completed"; businessDate: string; detail: string | null };
@@ -165,6 +167,12 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
       required: ["metric", "period"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "read_goal_progress",
+    description:
+      "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and the verified current count. current is null when no verified count exists; current_note then says why (for example the customer source did not load). Say the goal and the distance in one short sentence; when current is null, say you don't have a verified count yet and never estimate one.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "save_standing_instruction",
@@ -461,6 +469,25 @@ async function readBusinessNumbers(ctx: ToolContext, input: { metric: BusinessMe
   };
 }
 
+async function readGoal(ctx: ToolContext) {
+  const progress = await readGoalProgress(
+    { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, now: ctx.now(), timeZone: ctx.timeZone },
+    ctx.goalProgressReaders ?? productionGoalProgressReaders
+  );
+  if (!progress) return { status: "no_goal", note: "No headline goal is on record for this operator." };
+  return {
+    status: "ok",
+    objective: progress.objective,
+    unit: progress.unit,
+    target: progress.targetValue,
+    target_date: progress.targetDate,
+    started_at: progress.baselineValue,
+    current: progress.currentValue,
+    current_note: progress.currentNote,
+    to_go: progress.currentValue === null ? null : Math.max(0, progress.targetValue - progress.currentValue),
+  };
+}
+
 export async function saveStandingInstruction(ctx: ToolContext, input: { rule: string; operator_words: string }) {
   const store = ctx.standingInstructionStore ?? drizzleStandingInstructionStore();
   const text = input.rule.trim().replace(/\s+/g, " ").slice(0, 400);
@@ -504,6 +531,8 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
     }
     case "read_business_numbers":
       return { output: await readBusinessNumbers(ctx, input as never), wrote: false };
+    case "read_goal_progress":
+      return { output: await readGoal(ctx), wrote: false };
     case "save_standing_instruction": {
       const result = await saveStandingInstruction(ctx, input as never);
       return { output: result, wrote: result.status === "active" };

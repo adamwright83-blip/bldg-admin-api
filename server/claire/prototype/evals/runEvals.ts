@@ -166,7 +166,19 @@ async function main() {
     return ids;
   }
 
-  type Claire = { turn: (utterance: string) => Promise<{ speak: string; endCall: boolean; toolCalls?: unknown[]; failedWrite?: boolean; modelCalls?: number; inputTokens?: number; outputTokens?: number; latencyMs: number }>; opening?: string };
+  type ClaireLine = { speak: string; endCall: boolean; toolCalls?: unknown[]; failedWrite?: boolean; modelCalls?: number; inputTokens?: number; outputTokens?: number; latencyMs: number };
+  /** `open` is set for a scheduled call: Claire speaks first. */
+  type Claire = { turn: (utterance: string) => Promise<ClaireLine>; open?: () => Promise<ClaireLine>; opening?: string };
+
+  /** The scenario's goal as the goal reader sees it; the disposable database holds no macro goal. */
+  function goalReaders(scenario: Scenario) {
+    const goal = scenario.seed.goal;
+    return {
+      readMacroGoal: async () => (goal ? { id: `eval-goal:${scenario.id}`, objective: goal.objective, metricKey: "active_customers", unit: "customers", targetValue: goal.targetValue, targetDate: null } : null),
+      readRunBaseline: async () => goal?.startedAt ?? null,
+      readCurrentValue: async () => (goal?.current != null ? { value: goal.current, note: null } : { value: null, note: goal?.currentNote ?? "no verified current count" }),
+    };
+  }
 
   async function openClaire(system: SystemName, scenario: Scenario, now: () => Date): Promise<Claire> {
     if (system === "noop") {
@@ -179,15 +191,18 @@ async function main() {
         {
           tenantId: TENANT, operatorUserId: OPERATOR_OPEN_ID, dayDirectorActorId: identity.dayDirectorActorId, canonicalOperatorId: identity.canonicalOperatorId,
           timeZone: ZONE, now, conversationId: newConversationId(), nextTurnId: () => `t${++turnCounter}`,
+          goalProgressReaders: goalReaders(scenario),
         },
-        { operatorName: scenario.seed.operatorName ?? "Adam", businessName: "Laundry Farm" }
+        { operatorName: scenario.seed.operatorName ?? "Adam", businessName: "Laundry Farm", callKind: scenario.callKind }
       );
+      const line = (result: Awaited<ReturnType<typeof session.turn>>): ClaireLine => {
+        const failedWrite = result.toolEvents.some(event => event.name === "apply_day_line_changes" && Array.isArray((event.output as { receipts?: Array<{ status: string }> })?.receipts) && (event.output as { receipts: Array<{ status: string }> }).receipts.some(r => ["refused", "failed", "not_found", "ambiguous"].includes(r.status)));
+        return { speak: result.speak, endCall: result.endCall, toolCalls: result.toolEvents, failedWrite, modelCalls: result.modelCalls, inputTokens: result.inputTokens, outputTokens: result.outputTokens, latencyMs: result.latencyMs };
+      };
+      const open = session.open;
       return {
-        turn: async utterance => {
-          const result = await session.turn(utterance);
-          const failedWrite = result.toolEvents.some(event => event.name === "apply_day_line_changes" && Array.isArray((event.output as { receipts?: Array<{ status: string }> })?.receipts) && (event.output as { receipts: Array<{ status: string }> }).receipts.some(r => ["refused", "failed", "not_found", "ambiguous"].includes(r.status)));
-          return { speak: result.speak, endCall: result.endCall, toolCalls: result.toolEvents, failedWrite, modelCalls: result.modelCalls, inputTokens: result.inputTokens, outputTokens: result.outputTokens, latencyMs: result.latencyMs };
-        },
+        turn: async utterance => line(await session.turn(utterance)),
+        ...(open ? { open: async () => line(await open()) } : {}),
       };
     }
     const { openAuthorizedInboundClaireConversation, runRelayAuthoritativeTurn } = await import("../../claireTwilio");
@@ -210,6 +225,8 @@ async function main() {
 
   for (const system of systems) {
     for (const { set, scenario } of scenarios) {
+      // Scheduled calls run on the prototype (and noop) only; see Scenario.callKind.
+      if (scenario.callKind && system === "v2") continue;
       for (let trial = 1; trial <= trials; trial += 1) {
         const realNow = new Date();
         const today = businessDateToday(realNow, ZONE);
@@ -228,9 +245,9 @@ async function main() {
           let tokens = { input: 0, output: 0 };
           let sawTokens = false;
 
-          const speakTurn = async (utterance: string) => {
-            record.transcript.push({ speaker: "operator", text: utterance });
-            const result = await claire.turn(utterance);
+          const speakTurn = async (utterance: string | null) => {
+            if (utterance !== null) record.transcript.push({ speaker: "operator", text: utterance });
+            const result = utterance === null ? await claire.open!() : await claire.turn(utterance);
             const after = JSON.stringify(await readRows(seededIds)) + JSON.stringify(await readInstructions());
             const confirmedWrite = after !== snapshot;
             snapshot = after;
@@ -240,14 +257,18 @@ async function main() {
             return result;
           };
 
-          if (scenario.operator.mode === "scripted") {
+          // A scheduled call: Claire speaks first; the operator's lines answer her.
+          const opened = claire.open ? await speakTurn(null) : null;
+          if (opened?.endCall) {
+            // Nothing for the operator to answer.
+          } else if (scenario.operator.mode === "scripted") {
             for (const line of scenario.operator.turns) {
               const result = await speakTurn(line);
               if (result.endCall) break;
             }
           } else {
             const { openOperatorSimulator } = await import("./userSimulator");
-            const simulator = openOperatorSimulator(scenario.operator);
+            const simulator = openOperatorSimulator(scenario.operator, opened ? { claireOpened: opened.speak } : {});
             let result = await speakTurn(simulator.opening);
             for (let i = 0; i < scenario.operator.maxTurns && !result.endCall; i += 1) {
               const next = await simulator.next(result.speak);
