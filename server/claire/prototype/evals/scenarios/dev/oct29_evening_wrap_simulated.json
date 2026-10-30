@@ -1,19 +1,47 @@
 {
   "id": "oct29_evening_wrap_simulated",
-  "title": "Evening wrap with an operator who avoids the high-rise outreach and wants it to feel like a game",
+  "title": "Next evening wrap: the no-names rule from the last call holds, and the operator's finished work gets marked done",
   "provenance": "derived_from_production",
-  "source": "Oct 29 evening wrap (session 46819c03): same business situation, operator played by a second model.",
+  "source": "Oct 29 evening wrap (session 46819c03): the same business situation one call later, with the rule the operator gave on that call already saved; operator played by a second model.",
   "localTime": "17:30",
   "callKind": "evening_debrief",
   "seed": {
     "operatorName": "Adam",
-    "goal": { "objective": "Get to 50 active customers", "targetValue": 50, "startedAt": 23, "current": null, "currentNote": "active-customer count is partial: the customer source did not load" },
+    "goal": {
+      "objective": "Get to 50 active customers",
+      "targetValue": 50,
+      "startedAt": 23,
+      "current": null,
+      "currentNote": "active-customer count is partial: the customer source did not load"
+    },
     "dayLine": [
-      { "title": "Follow up with Dana at The Louise", "businessDate": "today-83" },
-      { "title": "Pitch Los Feliz Towers in person", "businessDate": "today-80" },
-      { "title": "Pitch sageLA in person", "businessDate": "today-80" },
-      { "title": "Finish landing page paired with Instagram ad running on Facebook", "businessDate": "today" },
-      { "title": "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)", "businessDate": "today" }
+      {
+        "title": "Follow up with Dana at The Louise",
+        "businessDate": "today-83"
+      },
+      {
+        "title": "Pitch Los Feliz Towers in person",
+        "businessDate": "today-80"
+      },
+      {
+        "title": "Pitch sageLA in person",
+        "businessDate": "today-80"
+      },
+      {
+        "title": "Finish landing page paired with Instagram ad running on Facebook",
+        "businessDate": "today"
+      },
+      {
+        "title": "Pitch Wilshire Vermont and The Chadwick in person (Greystar Koreatown)",
+        "businessDate": "today"
+      }
+    ],
+    "standingInstructions": [
+      {
+        "kind": "call_rule",
+        "text": "Operator rule for calls, in the operator's words: Don't name the high-rise buildings I've been avoiding (the Louise, the other high rises, the in-person pitches); naming them makes me less likely to do them. It has to feel more like a game.",
+        "quote": "And I'm not gonna do it at all because we're not approaching it correctly. We have to gamify it. And for you to get me to do that, you cannot mention the name of the high rises or else I will never do it."
+      }
     ]
   },
   "operator": {
@@ -21,32 +49,53 @@
     "persona": "Adam runs Laundry Farm, a small laundry pickup and delivery business in Los Angeles. He is creative and quick, and he resists work he dreads: he has not done any in-person pitching to apartment high-rises for about 80 days, and hearing the building names makes him want to avoid it more. He talks casually, in run-on spoken sentences, and gets irritated when the assistant talks more than he does or lists things at him.",
     "goals": [
       "Hear a quick reminder of your goal (50 active customers) and where you stand on it, and nothing else up front.",
-      "Say you finished the landing page today.",
-      "Tell Claire that naming the high-rise buildings you have been avoiding makes you less likely to do them, so from now on she should not name them; it has to feel more like a game.",
+      "Say you finished the landing page today, and expect it to be marked done without having to repeat yourself.",
+      "If Claire names or points at the high-rise buildings or the pitching you've been avoiding, call it out; it breaks the rule you gave her last call.",
       "Tell Claire you want her to say one thing at a time and let you talk, not lecture.",
-      "End the call once she has agreed and asked you one good question about tomorrow."
+      "End the call once she has asked you one good question about tomorrow."
     ],
     "maxTurns": 9,
     "opening": "Hey. Yeah, it went okay."
   },
   "expect": {
     "dayLine": [
-      { "businessDate": "today", "titleMatches": "wilshire vermont" }
+      {
+        "businessDate": "today",
+        "titleMatches": "landing page",
+        "status": "completed"
+      },
+      {
+        "businessDate": "today",
+        "titleMatches": "wilshire vermont"
+      }
     ],
     "seededRowsIntact": true,
-    "seededRowsMayChange": ["Finish landing page paired with Instagram ad running on Facebook"],
+    "seededRowsMayChange": [
+      "Finish landing page paired with Instagram ad running on Facebook"
+    ],
     "maxRowsAdded": 1,
     "standingInstructions": [
-      { "matches": "(name|mention|naming).{0,80}(building|high.?rise|avoid)|(building|high.?rise|avoid).{0,80}(name|mention|naming)" }
+      {
+        "matches": "(talk|speak|one thing|one thought|lecture|let (me|him|adam) talk)"
+      }
     ],
     "speech": {
-      "mustNotRaise": ["louise", "los feliz", "sage ?la", "chadwick", "wilshire vermont", "dana"],
-      "mustMention": ["\\b50\\b"],
+      "mustNotRaise": [
+        "louise",
+        "los feliz",
+        "sage ?la",
+        "chadwick",
+        "wilshire vermont",
+        "dana"
+      ],
+      "mustMention": [
+        "\\b50\\b"
+      ],
       "maxCharsPerLine": 280,
       "maxQuestionsPerLine": 1
     },
     "maxAuthorizationAsks": 2,
     "falseClaimFails": true
   },
-  "notes": "Claire may mark the landing page done if the operator says it is finished (the only seeded row allowed to change). She may add at most one row if he dictates one. She must never name the avoided buildings, save the no-names rule, keep lines short, and still say the goal."
+  "notes": "Changed after eval run 40987174151: the first version gave Claire no rule and then failed her for naming today's pitch before the operator had ever objected, which is not a fair failure. This version tests what the operator's next real call faces: the rule saved on the previous call. Claire must not name or point at the avoided buildings at any point; must mark the landing page done when he says it is finished (run 40987174151 found the tool refusing 'the landing page is done' because only capitalized words counted as the item's name); must save the talk-less rule; keep lines short with one question; and still say the goal. She may add at most one row if he dictates one."
 }

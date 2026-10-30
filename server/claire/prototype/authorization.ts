@@ -61,8 +61,11 @@ export const GENERIC_WORK_WORDS = new Set(["pitch", "person", "follow", "followu
 
 /**
  * The words that say WHICH piece of work: proper names in the title (any
- * capitalized word after the first), else its non-generic nouns. "Pitch The
- * Chadwick in person" → chadwick; "Renew the business license" → business, license.
+ * capitalized word after the first) and its non-generic nouns. "Pitch The
+ * Chadwick in person" → chadwick; "Renew the business license" → business, license;
+ * "Finish landing page paired with Instagram ad running on Facebook" → instagram,
+ * facebook, landing, page… (Oct 29 eval: with proper names alone, "the landing page
+ * is done" could never name it, and Claire looped asking the operator to rephrase).
  */
 export function identifyingTokens(title: string): string[] {
   const words = title.replace(/[’‘]/g, "'").split(/\s+/).filter(Boolean);
@@ -75,8 +78,7 @@ export function identifyingTokens(title: string): string[] {
         .filter(word => word.length >= 3)
     ),
   ];
-  if (proper.length) return proper;
-  return distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token));
+  return [...new Set([...proper, ...distinctiveTokens(title).filter(token => !GENERIC_WORK_WORDS.has(token))])];
 }
 
 /**
