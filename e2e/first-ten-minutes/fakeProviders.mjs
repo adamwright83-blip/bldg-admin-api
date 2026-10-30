@@ -99,6 +99,8 @@ function fakePortrait(corpusText) {
 const modelCalls = [];
 /** what the person "sent from Gmail" during a test, after JOYSTICK handed the message over */
 const sentLater = [];
+/** what someone wrote back to the person during a test */
+const receivedLater = [];
 
 const defaults = () => ({
   googleScopes: ALL_GOOGLE_SCOPES,
@@ -152,6 +154,7 @@ const server = http.createServer(async (req, res) => {
     revoked.length = 0;
     modelCalls.length = 0;
     sentLater.length = 0;
+    receivedLater.length = 0;
     return send(res, 200, { ok: true });
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
@@ -164,6 +167,22 @@ const server = http.createServer(async (req, res) => {
       date: new Date().toISOString(),
       from: { name: corpus.owner.name, email: corpus.owner.email },
       to: [{ name: input.toName ?? "", email: input.to }],
+      subject: input.subject ?? "",
+      body: input.body ?? "",
+      attachments: [],
+    });
+    return send(res, 200, { ok: true });
+  }
+
+  // someone writes back to the person: it lands in their inbox, now
+  if (path === "/__reply-from" && req.method === "POST") {
+    const input = JSON.parse(body || "{}");
+    receivedLater.push({
+      id: `m-received-later-${receivedLater.length + 1}`,
+      threadId: "t-sent-later",
+      date: new Date().toISOString(),
+      from: { name: input.fromName ?? "", email: input.from },
+      to: [{ name: corpus.owner.name, email: corpus.owner.email }],
       subject: input.subject ?? "",
       body: input.body ?? "",
       attachments: [],
@@ -201,10 +220,12 @@ const server = http.createServer(async (req, res) => {
     const q = url.searchParams.get("q") ?? "";
     const sent = /(^|\s)in:sent\b/.test(q);
     const to = q.match(/(?:^|\s)to:(\S+)/)?.[1]?.toLowerCase() ?? null;
+    const from = q.match(/(?:^|\s)from:(\S+)/)?.[1]?.toLowerCase() ?? null;
     const after = Number(q.match(/(?:^|\s)after:(\d+)/)?.[1] ?? 0) * 1000;
-    const ids = [...corpus.messages, ...sentLater]
+    const ids = [...corpus.messages, ...sentLater, ...receivedLater]
       .filter(message => (message.from.email === corpus.owner.email) === sent)
       .filter(message => !to || message.to.some(recipient => recipient.email.toLowerCase() === to))
+      .filter(message => !from || message.from.email.toLowerCase() === from)
       .filter(message => !after || new Date(message.date).getTime() >= after)
       .map(message => ({ id: message.id, threadId: message.threadId }));
     return send(res, 200, { messages: ids.reverse(), resultSizeEstimate: ids.length });
@@ -213,7 +234,7 @@ const server = http.createServer(async (req, res) => {
   if (attachment) return send(res, 200, { data: TINY_JPEG.toString("base64url"), size: TINY_JPEG.length });
   const one = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)$/);
   if (one) {
-    const message = [...corpus.messages, ...sentLater].find(candidate => candidate.id === decodeURIComponent(one[1]));
+    const message = [...corpus.messages, ...sentLater, ...receivedLater].find(candidate => candidate.id === decodeURIComponent(one[1]));
     return message ? send(res, 200, gmailMessage(message)) : send(res, 404, { error: "not found" });
   }
   if (path === "/www.googleapis.com/calendar/v3/calendars/primary/events") {

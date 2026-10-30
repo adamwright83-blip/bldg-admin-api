@@ -311,6 +311,33 @@ there. JOYSTICK doesn't send it." Behind it:
 
 Each time, "Pip retrieves the tea cosy and settles underneath it."
 
+## Your first chapter (slice 7)
+
+"Back to your page" sits under the writing table once there is a draft, and returns the person to Claire's portrait,
+kept as they left it. A new entry has appeared on the page:
+
+- **"Your first chapter"**, then Astra's entry, written from what the person actually did: "You revisited Elena's
+  Friday request and prepared a reply using the weekly service you now offer." If they decided it could wait, it says
+  that instead.
+- **The message's actual status**, the same line the writing table shows ("Prepared. Not sent.", "Opened in your
+  mail at 3:42 PM. JOYSTICK didn't send it.", "In your Sent folder, 3:44 PM.").
+
+**Claire is available with a suggested question**: "Where did we leave things with Elena?". Her answer is composed from
+the records, not generated, so it is exact:
+
+- **The request:** "You picked up Elena's Friday request from April."
+- **The message as it stands:** kept as drafted, the version they chose, or put in their own words, quoted in full.
+- **Where it is now, and only what is known.** Before answering she looks in their Sent folder again. She says a
+  message isn't there only when she looked; if she couldn't, she says that instead.
+- **Whether the recipient has written back since.** This is read from their own mail with the read-only access they
+  already gave, quoted verbatim past the greeting.
+- **Times are given in the person's own time zone, or not at all.**
+
+The answer is kept (`claire_answered` in `first_ten_events`), so she remembers what she said after a reload. "Ask again"
+answers from the records as they are then. "Tomorrow, we'll pick up from here." follows her answer. "The courtyard"
+returns to the writing table and the closing beat, and no list of chores appears anywhere. The journey's stage is
+`first_chapter` from the person's first return.
+
 ## Slices
 
 | # | Slice | State |
@@ -320,8 +347,8 @@ Each time, "Pip retrieves the tea cosy and settles underneath it."
 | 3 | The crew gets acquainted: seven reveals, sources on tap, corrections, Sable's confirm changes the world | merged |
 | 4 | Claire's portrait: "That sounds like me / Let me change something" | merged |
 | 5 | The revelation and "A Proper Letter" in the Silver Lake courtyard, handing off to the real draft | merged |
-| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | this PR |
-| 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | |
+| 6 | Activation at the moment of value: the draft, scene and decision survive checkout | merged |
+| 7 | "Your first chapter": Claire answers "Where did we leave things with Elena?" with the real state | this PR |
 | 8 | Part 3: "The Friday That Didn't Exist", "The Estimate That Wouldn't Fit", "Here is what changed because you arrived" | |
 
 ## Verification
