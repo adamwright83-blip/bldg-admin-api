@@ -1,0 +1,92 @@
+name: Boreslay Rally CI
+
+on:
+  pull_request:
+    paths:
+      - "client/src/components/boreslay-rally/**"
+      - "client/src/main.tsx"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/boreslay-rally-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-rally:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Rally files
+        id: typecheck
+        continue-on-error: true
+        run: |
+          pnpm check > typecheck.log 2>&1 || true
+          if grep -E "client/src/components/boreslay-rally|client/src/main\.tsx" typecheck.log; then
+            echo "Rally-scoped TypeScript errors found."
+            exit 1
+          fi
+          echo "No Rally-scoped TypeScript errors. Full-repo baseline errors, if any, remain in the artifact."
+
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-typecheck-log
+          path: typecheck.log
+
+      - name: Run Rally tests
+        id: rally_tests
+        continue-on-error: true
+        run: >-
+          pnpm exec vitest run
+          client/src/components/boreslay-rally/rallyEngine.test.ts
+          client/src/components/boreslay-rally/rallyEngine.duel.test.ts
+          client/src/components/boreslay-rally/rallyMetrics.test.ts
+          client/src/components/boreslay-rally/rallyStudioPhysics.test.ts
+          > rally-tests.log 2>&1
+
+      - name: Upload Rally test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-test-log
+          path: rally-tests.log
+
+      - name: Production build
+        id: production_build
+        continue-on-error: true
+        run: pnpm build > build.log 2>&1
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-build-log
+          path: build.log
+
+      - name: Enforce validation result
+        if: always()
+        run: |
+          failed=0
+          if [ "${{ steps.typecheck.outcome }}" != "success" ]; then failed=1; fi
+          if [ "${{ steps.rally_tests.outcome }}" != "success" ]; then failed=1; fi
+          if [ "${{ steps.production_build.outcome }}" != "success" ]; then failed=1; fi
+          exit "$failed"
