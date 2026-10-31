@@ -36,6 +36,9 @@ import { cachedAwaitingReplies, refreshAwaitingRepliesInBackground } from "../fi
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
+/** Recent replies carried into a turn's context: the newest few. */
+const PROMPT_REPLIES_SHOWN = 12;
+
 export type ClaireTimelineItem = {
   id: string;
   kind: FieldTodayItem["kind"];
@@ -491,6 +494,10 @@ export async function assembleClaireDriveContext(input: {
   let awaitingReplies: AwaitingReplies | undefined;
   try {
     awaitingReplies = (input.cachedAwaitingReplies ?? cachedAwaitingReplies)(input.tenantId) ?? undefined;
+    // the prompt carries the newest few replies; a read may keep many more (routines record them all)
+    if (awaitingReplies?.replies && awaitingReplies.replies.length > PROMPT_REPLIES_SHOWN) {
+      awaitingReplies = { ...awaitingReplies, replies: awaitingReplies.replies.slice(0, PROMPT_REPLIES_SHOWN) };
+    }
   } catch {
     awaitingReplies = undefined;
   }

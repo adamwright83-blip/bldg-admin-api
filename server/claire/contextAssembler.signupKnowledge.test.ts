@@ -133,6 +133,14 @@ describe("Claire's main context: signup knowledge and awaiting replies", () => {
     expect(mocks.refreshAwaitingRepliesInBackground).toHaveBeenCalledWith("tenant-1");
   });
 
+  it("carries only the newest 12 recent replies into the turn", async () => {
+    const replies = Array.from({ length: 20 }, (_, i) => ({ ...(awaiting.replies?.[0] ?? {}), messageId: `m${i}` })) as NonNullable<AwaitingReplies["replies"]>;
+    mocks.cachedAwaitingReplies.mockReturnValue({ ...awaiting, replies });
+    const context = await assemble();
+    expect(context.awaitingReplies?.replies).toHaveLength(12);
+    expect(context.awaitingReplies?.replies?.[0]?.messageId).toBe("m0");
+  });
+
   it("a cached list is used as is, with no background read", async () => {
     mocks.refreshAwaitingRepliesInBackground.mockClear();
     mocks.cachedAwaitingReplies.mockReturnValue(awaiting);
