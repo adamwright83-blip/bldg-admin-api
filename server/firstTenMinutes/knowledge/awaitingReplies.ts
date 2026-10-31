@@ -115,7 +115,9 @@ export async function readAwaitingReplies(tenantId: string, deps: AwaitingReader
   if (fresh) return fresh;
   const running = inflight.get(tenantId);
   if (running) return running;
-  const read = readFromGmail(tenantId, now, deps).finally(() => inflight.delete(tenantId));
+  const read: Promise<AwaitingReplies | null> = readFromGmail(tenantId, now, deps).finally(() => {
+    if (inflight.get(tenantId) === read) inflight.delete(tenantId);
+  });
   inflight.set(tenantId, read);
   return read;
 }
