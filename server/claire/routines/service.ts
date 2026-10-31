@@ -29,7 +29,21 @@ export const scheduleOf = (row: Pick<RoutineRecord, "cadence" | "weekday" | "loc
 
 const iso = (date: Date | null | undefined) => (date ? new Date(date).toISOString() : null);
 
-export function runView(row: RoutineRunRecord): RoutineRunView {
+/**
+ * What happens next to a failed scheduled run, as the routine stands now: a retry is promised only while the routine
+ * is active and still due (the runner leaves next_run_at due while it retries). Once it moved on, was paused or was
+ * stopped, the note says so, because Claire reads it as lastRun.summary.
+ */
+function failedScheduledNote(row: RoutineRunRecord, routine: RoutineRecord | undefined): string {
+  if (routine?.status === "stopped") return "It didn't finish. The routine is stopped, so it won't run again.";
+  if (routine?.status === "paused") return "It didn't finish. The routine is paused; it runs again once you resume it.";
+  // while it retries, the runner leaves next_run_at where it was (at or before this run's start); moving on sets it
+  // to the next period, after it
+  const stillDue = routine ? routine.status === "active" && routine.nextRunAt !== null && new Date(routine.nextRunAt).getTime() <= new Date(row.startedAt).getTime() : false;
+  return failedRunNote(row.attempts, row.attempts >= MAX_ROUTINE_ATTEMPTS || !stillDue);
+}
+
+export function runView(row: RoutineRunRecord, routine?: RoutineRecord): RoutineRunView {
   return {
     id: row.id,
     trigger: row.trigger,
@@ -45,7 +59,7 @@ export function runView(row: RoutineRunRecord): RoutineRunView {
         ? null
         : row.trigger === "manual"
           ? "It didn't finish, and nothing changed. Press Run now to try again."
-          : failedRunNote(row.attempts, row.attempts >= MAX_ROUTINE_ATTEMPTS),
+          : failedScheduledNote(row, routine),
   };
 }
 
@@ -63,7 +77,7 @@ export function routineView(row: RoutineRecord, runs: readonly RoutineRunRecord[
     nextRunAt: row.status === "active" ? iso(row.nextRunAt) : null,
     lastRunAt: iso(row.lastRunAt),
     createdAt: new Date(row.createdAt).toISOString(),
-    runs: runs.map(runView),
+    runs: runs.map(run => runView(run, row)),
   };
 }
 

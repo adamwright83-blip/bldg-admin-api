@@ -73,6 +73,26 @@ const ACTIONS = [
   /\b(mark|label|archive|forward|star|flag|move|tag|book|cancel|charge) (them|it|those|these|everyone|everybody|people|the|their|as|each|all)\b/,
   /\b(e-?mail|text|message|call|phone|ping|nudge|chase|contact|remind|reply to|respond to|answer|write to|follow[- ]?up with|reach out to|get in touch with) (them|him|her|everyone|everybody|anyone|people|those|these|customers|clients|each|all|whoever)\b/,
 ];
+/**
+ * Any verb that contacts someone or changes something, aimed at anyone but the operator: "text Elena", "let them
+ * know", "tell clients", "write a follow up", "archive messages". "tell me", "remind me", "let me know" ask for the
+ * report and stay. A few words are nouns as often as verbs ("text messages", "email threads"): those pass when what
+ * follows is plainly a kind of mail.
+ */
+const OUTWARD =
+  /\b(text|sms|call|phone|contact|e-?mail|message|write (?:to|a|an|the)|reply to|respond to|follow[- ]?up with|remind|let|tell|notify|ping|nudge|chase|reach out to|get in touch with|archive|label|delete|forward|invite)\s+([\p{L}'@.-]+)/gu;
+const THE_OPERATOR = new Set(["me", "myself"]);
+const MAIL_NOUNS = new Set(["messages", "message", "threads", "thread", "replies", "emails", "email", "chats", "texts"]);
+const NOUN_OR_VERB = /^(?:text|call|phone|e-?mail|message)$/;
+function asksToActOnOthers(asked: string): boolean {
+  for (const match of asked.matchAll(OUTWARD)) {
+    const [, verb, object] = match;
+    if (THE_OPERATOR.has(object!)) continue;
+    if (NOUN_OR_VERB.test(verb!) && MAIL_NOUNS.has(object!)) continue;
+    return true;
+  }
+  return false;
+}
 /** Asking for the report somewhere other than JOYSTICK. */
 const DELIVERY = [/\b(e-?mail|text|sms|whatsapp|slack|call|phone|message|dm) me\b/, /\bsends? me (an? )?(e-?mail|text|sms|whatsapp|slack|message|dm)\b/];
 /** The other direction: who is waiting on the operator. Not something Claire can check yet. */
@@ -188,7 +208,7 @@ export function parseRoutineInstruction(input: string, timeZone: string): Parsed
     return refuse("Routines report here, on the Claire Desk. Claire can't email, text or message the results to you.");
   // "send me a list" is asking for the report, not asking JOYSTICK to send anyone anything
   const asked = text.replace(/\bsends? me\b/g, "tell me");
-  if (ACTIONS.some(pattern => pattern.test(asked)))
+  if (ACTIONS.some(pattern => pattern.test(asked)) || asksToActOnOthers(asked))
     return refuse("Routines only read and report. Claire won't send, contact, label or change anything on a schedule. To follow up with someone, use “Prepare a follow-up” on the Waiting to hear back card.");
   if (OWED_BY_OPERATOR.test(asked))
     return refuse("Claire can't check who is waiting on you yet. She can tell you who you're waiting on, and who wrote back.");

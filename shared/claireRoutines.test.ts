@@ -41,6 +41,10 @@ describe("parseRoutineInstruction: the operator's words, read deterministically"
     ["Every Friday at eight, who's waiting to hear back since Monday", ["waiting_on", "weekly", 5, "08:00"]],
     ["at 9 every day: who answered?", ["wrote_back", "daily", null, "09:00"]],
     ["Once a week on Monday, who's gone silent", ["waiting_on", "weekly", 1, "08:00"]],
+    ["Every Monday remind me who hasn't replied", ["waiting_on", "weekly", 1, "08:00"]],
+    ["Every morning let me know who wrote back", ["wrote_back", "daily", null, "08:00"]],
+    ["Every evening tell me myself who replied", ["wrote_back", "daily", null, "17:00"]],
+    ["Every Friday, unanswered text messages", ["waiting_on", "weekly", 5, "08:00"]],
   ])("%s", (text, expected) => {
     expect(plan(text)).toEqual(expected);
   });
@@ -55,6 +59,16 @@ describe("parseRoutineInstruction: the operator's words, read deterministically"
     ["Every Monday, email everyone who hasn't replied", /only read and report/],
     ["Every morning send a reminder to people who've gone quiet", /only read and report/],
     ["Every Friday, follow up with them", /only read and report/],
+    ["Every day text Elena if she hasn't replied", /only read and report/],
+    ["Every Monday contact the people who haven't replied", /only read and report/],
+    ["Every day, let them know I'm waiting", /only read and report/],
+    ["Every morning tell clients who haven't replied that I'm waiting", /only read and report/],
+    ["Every Monday, write a follow up to everyone who hasn't replied", /only read and report/],
+    ["Every morning, archive messages from people who replied", /only read and report/],
+    ["Every Friday at 9, remind Teo if he hasn't answered", /only read and report/],
+    ["Every day call whoever hasn't replied", /only read and report/],
+    ["Every Monday, notify the team who wrote back", /only read and report/],
+    ["Every morning, reply to anyone who wrote back", /only read and report/],
     ["Email me every Monday who hasn't replied", /report here, on the Claire Desk/],
     ["Every Monday tell me my revenue", /can't check that on a schedule/],
     ["Every hour, who replied", /once a day, or once a week/],
