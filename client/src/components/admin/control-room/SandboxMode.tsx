@@ -50,6 +50,25 @@ function completedReplayMaxDate(now = new Date()): string {
   return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}-${String(previous.getUTCDate()).padStart(2, "0")}`;
 }
 
+
+/** What a capability's status means, from evidence: never "working" because a key exists. */
+const CAPABILITY_LABEL: Record<string, string> = {
+  unconfigured: "Not configured",
+  configured_not_yet_exercised: "Configured, not tested",
+  available: "Live and verified",
+  provider_error: "Provider error",
+  unavailable: "Provider error",
+  permission_denied: "Permission denied",
+  quota_limited: "Quota exceeded",
+  degraded: "Degraded / fallback",
+  coverage_missing: "Coverage missing",
+  stale: "Stale: no recent evidence",
+};
+
+function evidenceTime(at: string | null | undefined): string {
+  return at ? new Date(at).toLocaleString() : "never seen";
+}
+
 export default function SandboxMode({ onNavigate }: { onNavigate: (path: string) => void }) {
   const query = trpc.system.towerWars.sandbox.useQuery(undefined, { retry: false, staleTime: Infinity });
   const googleCaps = trpc.system.google.capabilities.useQuery(undefined, { retry: false, staleTime: 30_000 });
@@ -129,17 +148,25 @@ export default function SandboxMode({ onNavigate }: { onNavigate: (path: string)
       {/* Google Live Capability Status Pane */}
       <section className="sb-matrix">
         <h2>GOOGLE_CAPABILITIES_SPINE</h2>
-        <p>Live capability audit across all 10 provisioned Google Platform APIs. Secrets remain strictly redacted.</p>
+        <p>
+          What each Google API last answered, from real calls (kept across restarts). A key in Railway only means configured.
+          Secrets remain strictly redacted.
+        </p>
         <div className="sb-google-grid">
           {capabilities ? (
             Object.values(capabilities).map(cap => (
               <article key={cap.name} className={`sb-cap-card is-${cap.status}`}>
                 <div className="sb-cap-head">
                   <strong>{cap.name.replace(/_/g, " ").toUpperCase()}</strong>
-                  <span className={`sb-cap-badge is-${cap.status}`}>{cap.status}</span>
+                  <span className={`sb-cap-badge is-${cap.status}`} data-testid={`google-cap-${cap.name}`} data-status={cap.status}>
+                    {CAPABILITY_LABEL[cap.status] ?? cap.status}
+                  </span>
                 </div>
                 <div className="sb-cap-body">
                   <small>Credential: {cap.hasCredential ? "Configured in Railway" : "Unset"}</small>
+                  <small>Last answer: {evidenceTime(cap.lastCheckedAt)}</small>
+                  <small>Last success: {evidenceTime(cap.lastSuccessAt)}</small>
+                  {cap.lastError ? <small>Last error: {cap.lastError}</small> : null}
                   <small>Fallback: {cap.fallbackActive ? "Active" : "Standard"}</small>
                   {cap.coverageNotes ? <p>{cap.coverageNotes}</p> : null}
                 </div>

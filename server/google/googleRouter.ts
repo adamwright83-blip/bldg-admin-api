@@ -39,8 +39,8 @@ export const googleRouter = router({
 
   opportunityPressure: legacyAdminRoleProcedure
     .input(z.object({ forceFresh: z.boolean().optional() }).optional())
-    .query(async ({ input }) => {
-      return googleWorldService.getOpportunityPressure(input?.forceFresh);
+    .query(async ({ ctx, input }) => {
+      return googleWorldService.getOpportunityPressure(ctx.tenantId, input?.forceFresh);
     }),
 
   buildingReality: legacyAdminRoleProcedure

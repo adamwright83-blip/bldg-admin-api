@@ -1,0 +1,68 @@
+name: Google integrations
+
+# Google capability evidence (migration 0158) and Gmail reply detection (0159) on real MySQL, plus their contracts.
+on:
+  pull_request:
+    paths:
+      - "server/google/**"
+      - "server/geography/googleGeocoder*"
+      - "server/integrations/gmail/**"
+      - "server/integrations/googleMaps/**"
+      - "server/integrations/cleancloud/browserSync/gmailVerification.ts"
+      - "server/claire/prototype/tools.ts"
+      - "shared/googleCapabilities.ts"
+      - "shared/opportunityPressure*"
+      - "drizzle/0158_*"
+      - "drizzle/0159_*"
+      - "scripts/migrate.mjs"
+      - ".github/workflows/google-integrations.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-integrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  google:
+    name: google integrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: google_integrations_test
+        ports:
+          - 3412:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      TZ: UTC
+      DATABASE_URL: mysql://root:root@127.0.0.1:3412/google_integrations_test
+      JWT_SECRET: google-integrations-secret-0000000000000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Contracts
+        run: pnpm exec vitest run server/google server/integrations/gmail server/integrations/googleMaps shared/opportunityPressure.test.ts
+      - name: Migrate the disposable database, twice (idempotent)
+        run: |
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs
+      - name: On MySQL
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/google server/integrations/gmail
