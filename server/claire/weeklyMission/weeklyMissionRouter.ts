@@ -1,5 +1,7 @@
-import { awaitingOpeningLine, signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
+import { awaitingForBriefing, awaitingOpeningLine, nextLastSeenMark, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
 import { cachedAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "../../firstTenMinutes/knowledge/awaitingReplies";
+import { routinesForBriefing, routinesOpeningLine } from "../../../shared/claireRoutines";
+import { listRoutineViews } from "../routines/service";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
@@ -278,7 +280,7 @@ export const weeklyMissionRouter = router({
         (opening
           ? await Promise.race([readAwaitingReplies(identity.tenantId), new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))]).catch(() => null)
           : null);
-      if (awaiting) session.showrunner.briefing.awaitingReplies = awaiting;
+      if (awaiting) session.showrunner.briefing.awaitingReplies = awaitingForBriefing(awaiting);
       // Claire's own voice (the same xAI voice as her calls) when configured; otherwise the client says so.
       const voiced = <T extends { speak: string }>(r: T) => ({
         ...r,
@@ -301,6 +303,17 @@ export const weeklyMissionRouter = router({
       }
       if (!utterance) {
         const b = session.showrunner.briefing;
+        // what changed while they were away: who wrote back since their last visit to the desk (kept 60 days). The
+        // mark moves only as far as mail actually read: to this opening's Gmail read (its checkedAt, which may be a
+        // cached read from minutes ago), and not at all when Gmail wasn't read, so no reply falls between two visits
+        const seenKey = `claire-desk-last-seen:${identity.tenantId}:${identity.canonicalOperatorId}`;
+        const seen = await store.load<{ at: number }>(seenKey).catch(() => null);
+        const lastSeen = seen && seen.tenantId === owner.tenantId ? new Date(seen.state.at) : null;
+        const mark = nextLastSeenMark(awaiting, lastSeen);
+        if (mark !== null) await store.save(seenKey, owner, { at: mark }, 60 * 86_400_000).catch(() => undefined);
+        // the operator's routines, read fresh for the opening: what a scheduled check found since their last visit
+        const routineViews = await listRoutineViews(identity.tenantId).catch(() => null);
+        if (routineViews) b.routines = routinesForBriefing(routineViews, session.showrunner.timeZone);
         const open = [...b.today, ...b.tomorrow].filter(i => i.status === "open");
         const pending = b.pendingDecision?.items ?? [];
         const speak = [
@@ -309,6 +322,8 @@ export const weeklyMissionRouter = router({
           pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
           // where the first message from signup stands (First Ten Minutes), when there is one
           signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
+          sinceLastVisitLine(awaiting ?? b.awaitingReplies, lastSeen) ?? "",
+          routinesOpeningLine(routineViews ?? [], lastSeen) ?? "",
           awaitingOpeningLine(b.awaitingReplies) ?? "",
           "What do you need?",
         ].filter(Boolean).join(" ");

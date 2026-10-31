@@ -1,4 +1,5 @@
 import { AWAITING_REPLIES_RULE, SIGNUP_KNOWLEDGE_RULE } from "../../../shared/firstTenMinutesKnowledge";
+import { ROUTINES_RULE } from "../../../shared/claireRoutines";
 import { cleanLedgerReply } from "../workLedger/workLedgerTurn";
 import { reconcileSpokenPromises } from "../promiseReconciler";
 import {
@@ -234,6 +235,7 @@ export function systemPrompt(state: ShowrunnerCallState): string {
     "TRUTH: use only facts in BRIEFING or the operator's own words. Never invent customers, addresses, times, sales, travel times, prepared materials, or outcomes.",
     state.briefing.signupKnowledge ? SIGNUP_KNOWLEDGE_RULE : "",
     state.briefing.awaitingReplies ? AWAITING_REPLIES_RULE : "",
+    state.briefing.routines ? ROUTINES_RULE : "",
     "Operator reports are reports, not verified results; you may say 'you said', never 'confirmed'.",
     "Never say a plan change is approved, locked in, updated, saved or scheduled: only the system confirms that, separately.",
     "planEdits must be empty unless this is the in-app planning conversation.",

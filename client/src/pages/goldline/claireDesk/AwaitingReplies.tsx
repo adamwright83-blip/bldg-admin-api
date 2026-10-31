@@ -143,6 +143,28 @@ export function AwaitingReplies() {
           Nobody you wrote to in the last {a.scanned.days} days still owes you a reply.
         </p>
       )}
+      {a.replies?.length ? (
+        <>
+          <p className="cd-kicker cd-mt">WROTE BACK RECENTLY</p>
+          <ul className="cd-ready" data-testid="claire-desk-replies">
+            {a.replies.slice(0, SHOWN).map(reply => (
+              <li key={reply.messageId} data-testid="claire-desk-reply">
+                <strong>{reply.person.name ?? reply.person.address}</strong> ·{" "}
+                {new Date(reply.at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                <br />
+                <small>
+                  “{reply.snippet}”{" "}
+                  {reply.url ? (
+                    <a href={reply.url} target="_blank" rel="noreferrer noopener">
+                      open
+                    </a>
+                  ) : null}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       <p className="cd-fine">
         Read from {a.account ?? "your Gmail"} at {new Date(a.checkedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}. Ask Claire what to do
         about any of them.

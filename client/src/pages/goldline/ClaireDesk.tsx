@@ -19,6 +19,7 @@ import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
 import { OpenComms, type CommsPhase } from "./claireDesk/OpenComms";
 import { SignupKnowledge } from "./claireDesk/SignupKnowledge";
 import { AwaitingReplies } from "./claireDesk/AwaitingReplies";
+import { Routines } from "./claireDesk/Routines";
 import { DaphnePresentationConsent } from "./claireDesk/DaphnePresentationConsent";
 import { callSheetWithheldCopy } from "./claireDesk/callSheetFreshness";
 import "../storyHome/StoryHome.css";
@@ -309,6 +310,7 @@ export default function ClaireDesk() {
 
             <SignupKnowledge timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"} />
             <AwaitingReplies />
+            <Routines />
 
             <OpenComms onChanged={refresh} onPhase={setPhase} draft={draft} />
 

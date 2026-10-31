@@ -82,6 +82,55 @@ describe("who the person is waiting to hear back from", () => {
   });
 });
 
+describe("who wrote back, and what changed while the person was away", () => {
+  it("lists people she'd written to who answered, newest first, one each; not strangers, not automated mail", async () => {
+    const { computeRecentReplies } = await import("./awaitingReplies");
+    const { sinceLastVisitLine } = await import("../../../shared/firstTenMinutesKnowledge");
+    const sent = [
+      mail({ from: NINA, to: ["elena@larkspurhotel.example"], days: 6, text: "Would Friday suit?" }),
+      mail({ from: NINA, to: ["teo@marsh.example"], days: 9, text: "Shall I keep it going?", toName: "Teo Marsh" }),
+    ];
+    const received = [
+      mail({ from: "elena@larkspurhotel.example", to: [NINA], days: 3, text: "Yes, Friday is perfect." }),
+      mail({ from: "elena@larkspurhotel.example", to: [NINA], days: 1, text: "And two vases please." }),
+      mail({ from: "teo@marsh.example", to: [NINA], days: 2, text: "Keep it going." }),
+      // a stranger she never wrote to, and a newsletter: not replies
+      mail({ from: "newcomer@shop.example", to: [NINA], days: 1, text: "Hello!" }),
+      mail({ from: "teo@marsh.example", to: [NINA], days: 1, text: "Out of office", automated: true }),
+      // Teo wrote before she ever wrote to him: not a reply to her
+      mail({ from: "teo@marsh.example", to: [NINA], days: 12, text: "Hi" }),
+    ];
+    received[0].from.name = "Elena Ruiz";
+    received[1].from.name = "Elena Ruiz";
+    received[2].from.name = "Teo Marsh";
+    const replies = computeRecentReplies({ sent, received, ownerEmail: NINA });
+    expect(replies.map(reply => [reply.person.address, reply.snippet])).toEqual([
+      ["elena@larkspurhotel.example", "And two vases please."],
+      ["teo@marsh.example", "Keep it going."],
+    ]);
+    const awaiting = { checkedAt: now.toISOString(), account: NINA, items: [], replies, unavailable: null, scanned: { sent: 2, received: 6, days: 30 } };
+    // never been to the desk before: nothing to say about "since"
+    expect(sinceLastVisitLine(awaiting, null)).toBeNull();
+    expect(sinceLastVisitLine(awaiting, daysAgo(4))).toBe("Since you were last here, Elena Ruiz and Teo Marsh wrote back.");
+    expect(sinceLastVisitLine(awaiting, new Date(now.getTime() - 1.5 * 86_400_000))).toBe("Since you were last here, Elena Ruiz wrote back.");
+    expect(sinceLastVisitLine(awaiting, now)).toBeNull();
+  });
+
+  it("moves the last-seen mark only as far as mail was read", async () => {
+    const { nextLastSeenMark } = await import("../../../shared/firstTenMinutesKnowledge");
+    const read = (at: Date, unavailable: string | null = null) => ({ checkedAt: at.toISOString(), account: NINA, items: [], replies: [], unavailable, scanned: { sent: 0, received: 0, days: 30 } });
+    const cachedAt = new Date(now.getTime() - 8 * 60_000);
+    // first visit with a read: the mark starts at that read, not at "now"
+    expect(nextLastSeenMark(read(cachedAt), null)).toBe(cachedAt.getTime());
+    // Gmail timed out or wasn't readable: the mark stays where it was
+    expect(nextLastSeenMark(null, daysAgo(2))).toBeNull();
+    expect(nextLastSeenMark(read(now, "Gmail couldn't be read just now."), daysAgo(2))).toBeNull();
+    // a read older than the mark never moves it back
+    expect(nextLastSeenMark(read(daysAgo(3)), daysAgo(2))).toBeNull();
+    expect(nextLastSeenMark(read(cachedAt), daysAgo(2))).toBe(cachedAt.getTime());
+  });
+});
+
 describe("reading the waiting list", () => {
   it("reads once per workspace at a time, and a background refresh goes through the same read", async () => {
     clearAwaitingRepliesCache();
@@ -105,5 +154,23 @@ describe("reading the waiting list", () => {
     expect(calls).toBe(2);
     release(null);
     expect(await third).toBeNull();
+  });
+});
+
+describe("every reply a read sees is kept for routines; Claire's prompt takes the newest few", () => {
+  it("keeps all 13 people who wrote back, and the briefing carries the newest 12", async () => {
+    const { computeRecentReplies, RECENT_REPLIES_KEPT } = await import("./awaitingReplies");
+    const { awaitingForBriefing, BRIEFING_REPLIES_SHOWN } = await import("../../../shared/firstTenMinutesKnowledge");
+    const people = Array.from({ length: 13 }, (_, i) => `client${i}@shop.example`);
+    const sent = people.map(address => mail({ from: NINA, to: [address], days: 20, text: "Does Friday work?" }));
+    const received = people.map((address, i) => mail({ from: address, to: [NINA], days: 1 + i / 10, text: `Yes ${i}` }));
+    expect(computeRecentReplies({ sent, received, ownerEmail: NINA })).toHaveLength(12);
+    const all = computeRecentReplies({ sent, received, ownerEmail: NINA, limit: RECENT_REPLIES_KEPT });
+    expect(all).toHaveLength(13);
+    const awaiting = { checkedAt: now.toISOString(), account: NINA, items: [], replies: all, unavailable: null, scanned: { sent: 13, received: 13, days: 30 } };
+    const briefed = awaitingForBriefing(awaiting);
+    expect(briefed.replies).toHaveLength(BRIEFING_REPLIES_SHOWN);
+    expect(briefed.replies![0]).toEqual(all[0]);
+    expect(awaiting.replies).toHaveLength(13);
   });
 });

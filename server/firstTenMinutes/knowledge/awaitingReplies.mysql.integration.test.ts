@@ -129,6 +129,8 @@ describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL 
       ["Elena Ruiz", "elena@larkspurhotel.example", 4, true, "s-elena"],
     ]);
     expect(awaiting.items[0].url).toContain("th-elena");
+    // and who wrote back: Teo answered her question three days ago
+    expect(awaiting.replies?.map(reply => [reply.person.name, reply.snippet])).toEqual([["Teo Marsh", "Yes please."]]);
     // Ana and the hotel answered outside the sample: Gmail was asked about each candidate directly, so neither is listed
     expect(queries.some(q => q.startsWith("from:ana@studio.example -in:sent"))).toBe(true);
     expect(queries).toContain("thread:th-max");

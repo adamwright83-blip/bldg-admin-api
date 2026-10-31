@@ -154,18 +154,32 @@ export type AwaitingReply = {
   url: string | null;
 };
 
+/** Someone the operator had been writing to who wrote back recently: one real message in their inbox. */
+export type RecentReply = {
+  person: { name: string | null; address: string };
+  subject: string;
+  at: string;
+  /** their own words, shortened */
+  snippet: string;
+  messageId: string;
+  threadId: string;
+  url: string | null;
+};
+
 export type AwaitingReplies = {
   /** when the person's Gmail was read for this */
   checkedAt: string;
   account: string | null;
   items: AwaitingReply[];
+  /** people the operator had written to who wrote back within the window, newest first */
+  replies?: RecentReply[];
   /** plain words when it couldn't be read: Gmail not shared, Google refused, nothing connected */
   unavailable: string | null;
   scanned: { sent: number; received: number; days: number };
 };
 
 export const AWAITING_REPLIES_RULE =
-  "BRIEFING.awaitingReplies lists people the operator wrote to who haven't written back, read from the operator's own Gmail at checkedAt (the last scanned.days days): each item is one real message in their Sent folder (subject, sentAt, waitingDays, their own lastLine, asked = their message asked something). When asked who they are waiting on, answer from it by name with how long, and help decide what to do about each; never claim a reply arrived or didn't beyond checkedAt, and never send anything yourself: to follow up, point them to 'Prepare a follow-up' on the Waiting to hear back card, where they approve the exact words. If unavailable is set, say that reason.";
+  "BRIEFING.awaitingReplies lists people the operator wrote to who haven't written back, read from the operator's own Gmail at checkedAt (the last scanned.days days): each item is one real message in their Sent folder (subject, sentAt, waitingDays, their own lastLine, asked = their message asked something). When asked who they are waiting on, answer from it by name with how long, and help decide what to do about each; never claim a reply arrived or didn't beyond checkedAt, and never send anything yourself: to follow up, point them to 'Prepare a follow-up' on the Waiting to hear back card, where they approve the exact words. BRIEFING.awaitingReplies.replies are people the operator had written to who wrote back recently (at, their own snippet): when asked what changed or who answered, say who and when from there. If unavailable is set, say that reason.";
 
 export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined): string | null {
   const items = awaiting?.items ?? [];
@@ -175,6 +189,27 @@ export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined
   return `You're waiting to hear back from ${named.join(" and ")}${more}.`;
 }
 
+/** What changed while the operator was away: who wrote back since their last visit to the desk. */
+export function sinceLastVisitLine(awaiting: AwaitingReplies | null | undefined, lastSeen: Date | null): string | null {
+  if (!lastSeen) return null;
+  const fresh = (awaiting?.replies ?? []).filter(reply => new Date(reply.at).getTime() > lastSeen.getTime());
+  if (!fresh.length) return null;
+  const names = [...new Set(fresh.map(reply => reply.person.name ?? reply.person.address))];
+  const said = names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  return `Since you were last here, ${said} wrote back.`;
+}
+
+/**
+ * Where the "since you were last here" mark moves after a visit: only as far as mail was actually read (that read's
+ * checkedAt), never backwards, and not at all without a successful read. Null: leave it where it is.
+ */
+export function nextLastSeenMark(read: AwaitingReplies | null | undefined, lastSeen: Date | null): number | null {
+  if (!read || read.unavailable) return null;
+  const through = Date.parse(read.checkedAt);
+  if (!Number.isFinite(through)) return null;
+  return !lastSeen || through > lastSeen.getTime() ? through : null;
+}
+
 /**
  * Gmail's own compose window with this message filled in: what the owner opens when JOYSTICK can't send for them.
  * Built from the words as they stand, so an edit made after preparing it goes with it.
@@ -182,4 +217,10 @@ export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined
 export function gmailComposeUrl(mail: { to: { address: string }; subject: string; body: string }, account: string | null): string {
   const params = new URLSearchParams({ view: "cm", fs: "1", to: mail.to.address, su: mail.subject, body: mail.body });
   return `https://mail.google.com/mail/u/${encodeURIComponent(account ?? "0")}/?${params}`;
+}
+
+/** How many recent replies Claire's prompt carries: the newest few. Routines and the "since your last visit" count use them all. */
+export const BRIEFING_REPLIES_SHOWN = 12;
+export function awaitingForBriefing(awaiting: AwaitingReplies): AwaitingReplies {
+  return awaiting.replies && awaiting.replies.length > BRIEFING_REPLIES_SHOWN ? { ...awaiting, replies: awaiting.replies.slice(0, BRIEFING_REPLIES_SHOWN) } : awaiting;
 }
