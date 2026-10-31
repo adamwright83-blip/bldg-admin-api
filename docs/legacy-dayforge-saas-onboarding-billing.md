@@ -50,6 +50,7 @@ Plan variables:
 - `DAYFORGE_STRIPE_MAX_SUBSCRIPTIONS`
 - `DAYFORGE_STRIPE_ENTITLEMENTS`
 - `DAYFORGE_BILLING_GRACE_DAYS`
+- `DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID` (optional Stripe customer-portal configuration, `bpc_…`; the JOYSTICK sandbox values for all of these are in `docs/billing/JOYSTICK_STRIPE_SANDBOX.md`)
 
 The client submits a plan key. It never submits a Stripe price or customer ID. Checkout resolves the active price on the server; the Billing Portal resolves the customer from the authenticated tenant. A dedicated checkout ledger claims limited/founding-plan capacity transactionally, releases the claim on `checkout.session.expired`, and preserves Stripe idempotency across retries.
 

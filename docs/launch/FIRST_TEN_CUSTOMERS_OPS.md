@@ -10,7 +10,7 @@
 - [ ] **Account Setup & Provisioning:**
   - Verify customer completes 3-question briefing on `/joystick-start`.
   - Confirm custom personalized preview generates accurately for their industry/service model.
-  - Confirm Stripe Checkout completes with valid test-mode card and 7-day trial.
+  - Confirm Stripe Checkout completes with valid test-mode card and charges $79 at checkout (no trial).
 - [ ] **Tenant Verification:**
   - Verify distinct `tenantId` created in `tenants` and `saas_tenants`.
   - Verify owner record provisioned in `users` with hashed credentials.

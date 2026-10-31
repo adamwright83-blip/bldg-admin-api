@@ -8,7 +8,7 @@ import type { DraftStatus } from "./firstTenMinutesChapter";
 
 export type ActivationOffer = {
   planKey: string;
-  /** "7 days free, then $49 a month." */
+  /** "JOYSTICK, $79 a month." (or, for a plan with a trial, "7 days free, then $468 a year.") */
   line: string;
   /** "Card required. One plan. Cancel anytime." */
   detail: string;
@@ -49,7 +49,7 @@ export function offerWords(input: { trialDays: number; unitAmountCents: number |
   const price = input.unitAmountCents !== null ? `$${(input.unitAmountCents / 100).toFixed(input.unitAmountCents % 100 ? 2 : 0)}` : null;
   const per = input.interval === "year" ? "a year" : "a month";
   if (price && input.trialDays > 0) return { line: `${input.trialDays} days free, then ${price} ${per}.`, detail: "Card required. One plan. Cancel anytime." };
-  if (price) return { line: `${price} ${per}.`, detail: "Card required. Cancel anytime." };
+  if (price) return { line: `${input.displayName}, ${price} ${per}.`, detail: "Card required. One plan. Cancel anytime." };
   return { line: input.trialDays > 0 ? `${input.displayName}, ${input.trialDays} days free.` : `${input.displayName}.`, detail: "Card required." };
 }
 

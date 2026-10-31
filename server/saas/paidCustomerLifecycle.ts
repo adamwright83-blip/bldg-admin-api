@@ -7,9 +7,10 @@
 import Stripe from "stripe";
 import { normalizeSaasEmail } from "../../shared/saasTenant";
 import {
+  JOYSTICK_ANNUAL_TRIAL_DAYS,
   JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS,
+  JOYSTICK_MONTHLY_TRIAL_DAYS,
   JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS,
-  JOYSTICK_REQUIRED_TRIAL_DAYS,
 } from "./joystickStripeOffer";
 
 export const JOYSTICK_PUBLIC_CHECKOUT_LIVE = false;
@@ -32,10 +33,12 @@ export const UNRECOGNIZED_KEY_CHECKOUT_CLOSED_MESSAGE =
 export const ADAM_JOYSTICK_STRIPE_TEST_KEY_STEP =
   "Set DAYFORGE_BILLING_STRIPE_SECRET_KEY to the JOYSTICK Stripe sandbox secret that starts with sk_test_. Do not use a live key and do not use the Laundry Farm Stripe account. Leave public checkout closed (checkout_live stays false).";
 
+/** $79 a month with no trial (charged at checkout); annual $468 a year keeps its seven-day trial. */
 export const ADVERTISED_PAID_OFFER = {
   monthlyUnitAmountCents: JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS,
+  monthlyTrialDays: JOYSTICK_MONTHLY_TRIAL_DAYS,
   annualUnitAmountCents: JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS,
-  trialDays: JOYSTICK_REQUIRED_TRIAL_DAYS,
+  annualTrialDays: JOYSTICK_ANNUAL_TRIAL_DAYS,
   checkoutLive: JOYSTICK_PUBLIC_CHECKOUT_LIVE,
 } as const;
 
@@ -45,9 +48,10 @@ const STRIPE_API_VERSION = "2025-03-31.basil";
 
 export function assertAdvertisedOfferUnchanged(): void {
   if (
-    ADVERTISED_PAID_OFFER.monthlyUnitAmountCents !== 4900 ||
+    ADVERTISED_PAID_OFFER.monthlyUnitAmountCents !== 7900 ||
+    ADVERTISED_PAID_OFFER.monthlyTrialDays !== 0 ||
     ADVERTISED_PAID_OFFER.annualUnitAmountCents !== 46800 ||
-    ADVERTISED_PAID_OFFER.trialDays !== 7 ||
+    ADVERTISED_PAID_OFFER.annualTrialDays !== 7 ||
     ADVERTISED_PAID_OFFER.checkoutLive !== false
   ) {
     throw new Error("Advertised JOYSTICK offer drifted");
