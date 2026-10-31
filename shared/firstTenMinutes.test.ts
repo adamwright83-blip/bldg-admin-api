@@ -13,10 +13,11 @@ import { EXAMPLE_BUSINESS, EXAMPLE_CONNECTION } from "./firstTenMinutesExample";
 
 describe("first ten minutes contracts", () => {
   it("shows the experience only when the flag opens it to this browser", () => {
-    expect(firstTenShownTo(parseFirstTenMode(undefined), true)).toBe(false);
-    expect(firstTenShownTo("preview", false)).toBe(false);
-    expect(firstTenShownTo("preview", true)).toBe(true);
-    expect(firstTenShownTo("on", false)).toBe(true);
+    expect(firstTenShownTo({ mode: parseFirstTenMode(undefined), open: true })).toBe(false);
+    // preview: only when the server says this browser holds the pass
+    expect(firstTenShownTo({ mode: "preview", open: false })).toBe(false);
+    expect(firstTenShownTo({ mode: "preview", open: true })).toBe(true);
+    expect(firstTenShownTo({ mode: "on", open: true })).toBe(true);
   });
 
   it("treats both JOYSTICK signup modes as JOYSTICK and nothing else", () => {

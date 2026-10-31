@@ -34,7 +34,7 @@ jobs:
   first-ten:
     name: first ten minutes
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     services:
       mysql:
         image: mysql:8.0
@@ -74,6 +74,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: The first ten minutes in a browser
         run: scripts/first-ten-e2e.sh
+      - name: The controlled preview, server-enforced, in a browser
+        run: FIRST_TEN_E2E_MODE=preview FIRST_TEN_E2E_LOGS=tmp/first-ten-e2e-preview-logs scripts/first-ten-e2e.sh e2e/first-ten-minutes/preview.spec.ts
       - name: Keep the screenshots and logs
         if: always()
         uses: actions/upload-artifact@v6

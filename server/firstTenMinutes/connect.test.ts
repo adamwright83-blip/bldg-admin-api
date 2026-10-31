@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import { GOOGLE_SCOPES, SLACK_USER_SCOPES } from "../../shared/firstTenMinutes";
-import { firstTenMode, assertFirstTenOpen } from "./flag";
+import { firstTenMode, assertFirstTenOpen, firstTenOpenFor } from "./flag";
+import { FIRST_TEN_PREVIEW_COOKIE, issuePreviewPass, previewCodeMatches, verifyPreviewPass } from "./previewPass";
 import { decryptConnectionToken, encryptConnectionToken } from "./tokens";
 import { hashNonce, newConnectNonce, signConnectState, verifyConnectState, FIRST_TEN_NONCE_COOKIE } from "./oauthState";
 import { firstTenConnectOrigin, firstTenRedirectUri } from "./origins";
@@ -36,8 +37,42 @@ describe("the flag", () => {
     expect(firstTenMode({ JOYSTICK_FIRST_TEN_MINUTES: "true" } as NodeJS.ProcessEnv)).toBe("off");
     expect(firstTenMode({ JOYSTICK_FIRST_TEN_MINUTES: " ON " } as NodeJS.ProcessEnv)).toBe("on");
     expect(firstTenMode({ JOYSTICK_FIRST_TEN_MINUTES: "preview" } as NodeJS.ProcessEnv)).toBe("preview");
-    expect(() => assertFirstTenOpen({} as NodeJS.ProcessEnv)).toThrow(/isn't open/);
-    expect(() => assertFirstTenOpen({ JOYSTICK_FIRST_TEN_MINUTES: "preview" } as NodeJS.ProcessEnv)).not.toThrow();
+    expect(() => assertFirstTenOpen(null, {} as NodeJS.ProcessEnv)).toThrow(/isn't open/);
+    expect(() => assertFirstTenOpen(null, { JOYSTICK_FIRST_TEN_MINUTES: "on" } as NodeJS.ProcessEnv)).not.toThrow();
+  });
+
+  it("in preview, the server refuses any browser without the preview pass; the ?crew link alone opens nothing", () => {
+    const preview = { JOYSTICK_FIRST_TEN_MINUTES: "preview", JOYSTICK_FIRST_TEN_PREVIEW_CODE: "a-long-random-preview-code", JWT_SECRET: "jwt-secret-for-tests-000000" } as NodeJS.ProcessEnv;
+    // before: preview let every request through, so anyone could call the procedures
+    expect(() => assertFirstTenOpen(null, preview)).toThrow(/isn't open/);
+    expect(() => assertFirstTenOpen({ headers: {} }, preview)).toThrow(/isn't open/);
+    expect(() => assertFirstTenOpen({ headers: { cookie: `${FIRST_TEN_PREVIEW_COOKIE}=forged.value.sig` } }, preview)).toThrow(/isn't open/);
+    const pass = issuePreviewPass(preview)!;
+    expect(() => assertFirstTenOpen({ headers: { cookie: `other=1; ${FIRST_TEN_PREVIEW_COOKIE}=${encodeURIComponent(pass.value)}` } }, preview)).not.toThrow();
+    // a new code revokes every pass issued under the old one
+    expect(firstTenOpenFor({ headers: { cookie: `${FIRST_TEN_PREVIEW_COOKIE}=${pass.value}` } }, { ...preview, JOYSTICK_FIRST_TEN_PREVIEW_CODE: "a-different-long-code-now" })).toBe(false);
+    // a pass is no use once the flag is off
+    expect(firstTenOpenFor({ headers: { cookie: `${FIRST_TEN_PREVIEW_COOKIE}=${pass.value}` } }, { ...preview, JOYSTICK_FIRST_TEN_MINUTES: "" })).toBe(false);
+  });
+});
+
+describe("the preview pass", () => {
+  const preview = { JOYSTICK_FIRST_TEN_PREVIEW_CODE: "a-long-random-preview-code", JWT_SECRET: "jwt-secret-for-tests-000000" } as NodeJS.ProcessEnv;
+  it("is granted only for the configured code, and only when a code of at least 16 characters is set", () => {
+    expect(previewCodeMatches("a-long-random-preview-code", preview)).toBe(true);
+    expect(previewCodeMatches("a-long-random-preview-cod", preview)).toBe(false);
+    expect(previewCodeMatches("1", preview)).toBe(false);
+    expect(previewCodeMatches("short", { ...preview, JOYSTICK_FIRST_TEN_PREVIEW_CODE: "short" })).toBe(false);
+    expect(issuePreviewPass({ ...preview, JOYSTICK_FIRST_TEN_PREVIEW_CODE: "" })).toBeNull();
+  });
+  it("expires, and can't be altered", () => {
+    const now = new Date("2026-10-31T12:00:00Z");
+    const pass = issuePreviewPass(preview, now)!;
+    expect(verifyPreviewPass(pass.value, preview, now)).toBe(true);
+    expect(verifyPreviewPass(pass.value, preview, new Date(now.getTime() + 15 * 86_400_000))).toBe(false);
+    const [expires, version, signature] = pass.value.split(".");
+    expect(verifyPreviewPass(`${Number(expires) + 86_400_000}.${version}.${signature}`, preview, now)).toBe(false);
+    expect(verifyPreviewPass(pass.value, { ...preview, JWT_SECRET: "another-signing-key-000000" }, now)).toBe(false);
   });
 });
 
@@ -200,6 +235,21 @@ describe("the callback", () => {
   }
 
   const ownJourney = async () => ({ id: "journey-1", kind: "own" }) as never;
+
+  it("in preview, a callback without this browser's preview pass does nothing", async () => {
+    const { req } = await signedRequest("google");
+    const res = fakeRes();
+    const exchangeGoogle = vi.fn();
+    const save = vi.fn();
+    await handleFirstTenCallback("google", req, res as unknown as Response, {
+      env: { ...env, JOYSTICK_FIRST_TEN_MINUTES: "preview", JOYSTICK_FIRST_TEN_PREVIEW_CODE: "a-long-random-preview-code" },
+      loadJourney: ownJourney,
+      exchangeGoogle,
+      save,
+    } as never);
+    expect(exchangeGoogle).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
 
   it("saves a usable Google grant and returns to the same origin's page", async () => {
     const { req } = await signedRequest("google");
