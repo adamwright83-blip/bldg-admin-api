@@ -5861,7 +5861,7 @@ await ensureRequiredColumn(
   const statements = await readSqlStatements("../drizzle/0159_gmail_reply_detection.sql");
   for (const statement of statements) await runRequired(statement, "Gmail reply detection");
   await assertRequiredColumns("gmail_mailbox_watches", [
-    "mailbox_key", "tenant_id", "source", "account_email", "history_id", "status", "status_reason", "watch_expires_at", "last_watch_at",
+    "mailbox_key", "tenant_id", "source", "account_email", "history_id", "status", "status_reason", "status_changed_at", "watch_expires_at", "last_watch_at",
     "last_notice_at", "last_processed_at", "processing_until", "created_at", "updated_at",
   ]);
   await assertRequiredColumns("gmail_push_notices", ["pubsub_message_id", "account_email", "history_id", "received_at", "processed_at", "outcome", "attempts"]);

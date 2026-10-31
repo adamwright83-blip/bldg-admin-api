@@ -47,7 +47,13 @@ export function gmailMailboxApi(auth: Auth): MailboxApi & {
           const added = (data.history ?? []).flatMap(entry =>
             (entry.messagesAdded ?? []).flatMap(item => (item.message?.id && item.message.threadId ? [{ id: item.message.id, threadId: item.message.threadId }] : []))
           );
-          return { added, historyId: String(data.historyId ?? startHistoryId), ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+          const lastRecordId = data.history?.at(-1)?.id;
+          return {
+            added,
+            historyId: String(data.historyId ?? startHistoryId),
+            ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}),
+            ...(lastRecordId ? { lastRecordId: String(lastRecordId) } : {}),
+          };
         },
         () => "expired" as const
       ),

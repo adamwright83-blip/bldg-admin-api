@@ -46,7 +46,10 @@ export class MailboxAccessError extends Error {
 
 export interface MailboxApi {
   /** Messages added since `startHistoryId`; "expired" when Gmail no longer has that history (HTTP 404). */
-  historySince(startHistoryId: string, pageToken?: string): Promise<{ added: AddedMessage[]; historyId: string; nextPageToken?: string } | "expired">;
+  historySince(
+    startHistoryId: string,
+    pageToken?: string
+  ): Promise<{ added: AddedMessage[]; historyId: string; nextPageToken?: string; /** the id of the page's last history record */ lastRecordId?: string } | "expired">;
   /** One message's headers and snippet; "gone" when it was deleted before it could be read (HTTP 404). */
   message(id: string): Promise<FetchedMessage | "gone">;
   /** The ids of a thread's messages, oldest first (for recovery after an expired cursor). */
@@ -103,7 +106,8 @@ export interface ReplyStore {
 export type InboundEffect = (record: InboundRecord, conversation: TrackedConversation) => Promise<void>;
 
 export type ProcessResult =
-  | { outcome: "processed"; recorded: InboundRecord[]; historyId: string; recovered: boolean }
+  /** `more`: history was read up to the page limit, not to the end; the next pass continues from `historyId` */
+  | { outcome: "processed"; recorded: InboundRecord[]; historyId: string; recovered: boolean; more?: boolean }
   | { outcome: "skipped"; reason: string }
   | { outcome: "reconnect_required"; reason: string };
 
@@ -170,7 +174,8 @@ export async function processMailbox(
     }
     const recorded: InboundRecord[] = [];
     let pageToken: string | undefined;
-    let newest = mailbox.historyId;
+    let cursor = mailbox.historyId;
+    let complete = false;
     const seen = new Set<string>();
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const history = await deps.api.historySince(mailbox.historyId, pageToken);
@@ -181,13 +186,19 @@ export async function processMailbox(
         const record = await consider(mailbox, added.id, { ...deps, effects });
         if (record) recorded.push(record);
       }
-      newest = byNumber(newest, history.historyId);
-      if (!history.nextPageToken) break;
+      if (!history.nextPageToken) {
+        // read to the end: everything up to the mailbox's current historyId is handled
+        cursor = byNumber(cursor, history.historyId);
+        complete = true;
+        break;
+      }
+      // not the end yet: only what was actually read counts, up to this page's last record
+      if (history.lastRecordId) cursor = byNumber(cursor, history.lastRecordId);
       pageToken = history.nextPageToken;
     }
-    // only now, with every message up to it handled, does the cursor move
-    await deps.store.advanceCursor(mailbox.key, newest, now());
-    return { outcome: "processed", recorded, historyId: newest, recovered: false };
+    // only now, with every message up to it handled, does the cursor move; a page limit never skips unread pages
+    await deps.store.advanceCursor(mailbox.key, cursor, now());
+    return { outcome: "processed", recorded, historyId: cursor, recovered: false, ...(complete ? {} : { more: true }) };
   } catch (error) {
     if (error instanceof MailboxAccessError) {
       await deps.store.setStatus(mailbox.key, "reconnect_required", error.message, now());

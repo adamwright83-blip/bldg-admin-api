@@ -79,23 +79,43 @@ export async function handleNotice(notice: GmailPushNotice): Promise<void> {
   if (outcome !== "deferred") await noticeStore.settle(notice.pubsubMessageId, outcome, new Date());
 }
 
-/** Brings the watched set in line with the connected mailboxes: new ones watched, removed ones disconnected. */
-export async function syncOperatorMailboxes(): Promise<void> {
-  const connections = await listJawbreakerGmailConnections();
+export type MailboxSyncStore = Pick<typeof mailboxStore, "all" | "create" | "replaceAccount" | "reactivate" | "setStatus">;
+
+/**
+ * Brings the watched set in line with the connected mailboxes. A new connection is watched. A different account on
+ * the same tenant starts fresh (its own cursor and watch). The same account authorised again after Google ended
+ * access, or after it was removed, is watched again from its kept cursor; a mailbox is reactivated only by a
+ * connection stored after it stopped, so stale credentials are never retried in a loop. A removed connection is
+ * disconnected.
+ */
+export async function syncOperatorMailboxes(
+  deps: { connections?: typeof listJawbreakerGmailConnections; store?: MailboxSyncStore; now?: () => Date } = {}
+): Promise<void> {
+  const store = deps.store ?? mailboxStore;
+  const now = (deps.now ?? (() => new Date()))();
+  const connections = await (deps.connections ?? listJawbreakerGmailConnections)();
+  const mailboxes = new Map((await store.all()).map(mailbox => [mailbox.key, mailbox]));
   const connected = new Set<string>();
   for (const connection of connections) {
     if (!connection.connectedEmail) continue;
     const key = operatorKey(connection.tenantId);
+    const email = connection.connectedEmail.toLowerCase();
     connected.add(key);
-    const existing = await mailboxStore.find(key);
-    if (!existing) await mailboxStore.upsert({ key, tenantId: connection.tenantId, source: "operator_gmail", email: connection.connectedEmail });
-    else if (existing.email !== connection.connectedEmail.toLowerCase()) {
-      // a different account was connected: its history is not this one's
-      await mailboxStore.upsert({ key, tenantId: connection.tenantId, source: "operator_gmail", email: connection.connectedEmail });
+    const existing = mailboxes.get(key);
+    if (!existing) await store.create({ key, tenantId: connection.tenantId, source: "operator_gmail", email }, now);
+    else if (existing.email !== email) await store.replaceAccount(key, email, now);
+    else if (
+      existing.status !== "active" &&
+      connection.updatedAt &&
+      (!existing.statusChangedAt || connection.updatedAt.getTime() > existing.statusChangedAt.getTime())
+    ) {
+      await store.reactivate(key, now);
     }
   }
-  for (const mailbox of await mailboxStore.active()) {
-    if (mailbox.source === "operator_gmail" && !connected.has(mailbox.key)) await mailboxStore.setStatus(mailbox.key, "disconnected", "Gmail was disconnected");
+  for (const mailbox of mailboxes.values()) {
+    if (mailbox.source === "operator_gmail" && mailbox.status !== "disconnected" && !connected.has(mailbox.key)) {
+      await store.setStatus(mailbox.key, "disconnected", "Gmail was disconnected", now);
+    }
   }
 }
 

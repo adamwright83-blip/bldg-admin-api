@@ -207,13 +207,18 @@ export async function jawbreakerGmailAuthFor(tenantId: string): Promise<{ auth: 
 }
 
 /** Connected tenants and their accounts, for Gmail reply detection to watch. */
-export async function listJawbreakerGmailConnections(): Promise<Array<{ tenantId: string; connectedEmail: string | null }>> {
+export async function listJawbreakerGmailConnections(): Promise<Array<{ tenantId: string; connectedEmail: string | null; updatedAt: Date | null }>> {
   if (!isJawbreakerGmailConfigured()) return [];
   const db = await getDb();
   if (!db) return [];
   await ensureTable();
-  const result = await db.execute(sql`SELECT tenantId, connectedEmail FROM jawbreaker_gmail_connections`);
-  return rows<{ tenantId: string; connectedEmail: string | null }>(result);
+  // updatedAt moves when the operator reconnects (a new refresh token is stored)
+  const result = await db.execute(sql`SELECT tenantId, connectedEmail, updatedAt FROM jawbreaker_gmail_connections`);
+  return rows<{ tenantId: string; connectedEmail: string | null; updatedAt: Date | string | null }>(result).map(row => ({
+    tenantId: row.tenantId,
+    connectedEmail: row.connectedEmail,
+    updatedAt: row.updatedAt ? new Date(row.updatedAt) : null,
+  }));
 }
 
 async function gmailReaderFor(tenantId: string): Promise<GmailReader | null> {

@@ -167,6 +167,20 @@ describe("Gmail reply detection", () => {
     expect(w.state.cursor).toBe("170");
   });
 
+  it("at the page limit the cursor stops at the last page read, never past unread pages (#782 review)", async () => {
+    const pages = Array.from({ length: 60 }, (_, index) => ({
+      added: index === 55 ? [{ id: "m-reply", threadId: "th-elena" }] : [],
+      historyId: "9000",
+      lastRecordId: String(200 + index),
+    }));
+    const w = world({ history: pages, messages: [reply] });
+    const first = await processMailbox(MAILBOX, "9000", w);
+    // 50 pages read: the cursor is the 50th page's last record, not the mailbox's current 9000
+    expect(first).toMatchObject({ outcome: "processed", historyId: "249", more: true });
+    expect(w.state.cursor).toBe("249");
+    expect(w.rows.size).toBe(0);
+  });
+
   it("reads every page of history before moving the cursor", async () => {
     const second = msg("m-2", "th-elena", { From: "elena@larkspurhotel.example", Subject: "Re: also" }, "2026-10-31T10:00:00Z");
     const w = world({ history: [{ added: [{ id: "m-reply", threadId: "th-elena" }], historyId: "150" }, { added: [{ id: "m-2", threadId: "th-elena" }], historyId: "180" }], messages: [reply, second] });

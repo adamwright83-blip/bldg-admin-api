@@ -60,7 +60,7 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
       })
     ).toBe(true);
     await gmailSendLedger.settle(SEND, { status: "sent", gmailMessageId: "g-out", gmailThreadId: "th-elena", sentAt: at, failure: null });
-    await mailboxStore.upsert({ key: KEY, tenantId: "tenant-replies", source: "operator_gmail", email: ACCOUNT });
+    await mailboxStore.create({ key: KEY, tenantId: "tenant-replies", source: "operator_gmail", email: ACCOUNT }, new Date("2026-10-30T09:00:00Z"));
     await mailboxStore.watched(KEY, "100", new Date("2026-11-06T10:00:00Z"), new Date("2026-10-30T10:00:00Z"));
   });
   afterAll(async () => {
@@ -116,6 +116,23 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
   it("a follow-up in that conversation is held now that she wrote back", async () => {
     expect(await followUpVerdict({ kind: "gmail_send", ref: SEND })).toMatchObject({ proceed: false, reason: "replied", evidence: { gmailMessageId: "m-reply" } });
     expect(await followUpVerdict({ kind: "gmail_send", ref: "first_ten:someone-else" })).toEqual({ proceed: true });
+  });
+
+  it("a different account starts fresh; the same account reconnected keeps its cursor (#782 review)", async () => {
+    const key = "operator:tenant-switch";
+    await mailboxStore.create({ key, tenantId: "tenant-switch", source: "operator_gmail", email: "old@flowers.example" }, new Date("2026-10-30T09:00:00Z"));
+    await mailboxStore.watched(key, "700", new Date("2026-11-06T09:00:00Z"), new Date("2026-10-30T09:00:00Z"));
+    await mailboxStore.setStatus(key, "reconnect_required", "invalid_grant", new Date("2026-10-30T12:00:00Z"));
+    let row = (await mailboxStore.find(key))!;
+    expect(row).toMatchObject({ status: "reconnect_required", historyId: "700", watchExpiresAt: null });
+    expect(row.statusChangedAt?.toISOString()).toBe("2026-10-30T12:00:00.000Z");
+    await mailboxStore.reactivate(key, new Date("2026-10-31T09:00:00Z"));
+    row = (await mailboxStore.find(key))!;
+    expect(row).toMatchObject({ status: "active", historyId: "700" });
+    await mailboxStore.watched(key, "750", new Date("2026-11-07T09:00:00Z"), new Date("2026-10-31T09:00:00Z"));
+    await mailboxStore.replaceAccount(key, "New@Flowers.example", new Date("2026-10-31T10:00:00Z"));
+    row = (await mailboxStore.find(key))!;
+    expect(row).toMatchObject({ email: "new@flowers.example", status: "active", historyId: null, watchExpiresAt: null });
   });
 
   it("one pass per mailbox at a time", async () => {

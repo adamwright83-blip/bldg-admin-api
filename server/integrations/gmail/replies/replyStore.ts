@@ -14,6 +14,7 @@ export const gmailMailboxWatches = mysqlTable("gmail_mailbox_watches", {
   historyId: varchar("history_id", { length: 32 }),
   status: varchar("status", { length: 24 }).$type<MailboxStatus>().notNull(),
   statusReason: varchar("status_reason", { length: 255 }),
+  statusChangedAt: timestamp("status_changed_at"),
   watchExpiresAt: timestamp("watch_expires_at"),
   lastWatchAt: timestamp("last_watch_at"),
   lastNoticeAt: timestamp("last_notice_at"),
@@ -71,6 +72,12 @@ const mailboxOf = (row: typeof gmailMailboxWatches.$inferSelect): Mailbox => ({
   historyId: row.historyId,
   status: row.status,
 });
+const watchedOf = (row: typeof gmailMailboxWatches.$inferSelect) => ({
+  ...mailboxOf(row),
+  watchExpiresAt: row.watchExpiresAt,
+  source: row.source,
+  statusChangedAt: row.statusChangedAt,
+});
 
 export const replyStore: ReplyStore = {
   async recordInbound(record) {
@@ -120,30 +127,57 @@ export const replyStore: ReplyStore = {
   async setStatus(mailboxKey, status, reason, at) {
     await (await db())
       .update(gmailMailboxWatches)
-      .set({ status, statusReason: reason?.slice(0, 255) ?? null, lastProcessedAt: at })
+      .set({ status, statusReason: reason?.slice(0, 255) ?? null, statusChangedAt: at, lastProcessedAt: at, ...(status === "active" ? {} : { watchExpiresAt: null }) })
       .where(eq(gmailMailboxWatches.mailboxKey, mailboxKey));
   },
 };
 
+export type WatchedMailbox = Mailbox & { watchExpiresAt: Date | null; source: string; statusChangedAt: Date | null };
+
 export const mailboxStore = {
-  async upsert(input: { key: string; tenantId: string; source: string; email: string }) {
-    await (await db())
-      .insert(gmailMailboxWatches)
-      .values({ mailboxKey: input.key, tenantId: input.tenantId, source: input.source, accountEmail: input.email.toLowerCase(), status: "active" })
-      .onDuplicateKeyUpdate({ set: { accountEmail: input.email.toLowerCase() } });
+  /** A new mailbox: active, with no cursor and no watch yet. An existing one is left as it is. */
+  async create(input: { key: string; tenantId: string; source: string; email: string }, at: Date) {
+    try {
+      await (await db())
+        .insert(gmailMailboxWatches)
+        .values({ mailboxKey: input.key, tenantId: input.tenantId, source: input.source, accountEmail: input.email.toLowerCase(), status: "active", statusChangedAt: at });
+    } catch (error) {
+      if (!isMysqlDuplicateKeyError(error)) throw error;
+    }
   },
-  async find(key: string): Promise<(Mailbox & { watchExpiresAt: Date | null; source: string }) | null> {
+  /**
+   * The tenant connected a different Gmail account: its history is not the old one's. The cursor and the watch are
+   * cleared, so the new account gets its own watch and its own starting point.
+   */
+  async replaceAccount(key: string, email: string, at: Date) {
+    await (await db())
+      .update(gmailMailboxWatches)
+      .set({ accountEmail: email.toLowerCase(), historyId: null, watchExpiresAt: null, lastWatchAt: null, status: "active", statusReason: null, statusChangedAt: at })
+      .where(eq(gmailMailboxWatches.mailboxKey, key));
+  },
+  /** The same account was authorised again: watching resumes from its kept cursor (recovered if it has expired). */
+  async reactivate(key: string, at: Date) {
+    await (await db())
+      .update(gmailMailboxWatches)
+      .set({ status: "active", statusReason: null, statusChangedAt: at, watchExpiresAt: null })
+      .where(eq(gmailMailboxWatches.mailboxKey, key));
+  },
+  async find(key: string): Promise<WatchedMailbox | null> {
     const [row] = await (await db()).select().from(gmailMailboxWatches).where(eq(gmailMailboxWatches.mailboxKey, key)).limit(1);
-    return row ? { ...mailboxOf(row), watchExpiresAt: row.watchExpiresAt, source: row.source } : null;
+    return row ? watchedOf(row) : null;
+  },
+  /** Every operator mailbox, whatever its status, for keeping the watched set in line with the connections. */
+  async all(): Promise<WatchedMailbox[]> {
+    return (await (await db()).select().from(gmailMailboxWatches)).map(watchedOf);
   },
   async byEmail(email: string): Promise<Mailbox[]> {
     const rows = await (await db()).select().from(gmailMailboxWatches).where(eq(gmailMailboxWatches.accountEmail, email.toLowerCase()));
     return rows.map(mailboxOf);
   },
   /** Active mailboxes, for reconciliation and watch renewal. */
-  async active(): Promise<Array<Mailbox & { watchExpiresAt: Date | null; source: string }>> {
+  async active(): Promise<WatchedMailbox[]> {
     const rows = await (await db()).select().from(gmailMailboxWatches).where(eq(gmailMailboxWatches.status, "active"));
-    return rows.map(row => ({ ...mailboxOf(row), watchExpiresAt: row.watchExpiresAt, source: row.source }));
+    return rows.map(watchedOf);
   },
   /** A successful users.watch: the expiry, and the cursor if the mailbox had none yet. */
   async watched(key: string, historyId: string, expiresAt: Date, at: Date) {
@@ -152,10 +186,10 @@ export const mailboxStore = {
       .set({ watchExpiresAt: expiresAt, lastWatchAt: at, status: "active", statusReason: null, historyId: sql`COALESCE(${gmailMailboxWatches.historyId}, ${historyId})` })
       .where(eq(gmailMailboxWatches.mailboxKey, key));
   },
-  async setStatus(key: string, status: MailboxStatus, reason: string | null) {
+  async setStatus(key: string, status: MailboxStatus, reason: string | null, at = new Date()) {
     await (await db())
       .update(gmailMailboxWatches)
-      .set({ status, statusReason: reason?.slice(0, 255) ?? null, ...(status === "active" ? {} : { watchExpiresAt: null }) })
+      .set({ status, statusReason: reason?.slice(0, 255) ?? null, statusChangedAt: at, ...(status === "active" ? {} : { watchExpiresAt: null }) })
       .where(eq(gmailMailboxWatches.mailboxKey, key));
   },
   /** One pass per mailbox at a time: a conditional claim, released on finish or by expiry after a crash. */

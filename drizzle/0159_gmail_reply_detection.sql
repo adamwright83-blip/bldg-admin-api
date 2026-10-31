@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `gmail_mailbox_watches` (
   `history_id` varchar(32) NULL,
   `status` varchar(24) NOT NULL,
   `status_reason` varchar(255) NULL,
+  `status_changed_at` timestamp NULL,
   `watch_expires_at` timestamp NULL,
   `last_watch_at` timestamp NULL,
   `last_notice_at` timestamp NULL,
