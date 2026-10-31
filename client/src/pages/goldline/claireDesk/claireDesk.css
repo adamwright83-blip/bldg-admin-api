@@ -360,3 +360,9 @@
   .cd-says { font-size: 18px; }
   .cd-cctv { width: 100%; }
 }
+
+/* An approved follow-up: the owner reads and edits the exact words before anything is sent. */
+.cd-follow-up { display: grid; gap: 8px; margin-top: 8px; }
+.cd-follow-up textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #f3ebdd33; border-radius: 10px; background: #0b151b; color: var(--sh-paper); font: 400 15px/1.45 var(--sh-sans); resize: vertical; }
+.cd-follow-up textarea:focus-visible { outline: 2px solid var(--sh-gold); outline-offset: 1px; }
+.cd-follow-up a.cd-chip { display: inline-flex; align-items: center; text-decoration: none; }

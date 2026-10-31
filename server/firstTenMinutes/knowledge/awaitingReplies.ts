@@ -89,8 +89,9 @@ export function cachedAwaitingReplies(tenantId: string, now = Date.now()): Await
   return hit && now - hit.at < CACHE_MS ? hit.value : null;
 }
 
-export function clearAwaitingRepliesCache(): void {
-  cache.clear();
+export function clearAwaitingRepliesCache(tenantId?: string): void {
+  if (tenantId) cache.delete(tenantId);
+  else cache.clear();
 }
 
 /**

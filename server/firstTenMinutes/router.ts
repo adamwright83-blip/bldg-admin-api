@@ -19,6 +19,7 @@ import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep
 import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
 import { readTenantOnboardingKnowledge } from "./knowledge/tenantKnowledge";
 import { readAwaitingReplies } from "./knowledge/awaitingReplies";
+import { prepareFollowUp, sendFollowUp } from "./knowledge/followUp";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
@@ -43,6 +44,25 @@ export const firstTenMinutesRouter = router({
 
   /** Who the workspace's owner is waiting to hear back from, read from the Gmail they connected (cached briefly). */
   myAwaitingReplies: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readAwaitingReplies(ctx.tenantId)),
+
+  /** A follow-up to someone the owner is waiting on, for them to read and approve. Sends nothing. */
+  prepareFollowUp: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ messageId: z.string().min(1).max(191), timeZone: z.string().min(1).max(64) }))
+    .mutation(({ ctx, input }) => prepareFollowUp(ctx.tenantId, input.messageId, input.timeZone)),
+
+  /** The owner approved exactly this follow-up: the reply gate, then their own Gmail, once. */
+  sendFollowUp: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1).max(191),
+        to: z.object({ name: z.string().max(255).nullable(), address: z.string().email().max(320) }),
+        subject: z.string().trim().min(1).max(500),
+        body: z.string().trim().min(1).max(10_000),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      sendFollowUp({ tenantId: ctx.tenantId, approverOpenId: ctx.user.openId, messageId: input.messageId, mail: { to: input.to, subject: input.subject, body: input.body } })
+    ),
 
   availability: publicProcedure.query(
     ({ ctx }): FirstTenAvailability => ({

@@ -120,7 +120,7 @@ const sendKey = (journey: JourneyRow) => `first_ten:${journey.id}`;
 const sendFetch: typeof fetch = (url, init) => fetch(providerUrl(String(url)), init);
 
 /** The journey's Gmail, as the send service uses it: the connected account, its grants, and a token kept fresh. */
-async function sendAccess(journey: JourneyRow): Promise<GmailSendAccess | null> {
+export async function sendAccess(journey: JourneyRow): Promise<GmailSendAccess | null> {
   const access = await googleAccessFor(journey);
   if (!access) return null;
   let token = access.accessToken;

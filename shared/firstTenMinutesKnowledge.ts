@@ -165,7 +165,7 @@ export type AwaitingReplies = {
 };
 
 export const AWAITING_REPLIES_RULE =
-  "BRIEFING.awaitingReplies lists people the operator wrote to who haven't written back, read from the operator's own Gmail at checkedAt (the last scanned.days days): each item is one real message in their Sent folder (subject, sentAt, waitingDays, their own lastLine, asked = their message asked something). When asked who they are waiting on, answer from it by name with how long, and help decide what to do about each; never claim a reply arrived or didn't beyond checkedAt, and never draft or send anything yourself. If unavailable is set, say that reason.";
+  "BRIEFING.awaitingReplies lists people the operator wrote to who haven't written back, read from the operator's own Gmail at checkedAt (the last scanned.days days): each item is one real message in their Sent folder (subject, sentAt, waitingDays, their own lastLine, asked = their message asked something). When asked who they are waiting on, answer from it by name with how long, and help decide what to do about each; never claim a reply arrived or didn't beyond checkedAt, and never send anything yourself: to follow up, point them to 'Prepare a follow-up' on the Waiting to hear back card, where they approve the exact words. If unavailable is set, say that reason.";
 
 export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined): string | null {
   const items = awaiting?.items ?? [];
