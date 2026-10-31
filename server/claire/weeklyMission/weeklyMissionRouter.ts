@@ -1,3 +1,4 @@
+import { signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
@@ -293,6 +294,8 @@ export const weeklyMissionRouter = router({
           "Claire here.",
           open.length ? `On your Day Line: ${open.slice(0, 3).map(i => `${i.title}${i.window ? ` (${i.window})` : ""}`).join(", ")}.` : "Nothing is on your Day Line for today or tomorrow.",
           pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
+          // where the first message from signup stands (First Ten Minutes), when there is one
+          signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
           "What do you need?",
         ].filter(Boolean).join(" ");
         if (!session.history.length) session.history.push({ speaker: "claire", text: speak });

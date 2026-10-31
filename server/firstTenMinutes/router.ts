@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantOperatorProcedure, publicProcedure, router } from "../_core/trpc";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { JOURNEY_STAGES, type FirstTenAvailability } from "../../shared/firstTenMinutes";
 import { assertFirstTenOpen, firstTenMode, firstTenOpenFor } from "./flag";
@@ -17,6 +17,7 @@ import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
+import { readTenantOnboardingKnowledge } from "./knowledge/tenantKnowledge";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
@@ -32,6 +33,13 @@ const provider = z.enum(["google", "slack"]);
  * needs that draft's resume token.
  */
 export const firstTenMinutesRouter = router({
+  /**
+   * The signed-in workspace's own knowledge from signup: what the crew read, with receipts, the person's corrections
+   * and where the first message stands. Not behind the first-ten flag: the workspace keeps what it learned after the
+   * preview closes. Only the members who run the business see it.
+   */
+  myKnowledge: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readTenantOnboardingKnowledge(ctx.tenantId)),
+
   availability: publicProcedure.query(
     ({ ctx }): FirstTenAvailability => ({
       mode: firstTenMode(),
