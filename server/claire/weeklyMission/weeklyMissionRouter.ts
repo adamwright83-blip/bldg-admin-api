@@ -1,5 +1,5 @@
 import { awaitingOpeningLine, signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
-import { cachedAwaitingReplies, readAwaitingReplies } from "../../firstTenMinutes/knowledge/awaitingReplies";
+import { cachedAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "../../firstTenMinutes/knowledge/awaitingReplies";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
@@ -269,9 +269,12 @@ export const weeklyMissionRouter = router({
       }
       // Who the owner is waiting on, from their own Gmail: refreshed from the short cache every turn; the opening (no
       // utterance yet) may wait briefly for a first read, and goes on without it rather than keep the operator waiting.
+      // Later in the conversation an expired list is read again in the background; the next turn has it.
       const opening = !input.utterance?.trim() && !input.audioDataUrl;
+      const cachedAwaiting = cachedAwaitingReplies(identity.tenantId);
+      if (!cachedAwaiting && !opening) refreshAwaitingRepliesInBackground(identity.tenantId);
       const awaiting =
-        cachedAwaitingReplies(identity.tenantId) ??
+        cachedAwaiting ??
         (opening
           ? await Promise.race([readAwaitingReplies(identity.tenantId), new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))]).catch(() => null)
           : null);

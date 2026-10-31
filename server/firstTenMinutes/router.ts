@@ -47,8 +47,8 @@ export const firstTenMinutesRouter = router({
 
   /** A follow-up to someone the owner is waiting on, for them to read and approve. Sends nothing. */
   prepareFollowUp: legacyDayforgeTenantOperatorProcedure
-    .input(z.object({ messageId: z.string().min(1).max(191), timeZone: z.string().min(1).max(64) }))
-    .mutation(({ ctx, input }) => prepareFollowUp(ctx.tenantId, input.messageId, input.timeZone)),
+    .input(z.object({ messageId: z.string().min(1).max(191), recipient: z.string().email().max(320), timeZone: z.string().min(1).max(64) }))
+    .mutation(({ ctx, input }) => prepareFollowUp(ctx.tenantId, input.messageId, input.recipient, input.timeZone)),
 
   /** The owner approved exactly this follow-up: the reply gate, then their own Gmail, once. */
   sendFollowUp: legacyDayforgeTenantOperatorProcedure

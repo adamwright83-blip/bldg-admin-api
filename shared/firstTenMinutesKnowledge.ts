@@ -174,3 +174,12 @@ export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined
   const more = items.length > 2 ? ` and ${items.length - 2} more` : "";
   return `You're waiting to hear back from ${named.join(" and ")}${more}.`;
 }
+
+/**
+ * Gmail's own compose window with this message filled in: what the owner opens when JOYSTICK can't send for them.
+ * Built from the words as they stand, so an edit made after preparing it goes with it.
+ */
+export function gmailComposeUrl(mail: { to: { address: string }; subject: string; body: string }, account: string | null): string {
+  const params = new URLSearchParams({ view: "cm", fs: "1", to: mail.to.address, su: mail.subject, body: mail.body });
+  return `https://mail.google.com/mail/u/${encodeURIComponent(account ?? "0")}/?${params}`;
+}
