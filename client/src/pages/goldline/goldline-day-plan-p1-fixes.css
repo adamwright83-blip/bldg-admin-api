@@ -84,6 +84,13 @@
   outline-offset: 3px;
 }
 
+/* Campaign and rescue cards live inside .gdp-header, whose decorative area
+ * intentionally ignores pointer input. Opt the actionable cards back in so
+ * their full visible surface remains tappable on touch devices. */
+.gdp-shell .gdp-campaign-run-card {
+  pointer-events: auto;
+}
+
 /*
  * Runtime compatibility path for phones exposing desktop-sized layout
  * viewports. 1vw is intentionally relative to that wide layout viewport:
