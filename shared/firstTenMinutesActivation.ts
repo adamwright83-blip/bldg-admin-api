@@ -21,6 +21,11 @@ export type ActivationView = {
   required: boolean;
   offer: ActivationOffer | null;
   status: "none" | "checkout_pending" | "active";
+  /**
+   * The paid workspace's owner sign-in, once the workspace exists: "needs_password" until the person creates one
+   * (server/saas activateOwner), "ready" after. null before the workspace exists, and for Nina's example.
+   */
+  owner: "needs_password" | "ready" | null;
   /** what JOYSTICK already knows, for the person to confirm */
   identity: { businessName: string | null; contactName: string | null; ownerEmail: string | null };
   /** the connected Gmail account the message is sent from; null when Google isn't connected */
@@ -33,6 +38,15 @@ export type ActivationView = {
    */
   returnOrigin: string;
 };
+
+/** Opening the workspace the person paid for: plain words, after the story's own moment, never instead of it. */
+export const WORKSPACE_COPY = {
+  heading: "Your workspace is ready.",
+  needsPassword: "Create a password to open it. You'll sign in with it and {email}.",
+  button: "Open your workspace",
+  ready: "Open your workspace",
+  passwordHint: "At least 12 characters.",
+} as const;
 
 export const ACTIVATION_COPY = {
   heading: "Keep your crew. Continue your story.",
