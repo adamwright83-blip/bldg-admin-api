@@ -9,10 +9,8 @@ import {
 } from "./machineGraph";
 import type {
   JunctionPosition,
-  MachineDialState,
   MachineEngineState,
   MachinePoint,
-  RotorOrientation,
 } from "./machineTypes";
 import styles from "./impossibleMachine.module.css";
 
@@ -27,6 +25,107 @@ interface MachineRailwayProps {
   onToggleLowerRotor: () => void;
   onExamineCenter: () => void;
   hasOpportunity: boolean;
+}
+
+/**
+ * Model track renderer: draws authentic Victorian miniature model railway tracks
+ * featuring weathered dark oak sleepers, brass tie plates, parallel double rails,
+ * and molten gold conduction glow when energized.
+ */
+function ModelTrackSection({
+  d,
+  active,
+  dormant = false,
+}: {
+  d: string;
+  active: boolean;
+  dormant?: boolean;
+}) {
+  return (
+    <g fill="none">
+      {/* 1. Recessed track bed channel carved into enamel chassis */}
+      <path
+        d={d}
+        stroke="#140d08"
+        strokeWidth="28"
+        strokeLinecap="round"
+        opacity="0.32"
+        filter="url(#railShadow)"
+      />
+
+      {/* 2. Weathered dark walnut wooden cross-ties (sleepers) */}
+      <path
+        d={d}
+        stroke="#2d2015"
+        strokeWidth="24"
+        strokeDasharray="6 14"
+        strokeLinecap="butt"
+      />
+      {/* Wood grain highlight on ties */}
+      <path
+        d={d}
+        stroke="#483523"
+        strokeWidth="22"
+        strokeDasharray="3 17"
+        strokeDashoffset="1.5"
+        strokeLinecap="butt"
+      />
+      {/* Brass tie chair-plates holding rails down */}
+      <path
+        d={d}
+        stroke="#805e26"
+        strokeWidth="16"
+        strokeDasharray="2 18"
+        strokeDashoffset="2"
+        strokeLinecap="butt"
+        opacity="0.8"
+      />
+
+      {/* 3. Outer + Inner Twin Brass Rails Base */}
+      <path
+        d={d}
+        stroke="#1a110a"
+        strokeWidth="15"
+        strokeLinecap="round"
+      />
+
+      {/* 4. The Brass Rails (Twin 3.5px rails created by outer brass stroke + dark center groove) */}
+      <path
+        d={d}
+        stroke={active ? "url(#activeGlow)" : dormant ? "url(#mutedRail)" : "url(#brassRail)"}
+        strokeWidth="13"
+        strokeLinecap="round"
+        filter={active ? "url(#conductionGlow)" : "url(#railShadow)"}
+      />
+
+      {/* 5. Center gap between the twin rails */}
+      <path
+        d={d}
+        stroke="#23180f"
+        strokeWidth="6"
+        strokeLinecap="round"
+      />
+
+      {/* 6. Polished Metallic Crown Gleam on rails */}
+      {active ? (
+        <path
+          d={d}
+          stroke="#fffde8"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          opacity="0.9"
+        />
+      ) : (
+        <path
+          d={d}
+          stroke="url(#railCrownGleam)"
+          strokeWidth="1"
+          strokeLinecap="round"
+          opacity={dormant ? 0.25 : 0.65}
+        />
+      )}
+    </g>
+  );
 }
 
 /**
@@ -81,6 +180,16 @@ export function MachineRailway({
   const east = MACHINE_NODES.east_junction;
   const key = MACHINE_NODES.key_station;
 
+  // Track Path Coordinates
+  const domeStemPath = `M ${dome.x + 42} ${dome.y} L ${west.x - 52} ${west.y}`;
+  const eastStemPath = `M ${east.x + 52} ${east.y} L ${key.x - 42} ${key.y}`;
+  const upperWestPath = `M ${west.x + 42} ${west.y - 26} Q 490 205 ${upper.x - 56} ${upper.y}`;
+  const upperEastPath = `M ${upper.x + 56} ${upper.y} Q 790 205 ${east.x - 42} ${east.y - 26}`;
+  const lowerWestPath = `M ${west.x + 42} ${west.y + 26} Q 490 540 ${lower.x - 56} ${lower.y}`;
+  const lowerEastPath = `M ${lower.x + 56} ${lower.y} Q 790 540 ${east.x - 42} ${east.y + 26}`;
+  const centerWestPath = `M ${west.x + 52} ${west.y} L ${center.x - 78} ${center.y}`;
+  const centerEastPath = `M ${center.x + 78} ${center.y} L ${east.x - 52} ${east.y}`;
+
   return (
     <div className={styles.railwayLayer} data-testid="machine-railway-layer">
       <svg
@@ -90,210 +199,146 @@ export function MachineRailway({
       >
         <defs>
           <linearGradient id="brassRail" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e5c178" />
-            <stop offset="50%" stopColor="#b8883b" />
-            <stop offset="100%" stopColor="#7c561f" />
+            <stop offset="0%" stopColor="#f7dc99" />
+            <stop offset="40%" stopColor="#c8963e" />
+            <stop offset="100%" stopColor="#7a541c" />
           </linearGradient>
           <linearGradient id="activeGlow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ffd97d" />
-            <stop offset="50%" stopColor="#f7a731" />
-            <stop offset="100%" stopColor="#ffd97d" />
+            <stop offset="0%" stopColor="#fff3b0" />
+            <stop offset="50%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#fff3b0" />
           </linearGradient>
           <linearGradient id="mutedRail" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#7a6d5d" />
-            <stop offset="100%" stopColor="#4c4237" />
+            <stop offset="0%" stopColor="#5c4e40" />
+            <stop offset="100%" stopColor="#322920" />
           </linearGradient>
-          <filter id="railShadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#18110b" floodOpacity="0.55" />
+          <linearGradient id="railCrownGleam" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#c8963e" stopOpacity="0.2" />
+          </linearGradient>
+          <filter id="railShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feDropShadow dx="0" dy="3" stdDeviation="3.5" floodColor="#0d0804" floodOpacity="0.6" />
+          </filter>
+          <filter id="conductionGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#f59e0b" floodOpacity="0.8" />
+            <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#fff5ba" floodOpacity="0.9" />
           </filter>
         </defs>
 
-        {/* Sleepers / ties base paths */}
-        <g stroke="#4a3828" strokeWidth="18" strokeDasharray="5 13" fill="none" opacity="0.65">
-          {/* Dome to West Junction */}
-          <path d={`M ${dome.x + 42} ${dome.y} L ${west.x - 52} ${west.y}`} />
-          {/* East Junction to Key Station */}
-          <path d={`M ${east.x + 52} ${east.y} L ${key.x - 42} ${key.y}`} />
-          {/* Upper THEN route */}
-          <path
-            d={`M ${west.x + 42} ${west.y - 26} Q 490 205 ${upper.x - 56} ${upper.y}`}
-            opacity={state.dial === "THEN" && !state.keyRetrieved ? 0.85 : 0.35}
-          />
-          <path
-            d={`M ${upper.x + 56} ${upper.y} Q 790 205 ${east.x - 42} ${east.y - 26}`}
-            opacity={state.dial === "THEN" && !state.keyRetrieved ? 0.85 : 0.35}
-          />
-          {/* Lower NOW route */}
-          <path
-            d={`M ${west.x + 42} ${west.y + 26} Q 490 540 ${lower.x - 56} ${lower.y}`}
-            opacity={state.dial === "NOW" ? 0.85 : 0.35}
-          />
-          <path
-            d={`M ${lower.x + 56} ${lower.y} Q 790 540 ${east.x - 42} ${east.y + 26}`}
-            opacity={state.dial === "NOW" ? 0.85 : 0.35}
-          />
-          {/* Center route left and right stubs */}
-          <path d={`M ${west.x + 52} ${west.y} L ${center.x - 78} ${center.y}`} />
-          <path d={`M ${center.x + 78} ${center.y} L ${east.x - 52} ${east.y}`} />
-        </g>
+        {/* 1. Main Physical Railway Tracks (Parallel Double Brass Rails on Dark Oak Sleepers) */}
+        <g id="tracks-group">
+          {/* Stem from Rook Dome to West Junction */}
+          <ModelTrackSection d={domeStemPath} active={routeEval.connected} />
 
-        {/* Main Fixed Rails */}
-        <g filter="url(#railShadow)" fill="none" strokeLinecap="round">
-          {/* West Stem: Rook Dome to West Junction */}
-          <path
-            d={`M ${dome.x + 42} ${dome.y} L ${west.x - 52} ${west.y}`}
-            stroke={routeEval.connected ? "url(#activeGlow)" : "url(#brassRail)"}
-            strokeWidth="10"
+          {/* Stem from East Junction to Key Station */}
+          <ModelTrackSection d={eastStemPath} active={routeEval.connected} />
+
+          {/* Upper Route (THEN): West Arc & East Arc */}
+          <ModelTrackSection
+            d={upperWestPath}
+            active={upperActive}
+            dormant={state.dial !== "THEN" || state.keyRetrieved}
           />
-          {/* East Stem: East Junction to Key Station */}
-          <path
-            d={`M ${east.x + 52} ${east.y} L ${key.x - 42} ${key.y}`}
-            stroke={routeEval.connected ? "url(#activeGlow)" : "url(#brassRail)"}
-            strokeWidth="10"
+          <ModelTrackSection
+            d={upperEastPath}
+            active={upperActive}
+            dormant={state.dial !== "THEN" || state.keyRetrieved}
           />
 
-          {/* Upper Route (THEN) */}
-          <path
-            d={`M ${west.x + 42} ${west.y - 26} Q 490 205 ${upper.x - 56} ${upper.y}`}
-            stroke={
-              upperActive
-                ? "url(#activeGlow)"
-                : state.dial === "THEN" && !state.keyRetrieved
-                  ? "url(#brassRail)"
-                  : "url(#mutedRail)"
-            }
-            strokeWidth="10"
-            opacity={state.dial === "THEN" && !state.keyRetrieved ? 1 : 0.45}
+          {/* Lower Route (NOW): West Arc & East Arc */}
+          <ModelTrackSection
+            d={lowerWestPath}
+            active={lowerActive}
+            dormant={state.dial !== "NOW"}
           />
-          <path
-            d={`M ${upper.x + 56} ${upper.y} Q 790 205 ${east.x - 42} ${east.y - 26}`}
-            stroke={
-              upperActive
-                ? "url(#activeGlow)"
-                : state.dial === "THEN" && !state.keyRetrieved
-                  ? "url(#brassRail)"
-                  : "url(#mutedRail)"
-            }
-            strokeWidth="10"
-            opacity={state.dial === "THEN" && !state.keyRetrieved ? 1 : 0.45}
-          />
-
-          {/* Upper Return Gate (closes when keyRetrieved is true) */}
-          {state.keyRetrieved ? (
-            <g data-testid="upper-return-gate-closed">
-              <rect
-                x={812}
-                y={262}
-                width="28"
-                height="42"
-                rx="4"
-                fill="#8e2f22"
-                stroke="#e5c178"
-                strokeWidth="3"
-                transform="rotate(-28 826 283)"
-              />
-              <line
-                x1="816"
-                y1="273"
-                x2="836"
-                y2="293"
-                stroke="#fbf5e8"
-                strokeWidth="3"
-              />
-            </g>
-          ) : null}
-
-          {/* Lower Route (NOW) */}
-          <path
-            d={`M ${west.x + 42} ${west.y + 26} Q 490 540 ${lower.x - 56} ${lower.y}`}
-            stroke={
-              lowerActive
-                ? "url(#activeGlow)"
-                : state.dial === "NOW"
-                  ? "url(#brassRail)"
-                  : "url(#mutedRail)"
-            }
-            strokeWidth="10"
-            opacity={state.dial === "NOW" ? 1 : 0.45}
-          />
-          <path
-            d={`M ${lower.x + 56} ${lower.y} Q 790 540 ${east.x - 42} ${east.y + 26}`}
-            stroke={
-              lowerActive
-                ? "url(#activeGlow)"
-                : state.dial === "NOW"
-                  ? "url(#brassRail)"
-                  : "url(#mutedRail)"
-            }
-            strokeWidth="10"
-            opacity={state.dial === "NOW" ? 1 : 0.45}
+          <ModelTrackSection
+            d={lowerEastPath}
+            active={lowerActive}
+            dormant={state.dial !== "NOW"}
           />
 
           {/* Center Route Stubs */}
-          <path
-            d={`M ${west.x + 52} ${west.y} L ${center.x - 78} ${center.y}`}
-            stroke={centerActive ? "url(#activeGlow)" : "url(#brassRail)"}
-            strokeWidth="10"
-          />
-          <path
-            d={`M ${center.x + 78} ${center.y} L ${east.x - 52} ${east.y}`}
-            stroke={centerActive ? "url(#activeGlow)" : "url(#brassRail)"}
-            strokeWidth="10"
-          />
+          <ModelTrackSection d={centerWestPath} active={centerActive} dormant={!state.centerBridgeRestored} />
+          <ModelTrackSection d={centerEastPath} active={centerActive} dormant={!state.centerBridgeRestored} />
+        </g>
 
-          {/* Center Crossing Bridge: Broken vs Restored */}
+        {/* 2. Upper Return Gate (closes when keyRetrieved is true) */}
+        {state.keyRetrieved ? (
+          <g data-testid="upper-return-gate-closed" transform="translate(826, 283) rotate(-28)">
+            {/* Cast iron pivot stanchion */}
+            <circle cx="-16" cy="0" r="8" fill="#241910" stroke="#8e6c31" strokeWidth="2" filter="url(#railShadow)" />
+            <circle cx="-16" cy="0" r="3.5" fill="#ffd97d" />
+            {/* Articulated railway stop arm */}
+            <rect x="-16" y="-8" width="58" height="16" rx="3" fill="#1e1610" stroke="#d5a045" strokeWidth="1.5" filter="url(#railShadow)" />
+            {/* Brass diagonal hazard chevrons */}
+            <path d="M -4 -8 L 4 8 M 12 -8 L 20 8 M 28 -8 L 36 8" stroke="#ffd97d" strokeWidth="3" />
+            {/* Ruby glass signal lantern with red warning glow */}
+            <circle cx="34" cy="0" r="6" fill="#c41e1e" stroke="#ffe0e0" strokeWidth="1.2" filter="url(#conductionGlow)" />
+            <circle cx="34" cy="0" r="2.5" fill="#ffffff" opacity="0.8" />
+          </g>
+        ) : null}
+
+        {/* 3. Center Crossing Bay & Physical Bridge / Folded Dispatch Note */}
+        <g transform={`translate(${center.x}, ${center.y})`}>
+          {/* Recessed well bed */}
+          <rect x="-76" y="-28" width="152" height="56" rx="8" fill="#120c08" stroke="#5a3f1d" strokeWidth="2" filter="url(#railShadow)" />
+          {/* Internal machinery gears visible in recessed bay */}
+          <circle cx="-50" cy="14" r="10" fill="none" stroke="#3d2c18" strokeWidth="2" strokeDasharray="3 3" />
+          <circle cx="50" cy="-14" r="10" fill="none" stroke="#3d2c18" strokeWidth="2" strokeDasharray="3 3" />
+
           {state.centerBridgeRestored ? (
+            /* Restored Victorian Brass Telescoping Bridge */
             <g data-testid="center-crossing-restored-rails">
-              <line
-                x1={center.x - 78}
-                y1={center.y}
-                x2={center.x + 78}
-                y2={center.y}
-                stroke={centerActive ? "url(#activeGlow)" : "url(#brassRail)"}
-                strokeWidth="12"
-              />
-              <rect
-                x={center.x - 46}
-                y={center.y - 14}
-                width="92"
-                height="28"
-                rx="6"
-                fill="#c98a35"
-                stroke="#fff3d1"
-                strokeWidth="2.5"
-              />
+              {/* Heavy brass side truss girders with rivets */}
+              <rect x="-76" y="-22" width="152" height="6" fill="#8c6123" stroke="#ffd97d" strokeWidth="0.8" />
+              <rect x="-76" y="16" width="152" height="6" fill="#8c6123" stroke="#ffd97d" strokeWidth="0.8" />
+              {/* Cross lattice bracing */}
+              <path d="M -60 -16 L -40 16 M -40 -16 L -20 16 M -20 -16 L 0 16 M 0 -16 L 20 16 M 20 -16 L 40 16 M 40 -16 L 60 16" stroke="#c99846" strokeWidth="1.5" />
+              {/* Continuous Double Brass Rails */}
+              <line x1="-76" y1="-5" x2="76" y2="-5" stroke={centerActive ? "url(#activeGlow)" : "url(#brassRail)"} strokeWidth="3.5" filter={centerActive ? "url(#conductionGlow)" : undefined} />
+              <line x1="-76" y1="5" x2="76" y2="5" stroke={centerActive ? "url(#activeGlow)" : "url(#brassRail)"} strokeWidth="3.5" filter={centerActive ? "url(#conductionGlow)" : undefined} />
+              {/* Central interlocking brass locking plate */}
+              <rect x="-18" y="-14" width="36" height="28" rx="4" fill="#d5a045" stroke="#fff4cf" strokeWidth="1.5" />
+              <circle cx="0" cy="0" r="4" fill="#3a2512" />
             </g>
           ) : (
+            /* Broken Center Gap with Folded Correspondence Dispatch */
             <g data-testid="center-crossing-broken-gap">
-              {/* Visibly separated rail ends with physical gap */}
-              <line
-                x1={center.x - 78}
-                y1={center.y - 6}
-                x2={center.x - 46}
-                y2={center.y - 16}
-                stroke="#8e2f22"
-                strokeWidth="6"
-              />
-              <line
-                x1={center.x + 78}
-                y1={center.y + 6}
-                x2={center.x + 46}
-                y2={center.y + 16}
-                stroke="#8e2f22"
-                strokeWidth="6"
-              />
+              {/* Sheared brass rail ends with red buffer stops */}
+              <rect x="-76" y="-9" width="10" height="18" rx="2" fill="#7a251b" stroke="#e09282" strokeWidth="1" />
+              <line x1="-76" y1="-5" x2="-66" y2="-5" stroke="#d5a045" strokeWidth="3.5" />
+              <line x1="-76" y1="5" x2="-66" y2="5" stroke="#d5a045" strokeWidth="3.5" />
+
+              <rect x="66" y="-9" width="10" height="18" rx="2" fill="#7a251b" stroke="#e09282" strokeWidth="1" />
+              <line x1="66" y1="-5" x2="76" y2="-5" stroke="#d5a045" strokeWidth="3.5" />
+              <line x1="66" y1="5" x2="76" y2="5" stroke="#d5a045" strokeWidth="3.5" />
+
+              {/* Folded Parchment Dispatch Note */}
+              <g data-testid="center-crossing-note-asset">
+                <rect x="-38" y="-18" width="76" height="36" rx="4" fill="#000" opacity="0.45" filter="url(#railShadow)" />
+                <rect x="-36" y="-17" width="72" height="34" rx="4" fill="#fcf6eb" stroke="#d4b478" strokeWidth="1.5" />
+                {/* Envelope fold diagonal lines */}
+                <path d="M -36 -17 L 0 3 L 36 -17" fill="none" stroke="#d4b478" strokeWidth="1.2" />
+                {/* Crimson ribbon strap */}
+                <rect x="-6" y="-17" width="12" height="34" fill="#8e2318" />
+                {/* Crimson Wax Seal with monogram */}
+                <circle cx="0" cy="0" r="11" fill="#9e261b" stroke="#5a110a" strokeWidth="1.5" />
+                <circle cx="0" cy="0" r="8" fill="none" stroke="#e8a8a0" strokeWidth="0.8" opacity="0.7" />
+                <circle cx="0" cy="0" r="3.5" fill="#5a110a" />
+              </g>
             </g>
           )}
         </g>
 
-        {/* Socket indicator pips around junctions */}
+        {/* 4. Socket indicator pips around junctions */}
         <JunctionSockets cx={west.x} cy={west.y} side="west" activePosition={state.westJunction} />
         <JunctionSockets cx={east.x} cy={east.y} side="east" activePosition={state.eastJunction} />
 
-        {/* Rotating Turntable Disks */}
-        {/* West Junction Turntable Assembly */}
+        {/* 5. West Junction Turntable Assembly */}
         <g transform={`translate(${west.x}, ${west.y})`}>
-          <circle r="58" fill="#140f0a" stroke="#5a452d" strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Base recessed well */}
+          <circle r="60" fill="#130e09" stroke="#4a3722" strokeWidth="2" filter="url(#railShadow)" />
+          {/* Brass outer compass ring with markings */}
           <image
             href="/assets/first-ten/impossible-machine/switch-details.png"
             x="-62"
@@ -302,9 +347,15 @@ export function MachineRailway({
             height="124"
             style={{ pointerEvents: "none" }}
           />
+          {/* Alignment guide notches at Upper (-34deg), Center (0deg), Lower (34deg) */}
+          <line x1="42" y1="-28" x2="56" y2="-38" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="50" y1="0" x2="62" y2="0" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="42" y1="28" x2="56" y2="38" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Active circuit conduction ring */}
           {upperActive || lowerActive || centerActive ? (
-            <circle r="46" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+            <circle r="48" fill="url(#activeGlow)" opacity="0.35" filter="url(#conductionGlow)" />
           ) : null}
+          {/* Rotating Turntable Disc */}
           <motion.g
             animate={{ rotate: westAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 220, damping: 18 }}
@@ -319,9 +370,11 @@ export function MachineRailway({
           </motion.g>
         </g>
 
-        {/* East Junction Turntable Assembly */}
+        {/* 6. East Junction Turntable Assembly */}
         <g transform={`translate(${east.x}, ${east.y})`}>
-          <circle r="58" fill="#140f0a" stroke="#5a452d" strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Base recessed well */}
+          <circle r="60" fill="#130e09" stroke="#4a3722" strokeWidth="2" filter="url(#railShadow)" />
+          {/* Brass outer compass ring with markings */}
           <image
             href="/assets/first-ten/impossible-machine/switch-details.png"
             x="-62"
@@ -330,9 +383,15 @@ export function MachineRailway({
             height="124"
             style={{ pointerEvents: "none" }}
           />
+          {/* Alignment guide notches at Upper (34deg), Center (0deg), Lower (-34deg) */}
+          <line x1="-42" y1="-28" x2="-56" y2="-38" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="-50" y1="0" x2="-62" y2="0" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="-42" y1="28" x2="-56" y2="38" stroke="#d5b47a" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Active circuit conduction ring */}
           {upperActive || lowerActive || centerActive ? (
-            <circle r="46" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+            <circle r="48" fill="url(#activeGlow)" opacity="0.35" filter="url(#conductionGlow)" />
           ) : null}
+          {/* Rotating Turntable Disc */}
           <motion.g
             animate={{ rotate: eastAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 220, damping: 18 }}
@@ -347,11 +406,15 @@ export function MachineRailway({
           </motion.g>
         </g>
 
-        {/* Upper Alignment Rotor */}
+        {/* 7. Upper Alignment Rotor */}
         <g transform={`translate(${upper.x}, ${upper.y})`}>
-          <circle r="56" fill="#1a130c" stroke={state.dial === "THEN" ? "#d59b3f" : "#4a3b2c"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Recessed clockwork escapement well */}
+          <circle r="58" fill="#140e08" stroke={state.dial === "THEN" ? "#c9953b" : "#443424"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Horizontal track entry & exit guide collars */}
+          <rect x="-62" y="-9" width="12" height="18" rx="2" fill="#3a2a1b" stroke="#9e7538" strokeWidth="1" />
+          <rect x="50" y="-9" width="12" height="18" rx="2" fill="#3a2a1b" stroke="#9e7538" strokeWidth="1" />
           {upperActive ? (
-            <circle r="54" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+            <circle r="52" fill="url(#activeGlow)" opacity="0.35" filter="url(#conductionGlow)" />
           ) : null}
           <motion.g
             animate={{ rotate: upperRotorAngle }}
@@ -367,11 +430,15 @@ export function MachineRailway({
           </motion.g>
         </g>
 
-        {/* Lower Alignment Rotor */}
+        {/* 8. Lower Alignment Rotor */}
         <g transform={`translate(${lower.x}, ${lower.y})`}>
-          <circle r="56" fill="#1a130c" stroke={state.dial === "NOW" ? "#d59b3f" : "#4a3b2c"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Recessed clockwork escapement well */}
+          <circle r="58" fill="#140e08" stroke={state.dial === "NOW" ? "#c9953b" : "#443424"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {/* Horizontal track entry & exit guide collars */}
+          <rect x="-62" y="-9" width="12" height="18" rx="2" fill="#3a2a1b" stroke="#9e7538" strokeWidth="1" />
+          <rect x="50" y="-9" width="12" height="18" rx="2" fill="#3a2a1b" stroke="#9e7538" strokeWidth="1" />
           {lowerActive ? (
-            <circle r="54" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+            <circle r="52" fill="url(#activeGlow)" opacity="0.35" filter="url(#conductionGlow)" />
           ) : null}
           <motion.g
             animate={{ rotate: lowerRotorAngle }}
@@ -388,7 +455,7 @@ export function MachineRailway({
         </g>
       </svg>
 
-      {/* Interactive Accessible Controls Overlay (aligned to exact 1280x720 percentage coordinates) */}
+      {/* Interactive Accessible Controls Overlay (Clean Victorian clickable plates, no tacky glowing borders) */}
       <button
         type="button"
         className={styles.junctionButton}
@@ -418,12 +485,12 @@ export function MachineRailway({
         className={styles.rotorButton}
         style={{ left: `${(upper.x / MACHINE_WIDTH) * 100}%`, top: `${(upper.y / MACHINE_HEIGHT) * 100}%` }}
         onClick={onToggleUpperRotor}
-        aria-label={`Upper rotor (THEN): ${state.upperRotor}. Activate to align or misalign.`}
+        aria-label={`Upper alignment rotor: ${state.upperRotor}. Activate to toggle orientation.`}
         data-testid="machine-upper-rotor"
         data-orientation={state.upperRotor}
       >
         <span className={styles.junctionBadge}>
-          THEN ROTOR · {state.upperRotor === "aligned" ? "ALIGNED" : "OFF"}
+          {state.upperRotor === "aligned" ? "THEN ROTOR · ALIGNED" : "THEN ROTOR · OFF"}
         </span>
       </button>
 
@@ -432,47 +499,31 @@ export function MachineRailway({
         className={styles.rotorButton}
         style={{ left: `${(lower.x / MACHINE_WIDTH) * 100}%`, top: `${(lower.y / MACHINE_HEIGHT) * 100}%` }}
         onClick={onToggleLowerRotor}
-        aria-label={`Lower rotor (NOW): ${state.lowerRotor}. Activate to align or misalign.`}
+        aria-label={`Lower alignment rotor: ${state.lowerRotor}. Activate to toggle orientation.`}
         data-testid="machine-lower-rotor"
         data-orientation={state.lowerRotor}
       >
         <span className={styles.junctionBadge}>
-          NOW ROTOR · {state.lowerRotor === "aligned" ? "ALIGNED" : "OFF"}
+          {state.lowerRotor === "aligned" ? "NOW ROTOR · ALIGNED" : "NOW ROTOR · OFF"}
         </span>
       </button>
 
-      {/* Center Crossing Apparatus / Correspondence Trigger */}
       <button
         type="button"
-        className={`${styles.centerCrossingButton} ${state.centerBridgeRestored ? styles.centerCrossingRestored : styles.centerCrossingBroken}`}
+        className={styles.centerCrossingButton}
         style={{ left: `${(center.x / MACHINE_WIDTH) * 100}%`, top: `${(center.y / MACHINE_HEIGHT) * 100}%` }}
         onClick={onExamineCenter}
-        aria-label={
-          state.centerBridgeRestored
-            ? "Central crossing: coupled and restored"
-            : hasOpportunity
-              ? "Broken central crossing: inspect historical correspondence card"
-              : "Broken central crossing: uncoupled mechanical gap"
-        }
+        aria-label="Central crossing. Activate to inspect correspondence."
         data-testid="machine-center-crossing"
-        data-restored={state.centerBridgeRestored ? "yes" : "no"}
       >
         {state.centerBridgeRestored ? (
-          <img
-            src="/assets/first-ten/impossible-machine/effects/brass-coupling.png"
-            alt=""
-            className={styles.couplingSprite}
-            draggable={false}
-          />
+          <span className={styles.centerCrossingLabel}>BRIDGED</span>
         ) : hasOpportunity ? (
-          <span className={styles.correspondenceCardIcon} data-testid="machine-center-note-icon">
-            <span className={styles.correspondenceWaxSeal} />
-            <span className={styles.correspondenceLabel}>
-              {state.keyRetrieved ? "Inspect Note" : "Folded Note"}
-            </span>
+          <span className={styles.centerCrossingLabel}>
+            {state.keyRetrieved ? "INSPECT NOTE" : "FOLDED NOTE"}
           </span>
         ) : (
-          <span className={styles.brokenGapBadge}>GAP UNCOUPLED</span>
+          <span className={styles.centerCrossingLabel}>GAP UNCOUPLED</span>
         )}
       </button>
 

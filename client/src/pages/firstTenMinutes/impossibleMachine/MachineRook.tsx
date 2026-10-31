@@ -82,7 +82,7 @@ export function MachineRook({ state, unlockStage }: MachineRookProps) {
         className={styles.glassDomeOverlay}
         animate={
           domeRaised
-            ? { y: -155, opacity: isStealing ? 0.2 : 0.45, scale: 0.94 }
+            ? { y: -220, opacity: isStealing ? 0.2 : 0.45, scale: 0.96 }
             : { y: 0, opacity: 1, scale: 1 }
         }
         transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 120, damping: 16 }}
