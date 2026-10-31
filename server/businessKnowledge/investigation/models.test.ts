@@ -123,6 +123,10 @@ describe("reading the person's answers conservatively", () => {
     expect(readRelationshipAnswer("Same LLC, legally the same")).toBe("same_legal");
     // "separately" about billing is not "separate businesses"
     expect(readRelationshipAnswer("Same team, billed separately")).toBe("unclear");
+    // negation never confirms the opposite: it is asked again
+    expect(readRelationshipAnswer("They are not the same company; they are separate businesses")).toBe("unclear");
+    expect(readRelationshipAnswer("They aren't separate businesses, it's a trading name")).toBe("unclear");
+    expect(readRelationshipAnswer("They're not related")).toBe("separate");
   });
 
   it("status: past, paused, current, or unclear", () => {

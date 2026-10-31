@@ -1,4 +1,5 @@
 import type { BusinessUnderstanding, KnowledgeQuestionView, UnderstoodEntity } from "../../shared/businessKnowledge";
+import type { FindingView } from "../../shared/firstTenMinutesFindings";
 import { CoverageLedger } from "../firstTenMinutes/research/coverage";
 import { googleResearch } from "../firstTenMinutes/research/googleResearch";
 import type { PortraitKnowledge } from "../firstTenMinutes/portrait/write";
@@ -64,6 +65,33 @@ export async function investigateJourney(
   });
   if (result.status === "failed") throw new Error("The investigation failed");
   return { quietTerms: quietTerms(await readBusinessUnderstanding(scope)), notes };
+}
+
+// ------------------------------------------------------------------ the chapter's opportunity
+
+/** Whether an opportunity rests on a request about paused or past work, by the request's own words. */
+export function quietOpportunity(opportunity: FindingView, findings: readonly FindingView[], terms: readonly string[]): boolean {
+  if (opportunity.payload.kind !== "opportunity" || !terms.length) return false;
+  const requestId = opportunity.payload.requestId;
+  const request = findings.find(finding => finding.id === requestId);
+  const text = JSON.stringify([request?.payload ?? null, opportunity.payload]).toLowerCase();
+  return terms.some(term => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text));
+}
+
+/**
+ * The findings the chapter may choose its opportunity from: with the feature on and no draft yet, opportunities
+ * about work that is paused or past, as understood *now* (the person's answers included), are set aside, so the
+ * chapter never leads to work they no longer do. If they said it is still current, it is offered again. Once a
+ * draft exists, nothing changes under it.
+ */
+export async function chapterFindings(journey: JourneyRow, findings: FindingView[], drafted: boolean): Promise<FindingView[]> {
+  if (drafted || !intelligenceFor(journey)) return findings;
+  try {
+    const terms = quietTerms(await readBusinessUnderstanding(scopeOf(journey)));
+    return terms.length ? findings.filter(finding => !quietOpportunity(finding, findings, terms)) : findings;
+  } catch {
+    return findings;
+  }
 }
 
 // ------------------------------------------------------------------ Claire's questions, before the portrait

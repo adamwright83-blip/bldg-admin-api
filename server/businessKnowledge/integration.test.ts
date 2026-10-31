@@ -7,9 +7,7 @@ import type { ClaireDriveContext } from "../claire/contextAssembler";
 import { answerClairePreDriveFollowUp } from "../claire/preDriveConversation";
 import { buildClaireVerifiedFactInventory } from "../claire/verifiedFactInventoryFromContext";
 import { settlePortrait, type PortraitKnowledge } from "../firstTenMinutes/portrait/write";
-import { aboutQuietWork } from "../firstTenMinutes/understanding/run";
-import type { DraftFinding } from "../firstTenMinutes/understanding/draft";
-import { portraitKnowledgeOf, quietTerms } from "./onboarding";
+import { portraitKnowledgeOf, quietOpportunity, quietTerms } from "./onboarding";
 
 const understanding: BusinessUnderstanding = {
   journeyId: "j1",
@@ -63,10 +61,10 @@ describe("the portrait consumes the reconciled understanding", () => {
   });
 
   it("the chapter never leads to work that has gone quiet", () => {
-    const request: DraftFinding = { id: "req", companion: null, rank: 0, payload: { kind: "request", from: { name: "Bella", address: "b@bella.example" }, quote: "Can you redo our website?", wants: "a new website", recurring: false, at: "2026-04-01T00:00:00.000Z", subject: "Website" }, sources: [] };
-    const opportunity: DraftFinding = { id: "opp", companion: null, rank: 0, payload: { kind: "opportunity", type: "unanswered", person: { name: "Bella", address: "b@bella.example" }, requestId: "req", replyId: null, serviceId: null, summary: "Bella asked for a website" } as any, sources: [] };
-    expect(aboutQuietWork(opportunity, [request], ["website"])).toBe(true);
-    expect(aboutQuietWork(opportunity, [request], [])).toBe(false);
+    const request = finding("req", { kind: "request", from: { name: "Bella", address: "b@bella.example" }, quote: "Can you redo our website?", wants: "a new website", recurring: false, at: "2026-04-01T00:00:00.000Z", subject: "Website" });
+    const opportunity = finding("opp", { kind: "opportunity", type: "unanswered", person: { name: "Bella", address: "b@bella.example" }, requestId: "req", replyId: null, serviceId: null, summary: "Bella asked for a website" } as any);
+    expect(quietOpportunity(opportunity, [request, opportunity], ["website"])).toBe(true);
+    expect(quietOpportunity(opportunity, [request, opportunity], [])).toBe(false);
   });
 });
 

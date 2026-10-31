@@ -207,8 +207,11 @@ const has = (text: string, pattern: RegExp) => pattern.test(text.toLowerCase());
 
 /** Conservative: only an explicit answer is taken as one. "Yes", "kind of", "it's complicated" are unclear. */
 export function readRelationshipAnswer(text: string): RelationshipReading {
-  const t = text.toLowerCase();
+  const t = text.toLowerCase().replace(/[’']/g, "'");
   if (has(t, /\b(complicated|kind of|sort of|partly|partially|it depends|depends|both|sometimes|not exactly|ish)\b/)) return "unclear";
+  if (has(t, /\b(not related|unrelated|nothing to do with)\b/)) return "separate";
+  // any other negation ("not the same company", "aren't separate") could invert a phrase below: ask again instead
+  if (has(t, /\b(not|never|no|isn't|aren't|wasn't|weren't|doesn't|don't|nor)\b|n't\b/)) return "unclear";
   if (has(t, /\b(same (legal )?(company|entity|llc|corporation|corp)|one (legal )?(company|entity|llc)|same legal|legally the same)\b/)) return "same_legal";
   if (has(t, /\b(separate (businesses|business|companies|company|entities)|different (businesses|companies|company|business)|not related|unrelated|nothing to do with)\b/)) return "separate";
   if (has(t, /\b(two names for|same (operation|business|thing)|trading name|trade as|trades as|brand (of|for)|is our brand|dba|doing business as|one business)\b/)) return "trading_name";

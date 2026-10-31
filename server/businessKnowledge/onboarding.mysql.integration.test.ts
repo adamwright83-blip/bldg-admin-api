@@ -30,6 +30,8 @@ describe.skipIf(!allowed)("onboarding intelligence through the customer journey 
 
   const names = BRIEF_NAMES;
   const journey = { id: randomUUID(), kind: "own", tenantId: null as string | null } as any;
+  /** the workspace the journey became, once a test provisions it */
+  let provisioned: any = null;
 
   it("is entirely inert when the flag is off, and for Nina's example", async () => {
     const { onboardingQuestionState, onboardingPortraitKnowledge, readTenantBusinessUnderstanding } = await import("./onboarding");
@@ -90,7 +92,7 @@ describe.skipIf(!allowed)("onboarding intelligence through the customer journey 
     const { readTenantBusinessUnderstanding } = await import("./onboarding");
     const { businessKnowledgeForBriefing } = await import("../../shared/businessKnowledge");
     const tenantId = `tenant-${randomUUID().slice(0, 8)}`;
-    const provisioned = { ...journey, tenantId };
+    provisioned = { ...journey, tenantId };
     const understanding = await readTenantBusinessUnderstanding(tenantId, { journeyForTenant: async () => provisioned, accessFor: async () => null });
     const briefing = businessKnowledgeForBriefing(understanding)!;
     const relationship = briefing.relationships.find(item => item.basis === "operator")!;
@@ -103,5 +105,23 @@ describe.skipIf(!allowed)("onboarding intelligence through the customer journey 
     expect(briefing.people[0]).toMatchObject({ name: `${names.collaborator.first} ${names.collaborator.last}`, role: "Operations lead" });
     // another workspace that somehow resolved the same journey reads nothing: the rows are stamped with this tenant
     expect(await readTenantBusinessUnderstanding("tenant-other", { journeyForTenant: async () => ({ ...journey, tenantId: "tenant-other" }), accessFor: async () => null })).toBeNull();
+  });
+
+  it("the chapter sets aside an opportunity about past work, and offers it again once the person says it is current", async () => {
+    const { chapterFindings } = await import("./onboarding");
+    const { entities, assertClaim } = await import("./store");
+    const source = { provider: "gmail" as const, ref: "x", at: "2026-04-01T00:00:00.000Z", who: null, label: "x", excerpt: "x", url: null };
+    const request = { id: "req", companion: null, status: "proposed" as const, payload: { kind: "request" as const, from: { name: "Bella", address: "b@bella.example" }, quote: "Can you redo our website?", wants: "a new website", recurring: false, at: "2026-04-01T00:00:00.000Z", subject: "Website" }, sources: [source], correction: null };
+    const opportunity = { ...request, id: "opp", payload: { kind: "opportunity", type: "unanswered", person: { name: "Bella", address: "b@bella.example" }, requestId: "req", replyId: null, serviceId: null, summary: "Bella asked for a website" } } as any;
+    const findings = [request, opportunity] as any[];
+    // the person said website work is in the past: the chapter doesn't lead there
+    expect((await chapterFindings(provisioned, findings, false)).map(item => item.id)).toEqual(["req"]);
+    // once a draft exists, nothing changes under it
+    expect((await chapterFindings(provisioned, findings, true)).map(item => item.id)).toEqual(["req", "opp"]);
+    // they change their mind: it is current again, and the opportunity is offered
+    const scope = { journeyId: journey.id, tenantId: provisioned.tenantId };
+    const web = (await entities(scope)).find(entity => /website/i.test(entity.name))!;
+    await assertClaim(scope, { subjectEntityId: web.id, predicate: "status", value: "active", basis: "user_confirmed", detail: "Actually yes, a few a year", confidence: 100, rationale: "You said so.", evidenceIds: [], createdBy: "user" });
+    expect((await chapterFindings(provisioned, findings, false)).map(item => item.id)).toEqual(["req", "opp"]);
   });
 });
