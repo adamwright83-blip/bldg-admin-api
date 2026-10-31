@@ -381,9 +381,9 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
         onContinueToPage={adapter.onFinishAdventure ? () => void adapter.onFinishAdventure!() : undefined}
       />
 
-      {/* Paid Workspace Key & Back to Page link when a draft has been prepared */}
+      {/* Paid Workspace Key & Back to Page escape hatch */}
       {children}
-      {adapter.draft && !state.domeUnlocked && adapter.onFinishAdventure ? (
+      {!state.domeUnlocked && adapter.onFinishAdventure ? (
         <div className={styles.backToPageRow}>
           <button
             type="button"

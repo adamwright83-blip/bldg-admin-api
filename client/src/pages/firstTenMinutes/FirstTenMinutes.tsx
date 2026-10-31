@@ -288,6 +288,17 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     }
   }, [credentials?.sessionId]);
 
+  const exitSimulated = useCallback(() => {
+    setSimulatedActive(false);
+    if (credentials?.sessionId) {
+      try {
+        window.localStorage.setItem(`joystick_simulated_machine_${credentials.sessionId}`, "false");
+      } catch {}
+    }
+    setAtCourtyard(false);
+    window.scrollTo({ top: 0 });
+  }, [credentials?.sessionId]);
+
   // a kept page always leads somewhere visible: the chapter, or a plain word on why not yet (chapter/chapterGate.ts)
   const gate = chapterGate({ portraitKept, chapterOpen, onFirstChapter, data: chapter.data, isError: chapter.isError });
   const isSimulatedChapter = gate === "no_opportunity" && simulatedActive;
@@ -312,6 +323,13 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
       return null;
     }
   });
+
+  const simulatedStatus =
+    simulatedProgress?.adventureCompleted || simulatedProgress?.rookRescued
+      ? ("completed" as const)
+      : simulatedProgress?.keyRetrieved || simulatedDraft !== null
+        ? ("in_progress" as const)
+        : ("not_started" as const);
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -441,7 +459,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               });
               return "sent";
             },
-            onFinishAdventure: backToPage,
+            onFinishAdventure: async () => {
+              exitSimulated();
+            },
           }}
         />
       );
@@ -577,6 +597,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
                   onRetry={() => void chapter.refetch()}
                   onLookCloser={() => setCloser(true)}
                   onEnterSimulated={enterSimulated}
+                  simulatedStatus={simulatedStatus}
                 />
               ) : null}
             </PortraitPage>

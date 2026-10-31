@@ -317,11 +317,23 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     // Verify Claire's threshold appears
     const threshold = page.getByTestId("first-ten-chapter-threshold");
     await expect(threshold).toBeVisible({ timeout: 20_000 });
+    await expect(threshold).toHaveAttribute("data-simulated-status", "not_started");
     await expect(threshold).toContainText("I haven’t found a customer conversation waiting for you yet. But let me show you what happens when one arrives.");
 
-    // Enter simulated machine
+    // 1. Enter simulated machine
     await page.getByTestId("first-ten-enter-simulated-machine").click();
     const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+
+    // 2. Leave before finishing (escape hatch)
+    await expect(page.getByTestId("first-ten-back-to-page")).toBeVisible();
+    await page.getByTestId("first-ten-back-to-page").click();
+    await expect(machine).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible();
+    await expect(threshold).toBeVisible();
+
+    // 3. Resume the machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
     await expect(machine).toBeVisible({ timeout: 20_000 });
 
     // Solve outbound route (West=upper, East=upper, Upper Rotor=aligned)
@@ -376,10 +388,28 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     // Wind crank to return across central bridge
     await page.getByTestId("machine-wind-crank").click();
 
-    // Dome unlocks and Rook escape sequence plays
+    // 4. Dome unlocks and Rook escape sequence plays
     await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
     await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+
+    // 5. Exit after finish (back to portrait)
+    await page.getByTestId("first-ten-back-to-page").click();
+    await expect(machine).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible();
+    await expect(threshold).toBeVisible();
+    await expect(threshold).toHaveAttribute("data-simulated-status", "completed");
+
+    // 6. Reload preserves completed progression
+    await page.reload();
+    await expect(page.getByTestId("first-ten-portrait-kept")).toBeVisible({ timeout: 60_000 });
+    await expect(threshold).toHaveAttribute("data-simulated-status", "completed");
+    await expect(page.getByTestId("first-ten-enter-simulated-machine")).toHaveText("Three Days Later · Revisit the Machine");
+
+    // 7. Revisit the completed machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes");
   });
 
   test("Mobile responsive layout, camera panning, and Screenshot 10", async ({ page }) => {

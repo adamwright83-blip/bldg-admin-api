@@ -12,12 +12,14 @@ export function ChapterThreshold({
   onRetry,
   onLookCloser,
   onEnterSimulated,
+  simulatedStatus = "not_started",
 }: {
   gate: Extract<ChapterGate, "loading" | "error" | "no_opportunity">;
   retrying: boolean;
   onRetry: () => void;
   onLookCloser: () => void;
   onEnterSimulated?: () => void;
+  simulatedStatus?: "not_started" | "in_progress" | "completed";
 }) {
   if (gate === "loading") {
     return (
@@ -37,14 +39,42 @@ export function ChapterThreshold({
     );
   }
   return (
-    <div className={styles.threshold} role="status" data-testid="first-ten-chapter-threshold" data-state="no_opportunity">
+    <div
+      className={styles.threshold}
+      role="status"
+      data-testid="first-ten-chapter-threshold"
+      data-state="no_opportunity"
+      data-simulated-status={simulatedStatus}
+    >
       <p>Your page is kept.</p>
-      <p className={styles.thresholdClaireNote}>
-        &ldquo;I haven&rsquo;t found a customer conversation waiting for you yet. But let me show you what happens when one arrives.&rdquo;
-      </p>
-      <p className={styles.thresholdSubtitle}>
-        Step three days forward into an imagined scenario to see how JOYSTICK operates.
-      </p>
+      {simulatedStatus === "completed" ? (
+        <>
+          <p className={styles.thresholdClaireNote}>
+            &ldquo;Rook slipped away with the contraption. When a real conversation arrives, your machine will be waiting.&rdquo;
+          </p>
+          <p className={styles.thresholdSubtitle}>
+            You&rsquo;ve experienced how JOYSTICK acts when an inquiry lands. Revisit the machine anytime.
+          </p>
+        </>
+      ) : simulatedStatus === "in_progress" ? (
+        <>
+          <p className={styles.thresholdClaireNote}>
+            &ldquo;The clockwork railway is paused right where you left it.&rdquo;
+          </p>
+          <p className={styles.thresholdSubtitle}>
+            Step back into the imagined scenario anytime to finish rescuing Rook.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className={styles.thresholdClaireNote}>
+            &ldquo;I haven&rsquo;t found a customer conversation waiting for you yet. But let me show you what happens when one arrives.&rdquo;
+          </p>
+          <p className={styles.thresholdSubtitle}>
+            Step three days forward into an imagined scenario to see how JOYSTICK operates.
+          </p>
+        </>
+      )}
       <div className={styles.thresholdActions}>
         {onEnterSimulated ? (
           <button
@@ -53,7 +83,11 @@ export function ChapterThreshold({
             onClick={onEnterSimulated}
             data-testid="first-ten-enter-simulated-machine"
           >
-            Three Days Later · Enter the Machine
+            {simulatedStatus === "completed"
+              ? "Three Days Later · Revisit the Machine"
+              : simulatedStatus === "in_progress"
+                ? "Three Days Later · Resume the Machine"
+                : "Three Days Later · Enter the Machine"}
           </button>
         ) : null}
         <button type="button" onClick={onLookCloser} data-testid="first-ten-chapter-look-closer">
