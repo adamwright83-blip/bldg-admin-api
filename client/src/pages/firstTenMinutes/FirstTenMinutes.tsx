@@ -28,6 +28,8 @@ import { SendDesk } from "./chapter/SendDesk";
 import { WorkspaceKey } from "./chapter/WorkspaceKey";
 import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
 import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
+import { ChapterThreshold } from "./chapter/ChapterThreshold";
+import { chapterGate } from "./chapter/chapterGate";
 import { draftStatusLine } from "@shared/firstTenMinutesActivation";
 import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
@@ -250,7 +252,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   // "Your first chapter": back on their portrait, unless they went out to the courtyard again
   const [atCourtyard, setAtCourtyard] = useState(false);
   const onFirstChapter = view?.stage === "first_chapter" && !atCourtyard;
-  const inChapter = Boolean(chapterOpen && opportunity && chapter.data) && !onFirstChapter;
+  // a kept page always leads somewhere visible: the chapter, or a plain word on why not yet (chapter/chapterGate.ts)
+  const gate = chapterGate({ portraitKept, chapterOpen, onFirstChapter, data: chapter.data, isError: chapter.isError });
+  const inChapter = gate === "open";
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -456,6 +460,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
             >
               {onFirstChapter && firstChapter.data ? <AskClaire view={firstChapter.data} onAsk={ask} onCourtyard={toCourtyard} /> : null}
               {onFirstChapter && activation.data?.owner && credentials ? <WorkspaceKey activation={activation.data} credentials={credentials} /> : null}
+              {gate === "loading" || gate === "error" || gate === "no_opportunity" ? (
+                <ChapterThreshold gate={gate} retrying={chapter.isFetching} onRetry={() => void chapter.refetch()} onLookCloser={() => setCloser(true)} />
+              ) : null}
             </PortraitPage>
           ) : null}
           {crewFinished && portrait.data?.status === "failed" ? (

@@ -395,3 +395,45 @@
 .claireLinks button:disabled {
   opacity: 0.5;
 }
+
+/* Under a kept page when there's no chapter to open: what's true, and what to do next. */
+.threshold {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(251, 245, 232, 0.82);
+  text-align: center;
+}
+
+.threshold p {
+  margin: 0;
+}
+
+.thresholdActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  color: rgba(251, 245, 232, 0.5);
+}
+
+.thresholdActions button {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: rgba(251, 245, 232, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.thresholdActions button:disabled,
+.quietNote button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
