@@ -117,8 +117,9 @@ mode, using the harness that already exists (`scripts/run-stripe-provider-accept
 **What the session then does:**
 
 1. Start a disposable MySQL with Docker (the harness refuses non-disposable databases) and run migrations into it.
-2. Create the test-mode Product and Price for the advertised offer ($49/month, 7-day trial, card required) and the
-   plan row pointing at it; the offer guard in `server/saas/joystickStripeOffer.ts` will refuse anything else.
+2. Use the test-mode Product and Price for the advertised offer ($79/month, no trial, card required and charged at
+   checkout; ids in `docs/billing/JOYSTICK_STRIPE_SANDBOX.md`) and the plan row pointing at it; the offer guard in
+   `server/saas/joystickStripeOffer.ts` will refuse anything else.
 3. Run the app locally, and forward webhooks:
    ```bash
    stripe listen --forward-to localhost:3000/api/dayforge/billing/stripe-webhook

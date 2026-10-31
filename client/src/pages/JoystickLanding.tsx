@@ -751,8 +751,6 @@ export default function JoystickLanding() {
   // Section 12: Live proof founder clipboard dispatch log tab (0 = Silver Lake, 1 = CPE, 2 = Wilshire)
   const [activeDispatchTab, setActiveDispatchTab] = useState<number>(0);
 
-  // Section 13: Pricing billing cycle toggle ("monthly" | "annual")
-  const [pricingBillingCycle, setPricingBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   useEffect(() => {
     captureProductEvent("landing_page_visited", {
@@ -760,8 +758,8 @@ export default function JoystickLanding() {
       source: "joystick_landing",
     });
     captureProductEvent("landing_pricing_viewed", {
-      monthly_usd: 49,
-      trial_days: 7,
+      monthly_usd: 79,
+      trial_days: 0,
       card_required_at_signup: true,
       annual_shown: false,
       checkout_live: false,
@@ -2426,7 +2424,7 @@ export default function JoystickLanding() {
             <div>
               <div className="jl-section-label">Pricing</div>
               <h2 id="pricing-heading" className="jl-h2 jl-pricing-title">
-                7-Day Free Trial, Then $49/Month
+                $79/Month. Cancel Anytime.
               </h2>
             </div>
             <p className="jl-lede-text">
@@ -2435,36 +2433,17 @@ export default function JoystickLanding() {
           </div>
 
           <div className="jl-pricing-presentation-card" data-testid="landing-pricing-card">
-            {/* Membership Header & Billing Toggle */}
+            {/* Membership Header */}
             <div className="jl-pricing-main-block">
               <div className="jl-pricing-tier-badge">JOYSTICK OPERATOR MEMBERSHIP</div>
 
               <div className="jl-pricing-cost-display">
                 <div className="jl-cost-large">
-                  {pricingBillingCycle === "monthly" ? "$49" : "$39"}
+                  $79
                   <span className="jl-cost-period">/month</span>
                 </div>
-                <div className="jl-cost-annual-note">
-                  {pricingBillingCycle === "annual" ? "Billed annually at $468/year (saves $120 annually)" : "Billed monthly. Switch to annual for $468/year"}
-                </div>
-              </div>
-
-              {/* Cycle Toggle */}
-              <div className="jl-billing-toggle-row">
-                <button
-                  type="button"
-                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "monthly" ? "is-active" : ""}`}
-                  onClick={() => setPricingBillingCycle("monthly")}
-                >
-                  Monthly billing ($49/month)
-                </button>
-                <button
-                  type="button"
-                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "annual" ? "is-active" : ""}`}
-                  onClick={() => setPricingBillingCycle("annual")}
-                >
-                  Annual billing ($468/year · save 20%)
-                </button>
+                {/* One plan at launch: monthly. An annual price isn't offered until it is approved. */}
+                <div className="jl-cost-annual-note">Billed monthly.</div>
               </div>
 
               {/* Commercial Terms Pills */}
@@ -2472,8 +2451,8 @@ export default function JoystickLanding() {
                 className="jl-terms joystick-desktop__terms"
                 data-testid="landing-commercial-terms"
               >
-                <li className="joystick-terms-pill">7-day trial</li>
-                <li className="joystick-terms-pill">$49/month</li>
+                <li className="joystick-terms-pill">$79/month</li>
+                <li className="joystick-terms-pill">Charged at signup</li>
                 <li className="joystick-terms-pill">Card required at signup</li>
                 <li className="joystick-terms-pill">Cancel anytime</li>
               </ul>

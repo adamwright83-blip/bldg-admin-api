@@ -37,6 +37,7 @@ import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../legacy/dayforge/events/goldlineEventRouter";
 import { dayDirectorRouter } from "../planning/dayDirector/dayDirectorRouter";
 import { weeklyMissionRouter } from "../claire/weeklyMission/weeklyMissionRouter";
+import { claireRoutinesRouter } from "../claire/routines/router";
 import { nightShiftRouter } from "../nightShift/nightShiftRouter";
 import { towerWarsRouter } from "../experience/goldline/modes/towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
@@ -113,6 +114,7 @@ export const systemRouter = router({
   goldlineEvents: goldlineEventRouter,
   dayDirector: dayDirectorRouter,
   weeklyMission: weeklyMissionRouter,
+  claireRoutines: claireRoutinesRouter,
   nightShift: nightShiftRouter,
   towerWars: towerWarsRouter,
   geographicTruth: geographicTruthRouter,

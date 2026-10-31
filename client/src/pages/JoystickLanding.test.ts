@@ -53,11 +53,17 @@ describe("JOYSTICK public start", () => {
     );
   });
 
-  it("advertises $49/month with a seven-day trial and a card required at signup", () => {
-    expect(landingSource).toContain("7-day trial");
-    expect(landingSource).toContain("$49/month");
-    expect(landingSource).toContain("7-Day Free Trial, Then $49/Month");
+  it("advertises $79/month with no trial, charged and card required at signup", () => {
+    expect(landingSource).toContain("$79/month");
+    expect(landingSource).toContain("$79/Month. Cancel Anytime.");
+    expect(landingSource).toContain("Charged at signup");
     expect(landingSource).toContain("Card required at signup");
+    // the retired $49 + seven-day-trial offer is not advertised anywhere on the page
+    expect(landingSource).not.toMatch(/\$49\b/);
+    expect(landingSource).not.toMatch(/7-day trial|free trial/i);
+    // the annual savings claims were computed from $49; they are not restated
+    expect(landingSource).not.toContain("save 20%");
+    expect(landingSource).not.toContain("saves $120");
   });
 
   it("does not advertise a live charge while checkout is unverified", () => {
@@ -73,15 +79,10 @@ describe("JOYSTICK public start", () => {
     expect(landingSource).toContain("checkout_live: false");
   });
 
-  it("does not show an annual price other than $468/year", () => {
-    const annual = [
-      ...landingSource.matchAll(
-        /\$\s*([0-9][0-9,]*)\s*(?:\/\s*year|per year)/gi
-      ),
-    ];
-    expect(
-      annual.every((match) => match[1].replace(/,/g, "") === "468")
-    ).toBe(true);
+  it("offers one plan, monthly: no annual price or annual toggle until one is approved", () => {
+    expect(landingSource).not.toMatch(/\$\s*[0-9][0-9,]*\s*(?:\/\s*year|per year)/i);
+    expect(landingSource).not.toMatch(/annual billing|billed annually|switch to annual/i);
+    expect(landingSource).toContain("Billed monthly.");
   });
 
   it("does not advertise XP, coins, gold, or streaks", () => {
@@ -93,8 +94,8 @@ describe("JOYSTICK public start", () => {
 
   it("records pricing and closed-checkout events without message bodies", () => {
     expect(landingSource).toContain('captureProductEvent("landing_pricing_viewed"');
-    expect(landingSource).toContain("monthly_usd: 49");
-    expect(landingSource).toContain("trial_days: 7");
+    expect(landingSource).toContain("monthly_usd: 79");
+    expect(landingSource).toContain("trial_days: 0");
     expect(landingSource).toContain("card_required_at_signup: true");
     expect(landingSource).not.toMatch(
       /captureProductEvent\([^)]*\b(message|body|answer)\b/

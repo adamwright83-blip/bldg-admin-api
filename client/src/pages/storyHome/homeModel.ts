@@ -17,6 +17,28 @@ export const HOME_NAV = [
   { key: "settings", label: "Settings", path: "/settings" },
 ] as const;
 
+export type HomeNavItem = { key: (typeof HOME_NAV)[number]["key"]; label: string; path: string };
+
+/**
+ * A tenant member is served none of the admin paths above except Lantern City, so their icons go to the tenant routes
+ * for the same places. Operations has no tenant route and is left out.
+ */
+const TENANT_NAV_PATHS: Readonly<Partial<Record<HomeNavItem["key"], string>>> = {
+  city: "/growth/lantern-city",
+  customers: "/product/customers",
+  money: "/product/money",
+  settings: "/billing",
+};
+
+/** The top-bar icons for a signed-in user: tenant routes for a tenant member (`role: "user"`), HOME_NAV for everyone else. */
+export function homeNavFor(role: string | null | undefined): HomeNavItem[] {
+  if (role !== "user") return HOME_NAV.map(item => ({ ...item }));
+  return HOME_NAV.flatMap(item => {
+    const path = TENANT_NAV_PATHS[item.key];
+    return path ? [{ ...item, path }] : [];
+  });
+}
+
 /** Fixed art paths. Final art lands at these paths in its own commit; until then the page falls back. */
 export const HOME_ART = {
 

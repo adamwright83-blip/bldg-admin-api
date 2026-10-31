@@ -584,10 +584,10 @@ export default function JoystickAcquisitionPage() {
             </div>
             <div className="ja-checkout">
               <p className="ja-kicker">START PLAYING</p>
-              <h2>7 days, then $49/month.</h2>
+              <h2>$79 a month.</h2>
               <p>Card required. One plan. Cancel anytime.</p>
               <button className="ja-primary" disabled={busy || !plans.data?.length} onClick={() => void beginCheckout()}>
-                {plans.data?.length ? "START MY 7 DAYS" : "BILLING CONNECTION PENDING"}
+                {plans.data?.length ? "CONTINUE TO CHECKOUT" : "BILLING CONNECTION PENDING"}
               </button>
               {!plans.data?.length ? <small>Your setup is saved. No tenant or fake payment is created while billing is unavailable.</small> : null}
             </div>

@@ -1,16 +1,21 @@
 /* LEGACY DAYFORGE COMPATIBILITY: billing plan keys below are JOYSTICK commercial offers. Historical DayForge names are not current architecture. */
 /**
  * Advertised JOYSTICK checkout contract.
- * Monthly is 4900 USD cents, interval month, with a seven-day trial and a card at signup.
- * Annual is 46800 USD cents ($468/year), interval year. That amount is not 49000.
+ * Monthly is 7900 USD cents ($79), interval month, with no trial: a card at signup, charged at checkout.
+ * Annual is 46800 USD cents ($468/year), interval year. That amount is not 49000. Annual keeps the seven-day
+ * trial it was published with; it used to share the monthly trial constant and was not part of the $79 change.
+ * The Stripe price and product ids come from the plan row (synced from the environment), never from this module.
  * This module stores no Stripe account id and creates no charges.
  */
 
 export const JOYSTICK_MONTHLY_PLAN_KEY = "joystick-growth-standard";
 export const JOYSTICK_ANNUAL_PLAN_KEY = "joystick-growth-annual";
-export const JOYSTICK_REQUIRED_TRIAL_DAYS = 7;
-export const JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS = 4900;
-/** $468 per year. Do not replace this with $490 (49000) or with 12 × $49 (58800). */
+/** Monthly has no trial. Adding one back changes the advertised offer, not just this number. */
+export const JOYSTICK_MONTHLY_TRIAL_DAYS = 0;
+/** Annual's trial, unchanged from before the monthly offer moved to $79 with no trial. */
+export const JOYSTICK_ANNUAL_TRIAL_DAYS = 7;
+export const JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS = 7900;
+/** $468 per year. Do not replace this with $490 (49000), 12 × $49 (58800) or 12 × $79 (94800). */
 export const JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS = 46800;
 
 export type JoystickCheckoutCloseCode =
@@ -24,7 +29,7 @@ export type AdvertisedOffer = {
   unitAmountCents: number;
   currency: "usd";
   interval: "month" | "year";
-  trialDays: 7;
+  trialDays: typeof JOYSTICK_MONTHLY_TRIAL_DAYS | typeof JOYSTICK_ANNUAL_TRIAL_DAYS;
 };
 
 export type StripePriceFacts = {
@@ -44,7 +49,7 @@ const MONTHLY_OFFER: AdvertisedOffer = {
   unitAmountCents: JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS,
   currency: "usd",
   interval: "month",
-  trialDays: JOYSTICK_REQUIRED_TRIAL_DAYS,
+  trialDays: JOYSTICK_MONTHLY_TRIAL_DAYS,
 };
 
 const ANNUAL_OFFER: AdvertisedOffer = {
@@ -52,7 +57,7 @@ const ANNUAL_OFFER: AdvertisedOffer = {
   unitAmountCents: JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS,
   currency: "usd",
   interval: "year",
-  trialDays: JOYSTICK_REQUIRED_TRIAL_DAYS,
+  trialDays: JOYSTICK_ANNUAL_TRIAL_DAYS,
 };
 
 export function advertisedOfferForPlan(planKey: string): AdvertisedOffer | null {
@@ -68,7 +73,7 @@ export function isAdvertisedJoystickPlan(planKey: string): boolean {
 export function publicCheckoutClosedMessage(code: JoystickCheckoutCloseCode): string {
   switch (code) {
     case "trial_days":
-      return "Checkout is closed until the plan includes the seven-day trial";
+      return "Checkout is closed until the plan's trial matches the advertised offer";
     case "stale_price":
       return "Checkout is closed because the configured Stripe price is stale";
     case "price_mismatch":
@@ -156,12 +161,30 @@ export function checkAdvertisedStripePrice(input: {
   return { ok: true };
 }
 
+/**
+ * The environment may write an advertised plan only with that plan's advertised trial: 0 days for monthly,
+ * 7 for annual. A disagreeing value is not synced, and checkout stays closed on the row already stored.
+ */
 export function advertisedPlanEnvSyncAllowed(
   planKey: string,
   trialDays: number
 ): boolean {
-  if (!isAdvertisedJoystickPlan(planKey)) return true;
-  return trialDays === JOYSTICK_REQUIRED_TRIAL_DAYS;
+  const offer = advertisedOfferForPlan(planKey);
+  if (!offer) return true;
+  return trialDays === offer.trialDays;
+}
+
+/**
+ * The trial a new Checkout subscription gets: the advertised one for an advertised plan, the plan row's otherwise.
+ * Zero means Checkout sends no trial_period_days at all and the first invoice is charged at checkout.
+ */
+export function checkoutTrialPeriodDays(plan: {
+  planKey: string;
+  trialDays: number;
+}): number {
+  const offer = advertisedOfferForPlan(plan.planKey);
+  const days = offer ? offer.trialDays : plan.trialDays;
+  return Number.isInteger(days) && days > 0 ? days : 0;
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   nextReadinessPrompt,
 } from "../../shared/claireRuntime";
 import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
+import { AWAITING_REPLIES_RULE, SIGNUP_KNOWLEDGE_RULE } from "../../shared/firstTenMinutesKnowledge";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import {
   assertPostGenerationStateVerbs,
@@ -211,6 +212,14 @@ export function conservativeClaireFollowUp(input: {
   return "I have your last message. I couldn’t finish my response just now.";
 }
 
+/**
+ * Claire Desk's own rule lines for signup knowledge and awaiting replies, pointed at where this prompt carries the
+ * same fields (currentContext.*, not the Desk's BRIEFING.*). Nothing else in them changes.
+ */
+export function contextKnowledgeRule(rule: string): string {
+  return rule.replace(/\bBRIEFING\./g, "currentContext.");
+}
+
 function compactConversationContext(context: ClaireDriveContext): string {
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
@@ -239,6 +248,9 @@ function compactConversationContext(context: ClaireDriveContext): string {
     missionSalesBrief: context.missionSalesBrief,
     picture: runtime.picture,
     workItems: runtime.workItems.slice(0, 8),
+    // Absent unless real (see ClaireDriveContext): JSON drops an undefined field.
+    signupKnowledge: context.signupKnowledge,
+    awaitingReplies: context.awaitingReplies,
     factInventory: buildClaireVerifiedFactInventory(context).toPromptSection(),
   });
 }
@@ -510,6 +522,15 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "mission_sales_brief",
         text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
+      },
+      // Only where currentContext actually carries the field (a personal-only turn sends no business context).
+      {
+        label: "signup_knowledge",
+        text: conversationalMode !== "personal" && input.context.signupKnowledge ? contextKnowledgeRule(SIGNUP_KNOWLEDGE_RULE) : null,
+      },
+      {
+        label: "awaiting_replies",
+        text: conversationalMode !== "personal" && input.context.awaitingReplies ? contextKnowledgeRule(AWAITING_REPLIES_RULE) : null,
       },
       ...(input.daphnePromptSection
         ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]

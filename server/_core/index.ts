@@ -71,6 +71,7 @@ import { startAutomaticGeographicReconciliation } from "../geography/geographicR
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/browserSync/cleancloudDirectScheduler";
 import { registerGmailPushRoute, startGmailReplyDetection } from "../integrations/gmail/replies/replyService";
+import { claireRoutinesWorkerEnabled, startClaireRoutines } from "../claire/routines/worker";
 import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../agents/persistentOperator/autonomousWorkerService";
 import { startDaphneConsolidationWorker } from "../agents/daphne/consolidationWorker";
@@ -936,6 +937,11 @@ async function startServer() {
             error instanceof Error ? error.message : String(error)
           );
         });
+    }
+    // Claire routines: the operator's recurring read-only checks (production; CLAIRE_ROUTINES_WORKER=1 elsewhere)
+    if (claireRoutinesWorkerEnabled()) {
+      const stopClaireRoutines = startClaireRoutines();
+      server.once("close", stopClaireRoutines);
     }
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_PROOF_MODE === "1") {
       const stopOutbox = startEconomicOutboxDrainer();
