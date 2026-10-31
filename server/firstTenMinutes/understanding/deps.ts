@@ -43,12 +43,35 @@ export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> 
     return { readers: exampleReaders(), extractor: exampleExtractor(), geocoder: exampleGeocoder() };
   }
   const slack = await connectionSecrets(journey.id, "slack");
-  const access = await googleAccessFor(journey);
+  return readingDepsWith(journey, {
+    google: await googleAccessFor(journey),
+    slack: slack ? { accessToken: slack.accessToken, userId: slack.row.accountSubject } : null,
+  });
+}
+
+export type ReadingConnections = {
+  google: GoogleAccess | null;
+  slack: { accessToken: string; userId: string | null } | null;
+};
+
+/**
+ * The reading for `journey` over the given connections: what `readingDepsFor` builds from the journey's own. The
+ * cold-start test harness (businessKnowledge/coldTest.ts) uses it to read a person's connected accounts into a
+ * throwaway test journey, with its read-only `fetch`, the investigator model it was asked for (`env`) and, in its own
+ * tests, a fixed clock (`now`).
+ */
+export function readingDepsWith(
+  journey: JourneyRow,
+  connections: ReadingConnections,
+  options: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv; now?: () => Date } = {}
+): ReadingDeps {
+  const { google: access, slack } = connections;
+  const now = options.now ?? (() => new Date());
   const ownerEmail = access?.ownerEmail ?? "";
-  const gmail = access ? gmailReader(access) : null;
-  const calendar = access ? calendarReader(access) : null;
-  const drive = access ? driveReader(access) : null;
-  const slackRead = slack ? slackReader({ accessToken: slack.accessToken, userId: slack.row.accountSubject }) : null;
+  const gmail = access ? gmailReader(access, { fetch: options.fetch, now: options.now }) : null;
+  const calendar = access ? calendarReader(access, { fetch: options.fetch, now: options.now }) : null;
+  const drive = access ? driveReader(access, { fetch: options.fetch, now: options.now }) : null;
+  const slackRead = slack ? slackReader(slack, { fetch: options.fetch, now: options.now }) : null;
   const nothing = { items: [], unavailable: null };
 
   const readers: SourceReaders = {
@@ -60,15 +83,20 @@ export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> 
     calendar: async window => (calendar ? calendar(window) : nothing),
     drive: async limit =>
       drive
-        ? drive.drive(limit, READ_LIMITS.driveDocs, new Date(Date.now() - 365 * 24 * 60 * 60 * 1000))
+        ? drive.drive(limit, READ_LIMITS.driveDocs, new Date(now().getTime() - 365 * 24 * 60 * 60 * 1000))
         : nothing,
     slack: async limit => (slackRead ? slackRead(limit) : nothing),
-    now: () => new Date(),
+    now,
   };
   return {
     readers,
     extractor: claudeExtractor(journey.id),
     geocoder: googleGeocoder(),
-    ...(access && intelligenceFor(journey) ? { investigate: (heartbeat: () => Promise<void>) => investigateJourney(journey, access, heartbeat) } : {}),
+    ...(access && intelligenceFor(journey)
+      ? {
+          investigate: (heartbeat: () => Promise<void>) =>
+            investigateJourney(journey, access, heartbeat, { fetch: options.fetch, env: options.env, now: options.now }),
+        }
+      : {}),
   };
 }
