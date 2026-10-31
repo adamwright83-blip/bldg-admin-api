@@ -91,17 +91,24 @@ export type DistrictOpportunityMetric = {
   name: string;
   center: { latitude: number; longitude: number };
   atlasAnchor: { x: number; y: number };
-  multiFamilyDensityCount: number; // Multi-family building aggregate from Places
-  goldlineCustomerCount: number;
-  penetrationRatio: number; // goldline / multiFamily
-  opportunityPressure: "unexplored" | "high_potential" | "contested" | "stronghold";
+  /** Multi-family buildings Google counted in the district; null when the count is unknown (the query failed) */
+  multiFamilyDensityCount: number | null;
+  /** Active customers located in the district from business records; null when presence couldn't be read */
+  goldlineCustomerCount: number | null;
+  /** goldline / multiFamily; null when either is unknown or there are no buildings to divide by */
+  penetrationRatio: number | null;
+  /** "unknown" when either input is unknown: no glow is invented for a district JOYSTICK can't measure */
+  opportunityPressure: "unexplored" | "high_potential" | "contested" | "stronghold" | "unknown";
   intensityScore: number; // 0.0 to 1.0 for visual glow
 };
 
 export type TerritoryOpportunityProjection = {
   generatedAt: string;
   districts: DistrictOpportunityMetric[];
+  /** sum of the districts whose count is known */
   totalHousingCount: number;
+  /** districts whose building count is unknown; totalHousingCount leaves them out */
+  unknownHousingDistrictCount: number;
   unexploredDistrictCount: number;
   source: "places_aggregate" | "baseline_density";
 };
@@ -109,47 +116,60 @@ export type TerritoryOpportunityProjection = {
 export function computeOpportunityPressure(input: {
   districts: Array<{
     districtId: string;
-    housingCount: number;
-    activeCustomerCount: number;
+    /** null: unknown, never a stand-in number */
+    housingCount: number | null;
+    /** null: unknown, never treated as "no customers" */
+    activeCustomerCount: number | null;
   }>;
   source?: "places_aggregate" | "baseline_density";
 }): TerritoryOpportunityProjection {
   const source = input.source ?? "baseline_density";
   let totalHousing = 0;
+  let unknownHousing = 0;
   let unexploredCount = 0;
 
   const districtMetrics: DistrictOpportunityMetric[] = STRATEGIC_LA_DISTRICTS.map(district => {
     const data = input.districts.find(d => d.districtId === district.id);
-    const multiFamilyDensityCount = Math.max(1, data?.housingCount ?? 50);
-    const goldlineCustomerCount = data?.activeCustomerCount ?? 0;
-    totalHousing += multiFamilyDensityCount;
+    const housing = data?.housingCount ?? null;
+    const customers = data?.activeCustomerCount ?? null;
+    if (housing == null) unknownHousing += 1;
+    else totalHousing += housing;
 
-    const ratio = goldlineCustomerCount / multiFamilyDensityCount;
-    let pressure: DistrictOpportunityMetric["opportunityPressure"] = "unexplored";
-    let intensity = 0.2;
+    const base = { districtId: district.id, name: district.name, center: district.center, atlasAnchor: district.atlasAnchor };
+    if (housing == null || customers == null) {
+      return {
+        ...base,
+        multiFamilyDensityCount: housing,
+        goldlineCustomerCount: customers,
+        penetrationRatio: null,
+        opportunityPressure: "unknown",
+        intensityScore: 0,
+      };
+    }
 
-    if (goldlineCustomerCount === 0) {
+    const ratio = housing > 0 ? customers / housing : null;
+    let pressure: DistrictOpportunityMetric["opportunityPressure"];
+    let intensity: number;
+    if (customers === 0) {
       pressure = "unexplored";
-      intensity = 0.4;
+      // a district with no multi-family buildings has nothing to explore
+      intensity = housing > 0 ? 0.4 : 0;
       unexploredCount += 1;
+    } else if (ratio == null || ratio >= 0.30) {
+      pressure = "stronghold";
+      intensity = 0.30;
     } else if (ratio < 0.15) {
       pressure = "high_potential";
       intensity = 0.85; // Strong unexplored strategic glow
-    } else if (ratio < 0.30) {
+    } else {
       pressure = "contested";
       intensity = 0.60;
-    } else {
-      pressure = "stronghold";
-      intensity = 0.30;
     }
 
     return {
-      districtId: district.id,
-      name: district.name,
-      center: district.center,
-      atlasAnchor: district.atlasAnchor,
-      multiFamilyDensityCount,
-      goldlineCustomerCount,
+      ...base,
+      multiFamilyDensityCount: housing,
+      goldlineCustomerCount: customers,
       penetrationRatio: ratio,
       opportunityPressure: pressure,
       intensityScore: intensity,
@@ -160,6 +180,7 @@ export function computeOpportunityPressure(input: {
     generatedAt: new Date().toISOString(),
     districts: districtMetrics,
     totalHousingCount: totalHousing,
+    unknownHousingDistrictCount: unknownHousing,
     unexploredDistrictCount: unexploredCount,
     source,
   };

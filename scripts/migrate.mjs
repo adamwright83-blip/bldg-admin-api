@@ -5847,5 +5847,14 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0158: Google capability evidence, the newest real answer from each Google API, kept across restarts. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0158_google_capability_evidence.sql");
+  for (const statement of statements) await runRequired(statement, "Google capability evidence");
+  await assertRequiredColumns("google_capability_evidence", [
+    "capability", "last_status", "last_checked_at", "last_success_at", "last_failure_at", "last_error", "last_latency_ms", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

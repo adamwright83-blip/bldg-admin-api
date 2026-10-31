@@ -1,4 +1,5 @@
 import { ENV } from "../_core/env";
+import { classifyGoogleFailure, recordGoogleTelemetry } from "../google/googleTelemetry";
 
 export type GeocodeResult =
   | {
@@ -51,6 +52,20 @@ export class GoogleGeocoder {
   async geocode(address: string): Promise<GeocodeResult> {
     if (!this.apiKey.trim()) return this.geocodeViaPlaces(address);
     let lastError = "Google geocoding request failed";
+    let lastHttp: number | null = null;
+    let lastProvider: string | null = null;
+    const started = performance.now();
+    // every real answer from the Geocoding API is evidence for the capabilities view (the Places fallback is not)
+    const evidence = (success: boolean, failure?: { http: number | null; provider: string | null; error: string }) =>
+      recordGoogleTelemetry({
+        api: "geocoding",
+        requestType: "geocode:json",
+        elapsedMs: performance.now() - started,
+        success,
+        status: success ? "available" : classifyGoogleFailure({ httpStatus: failure!.http, providerStatus: failure!.provider }),
+        error: failure?.error,
+        ...(failure && this.placesApiKey.trim() ? { fallbackSelected: "places_text_search" } : {}),
+      });
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const url = new URL(
@@ -63,20 +78,31 @@ export class GoogleGeocoder {
         });
         if (!response.ok) {
           lastError = `Google geocoding HTTP ${response.status}`;
+          lastHttp = response.status;
           if (response.status === 429 || response.status >= 500) continue;
+          evidence(false, { http: response.status, provider: null, error: lastError });
           return this.placesApiKey.trim()
             ? this.geocodeViaPlaces(address)
             : { status: "provider_failure", error: lastError };
         }
         const body = (await response.json()) as GoogleBody;
-        if (body.status === "ZERO_RESULTS")
+        if (body.status === "ZERO_RESULTS") {
+          evidence(true);
           return { status: "ambiguous", error: "No geocoding result" };
+        }
         if (
           body.status === "OVER_QUERY_LIMIT" ||
           body.status === "UNKNOWN_ERROR"
         ) {
           lastError = `Google geocoding returned ${body.status}`;
+          lastHttp = response.status;
+          lastProvider = body.status;
           continue;
+        }
+        if (body.status !== "OK") {
+          evidence(false, { http: response.status, provider: body.status ?? null, error: safeError(body.error_message ?? `Google geocoding returned ${body.status ?? "UNKNOWN"}`) });
+        } else {
+          evidence(true);
         }
         const result = body.results?.[0];
         const location = result?.geometry?.location;
@@ -114,8 +140,11 @@ export class GoogleGeocoder {
         };
       } catch (error) {
         lastError = safeError(error);
+        lastHttp = null;
+        lastProvider = null;
       }
     }
+    evidence(false, { http: lastHttp, provider: lastProvider, error: lastError });
     return { status: "transient_failure", error: lastError };
   }
 

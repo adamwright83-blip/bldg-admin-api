@@ -38,6 +38,23 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
   return out;
 }
 
+/**
+ * Google's own reason for a refusal, e.g. " (SERVICE_DISABLED)" when the API isn't enabled in the OAuth client's
+ * Cloud project, or " (ACCESS_TOKEN_SCOPE_INSUFFICIENT)" when the person didn't grant the scope. Codes only: never a
+ * message body, never a token.
+ */
+async function googleReason(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as {
+      error?: { status?: string; details?: Array<{ reason?: string }>; errors?: Array<{ reason?: string }> };
+    };
+    const reason = body.error?.details?.find(detail => detail.reason)?.reason ?? body.error?.errors?.find(error => error.reason)?.reason ?? body.error?.status;
+    return reason && /^[A-Za-z_]{2,64}$/.test(reason) ? ` (${reason})` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function googleClient(access: GoogleAccess, deps: Deps = {}) {
   const fetcher = deps.fetch ?? fetch;
   const now = deps.now ?? (() => new Date());
@@ -66,7 +83,7 @@ export function googleClient(access: GoogleAccess, deps: Deps = {}) {
           await refresh();
           continue;
         }
-        if (!response.ok) throw new ProviderError("google", response.status, `Google answered ${response.status}`);
+        if (!response.ok) throw new ProviderError("google", response.status, `Google answered ${response.status}${await googleReason(response)}`);
         return as === "json" ? await response.json() : await response.text();
       } finally {
         clearTimeout(timer);
