@@ -1,0 +1,451 @@
+{
+  "schemaVersion": 1,
+  "program": "E0/E1",
+  "basis": {
+    "repository": "adamwright83-blip/bldg-admin-api",
+    "main": "7ba7310df76a142c053c9c2c857b750e207cb221",
+    "certification": "docs/architecture/PROGRAM_D_CERTIFICATION.md",
+    "phase": "classified; physical moves deferred"
+  },
+  "invariant": "One owning domain -> one legal write path -> explicit evidence -> canonical read surface -> downstream consumer",
+  "pathGroups": [
+    {
+      "classification": "business-authority",
+      "names": [
+        "orders",
+        "authority",
+        "money",
+        "commercialPipeline",
+        "commercialMissions",
+        "commercialProposals",
+        "commercialCampaigns",
+        "geography",
+        "canonicalBuilding",
+        "territory"
+      ],
+      "paths": [
+        "server/orders",
+        "server/authority",
+        "server/money",
+        "server/commercialPipeline",
+        "server/commercialMissions",
+        "server/commercialProposals",
+        "server/commercialCampaigns",
+        "server/geography",
+        "server/canonicalBuilding",
+        "server/territory"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "business-read-and-operations",
+      "names": [
+        "analytics",
+        "churnRadar",
+        "customerAssets",
+        "field",
+        "strategy",
+        "salesIntel",
+        "campaignRuns",
+        "missionSalesBrief",
+        "nightShift",
+        "goldlineOnboarding",
+        "franchise",
+        "marketplacePayments"
+      ],
+      "paths": [
+        "server/analytics",
+        "server/churnRadar",
+        "server/customerAssets",
+        "server/field",
+        "server/strategy",
+        "server/salesIntel",
+        "server/campaignRuns",
+        "server/missionSalesBrief",
+        "server/nightShift",
+        "server/goldlineOnboarding",
+        "server/franchise",
+        "server/marketplacePayments"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "agents-and-planning",
+      "names": [
+        "agents",
+        "claire",
+        "daphne",
+        "operatorRepresentative",
+        "persistentOperator",
+        "missionDirector",
+        "dayDirector",
+        "planning",
+        "weeklyGrowthCandidates",
+        "president",
+        "mitch",
+        "learning",
+        "behavioralExperiment",
+        "behavioralLedger",
+        "behavioralSelection",
+        "executionIntelligence",
+        "operatorArtifact"
+      ],
+      "paths": [
+        "server/agents",
+        "server/claire",
+        "server/daphne",
+        "server/operatorRepresentative",
+        "server/persistentOperator",
+        "server/missionDirector",
+        "server/dayDirector",
+        "server/planning",
+        "server/weeklyGrowthCandidates",
+        "server/president",
+        "server/mitch",
+        "server/learning",
+        "server/behavioralExperiment",
+        "server/behavioralLedger",
+        "server/behavioralSelection",
+        "server/executionIntelligence",
+        "server/operatorArtifact"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "experience-and-game",
+      "names": [
+        "armory",
+        "businessWorld",
+        "campaignLibrary",
+        "companions",
+        "driverGameWorld",
+        "fictionPacks",
+        "goldlineCargo",
+        "goldlineKingdoms",
+        "goldlineProgression",
+        "goldlineVerification",
+        "goldlineWorld",
+        "grow",
+        "impactSignals",
+        "lanternCity",
+        "narratorOs",
+        "openChannel",
+        "rookContact",
+        "spiritHumanRescue",
+        "towerWars",
+        "unload",
+        "worldForge"
+      ],
+      "paths": [
+        "server/armory",
+        "server/businessWorld",
+        "server/campaignLibrary",
+        "server/companions",
+        "server/driverGameWorld",
+        "server/fictionPacks",
+        "server/goldlineCargo",
+        "server/goldlineKingdoms",
+        "server/goldlineProgression",
+        "server/goldlineVerification",
+        "server/goldlineWorld",
+        "server/grow",
+        "server/impactSignals",
+        "server/lanternCity",
+        "server/narratorOs",
+        "server/openChannel",
+        "server/rookContact",
+        "server/spiritHumanRescue",
+        "server/towerWars",
+        "server/unload",
+        "server/worldForge"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "integrations-and-external-evidence",
+      "names": [
+        "cleancloudBrowserSync",
+        "externalOrders",
+        "externalSystems",
+        "google",
+        "googleCalendar",
+        "twilioPlatform"
+      ],
+      "paths": [
+        "server/cleancloudBrowserSync",
+        "server/externalOrders",
+        "server/externalSystems",
+        "server/google",
+        "server/googleCalendar",
+        "server/twilioPlatform"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "platform-and-saas",
+      "names": [
+        "_core",
+        "businessEvents",
+        "capabilities",
+        "clientFatal",
+        "durableExecution",
+        "identity",
+        "saas",
+        "schema",
+        "team"
+      ],
+      "paths": [
+        "server/_core",
+        "server/businessEvents",
+        "server/capabilities",
+        "server/clientFatal",
+        "server/durableExecution",
+        "server/identity",
+        "server/saas",
+        "server/schema",
+        "server/team"
+      ],
+      "status": "inventory-only-not-yet-moved"
+    },
+    {
+      "classification": "historical-legacy",
+      "names": [
+        "legacyDayforgeCoaching",
+        "legacyDayforgeDemo",
+        "legacyDayforgeEvents",
+        "legacyDayforgeProof",
+        "legacyDayforgeRelease",
+        "legacyDayforgeRetention",
+        "legacyDayforgeSecurity",
+        "legacyDayforgeToday"
+      ],
+      "paths": [
+        "server/legacyDayforgeCoaching",
+        "server/legacyDayforgeDemo",
+        "server/legacyDayforgeEvents",
+        "server/legacyDayforgeProof",
+        "server/legacyDayforgeRelease",
+        "server/legacyDayforgeRetention",
+        "server/legacyDayforgeSecurity",
+        "server/legacyDayforgeToday"
+      ],
+      "status": "compatibility-review-before-quarantine"
+    },
+    {
+      "classification": "mixed-verify-before-moving",
+      "names": [
+        "goldline",
+        "joystick",
+        "procurement"
+      ],
+      "paths": [
+        "server/goldline",
+        "server/joystick",
+        "server/procurement"
+      ],
+      "status": "mixed-needs-split"
+    }
+  ],
+  "concepts": [
+    {
+      "concept": "Orders lifecycle",
+      "owner": "Orders",
+      "writePath": "server/orders/orderLifecycleService.ts",
+      "readPath": "server/orders/orderHistoryReadService.ts",
+      "consumers": "Driver, admin, resident intake",
+      "rule": "Native lifecycle is Orders-owned; Driver is not Vendor.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Native payment admission",
+      "owner": "Payment",
+      "writePath": "server/authority/paymentAdmission.ts",
+      "readPath": "server/authority/nativePaymentReadService.ts",
+      "consumers": "Orders, Commercial, analytics, world projections",
+      "rule": "Payment occurrence and captured dollars require distinct evidence. Editable order totals are not historical captured dollars.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Admitted economic read",
+      "owner": "Money / Payments",
+      "writePath": "server/authority/paymentAdmission.ts",
+      "readPath": "server/analytics/paidOrderLedger.ts",
+      "consumers": "Commercial, Strategy, Money, game",
+      "rule": "Unknown historical captured amounts remain unknown.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Commercial conversion",
+      "owner": "Commercial",
+      "writePath": "server/commercialPipeline/commercialPipelineService.ts",
+      "readPath": "server/commercialPipeline/commercialAccountReadService.ts",
+      "consumers": "Strategy, Planning, game projections",
+      "rule": "Won means accepted/verbal conversion, not payment.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Commercial field outcomes",
+      "owner": "Commercial",
+      "writePath": "server/commercialMissions/commercialMissionStore.ts",
+      "readPath": "server/commercialPipeline/commercialAccountReadService.ts",
+      "consumers": "Planning, game",
+      "rule": "Do not manufacture visits, sales, or rewards from fictional progress.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "External CleanCloud evidence",
+      "owner": "External integration / evidence",
+      "writePath": "server/cleancloudBrowserSync/ingestion.ts",
+      "readPath": "server/cleancloudBrowserSync/assimilateCustomerTruth.ts",
+      "consumers": "Customer aggregates, operational projections",
+      "rule": "External observations do not grant native Payment authority. Tenantless legacy importer is explicitly held.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Driver order execution",
+      "owner": "Driver interface to Orders",
+      "writePath": "server/joystick/driverOrderService.ts",
+      "readPath": "server/joystick/driverOrderStore.ts",
+      "consumers": "Driver app",
+      "rule": "Driver adapter delegates lifecycle mutation to canonical Orders service.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Daily prioritization",
+      "owner": "Mission Director",
+      "writePath": "server/missionDirector/missionDirectorService.ts",
+      "readPath": "server/missionDirector/missionDirectorTypes.ts",
+      "consumers": "Day Line, Driver",
+      "rule": "Mission Director is deterministic ranker; other agents propose candidates.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Day Line commitments",
+      "owner": "Day Director / Planning",
+      "writePath": "server/dayDirector/dayDirectorService.ts",
+      "readPath": "server/dayDirector/workdayPlanSnapshotStore.ts",
+      "consumers": "Claire, Driver, operator",
+      "rule": "Day Line planned work is not proof of completion.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Operator decisions",
+      "owner": "Persistent Operator",
+      "writePath": "server/persistentOperator/decisionEngine.ts",
+      "readPath": "server/persistentOperator/obligationStore.ts",
+      "consumers": "Claire and mission candidate pipeline",
+      "rule": "Operator learning does not override business authority or the ranking owner.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Claire conversation",
+      "owner": "Claire",
+      "writePath": "server/claire/turn/claireTurn.ts",
+      "readPath": "server/claire/contextAssembler.ts",
+      "consumers": "Voice and admin interaction",
+      "rule": "Conversation style does not override source-backed customer/payment truth.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Daphne interaction preferences",
+      "owner": "Daphne",
+      "writePath": "server/daphne/explicitPreferenceCorrection.ts",
+      "readPath": "server/daphne/claireAdapter.ts",
+      "consumers": "Claire",
+      "rule": "PR #495 owns frozen Daphne/Claire paths until its merge; do not move or edit them.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Daphne Stage 3B consent",
+      "owner": "Operator Representative / Daphne",
+      "writePath": "server/operatorRepresentative/directives.ts",
+      "readPath": "server/operatorRepresentative/adaptation.ts",
+      "consumers": "Claire",
+      "rule": "Keep only the explicitly wired deferral/dismissal adaptation target.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "President company improvement",
+      "owner": "President",
+      "writePath": "server/president/",
+      "readPath": "server/president/",
+      "consumers": "Company executive workflow",
+      "rule": "President never manages Mitch; operator approves chosen work before execution.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Mitch game production",
+      "owner": "Mitch",
+      "writePath": "server/mitch/",
+      "readPath": "server/mitch/",
+      "consumers": "Game asset/production workflow",
+      "rule": "Mitch is directed independently by operator, not President.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Game and world projections",
+      "owner": "Game / Reality Bridge",
+      "writePath": "server/goldlineWorld/",
+      "readPath": "server/lanternCity/",
+      "consumers": "Admin Lantern City, narrative, gameplay",
+      "rule": "World consumes source-backed business reality and never writes invented business success.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "SaaS tenancy",
+      "owner": "SaaS",
+      "writePath": "server/saas/",
+      "readPath": "server/joystick/tenantIdentity.ts",
+      "consumers": "All domain operations",
+      "rule": "Never synthesize default tenant from missing authority.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Resident agent tools",
+      "owner": "Agent Runtime",
+      "writePath": "server/agents/permissions.ts",
+      "readPath": "server/agents/s2sEndpoint.ts",
+      "consumers": "External resident app",
+      "rule": "Preserve externally used tool names/shapes and tenant/approval enforcement.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    },
+    {
+      "concept": "Durable execution",
+      "owner": "Platform",
+      "writePath": "server/durableExecution/worker.ts",
+      "readPath": "server/durableExecution/worker.ts",
+      "consumers": "Jobs, outbox, workers",
+      "rule": "Workers execute admitted actions, not second business-logic authority.",
+      "verification": "repository-path-present-not-API-exhaustive"
+    }
+  ],
+  "protectedWorkstreams": {
+    "daphnePr": 495,
+    "stateAtClassification": "open",
+    "frozenPaths": [
+      "server/claire/proactive/boardService.test.ts",
+      "server/claire/proactive/boardService.ts",
+      "server/claire/turn/claireTurn.ts",
+      "server/claire/turn/daphneV2RuntimeCorrection.mysql.integration.test.ts",
+      "server/claire/turn/daphneV2RuntimeCorrection.test.ts",
+      "server/daphne/claireAdapter.ts",
+      "server/daphne/explicitPreferenceCorrection.test.ts",
+      "server/daphne/explicitPreferenceCorrection.ts"
+    ],
+    "alsoRespect": [
+      476,
+      375,
+      411,
+      374,
+      359,
+      361
+    ]
+  },
+  "explicitUnknowns": [
+    "Full call-site API contracts require source-level verification before physical moves",
+    "Folder presence does not grant write authority",
+    "Several business/game/composition directories are mixed and must be split by responsibility before rename",
+    "Legacy-labelled paths may remain live compatibility endpoints",
+    "Do not claim independent cold-model exam passed from this map alone"
+  ]
+}
