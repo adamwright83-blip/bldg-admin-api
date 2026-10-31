@@ -25,6 +25,7 @@ import { LetterScene } from "./chapter/LetterScene";
 import { DraftTable } from "./chapter/DraftTable";
 import { ActivationCard } from "./chapter/ActivationCard";
 import { SendDesk } from "./chapter/SendDesk";
+import { WorkspaceKey } from "./chapter/WorkspaceKey";
 import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
 import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
 import { draftStatusLine } from "@shared/firstTenMinutesActivation";
@@ -322,6 +323,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
             notice={notice}
           />
         ) : null}
+        {view.owner ? <WorkspaceKey activation={view} credentials={credentials} /> : null}
       </>
     );
   }
@@ -453,6 +455,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               }
             >
               {onFirstChapter && firstChapter.data ? <AskClaire view={firstChapter.data} onAsk={ask} onCourtyard={toCourtyard} /> : null}
+              {onFirstChapter && activation.data?.owner && credentials ? <WorkspaceKey activation={activation.data} credentials={credentials} /> : null}
             </PortraitPage>
           ) : null}
           {crewFinished && portrait.data?.status === "failed" ? (
