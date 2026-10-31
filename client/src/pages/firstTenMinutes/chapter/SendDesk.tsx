@@ -32,6 +32,8 @@ export function SendDesk({
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [problem, setProblem] = useState<string | null>(notice);
+  // Google refused to send despite the stored grant (revoked or narrowed since): ask for permission again
+  const [refused, setRefused] = useState(false);
   const name = draft.to.name ?? draft.to.address;
   const firstName = draft.to.name?.split(/\s+/)[0] ?? draft.to.address;
   const recipient = draft.to.name ? `${draft.to.name} <${draft.to.address}>` : draft.to.address;
@@ -62,7 +64,10 @@ export function SendDesk({
       const outcome = await onSend({ to: draft.to.address, subject: draft.subject, body: draft.body });
       setConfirming(false);
       if (outcome === "failed") setProblem("Google didn't send it. Nothing went; your message is still here. You can try again.");
-      if (outcome === "needs_permission") setProblem("Google hasn't allowed JOYSTICK to send from this account yet.");
+      if (outcome === "needs_permission") {
+        setRefused(true);
+        setProblem("Google didn't allow JOYSTICK to send from this account. Nothing was sent; allow it again to send from here.");
+      }
     });
   }
 
@@ -89,7 +94,7 @@ export function SendDesk({
     );
   }
 
-  const allowed = Boolean(activation.sendFrom) && activation.canSend;
+  const allowed = Boolean(activation.sendFrom) && activation.canSend && !refused;
   return (
     <section className={styles.sendDesk} data-testid="first-ten-send" data-status={draft.status}>
       <dl className={styles.sendMessage} data-testid="first-ten-send-message">

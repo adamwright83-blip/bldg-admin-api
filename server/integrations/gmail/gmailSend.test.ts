@@ -47,7 +47,7 @@ function memoryLedger(): SendLedger & { rows: Map<string, SendRecord> } {
 
 type Call = { method: string; url: string; body: string | null; token: string };
 /** Gmail, played: `send` answers each POST in turn; the Sent folder holds whatever `sentFolder` says. */
-function gmail(options: { send?: Array<"ok" | "lost" | "accepted_then_lost" | 400 | 401 | 403 | 503>; sentFolder?: () => Array<{ id: string; rfc822: string }> } = {}) {
+function gmail(options: { send?: Array<"ok" | "lost" | "accepted_then_lost" | 400 | 401 | 403 | 503>; sentFolder?: () => Array<{ id: string; rfc822: string }>; lookup?: number } = {}) {
   const calls: Call[] = [];
   const sends = [...(options.send ?? ["ok"])];
   const folder: Array<{ id: string; rfc822: string }> = [];
@@ -67,6 +67,7 @@ function gmail(options: { send?: Array<"ok" | "lost" | "accepted_then_lost" | 40
       folder.push({ id: `g-${folder.length + 1}`, rfc822 });
       return Response.json({ id: `g-${folder.length}`, threadId: "t-1", labelIds: ["SENT"] });
     }
+    if (options.lookup) return new Response("{}", { status: options.lookup });
     const q = new URL(call.url).searchParams.get("q") ?? "";
     const wanted = q.match(/rfc822msgid:(\S+)/)?.[1];
     const found = [...folder, ...(options.sentFolder?.() ?? [])].filter(item => item.rfc822.replace(/^<|>$/g, "") === wanted);
@@ -194,6 +195,18 @@ describe("sending from the person's own Gmail", () => {
     now = new Date("2026-10-31T18:00:00Z");
     expect(await send({ ledger, fetch: google.fetch, now: () => now }, { access: sendOnly })).toEqual({ status: "sending" });
     expect(await checkSend({ key: "first_ten:j1", access: sendOnly }, { ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
+    expect(google.posts()).toHaveLength(1);
+  });
+
+  it("a Sent folder that can't be read proves nothing: a lost answer is never sent again on it (#779 review)", async () => {
+    const ledger = memoryLedger();
+    let now = new Date("2026-10-31T17:00:00Z");
+    const google = gmail({ send: ["lost", "ok"], lookup: 503 });
+    expect(await send({ ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
+    for (const later of ["2026-10-31T17:05:00Z", "2026-10-31T19:00:00Z", "2026-11-01T17:00:00Z"]) {
+      now = new Date(later);
+      expect(await send({ ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
+    }
     expect(google.posts()).toHaveLength(1);
   });
 

@@ -186,25 +186,33 @@ const sentOutcome = (record: Pick<SendRecord, "gmailMessageId" | "gmailThreadId"
   already,
 });
 
+type Settled = { outcome: SendOutcome; record: SendRecord | null; absentFromSent: boolean };
+
+/** Looks in Sent for a send whose answer was lost; `absentFromSent` only when the folder was read and it isn't there. */
+async function settle(key: string, access: GmailSendAccess, deps: Deps): Promise<Settled> {
+  const record = await deps.ledger.find(key);
+  if (!record) return { outcome: { status: "sending" }, record: null, absentFromSent: false };
+  if (record.status === "sent") return { outcome: sentOutcome(record, true), record, absentFromSent: false };
+  if (record.status === "failed") return { outcome: { status: "failed", reason: record.failure ?? "Google refused it." }, record, absentFromSent: false };
+  const now = (deps.now ?? (() => new Date()))();
+  if (record.status === "sending" && now.getTime() - record.lastAttemptAt.getTime() < IN_FLIGHT_MS) return { outcome: { status: "sending" }, record, absentFromSent: false };
+  const found = await lookInSent(record, access, deps);
+  if (found && found !== "unreadable") {
+    const outcome = { status: "sent" as const, gmailMessageId: found.id, gmailThreadId: found.threadId, sentAt: record.lastAttemptAt, failure: null };
+    await deps.ledger.settle(key, outcome);
+    return { outcome: sentOutcome(outcome, true), record, absentFromSent: false };
+  }
+  if (record.status === "sending") await deps.ledger.settle(key, { status: "unknown", gmailMessageId: null, gmailThreadId: null, sentAt: null, failure: null });
+  return { outcome: { status: "sending" }, record: { ...record, status: "unknown" }, absentFromSent: found === null };
+}
+
 /**
  * Settles a send whose answer was lost, from the Sent folder. Sent (with Google's id), or still `sending`: an
  * unknown send is never claimed, and never tried again here.
  */
 export async function checkSend(input: { key: string; access: GmailSendAccess }, deps: Deps): Promise<SendOutcome | null> {
-  const record = await deps.ledger.find(input.key);
-  if (!record) return null;
-  if (record.status === "sent") return sentOutcome(record, true);
-  if (record.status === "failed") return { status: "failed", reason: record.failure ?? "Google refused it." };
-  const now = (deps.now ?? (() => new Date()))();
-  if (record.status === "sending" && now.getTime() - record.lastAttemptAt.getTime() < IN_FLIGHT_MS) return { status: "sending" };
-  const found = await lookInSent(record, input.access, deps);
-  if (found && found !== "unreadable") {
-    const outcome = { status: "sent" as const, gmailMessageId: found.id, gmailThreadId: found.threadId, sentAt: record.lastAttemptAt, failure: null };
-    await deps.ledger.settle(input.key, outcome);
-    return sentOutcome(outcome, true);
-  }
-  if (record.status === "sending") await deps.ledger.settle(input.key, { status: "unknown", gmailMessageId: null, gmailThreadId: null, sentAt: null, failure: null });
-  return { status: "sending" };
+  if (!(await deps.ledger.find(input.key))) return null;
+  return (await settle(input.key, input.access, deps)).outcome;
 }
 
 /**
@@ -223,12 +231,12 @@ export async function sendApprovedEmail(
   let record = await deps.ledger.find(input.key);
   if (record?.status === "sent") return sentOutcome(record, true);
   if (record && record.status !== "failed") {
-    // in flight, or its answer was lost: settle it from the Sent folder; try again only once it can't have gone
-    const settled = await checkSend({ key: input.key, access: input.access }, deps);
-    if (settled?.status !== "sending") return settled ?? { status: "sending" };
-    record = (await deps.ledger.find(input.key))!;
-    if (record.status !== "unknown" || now().getTime() - record.lastAttemptAt.getTime() < SETTLE_MS) return { status: "sending" };
-    if (!input.access.grantedScopes.includes(GMAIL_READ_SCOPE)) return { status: "sending" };
+    // in flight, or its answer was lost: settle it from the Sent folder. It is tried again only when the folder was
+    // actually read, long enough after, and doesn't have it; a folder that couldn't be read proves nothing
+    const settled = await settle(input.key, input.access, deps);
+    if (settled.outcome.status !== "sending" || !settled.record) return settled.outcome;
+    record = settled.record;
+    if (!settled.absentFromSent || record.status !== "unknown" || now().getTime() - record.lastAttemptAt.getTime() < SETTLE_MS) return { status: "sending" };
   }
   if (!canSendFrom(input.access)) return { status: "needs_permission" };
 

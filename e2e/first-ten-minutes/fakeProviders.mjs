@@ -194,7 +194,10 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname;
 
   if (path === "/__control" && req.method === "POST") {
-    control = { ...control, ...JSON.parse(body || "{}") };
+    const { revokeSend, ...changes } = JSON.parse(body || "{}");
+    // the person took JOYSTICK's permission to send away at Google, behind JOYSTICK's back
+    if (revokeSend) sendGranted = false;
+    control = { ...control, ...changes };
     return send(res, 200, { ok: true, control });
   }
   if (path === "/__reset" && req.method === "POST") {

@@ -87,6 +87,16 @@ test("the person's own words go exactly as approved; a refusal keeps the message
   await expect(page.getByTestId("first-ten-send-message")).toContainText("Shall I bring a sample this Friday?");
   await allowSending(page);
 
+  // permission taken away at Google since: nothing went, and permission can be given again from the table
+  await request.post(`${FAKE}/__control`, { data: { revokeSend: true } });
+  await page.getByTestId("first-ten-send-start").click();
+  await page.getByTestId("first-ten-send-now").click();
+  await expect(page.getByTestId("first-ten-send-problem")).toHaveText(
+    "Google didn't allow JOYSTICK to send from this account. Nothing was sent; allow it again to send from here."
+  );
+  await expect(page.getByTestId("first-ten-send")).toHaveAttribute("data-status", "prepared");
+  await allowSending(page);
+
   // Google refuses it: nothing went, and the message is still at the table
   await request.post(`${FAKE}/__control`, { data: { sendAnswer: "refuse" } });
   await page.getByTestId("first-ten-send-start").click();
