@@ -211,6 +211,91 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
   });
 
+  test("Route C: No eligible business opportunity (opportunity = null) -> Outbound upper -> Key capture -> Alternate lower return in NOW (Zero email send)", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    // Intercept chapter query to simulate an operator with NO eligible business opportunity
+    await page.route("**/api/trpc/*", async route => {
+      const decoded = decodeURIComponent(route.request().url());
+      if (!decoded.includes("firstTenMinutes.chapter")) {
+        return route.continue();
+      }
+      try {
+        const response = await route.fetch();
+        const json = await response.json();
+        const stripOpp = (target: any) => {
+          if (!target) return;
+          if (target.json && typeof target.json === "object") {
+            target.json.opportunity = null;
+            target.json.draft = null;
+          }
+          if ("opportunity" in target) {
+            target.opportunity = null;
+            target.draft = null;
+          }
+        };
+        if (Array.isArray(json)) {
+          for (const item of json) {
+            if (item?.result?.data) stripOpp(item.result.data);
+          }
+        } else if (json?.result?.data) {
+          stripOpp(json.result.data);
+        }
+        await route.fulfill({ json });
+      } catch {
+        return route.continue().catch(() => undefined);
+      }
+    });
+
+    await advanceToMachineWithExample(page);
+
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible();
+
+    // Verify no inspect note button exists when there is no opportunity
+    await expect(page.getByTestId("machine-toggle-correspondence")).toHaveCount(0);
+
+    // Outbound solve in THEN
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-dial", "NOW", { timeout: 15_000 });
+
+    // Solve lower route in NOW
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-lower-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-lower-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank for lower return trip
+    await page.getByTestId("machine-wind-crank").click();
+
+    // Dome unlocks, Rook escapes, ending appears — 100% complete without business opportunity or email send!
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+  });
+
   test("Mobile responsive layout, camera panning, and Screenshot 10", async ({ page }) => {
     test.setTimeout(180_000);
     // Set viewport to mobile portrait

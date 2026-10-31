@@ -458,6 +458,16 @@ export function MachineCorrespondence({
                     notice={connectNotice}
                   />
                 ) : null}
+
+                {draft.status === "verified_sent" ? (
+                  <div
+                    className={styles.closingBeatNote}
+                    data-testid="first-ten-closing"
+                    data-outcome="sent"
+                  >
+                    <p>Hazel notices the ink on your hand.</p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

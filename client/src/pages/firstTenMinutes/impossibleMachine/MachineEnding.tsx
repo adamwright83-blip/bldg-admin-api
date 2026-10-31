@@ -18,14 +18,17 @@ interface MachineEndingProps {
 export function MachineEnding({ state, draftStatus = null, onContinueToPage, children }: MachineEndingProps) {
   const reduce = useReducedMotion();
 
+  // The ending banner and comedic theft art ONLY render after the actual rescue of Rook from the dome
+  if (!state.domeUnlocked) return null;
+
+  // Only verified provider evidence licenses the claim that an email was sent from Gmail.
+  // Reported sent, unverified sending, or handed off do not license this claim.
   const outcomeKind =
-    draftStatus === "verified_sent" || draftStatus === "reported_sent" || state.centerBridgeRestored
+    draftStatus === "verified_sent" || state.centerBridgeRestored
       ? "sent"
       : draftStatus === "declined"
         ? "not_now"
         : null;
-
-  if (!state.domeUnlocked && !outcomeKind) return null;
 
   return (
     <motion.section
@@ -47,22 +50,16 @@ export function MachineEnding({ state, draftStatus = null, onContinueToPage, chi
           />
         </div>
         <div className={styles.endingTextCol}>
-          <span className={styles.endingTag}>
-            {state.domeUnlocked ? "DOME UNLOCKED · ROOK IS FREE" : "CENTRAL COUPLING UPDATED"}
-          </span>
+          <span className={styles.endingTag}>DOME UNLOCKED · ROOK IS FREE</span>
           <h2 className={styles.endingTitle}>
-            {state.domeUnlocked
-              ? "Rook checks that no one is looking, then tries to slide the entire railway into his satchel."
-              : outcomeKind === "sent"
-                ? "The central brass bridge locked into place."
-                : "The note stays tucked in the brass clip for later."}
+            Rook checks that no one is looking, then tries to slide the entire railway into his satchel.
           </h2>
           <p className={styles.endingSub}>
             {outcomeKind === "sent"
               ? "Your message went out from your Gmail. Hazel notices the ink on your hand. Rook has already claimed the central turntable as salvage."
               : "The lower NOW turntable carries the key home. Rook is already trying to fold the brass chimney so the machine fits in his bag."}
           </p>
-          {state.domeUnlocked && onContinueToPage ? (
+          {onContinueToPage ? (
             <div className={styles.endingActions}>
               <button
                 type="button"

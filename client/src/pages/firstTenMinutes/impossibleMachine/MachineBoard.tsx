@@ -220,7 +220,6 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
       data-dome-unlocked={state.domeUnlocked ? "yes" : "no"}
       data-rook-stealing={state.rookStealing ? "yes" : "no"}
     >
-      <div data-testid="first-ten-revelation" style={{ display: "contents" }} />
       {/* Top Status & Mobile Camera Focus Bar */}
       <div className={styles.topUtilityBar}>
         <div className={styles.statusReadout} data-testid="machine-status-readout">

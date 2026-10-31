@@ -855,6 +855,17 @@
   font-weight: 600;
 }
 
+.closingBeatNote {
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: rgba(201, 138, 53, 0.12);
+  border: 1px solid #c98a35;
+  color: #2a2119;
+  font-size: 15px;
+  font-style: italic;
+  font-family: serif;
+}
+
 .bridgeRestoredBanner {
   padding: 12px 16px;
   border-radius: 6px;

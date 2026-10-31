@@ -76,11 +76,13 @@ test("Nina's portrait: Astra's page, changed in Nina's own hand, and kept", asyn
   await expect(page.getByTestId("first-ten-portrait-controls")).toHaveCount(0);
   await shots("32-portrait-kept", page, testInfo);
 
-  // kept, the page gives way to what Claire wanted to show; a reload goes on from there, the crew not introducing
-  // itself again (the kept page, with Nina's words, is checked on MySQL in portrait.mysql.integration.test.ts)
-  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 20_000 });
+  // kept, the page gives way to what Claire wanted to show: The Impossible Machine; a reload goes on from there,
+  // the crew not introducing itself again (the kept page, with Nina's words, is checked on MySQL in portrait.mysql.integration.test.ts)
+  await expect(page.getByTestId("first-ten-impossible-machine")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("machine-board-stage")).toBeVisible();
   await page.reload();
-  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("first-ten-impossible-machine")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("machine-board-stage")).toBeVisible();
   await expect(page.getByTestId("first-ten-crew-line")).toHaveCount(0);
 });
 
