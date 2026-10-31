@@ -25,6 +25,14 @@ import {
   loadClaireIdentityTruth,
   type ClaireIdentityTruth,
 } from "./identityTruth";
+import {
+  signupKnowledgeForBriefing,
+  type AwaitingReplies,
+  type OnboardingKnowledge,
+  type SignupKnowledgeBriefing,
+} from "../../shared/firstTenMinutesKnowledge";
+import { readTenantOnboardingKnowledge } from "../firstTenMinutes/knowledge/tenantKnowledge";
+import { cachedAwaitingReplies } from "../firstTenMinutes/knowledge/awaitingReplies";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -150,6 +158,17 @@ export type ClaireDriveContext = {
   communications?: ClaireCommunicationsContextPort;
   /** Authority-0 platform identity plus authority-1 tenant/account identity. */
   identityTruth?: ClaireIdentityTruth;
+  /**
+   * What JOYSTICK's crew read from the operator's own accounts at signup, compact, every fact with its finding id
+   * (the same briefing Claire Desk's showrunner gets): history, not current business truth. Absent (never null) when
+   * there is none or it could not be read, so it never appears in the serialized prompt unless it is real.
+   */
+  signupKnowledge?: SignupKnowledgeBriefing;
+  /**
+   * Who the operator is waiting to hear back from, and who wrote back, from their own Gmail as last read: the short
+   * cache only, never a live Gmail read during a turn. Absent when nothing is cached.
+   */
+  awaitingReplies?: AwaitingReplies;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -338,10 +357,19 @@ export async function assembleClaireDriveContext(input: {
   missionId?: number;
   now?: Date;
   timeZone?: string;
+  /** Test seams. Production reads the tenant's own First Ten Minutes journey and the awaiting-replies cache. */
+  loadSignupKnowledge?: (tenantId: string) => Promise<OnboardingKnowledge | null>;
+  cachedAwaitingReplies?: (tenantId: string) => AwaitingReplies | null;
 }): Promise<ClaireDriveContext> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   const clock = buildClaireClock(now, timeZone);
+  // A database read, started now so it runs alongside the reads below rather than after them. Any failure (no
+  // database, no journey for this tenant) leaves the field absent; it never fails the turn.
+  const signupKnowledgeRead: Promise<SignupKnowledgeBriefing | undefined> = Promise.resolve()
+    .then(() => (input.loadSignupKnowledge ?? readTenantOnboardingKnowledge)(input.tenantId))
+    .then(knowledge => signupKnowledgeForBriefing(knowledge, timeZone) ?? undefined)
+    .catch(() => undefined);
   let today: any = { timeline: [], blockers: [], businessDate: clock.businessDate, nextFixedCommitment: null, items: [] };
   let tomorrow: any = { timeline: [], blockers: [], businessDate: clock.tomorrowBusinessDate, nextFixedCommitment: null, items: [] };
   try {
@@ -457,6 +485,15 @@ export async function assembleClaireDriveContext(input: {
     // Non-fatal strategy snapshot fallback
   }
 
+  const signupKnowledge = await signupKnowledgeRead;
+  // Only what the last read of their Gmail already holds: a turn never waits on Google.
+  let awaitingReplies: AwaitingReplies | undefined;
+  try {
+    awaitingReplies = (input.cachedAwaitingReplies ?? cachedAwaitingReplies)(input.tenantId) ?? undefined;
+  } catch {
+    awaitingReplies = undefined;
+  }
+
   const assembled: ClaireDriveContext = {
     phase: input.phase,
     generatedAt: now.toISOString(),
@@ -490,6 +527,8 @@ export async function assembleClaireDriveContext(input: {
     strategySnapshotId: strategySnapshot?.id ?? null,
     strategySnapshot,
     ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
+    ...(signupKnowledge ? { signupKnowledge } : {}),
+    ...(awaitingReplies ? { awaitingReplies } : {}),
   };
   assembled.runtime = assembleClaireRuntimeView(assembled, now);
   assembled.communications = await loadClaireCommunicationsContext({
