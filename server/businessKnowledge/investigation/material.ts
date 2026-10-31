@@ -58,6 +58,8 @@ export function dateIn(text: string): Date | null {
 export class MaterialBook {
   private readonly items = new Map<string, Material>();
   private readonly byKey = new Map<string, string>();
+  /** handles added or expanded (a snippet replaced by a fuller read) since the interpreter last took them */
+  private readonly changed = new Set<string>();
   private next = 1;
 
   constructor(private readonly ownerEmail: string) {}
@@ -68,14 +70,25 @@ export class MaterialBook {
     if (known) {
       const existing = this.items.get(known)!;
       // a fuller read of the same item replaces a snippet
-      if (item.text.length > existing.text.length) this.items.set(known, { ...existing, ...item, handle: known });
+      if (item.text.length > existing.text.length) {
+        this.items.set(known, { ...existing, ...item, handle: known });
+        this.changed.add(known);
+      }
       return this.items.get(known)!;
     }
     const handle = `S${this.next++}`;
     const material = { ...item, handle };
     this.items.set(handle, material);
     this.byKey.set(key, handle);
+    this.changed.add(handle);
     return material;
+  }
+
+  /** Everything new or expanded since the last call: what the interpreter hasn't read yet in its current form. */
+  takeChanged(): Material[] {
+    const out = [...this.changed].map(handle => this.items.get(handle)!).filter(Boolean);
+    this.changed.clear();
+    return out.sort((a, b) => Number(a.handle.slice(1)) - Number(b.handle.slice(1)));
   }
 
   get(handle: string): Material | undefined {

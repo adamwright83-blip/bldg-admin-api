@@ -200,7 +200,8 @@ export type TimelineInput = {
 /** What happened, when, on which evidence. The same event from the same evidence is stored once. */
 export async function recordTimelineEvent(scope: KnowledgeScope, runId: string | null, input: TimelineInput, now = new Date()): Promise<string> {
   const db = await knowledgeDb();
-  const id = hashId(scope.journeyId, input.entityId, input.relatedEntityId, input.kind, input.evidenceId);
+  // the signal is part of what an event is: the same quote can be both a mention and the owner's own act
+  const id = hashId(scope.journeyId, input.entityId, input.relatedEntityId, input.kind, input.signal, input.evidenceId);
   await db
     .insert(bkTimeline)
     .values({
@@ -311,7 +312,18 @@ export async function assertClaim(scope: KnowledgeScope, input: AssertionInput):
     const conflicts = live.filter(row => row.state === "conflict");
     // the same answer again settles nothing new, unless it is the person reaffirming it over a conflict: then it is
     // a new confirmation (with its own time, after the activity they just reviewed) that closes the conflict
-    if (current && same(current) && !(isUser(input.basis) && conflicts.length)) return { outcome: "unchanged" as const, id: current.id, version: current.version };
+    if (current && same(current) && !(isUser(input.basis) && conflicts.length)) {
+      // the same inference on newer evidence keeps its version but not stale support: its last activity, reasons and
+      // receipts are refreshed in place (the claim itself, value and basis, is what versions; the person's own
+      // answers are never touched here)
+      if (!isUser(current.basis)) {
+        await tx
+          .update(bkAssertions)
+          .set({ effectiveFrom: values.effectiveFrom, rationale: values.rationale, confidence: values.confidence, evidenceIdsJson: values.evidenceIdsJson })
+          .where(and(inScope(bkAssertions, scope), eq(bkAssertions.id, current.id)));
+      }
+      return { outcome: "unchanged" as const, id: current.id, version: current.version };
+    }
 
     if (current && isUser(current.basis) && !isUser(input.basis)) {
       // the person's answer stands; an agreeing inference adds nothing; a disagreeing one is kept as a conflict

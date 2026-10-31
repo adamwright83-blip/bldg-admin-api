@@ -120,12 +120,11 @@ export async function investigate(scope: KnowledgeScope, deps: InvestigationDeps
     const operatorId = await upsertEntity(scope, { kind: "operator", name: ownerName ?? deps.ownerEmail, email: deps.ownerEmail });
     index.remember(operatorId, "operator", ownerName ?? deps.ownerEmail, [], deps.ownerEmail);
 
-    let seen = 0;
     let quietRounds = 0;
     for (let round = 1; round <= budget.rounds; round += 1) {
       used.rounds = round;
-      const fresh = book.since(seen);
-      seen = book.size;
+      // new items, and items a later read expanded (a thread read in full after its snippet was seen)
+      const fresh = book.takeChanged();
       const known = await knownSummary();
       const interpretation = await deps.model.interpret({
         ownerName,
@@ -169,7 +168,7 @@ export async function investigate(scope: KnowledgeScope, deps: InvestigationDeps
       await renewRun(scope, runId);
       if (round === budget.rounds) {
         // read what the last round fetched before stopping
-        const tail = book.since(seen);
+        const tail = book.takeChanged();
         if (tail.length) {
           const applied2 = await applyInterpretation(
             { scope, runId, book, now, operatorId, ownerEmail: deps.ownerEmail, ownerName },

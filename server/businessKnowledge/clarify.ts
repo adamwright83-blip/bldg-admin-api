@@ -136,6 +136,22 @@ export async function proposeQuestions(scope: KnowledgeScope, now: Date): Promis
     const confirmed = live.find(row => row.state === "current" && row.claimKey === conflict.claimKey);
     const subject = byId.get(conflict.subjectEntityId);
     if (!confirmed || !subject) continue;
+    // a relationship in conflict is asked as a relationship, and answered through the relationship path
+    if (conflict.predicate === "relationship") {
+      const object = conflict.objectEntityId ? byId.get(conflict.objectEntityId) : undefined;
+      if (!object) continue;
+      await offer(scope, {
+        topicKey: `conflict:${conflict.id}`,
+        kind: "relationship",
+        entityIds: [subject.id, object.id],
+        question: `Earlier you told me how ${subject.name} and ${object.name} relate${confirmed.detail ? ` ("${confirmed.detail.slice(0, 120)}")` : ""}. Something newer suggests otherwise. Are they separate businesses, or two names for the same operation?`,
+        why: conflict.rationale,
+        priority: PRIORITY.conflict,
+        evidenceFingerprint: fingerprint(...conflict.evidenceIdsJson),
+      });
+      continue;
+    }
+    if (conflict.predicate !== "status") continue;
     await offer(scope, {
       topicKey: `conflict:${conflict.id}`,
       kind: "conflict",
