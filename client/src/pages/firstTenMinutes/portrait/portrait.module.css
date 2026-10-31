@@ -437,3 +437,9 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.thresholdSignup {
+  width: min(440px, 100%);
+  margin-top: 8px;
+  text-align: left;
+}

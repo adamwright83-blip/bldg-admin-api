@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { draftStatusLine, offerWords } from "../../../shared/firstTenMinutesActivation";
 import { advertisedOfferForPlan, JOYSTICK_ANNUAL_PLAN_KEY, JOYSTICK_MONTHLY_PLAN_KEY } from "../../saas/joystickStripeOffer";
-import { isThePreparedMessage, latestOnSubject } from "./activation";
+import { activationRefusedReason, isThePreparedMessage, latestOnSubject } from "./activation";
 
 const PREPARED = {
   subject: "Re: Friday flowers?",
@@ -62,5 +62,19 @@ describe("the message leaving the table", () => {
     expect(draftStatusLine("verified_sent", { ...at, sentByJoystick: true })).toMatch(/^Sent from your Gmail at .+\.$/);
     expect(draftStatusLine("verified_sent", { ...at, sentByJoystick: false })).toMatch(/^In your Sent folder/);
     expect(draftStatusLine("sending", { ...at, verifiedSentAt: null })).toBe("Sending from your Gmail. JOYSTICK will say it went only once Google shows it.");
+  });
+});
+
+describe("who may become a customer", () => {
+  it("lets an own journey check out with no opportunity and no draft, and still refuses Nina's example", () => {
+    expect(activationRefusedReason("own")).toBeNull();
+    expect(activationRefusedReason("example")).toBe("example");
+  });
+
+  it("does not consult correspondence, so a fictional prospect is not an example and not a blocker", () => {
+    const fictionalProspect = { kind: "own" as const, opportunity: null, draft: null, imagined: true };
+    expect(activationRefusedReason(fictionalProspect.kind)).toBeNull();
+    expect(fictionalProspect.opportunity).toBeNull();
+    expect(fictionalProspect.draft).toBeNull();
   });
 });

@@ -1,21 +1,26 @@
+import type { ReactNode } from "react";
 import styles from "../portrait/portrait.module.css";
 import type { ChapterGate } from "./chapterGate";
 
 /**
  * Under a kept page, whenever the chapter isn't showing: it's on its way, it couldn't be read, or the crew found no
  * conversation to pick up. Each says what's true and offers something to do. Nothing here names a customer or an
- * opportunity the records don't hold.
+ * opportunity the records don't hold. Signup, when passed, is the existing JOYSTICK offer: a letter is not required.
+ * PR #800 adds an optional "Three Days Later" entry on this same screen. Keep that button and this signup together.
  */
 export function ChapterThreshold({
   gate,
   retrying,
   onRetry,
   onLookCloser,
+  signup,
 }: {
   gate: Extract<ChapterGate, "loading" | "error" | "no_opportunity">;
   retrying: boolean;
   onRetry: () => void;
   onLookCloser: () => void;
+  /** The existing JOYSTICK offer, once it's known there's no letter to write. */
+  signup?: ReactNode;
 }) {
   if (gate === "loading") {
     return (
@@ -41,6 +46,7 @@ export function ChapterThreshold({
         The crew read through what you shared and didn't find a conversation still waiting on you, so there's no letter
         to write today. Claire won't make one up.
       </p>
+      <p>You can still keep your crew and open JOYSTICK. Nothing has to be sent.</p>
       <div className={styles.thresholdActions}>
         <button type="button" onClick={onLookCloser} data-testid="first-ten-chapter-look-closer">
           See what the crew found
@@ -50,6 +56,7 @@ export function ChapterThreshold({
           Check again
         </button>
       </div>
+      {signup ? <div className={styles.thresholdSignup}>{signup}</div> : null}
     </div>
   );
 }

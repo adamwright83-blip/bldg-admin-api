@@ -24,7 +24,8 @@ import { ClaireQuestion } from "./knowledge/ClaireQuestion";
 import { RevelationScene } from "./chapter/RevelationScene";
 import { LetterScene } from "./chapter/LetterScene";
 import { DraftTable } from "./chapter/DraftTable";
-import { ActivationCard } from "./chapter/ActivationCard";
+import { ActivationOffer } from "./chapter/ActivationOffer";
+import { activationQueryEnabled } from "./chapter/activationEligibility";
 import { SendDesk } from "./chapter/SendDesk";
 import { WorkspaceKey } from "./chapter/WorkspaceKey";
 import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
@@ -247,6 +248,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   // The first chapter, once the person has kept Claire's page: the revelation, Hazel's letter, the real draft.
   const portraitKept = page?.status === "kept";
   const [chapterOpen, setChapterOpen] = useState(false);
+  const [signupOpen, setSignupOpen] = useState(false);
   useEffect(() => {
     if (!portraitKept || chapterOpen) return;
     // kept just now, the seal lands first; kept before this visit, the chapter is simply where the person left it
@@ -276,7 +278,12 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
   const activation = trpc.system.firstTenMinutes.activation.useQuery(credentials!, {
-    enabled: Boolean(credentials) && hasDraft,
+    enabled: activationQueryEnabled({
+      hasCredentials: Boolean(credentials),
+      hasDraft,
+      portraitKept,
+      stage: view?.stage,
+    }),
     retry: false,
     refetchInterval: query => (query.state.data?.status === "checkout_pending" ? 2000 : false),
   });
@@ -296,39 +303,64 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     return null;
   }
 
+  async function continueActivation(identity: { businessName: string; contactName: string; ownerEmail: string; timeZone: string }) {
+    if (!credentials) return;
+    const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
+    window.location.assign(url);
+  }
+
+  function renderSignupWithoutDraft() {
+    const offer = activation.data;
+    if (!offer || !credentials || chapter.data?.draft) return null;
+    return (
+      <div data-testid="first-ten-signup">
+        <ActivationOffer
+          activation={offer}
+          credentials={credentials}
+          checkout={returned.checkout}
+          showCard={offer.example || offer.status !== "active"}
+          onBringYourOwn={bringYourOwn}
+          onContinue={continueActivation}
+        />
+      </div>
+    );
+  }
+
+  /** The same offer, available before a draft exists, without replacing the chapter. */
+  function renderSignupBypass() {
+    if (hasDraft) return null;
+    const offer = activation.data;
+    const open = signupOpen || returned.checkout !== null || offer?.status === "checkout_pending" || offer?.status === "active";
+    if (!open) {
+      return (
+        <button type="button" className={sendStyles.backToPage} onClick={() => setSignupOpen(true)} data-testid="first-ten-signup-bypass">
+          Continue with JOYSTICK
+        </button>
+      );
+    }
+    return renderSignupWithoutDraft();
+  }
+
   function renderTableFoot() {
     const draft = chapter.data?.draft;
-    const view = activation.data;
-    if (!draft || !view || !credentials) return null;
-    const mustActivate = view.required && view.status !== "active";
+    const offer = activation.data;
+    if (!draft || !offer || !credentials) return null;
+    const mustActivate = offer.required && offer.status !== "active";
+    const showCard = offer.example || mustActivate || (!offer.required && draft.status === "prepared");
     return (
       <>
-        {returned.checkout === "cancelled" && view.status !== "active" ? (
-          <p className={styles.quiet} data-testid="first-ten-checkout-cancelled">
-            Checkout closed. Nothing was charged; everything here is saved.
-          </p>
-        ) : null}
-        {view.example || mustActivate || (!view.required && draft.status === "prepared") ? (
-          // back from a paid checkout, the workspace is on its way; otherwise an open checkout can be picked up again
-          view.status === "checkout_pending" && returned.checkout === "success" ? (
-            <p className={styles.quiet} data-testid="first-ten-checkout-pending">
-              Your crew is being kept. This takes a moment.
-            </p>
-          ) : (
-            <ActivationCard
-              activation={view}
-              onBringYourOwn={bringYourOwn}
-              onContinue={async identity => {
-                const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
-                window.location.assign(url);
-              }}
-            />
-          )
-        ) : null}
-        {!view.example && !mustActivate ? (
+        <ActivationOffer
+          activation={offer}
+          credentials={credentials}
+          checkout={returned.checkout}
+          showCard={showCard}
+          onBringYourOwn={bringYourOwn}
+          onContinue={continueActivation}
+        />
+        {!offer.example && !mustActivate ? (
           <SendDesk
             draft={draft}
-            activation={view}
+            activation={offer}
             onSend={async (approved, options) => {
               const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
               setChapter(sent.chapter);
@@ -344,7 +376,6 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
             notice={notice}
           />
         ) : null}
-        {view.owner ? <WorkspaceKey activation={view} credentials={credentials} /> : null}
       </>
     );
   }
@@ -388,18 +419,26 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     const data = chapter.data;
     if (!data || !opportunity || !credentials) return null;
     if (!data.progress.revealed) {
-      return <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />;
+      return (
+        <>
+          <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />
+          {renderSignupBypass()}
+        </>
+      );
     }
     if (!data.draft) {
       return (
-        <LetterScene
-          steps={data.progress.steps}
-          letterWritten={data.progress.letterWritten}
-          carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
-          onStep={which => step(which)}
-          onWritten={() => step("letter_written")}
-          onYours={() => prepareDraft.mutateAsync(credentials).then(setChapter)}
-        />
+        <>
+          <LetterScene
+            steps={data.progress.steps}
+            letterWritten={data.progress.letterWritten}
+            carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
+            onStep={which => step(which)}
+            onWritten={() => step("letter_written")}
+            onYours={() => prepareDraft.mutateAsync(credentials).then(setChapter)}
+          />
+          {renderSignupBypass()}
+        </>
       );
     }
     const outcome = closingOutcome();
@@ -481,7 +520,13 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               {onFirstChapter && firstChapter.data ? <AskClaire view={firstChapter.data} onAsk={ask} onCourtyard={toCourtyard} /> : null}
               {onFirstChapter && activation.data?.owner && credentials ? <WorkspaceKey activation={activation.data} credentials={credentials} /> : null}
               {gate === "loading" || gate === "error" || gate === "no_opportunity" ? (
-                <ChapterThreshold gate={gate} retrying={chapter.isFetching} onRetry={() => void chapter.refetch()} onLookCloser={() => setCloser(true)} />
+                <ChapterThreshold
+                  gate={gate}
+                  retrying={chapter.isFetching}
+                  onRetry={() => void chapter.refetch()}
+                  onLookCloser={() => setCloser(true)}
+                  signup={gate === "no_opportunity" ? renderSignupWithoutDraft() : null}
+                />
               ) : null}
             </PortraitPage>
           ) : null}

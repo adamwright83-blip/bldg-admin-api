@@ -21,13 +21,15 @@ const allowed = (() => {
 })();
 process.env.JWT_SECRET ||= "first-ten-integration-secret-000000000000";
 
-function fakeStripe(state: { event: unknown; subscription: unknown; created?: { params: Record<string, unknown> } }) {
+function fakeStripe(state: { event: unknown; subscription: unknown; created?: { params: Record<string, unknown> }; sessionId?: string }) {
   return {
     checkout: {
       sessions: {
         create: async (params: Record<string, unknown>) => {
           state.created = { params };
-          return { id: `cs_test_first_ten_${randomUUID().slice(0, 8)}`, url: "https://checkout.stripe.example/first-ten" };
+          const id = `cs_test_first_ten_${randomUUID().slice(0, 8)}`;
+          if ("sessionId" in state) state.sessionId = id;
+          return { id, url: "https://checkout.stripe.example/first-ten" };
         },
         retrieve: async (id: string) => ({ id, url: "https://checkout.stripe.example/first-ten" }),
       },
@@ -215,6 +217,212 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
       else process.env.JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN = previousOrigin;
       await new Promise(resolve => gmail.close(resolve));
     }
+  });
+
+  it("checks out an own journey with no opportunity and no draft, and does not invent either", async () => {
+    const { startJourney } = await import("../journeys");
+    const { journeyById } = await import("../store");
+    const { chapterView } = await import("../chapter/chapter");
+    const { activationView, beginActivation, sendDraft } = await import("./activation");
+    const { processLegacyDayforgeBillingWebhook } = await import("../../saas/saasBilling");
+    const { activateOnboardingOwner } = await import("../../saas/saasStore");
+    const started = await startJourney({ requestId: randomUUID(), kind: "own" });
+    const { journey, credentials } = started;
+    const email = `ada-${suffix}@northsideplumbing.example`;
+    const identity = { businessName: "Northside Plumbing", contactName: "Ada Moss", ownerEmail: email, timeZone: "America/Los_Angeles" };
+    let paidTenant = "";
+
+    const chapter = await chapterView(journey);
+    expect(chapter.opportunity).toBeNull();
+    expect(chapter.draft).toBeNull();
+    expect(journey.kind).toBe("own");
+    const [draftsBefore] = await db.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM first_ten_drafts WHERE journey_id = ?", [journey.id]);
+    const [opportunitiesBefore] = await db.query<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS n FROM first_ten_findings WHERE journey_id = ? AND kind = 'opportunity'",
+      [journey.id]
+    );
+    expect(Number(draftsBefore[0].n)).toBe(0);
+    expect(Number(opportunitiesBefore[0].n)).toBe(0);
+    // billing is open, and there is still nothing to send
+    await expect(sendDraft(journey, credentials, { to: "nobody@example.com", subject: "Hello", body: "Hello" })).rejects.toThrow(/Continue with JOYSTICK first/);
+
+    const state = { event: null as unknown, subscription: null as unknown, created: undefined as { params: Record<string, unknown> } | undefined, sessionId: "" };
+    const stripe = fakeStripe(state);
+    const { url: checkoutUrl } = await beginActivation(journey, credentials, identity, stripe);
+    expect(checkoutUrl).toBe("https://checkout.stripe.example/first-ten");
+    expect(state.created?.params.success_url).toContain(`/joystick-start?session=${credentials.sessionId}&checkout=success`);
+    expect(state.created?.params.cancel_url).toContain("checkout=cancelled");
+    expect((await activationView(journey, credentials)).status).toBe("checkout_pending");
+    expect((await journeyById(journey.id))!.tenantId).toBeNull();
+    expect((await journeyById(journey.id))!.kind).toBe("own");
+
+    // leaving checkout, or asking again, does not provision and does not open a second checkout
+    state.created = undefined;
+    const resumed = await beginActivation(journey, credentials, identity, fakeStripe(state));
+    expect(resumed.url).toBe("https://checkout.stripe.example/first-ten");
+    expect(state.created).toBeUndefined();
+    expect((await activationView(journey, credentials))).toMatchObject({ status: "checkout_pending", owner: null });
+
+    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test";
+    const created = Math.floor(Date.now() / 1000);
+    const subscription = {
+      id: `sub_nodraft_${suffix}`,
+      customer: `cus_nodraft_${suffix}`,
+      status: "active",
+      cancel_at_period_end: false,
+      trial_end: null,
+      items: { data: [{ current_period_end: created + 86400 * 30 }] },
+      latest_invoice: `in_nodraft_${suffix}`,
+      metadata: { legacyDayforgeOnboardingSessionId: credentials.sessionId, legacyDayforgePlanKey: planKey },
+    };
+    state.event = {
+      id: `evt_nodraft_${suffix}`,
+      type: "checkout.session.completed",
+      livemode: false,
+      created,
+      data: { object: { id: state.sessionId || "cs_test_nodraft", subscription: subscription.id, metadata: subscription.metadata } },
+    };
+    state.subscription = subscription;
+    const processed = await processLegacyDayforgeBillingWebhook({ rawBody: Buffer.from("nodraft"), signature: "test-signature", stripe: fakeStripe(state) });
+    expect(processed.status).toBe("processed");
+    const again = await processLegacyDayforgeBillingWebhook({ rawBody: Buffer.from("nodraft"), signature: "test-signature", stripe: fakeStripe(state) });
+    expect(again).toMatchObject({ status: "ignored", reason: "duplicate_event" });
+
+    const after = await activationView(journey, credentials);
+    expect(after).toMatchObject({ status: "active", owner: "needs_password", example: false, identity: { contactName: "Ada Moss", ownerEmail: email } });
+    paidTenant = (await journeyById(journey.id))!.tenantId ?? "";
+    expect(paidTenant).toMatch(/^df_[0-9a-f]{24}$/);
+    const [tenants] = await db.query<mysql.RowDataPacket[]>(`SELECT id FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [paidTenant]);
+    expect(tenants).toHaveLength(1);
+
+    // asking for checkout again reuses the paid signup; it does not open another tenant
+    state.created = undefined;
+    await beginActivation(journey, credentials, identity, fakeStripe(state));
+    expect(state.created).toBeUndefined();
+    const [tenantsAfterRepeat] = await db.query<mysql.RowDataPacket[]>(`SELECT id FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE contactEmail = ?`, [email]);
+    expect(tenantsAfterRepeat.map(row => row.id)).toEqual([paidTenant]);
+
+    const owned = await activateOnboardingOwner({ ...credentials, name: "Ada Moss", passwordHash: await bcrypt.hash("a long first-ten password", 4) });
+    expect(owned.tenantId).toBe(paidTenant);
+    expect(await activationView(journey, credentials)).toMatchObject({ status: "active", owner: "ready" });
+    const [signIn] = await db.query<mysql.RowDataPacket[]>(
+      `SELECT c.emailNormalized, m.role FROM ${LEGACY_DAYFORGE_TABLE("user_credentials")} c
+       JOIN ${LEGACY_DAYFORGE_TABLE("memberships")} m ON m.tenantId = c.tenantId AND m.userOpenId = c.userOpenId
+       WHERE c.tenantId = ?`,
+      [paidTenant]
+    );
+    expect(signIn).toEqual([expect.objectContaining({ emailNormalized: email, role: "owner" })]);
+
+    // still nothing to send, and nothing was written into the business records
+    await expect(sendDraft(journey, credentials, { to: "nobody@example.com", subject: "Hello", body: "Hello" })).rejects.toThrow(/isn't waiting at the table/);
+    const [draftsAfter] = await db.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM first_ten_drafts WHERE journey_id = ?", [journey.id]);
+    const [opportunitiesAfter] = await db.query<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS n FROM first_ten_findings WHERE journey_id = ? AND kind = 'opportunity'",
+      [journey.id]
+    );
+    const [sends] = await db.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM gmail_sends WHERE send_key = ?", [`first_ten:${journey.id}`]);
+    expect(Number(draftsAfter[0].n)).toBe(0);
+    expect(Number(opportunitiesAfter[0].n)).toBe(0);
+    expect(Number(sends[0].n)).toBe(0);
+    expect((await journeyById(journey.id))!.kind).toBe("own");
+
+    for (const table of ["entitlements", "subscriptions", "memberships", "user_credentials"].map(LEGACY_DAYFORGE_TABLE)) {
+      await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [paidTenant]).catch(() => undefined);
+    }
+    await db.execute("DELETE FROM users WHERE tenantId = ?", [paidTenant]).catch(() => undefined);
+    await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [paidTenant]).catch(() => undefined);
+  });
+
+  it("does not grant a workspace when checkout is abandoned, expired, or unpaid", async () => {
+    const { startJourney } = await import("../journeys");
+    const { journeyById } = await import("../store");
+    const { activationView, beginActivation } = await import("./activation");
+    const { processLegacyDayforgeBillingWebhook } = await import("../../saas/saasBilling");
+    const { activateOnboardingOwner } = await import("../../saas/saasStore");
+    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test";
+
+    const abandoned = await startJourney({ requestId: randomUUID(), kind: "own" });
+    const abandonedEmail = `abandoned-${suffix}@northsideplumbing.example`;
+    const abandonedIdentity = { businessName: "Northside Plumbing", contactName: "Ada Moss", ownerEmail: abandonedEmail, timeZone: "America/Los_Angeles" };
+    const abandonedState = { event: null as unknown, subscription: null as unknown, created: undefined as { params: Record<string, unknown> } | undefined, sessionId: "" };
+    await beginActivation(abandoned.journey, abandoned.credentials, abandonedIdentity, fakeStripe(abandonedState));
+    expect(await activationView(abandoned.journey, abandoned.credentials)).toMatchObject({ status: "checkout_pending", owner: null });
+    expect((await journeyById(abandoned.journey.id))!.tenantId).toBeNull();
+
+    const created = Math.floor(Date.now() / 1000);
+    abandonedState.event = {
+      id: `evt_expire_${suffix}`,
+      type: "checkout.session.expired",
+      livemode: false,
+      created,
+      data: { object: { id: abandonedState.sessionId } },
+    };
+    const expired = await processLegacyDayforgeBillingWebhook({ rawBody: Buffer.from("expire"), signature: "test-signature", stripe: fakeStripe(abandonedState) });
+    expect(expired.status).toBe("processed");
+    expect(await activationView(abandoned.journey, abandoned.credentials)).toMatchObject({ status: "none", owner: null });
+    expect((await journeyById(abandoned.journey.id))!.tenantId).toBeNull();
+
+    const failed = await startJourney({ requestId: randomUUID(), kind: "own" });
+    const failedEmail = `failed-${suffix}@northsideplumbing.example`;
+    const failedIdentity = { businessName: "Northside Plumbing", contactName: "Ada Moss", ownerEmail: failedEmail, timeZone: "America/Los_Angeles" };
+    const failedState = { event: null as unknown, subscription: null as unknown, created: undefined as { params: Record<string, unknown> } | undefined, sessionId: "" };
+    await beginActivation(failed.journey, failed.credentials, failedIdentity, fakeStripe(failedState));
+    const subscription = {
+      id: `sub_unpaid_${suffix}`,
+      customer: `cus_unpaid_${suffix}`,
+      status: "incomplete",
+      cancel_at_period_end: false,
+      trial_end: null,
+      items: { data: [{ current_period_end: created + 86400 * 30 }] },
+      latest_invoice: `in_unpaid_${suffix}`,
+      metadata: { legacyDayforgeOnboardingSessionId: failed.credentials.sessionId, legacyDayforgePlanKey: planKey },
+    };
+    failedState.subscription = subscription;
+    failedState.event = {
+      id: `evt_unpaid_${suffix}`,
+      type: "invoice.payment_failed",
+      livemode: false,
+      created,
+      data: {
+        object: {
+          id: `in_unpaid_${suffix}`,
+          parent: { type: "subscription_details", subscription_details: { subscription: subscription.id } },
+        },
+      },
+    };
+    const unpaid = await processLegacyDayforgeBillingWebhook({ rawBody: Buffer.from("unpaid"), signature: "test-signature", stripe: fakeStripe(failedState) });
+    expect(unpaid.status).toBe("processed");
+    const unpaidView = await activationView(failed.journey, failed.credentials);
+    expect(unpaidView.owner).not.toBe("ready");
+    await expect(
+      activateOnboardingOwner({ ...failed.credentials, name: "Ada Moss", passwordHash: await bcrypt.hash("a long first-ten password", 4) })
+    ).rejects.toThrow(/not active/);
+    const failedTenant = (await journeyById(failed.journey.id))!.tenantId;
+    if (failedTenant) {
+      const [creds] = await db.query<mysql.RowDataPacket[]>(`SELECT 1 FROM ${LEGACY_DAYFORGE_TABLE("user_credentials")} WHERE tenantId = ?`, [failedTenant]);
+      expect(creds).toHaveLength(0);
+      for (const table of ["entitlements", "subscriptions", "memberships", "user_credentials"].map(LEGACY_DAYFORGE_TABLE)) {
+        await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [failedTenant]).catch(() => undefined);
+      }
+      await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [failedTenant]).catch(() => undefined);
+    }
+  });
+
+  it("refuses to activate one person's journey from another person's signup", async () => {
+    const { startJourney } = await import("../journeys");
+    const { beginActivation } = await import("./activation");
+    const ada = await startJourney({ requestId: randomUUID(), kind: "own" });
+    const ben = await startJourney({ requestId: randomUUID(), kind: "own" });
+    const state = { event: null as unknown, subscription: null as unknown, created: undefined as { params: Record<string, unknown> } | undefined, sessionId: "" };
+    await expect(
+      beginActivation(
+        ben.journey,
+        ada.credentials,
+        { businessName: "Northside Plumbing", contactName: "Ada Moss", ownerEmail: `ada-cross-${suffix}@northsideplumbing.example`, timeZone: "America/Los_Angeles" },
+        fakeStripe(state)
+      )
+    ).rejects.toThrow(/different signup/);
+    expect(state.created).toBeUndefined();
   });
 
   it("never activates Nina's example, and says plainly when billing isn't open", async () => {
