@@ -1,5 +1,5 @@
-import { awaitingOpeningLine, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
-import { cachedAwaitingReplies, readAwaitingReplies } from "../../firstTenMinutes/knowledge/awaitingReplies";
+import { awaitingOpeningLine, nextLastSeenMark, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
+import { cachedAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "../../firstTenMinutes/knowledge/awaitingReplies";
 import { routinesForBriefing, routinesOpeningLine } from "../../../shared/claireRoutines";
 import { listRoutineViews } from "../routines/service";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
@@ -271,9 +271,12 @@ export const weeklyMissionRouter = router({
       }
       // Who the owner is waiting on, from their own Gmail: refreshed from the short cache every turn; the opening (no
       // utterance yet) may wait briefly for a first read, and goes on without it rather than keep the operator waiting.
+      // Later in the conversation an expired list is read again in the background; the next turn has it.
       const opening = !input.utterance?.trim() && !input.audioDataUrl;
+      const cachedAwaiting = cachedAwaitingReplies(identity.tenantId);
+      if (!cachedAwaiting && !opening) refreshAwaitingRepliesInBackground(identity.tenantId);
       const awaiting =
-        cachedAwaitingReplies(identity.tenantId) ??
+        cachedAwaiting ??
         (opening
           ? await Promise.race([readAwaitingReplies(identity.tenantId), new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))]).catch(() => null)
           : null);
@@ -300,11 +303,14 @@ export const weeklyMissionRouter = router({
       }
       if (!utterance) {
         const b = session.showrunner.briefing;
-        // what changed while they were away: who wrote back since their last visit to the desk (kept 60 days)
+        // what changed while they were away: who wrote back since their last visit to the desk (kept 60 days). The
+        // mark moves only as far as mail actually read: to this opening's Gmail read (its checkedAt, which may be a
+        // cached read from minutes ago), and not at all when Gmail wasn't read, so no reply falls between two visits
         const seenKey = `claire-desk-last-seen:${identity.tenantId}:${identity.canonicalOperatorId}`;
         const seen = await store.load<{ at: number }>(seenKey).catch(() => null);
         const lastSeen = seen && seen.tenantId === owner.tenantId ? new Date(seen.state.at) : null;
-        await store.save(seenKey, owner, { at: now.getTime() }, 60 * 86_400_000).catch(() => undefined);
+        const mark = nextLastSeenMark(awaiting, lastSeen);
+        if (mark !== null) await store.save(seenKey, owner, { at: mark }, 60 * 86_400_000).catch(() => undefined);
         // the operator's routines, read fresh for the opening: what a scheduled check found since their last visit
         const routineViews = await listRoutineViews(identity.tenantId).catch(() => null);
         if (routineViews) b.routines = routinesForBriefing(routineViews, session.showrunner.timeZone);

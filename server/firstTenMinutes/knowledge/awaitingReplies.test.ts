@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MailItem } from "../understanding/sources";
 import { awaitingOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
-import { computeAwaitingReplies } from "./awaitingReplies";
+import { clearAwaitingRepliesCache, computeAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "./awaitingReplies";
 
 const NINA = "nina@wildrootflowers.example";
 const now = new Date("2026-11-02T17:00:00Z");
@@ -114,5 +114,45 @@ describe("who wrote back, and what changed while the person was away", () => {
     expect(sinceLastVisitLine(awaiting, daysAgo(4))).toBe("Since you were last here, Elena Ruiz and Teo Marsh wrote back.");
     expect(sinceLastVisitLine(awaiting, new Date(now.getTime() - 1.5 * 86_400_000))).toBe("Since you were last here, Elena Ruiz wrote back.");
     expect(sinceLastVisitLine(awaiting, now)).toBeNull();
+  });
+
+  it("moves the last-seen mark only as far as mail was read", async () => {
+    const { nextLastSeenMark } = await import("../../../shared/firstTenMinutesKnowledge");
+    const read = (at: Date, unavailable: string | null = null) => ({ checkedAt: at.toISOString(), account: NINA, items: [], replies: [], unavailable, scanned: { sent: 0, received: 0, days: 30 } });
+    const cachedAt = new Date(now.getTime() - 8 * 60_000);
+    // first visit with a read: the mark starts at that read, not at "now"
+    expect(nextLastSeenMark(read(cachedAt), null)).toBe(cachedAt.getTime());
+    // Gmail timed out or wasn't readable: the mark stays where it was
+    expect(nextLastSeenMark(null, daysAgo(2))).toBeNull();
+    expect(nextLastSeenMark(read(now, "Gmail couldn't be read just now."), daysAgo(2))).toBeNull();
+    // a read older than the mark never moves it back
+    expect(nextLastSeenMark(read(daysAgo(3)), daysAgo(2))).toBeNull();
+    expect(nextLastSeenMark(read(cachedAt), daysAgo(2))).toBe(cachedAt.getTime());
+  });
+});
+
+describe("reading the waiting list", () => {
+  it("reads once per workspace at a time, and a background refresh goes through the same read", async () => {
+    clearAwaitingRepliesCache();
+    let calls = 0;
+    let release: (value: null) => void = () => undefined;
+    const journeyFor = () => {
+      calls += 1;
+      return new Promise<null>(resolve => (release = resolve));
+    };
+    const first = readAwaitingReplies("df_one", { journeyFor });
+    const second = readAwaitingReplies("df_one", { journeyFor });
+    refreshAwaitingRepliesInBackground("df_one", { journeyFor });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    release(null);
+    expect(await first).toBeNull();
+    expect(await second).toBeNull();
+    // finished: the next look reads again
+    const third = readAwaitingReplies("df_one", { journeyFor });
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    release(null);
+    expect(await third).toBeNull();
   });
 });

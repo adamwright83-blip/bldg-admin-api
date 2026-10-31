@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { formatInTimeZone } from "date-fns-tz";
-import type { AwaitingReply } from "../../../shared/firstTenMinutesKnowledge";
+import { gmailComposeUrl, type AwaitingReply } from "../../../shared/firstTenMinutesKnowledge";
 import { approvalDigest, canSendFrom, sendApprovedEmail, SendRefused, type OutgoingEmail, type SendOutcome } from "../../integrations/gmail/gmailSend";
 import { gmailSendLedger } from "../../integrations/gmail/gmailSendLedger";
 import { followUpVerdict } from "../../integrations/gmail/replies/trackedConversations";
@@ -14,13 +15,18 @@ import { clearAwaitingRepliesCache, readAwaitingReplies } from "./awaitingReplie
  * exact words, from their own Gmail (server/integrations/gmail/gmailSend: approval digest, one send per key, shown as
  * sent only with Google's id).
  *
- * The reply gate runs immediately before sending: the owner's Gmail is read again, and if the person has written back
- * since (by address or in that thread), nothing is sent; nor is it if a follow-up JOYSTICK already sent for this
- * message has been answered (followUpVerdict). Without Gmail's permission to send, nothing is tried: the owner gets the
- * exact message to send from Gmail themselves. JOYSTICK never sends on its own.
+ * One follow-up per person per message: a note to three people is three people waiting, each with their own
+ * follow-up. The reply gate runs immediately before sending: the waiting list is read again from the owner's Gmail,
+ * which asks Gmail about that person and conversation directly; if they've written back since (by address or in that
+ * thread), nothing is sent, nor is it if a follow-up JOYSTICK already sent has been answered (followUpVerdict). An
+ * attempt whose answer from Google was lost is settled from the Sent folder first, never sent again on a guess.
+ * Without Gmail's permission to send, nothing is tried: the owner gets the exact message to send from Gmail
+ * themselves. JOYSTICK never sends on its own.
  */
 export const FOLLOW_UP_ACTOR = "claire_desk_follow_up";
-export const followUpKey = (tenantId: string, messageId: string) => `desk_follow_up:${tenantId}:${messageId}`;
+const recipientRef = (address: string) => createHash("sha256").update(address.trim().toLowerCase()).digest("hex").slice(0, 16);
+export const followUpKey = (tenantId: string, messageId: string, recipient: string) => `desk_follow_up:${tenantId}:${messageId}:${recipientRef(recipient)}`;
+export { gmailComposeUrl };
 
 export type FollowUpDraft = {
   messageId: string;
@@ -51,16 +57,15 @@ export function composeFollowUp(item: AwaitingReply, timeZone: string): Outgoing
   };
 }
 
-export function gmailComposeUrl(mail: OutgoingEmail, account: string | null): string {
-  const params = new URLSearchParams({ view: "cm", fs: "1", to: mail.to.address, su: mail.subject, body: mail.body });
-  return `https://mail.google.com/mail/u/${encodeURIComponent(account ?? "0")}/?${params}`;
-}
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-async function waitingItem(tenantId: string, messageId: string, fresh: boolean): Promise<AwaitingReply | null> {
+/** That person, for that message, on the waiting list; `others` says whether the message still has anyone waiting. */
+async function waitingItem(tenantId: string, messageId: string, recipient: string, fresh: boolean): Promise<{ item: AwaitingReply | null; others: boolean }> {
   if (fresh) clearAwaitingRepliesCache(tenantId);
   const awaiting = await readAwaitingReplies(tenantId);
   if (awaiting?.unavailable) throw new TRPCError({ code: "PRECONDITION_FAILED", message: awaiting.unavailable });
-  return awaiting?.items.find(item => item.messageId === messageId) ?? null;
+  const forMessage = awaiting?.items.filter(item => item.messageId === messageId) ?? [];
+  return { item: forMessage.find(item => same(item.person.address, recipient)) ?? null, others: forMessage.length > 0 };
 }
 
 async function journeyAccess(tenantId: string) {
@@ -69,12 +74,12 @@ async function journeyAccess(tenantId: string) {
   return { journey, access: await sendAccess(journey) };
 }
 
-export async function prepareFollowUp(tenantId: string, messageId: string, timeZone: string): Promise<FollowUpDraft> {
-  const item = await waitingItem(tenantId, messageId, false);
+export async function prepareFollowUp(tenantId: string, messageId: string, recipient: string, timeZone: string): Promise<FollowUpDraft> {
+  const { item } = await waitingItem(tenantId, messageId, recipient, false);
   if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "They're not on the waiting list any more: they may have written back." });
   const { access } = await journeyAccess(tenantId);
   const mail = composeFollowUp(item, timeZone);
-  const previous = await gmailSendLedger.find(followUpKey(tenantId, messageId));
+  const previous = await gmailSendLedger.find(followUpKey(tenantId, messageId, item.person.address));
   return {
     messageId,
     mail,
@@ -91,23 +96,27 @@ export type FollowUpResult =
   | { status: "sending" }
   | { status: "needs_permission"; composeUrl: string }
   | { status: "failed"; reason: string }
-  | { status: "replied" };
+  | { status: "replied" }
+  | { status: "not_waiting" };
 
 /** The owner approved exactly `mail`: check they're still waiting, then send it from their own Gmail, once. */
 export async function sendFollowUp(
   input: { tenantId: string; approverOpenId: string; messageId: string; mail: OutgoingEmail },
   deps: { now?: () => Date; send?: typeof sendApprovedEmail } = {}
 ): Promise<FollowUpResult> {
-  const key = followUpKey(input.tenantId, input.messageId);
+  const key = followUpKey(input.tenantId, input.messageId, input.mail.to.address);
   const previous = await gmailSendLedger.find(key);
   if (previous?.status === "sent" && previous.sentAt) return { status: "sent", at: previous.sentAt.toISOString(), already: true };
-  // the reply gate: their answer, or an answer to a follow-up already sent, holds this one
-  const verdict = await followUpVerdict({ kind: "gmail_send", ref: key });
-  if (!verdict.proceed) return { status: "replied" };
-  const item = await waitingItem(input.tenantId, input.messageId, true);
-  if (!item) return { status: "replied" };
-  if (item.person.address.trim().toLowerCase() !== input.mail.to.address.trim().toLowerCase()) {
-    throw new SendRefused("bad_address", "A follow-up goes to the person you're waiting on, no one else.");
+  // an attempt still in flight, or whose answer from Google was lost, is settled from the Sent folder before anything
+  // else: once it shows up there it is the newest note to them, and must not read as "they're no longer waiting"
+  const unsettled = Boolean(previous && previous.status !== "failed");
+  if (!unsettled) {
+    // the reply gate: their answer, or an answer to a follow-up already sent, holds this one
+    const verdict = await followUpVerdict({ kind: "gmail_send", ref: key });
+    if (!verdict.proceed) return { status: "replied" };
+    const { item, others } = await waitingItem(input.tenantId, input.messageId, input.mail.to.address, true);
+    if (!item && others) throw new SendRefused("bad_address", "A follow-up goes to the person you're waiting on, no one else.");
+    if (!item) return { status: "not_waiting" };
   }
   const { access } = await journeyAccess(input.tenantId);
   if (!access || !canSendFrom(access)) return { status: "needs_permission", composeUrl: gmailComposeUrl(input.mail, access?.accountEmail ?? null) };

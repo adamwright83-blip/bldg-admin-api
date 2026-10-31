@@ -74,10 +74,13 @@ export async function readJourneyKnowledge(journey: JourneyRow): Promise<Onboard
 
   const page = await portraitView(journey.id);
   const portrait =
-    page && page.status === "ready"
+    page && (page.status === "ready" || page.status === "kept")
       ? {
-          kept: Boolean((await portraitRow(journey.id))?.keptAt),
-          lines: portraitLines(page).map(line => ({ text: line.text, factIds: line.findingIds.filter(id => live.has(id)) })),
+          kept: page.status === "kept" || Boolean((await portraitRow(journey.id))?.keptAt),
+          // the page as the person left it: a line they rewrote reads in their words, a line they removed is gone
+          lines: portraitLines(page)
+            .filter(line => line.changedTo !== null)
+            .map(line => ({ text: typeof line.changedTo === "string" ? line.changedTo : line.text, factIds: line.findingIds.filter(id => live.has(id)) })),
         }
       : null;
 
