@@ -1,4 +1,5 @@
 import type { PostHog } from "posthog-js";
+import { redactPreviewCode } from "./previewCode";
 import { decidePosthogIdentity, type AnalyticsIdentity } from "./posthogIdentity";
 
 const SECRET_PROPERTY = /password|authorization|cookie|secret|api[_-]?key|bearer/i;
@@ -39,10 +40,12 @@ async function resolvePosthogConfig(): Promise<{ key: string; host: string } | n
   }
 }
 
-function scrubProperties(properties: Record<string, unknown> | undefined): void {
+export function scrubProperties(properties: Record<string, unknown> | undefined): void {
   if (!properties) return;
   for (const key of Object.keys(properties)) {
     if (SECRET_PROPERTY.test(key)) delete properties[key];
+    // a URL carrying the first-ten preview code (an access credential) is recorded without it
+    else if (typeof properties[key] === "string") properties[key] = redactPreviewCode(properties[key] as string);
   }
 }
 

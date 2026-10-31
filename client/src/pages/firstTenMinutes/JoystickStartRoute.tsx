@@ -1,23 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { FIRST_TEN_PREVIEW_PARAM, firstTenShownTo } from "@shared/firstTenMinutes";
+import { firstTenShownTo } from "@shared/firstTenMinutes";
+import { takePreviewCodeFromUrl } from "@/lib/previewCode";
 import { adoptFirstTenHandoff, sessionBelongsToTodaysFunnel } from "./draftStorage";
 
 const JoystickAcquisitionPage = lazy(() => import("../JoystickAcquisitionPage"));
 const FirstTenMinutes = lazy(() => import("./FirstTenMinutes"));
-
-/** The preview code from ?crew=<code>. Read only: a render may run twice (StrictMode), so nothing changes here. */
-function readPreviewCode(): string | null {
-  return new URLSearchParams(window.location.search).get(FIRST_TEN_PREVIEW_PARAM) || null;
-}
-
-/** Takes the code out of the address bar, so it isn't kept in history or shared by copying the URL. */
-function forgetPreviewCode() {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has(FIRST_TEN_PREVIEW_PARAM)) return;
-  url.searchParams.delete(FIRST_TEN_PREVIEW_PARAM);
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-}
 
 /**
  * /joystick-start. With JOYSTICK_FIRST_TEN_MINUTES off (the default), or when the server can't say, this is today's
@@ -34,7 +22,8 @@ export default function JoystickStartRoute() {
   // a journey carried here from another origin is adopted before anything else reads the stored draft
   const previewCode = useMemo(() => {
     adoptFirstTenHandoff();
-    return readPreviewCode();
+    // taken out of the URL at startup, before analytics (lib/previewCode.ts); held in memory only
+    return takePreviewCodeFromUrl();
   }, []);
   const [entering, setEntering] = useState(Boolean(previewCode));
   // the server's own answer to the code: the pass is set with it, so later calls carry it; the page doesn't wait on a
@@ -42,7 +31,6 @@ export default function JoystickStartRoute() {
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     if (!previewCode) return;
-    forgetPreviewCode();
     enterPreview
       .mutateAsync({ code: previewCode })
       .then(result => {
