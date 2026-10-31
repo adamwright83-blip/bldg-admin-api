@@ -6,6 +6,7 @@ vi.mock("../../../db", () => ({ getDb: mocks.getDb }));
 import {
   ChapterStateRevisionConflictError,
   getChapterState,
+  keepChapterCompletion,
   saveChapterState,
 } from "./chapterStateService";
 import type { GoldlineChapterFictionState } from "../../../../shared/goldlineChapterState";
@@ -144,6 +145,73 @@ describe("goldline chapter state service", () => {
     });
     expect(retried.revision).toBe(2);
     expect(retried.state.room).toBe("garden");
+  });
+
+  it("never lets a later write un-finish a completed chapter (a local 'Begin again' replay)", async () => {
+    const { db, rows } = memoryDb();
+    mocks.getDb.mockResolvedValue(db);
+    const finished = {
+      ...sampleState(),
+      cleared: ["arrival", "garden", "gallery"],
+      completed: true,
+      choice: "preserve" as const,
+    };
+    await saveChapterState({ ...identity, expectedRevision: 0, state: finished, requestId: "req-1" });
+    const replay = await saveChapterState({
+      ...identity,
+      expectedRevision: 1,
+      state: sampleState(),
+      requestId: "req-2",
+    });
+    expect(replay.revision).toBe(1);
+    expect(replay.state.completed).toBe(true);
+    expect(replay.state.choice).toBe("preserve");
+    const stored = await getChapterState(identity);
+    expect(stored?.revision).toBe(1);
+    expect(stored?.state.completed).toBe(true);
+    expect(stored?.state.choice).toBe("preserve");
+    expect(rows[0]?.lastRequestId).toBe("req-1");
+  });
+
+  it("keeps the choice recorded with a completed chapter when a replay completes again", async () => {
+    const { db } = memoryDb();
+    mocks.getDb.mockResolvedValue(db);
+    const finished = { ...sampleState(), completed: true, choice: "preserve" as const };
+    await saveChapterState({ ...identity, expectedRevision: 0, state: finished, requestId: "req-1" });
+    const again = await saveChapterState({
+      ...identity,
+      expectedRevision: 1,
+      state: { ...finished, choice: "break", secretSeen: true },
+      requestId: "req-2",
+    });
+    expect(again.revision).toBe(2);
+    expect(again.state.choice).toBe("preserve");
+    expect(again.state.secretSeen).toBe(true);
+    expect((await getChapterState(identity))?.state.choice).toBe("preserve");
+  });
+
+  it("still rejects a stale write against a completed chapter so the caller adopts server truth", async () => {
+    const { db } = memoryDb();
+    mocks.getDb.mockResolvedValue(db);
+    await saveChapterState({ ...identity, expectedRevision: 0, state: sampleState(), requestId: "req-1" });
+    await saveChapterState({
+      ...identity,
+      expectedRevision: 1,
+      state: { ...sampleState(), completed: true, choice: "break" },
+      requestId: "req-2",
+    });
+    await expect(
+      saveChapterState({ ...identity, expectedRevision: 1, state: sampleState(), requestId: "req-3" })
+    ).rejects.toBeInstanceOf(ChapterStateRevisionConflictError);
+  });
+
+  it("records completion and choice normally while a chapter is unfinished", () => {
+    const open = sampleState();
+    const done = { ...sampleState(), completed: true, choice: "break" as const };
+    expect(keepChapterCompletion(open, done)).toEqual(done);
+    expect(keepChapterCompletion(open, { ...open, choice: "preserve" })?.choice).toBe("preserve");
+    expect(keepChapterCompletion(done, open)).toBeNull();
+    expect(keepChapterCompletion({ ...done, choice: null }, { ...done, choice: "preserve" })?.choice).toBe("preserve");
   });
 
   it("keeps tenants isolated — a different tenant sees no row", async () => {

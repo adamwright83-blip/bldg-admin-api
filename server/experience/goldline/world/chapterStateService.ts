@@ -88,7 +88,8 @@ export async function listChapterStatesForOperator(input: {
  * A mismatch throws with the current authoritative row so the caller adopts
  * server truth instead of silently overwriting a newer write from another
  * device. `requestId` dedupes a retried write without bumping the revision
- * twice for the same intentional action.
+ * twice for the same intentional action. Completion is monotonic
+ * (keepChapterCompletion): a finished chapter is never un-finished by a write.
  */
 export async function saveChapterState(input: {
   tenantId: string;
@@ -129,12 +130,17 @@ export async function saveChapterState(input: {
     throw new ChapterStateRevisionConflictError(existing);
   }
 
+  const state = keepChapterCompletion(existing.state, input.state);
+  // A write that would un-finish a completed chapter (a local "Begin again"
+  // replay) changes nothing: the finished record stays authoritative.
+  if (!state) return existing;
+
   const nextRevision = existing.revision + 1;
   const result = await db
     .update(goldlineChapterStates)
     .set({
       revision: nextRevision,
-      stateJson: input.state,
+      stateJson: state,
       lastRequestId: input.requestId,
     })
     .where(and(identity(input), eq(goldlineChapterStates.revision, existing.revision)));
@@ -143,5 +149,20 @@ export async function saveChapterState(input: {
     const latest = await getChapterState(input);
     throw new ChapterStateRevisionConflictError(latest ?? existing);
   }
-  return { revision: nextRevision, state: input.state };
+  return { revision: nextRevision, state };
+}
+
+/**
+ * Completion is monotonic. Once a chapter is recorded as completed, a later
+ * write can never move it back to not-completed, and the choice recorded with
+ * that completion is never cleared or replaced. Returns null when `incoming`
+ * would un-finish the chapter (the caller keeps the stored row unchanged).
+ */
+export function keepChapterCompletion(
+  stored: GoldlineChapterFictionState,
+  incoming: GoldlineChapterFictionState
+): GoldlineChapterFictionState | null {
+  if (!stored.completed) return incoming;
+  if (!incoming.completed) return null;
+  return { ...incoming, choice: stored.choice ?? incoming.choice };
 }

@@ -22,6 +22,7 @@ import LaundryFarmHome from "./pages/LaundryFarmHome";
 import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
 import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 import { GoldlineCelebrationProvider } from "./components/goldline/GoldlineCelebrationProvider";
+import { TenantUnlockedChapterGate } from "./components/goldline/TenantUnlockedChapterGate";
 import { LegacyLandingFrame } from "./product/LegacyProductNotice";
 import { CustomerHostApp } from "./hostRouting/CustomerHostApp";
 import {
@@ -285,22 +286,12 @@ function JoystickWorldRoute() {
 }
 
 function TenantUnlockedChapter() {
-  const kingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
-    retry: false,
-  });
-  if (kingdoms.isLoading) {
-    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
-  }
-  const unlocked = kingdoms.data?.some(
-    kingdom =>
-      kingdom.kingdomId === "kingdom-2-the-last-valet" &&
-      kingdom.lanternCityStatus !== "locked"
-  );
-  if (!unlocked || kingdoms.isError) return <Redirect to="/play" />;
   return (
-    <Suspense fallback={<PublicLandingFallback />}>
-      <GoldlineChapterHost />
-    </Suspense>
+    <TenantUnlockedChapterGate locked={<Redirect to="/play" />}>
+      <Suspense fallback={<PublicLandingFallback />}>
+        <GoldlineChapterHost />
+      </Suspense>
+    </TenantUnlockedChapterGate>
   );
 }
 

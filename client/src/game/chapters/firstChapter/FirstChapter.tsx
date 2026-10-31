@@ -7,8 +7,9 @@ import { ChapterScene, EMPTY_WORLD, type WorldPresentation } from './ChapterScen
 import { chapterLine, interactionHint } from './presentation';
 import './firstChapter.css';
 
-export type FirstChapterProps={world?:WorldPresentation;onPrepare?:()=>void;onEcho?:()=>void;syncStatus?:string};
-export default function FirstChapter({world=EMPTY_WORLD,onPrepare,onEcho,syncStatus='Saved on this device'}:FirstChapterProps) {
+/** `storageKey` is this device's save slot; the authenticated host passes one scoped to the signed-in account. */
+export type FirstChapterProps={world?:WorldPresentation;onPrepare?:()=>void;onEcho?:()=>void;syncStatus?:string;storageKey?:string};
+export default function FirstChapter({world=EMPTY_WORLD,onPrepare,onEcho,syncStatus='Saved on this device',storageKey='goldline:chapter-dev:the-last-valet:v1'}:FirstChapterProps) {
   const mount=useRef<HTMLDivElement>(null);
   const sim=useRef<ChapterState>(createChapter());
   const input=useRef<Input>({x:0,y:0});
@@ -22,7 +23,6 @@ export default function FirstChapter({world=EMPTY_WORLD,onPrepare,onEcho,syncSta
   const [playing,setPlaying]=useState(false);
   const [endingSeen,setEndingSeen]=useState(false);
   const playingRef=useRef(false);
-  const storageKey='goldline:chapter-dev:the-last-valet:v1';
   const resume=()=>{sim.current.paused=false;playingRef.current=true;setPlaying(true);getAudioManager().play('ui_tap');};
   const pause=()=>{input.current={x:0,y:0};keys.current.clear();sim.current.paused=true;playingRef.current=false;setPlaying(false);};
   useEffect(()=>{
