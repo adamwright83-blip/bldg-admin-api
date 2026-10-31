@@ -9,7 +9,8 @@ export type SendOutcome = "sent" | "sending" | "needs_permission" | "failed";
  * The message leaves the table from inside JOYSTICK, from the person's own Gmail. The page shows exactly what will go
  * and from which account, asks once, naming the recipient, and sends only that. The first time, Google is asked for
  * permission to send. Nothing is shown as sent until Google answered with the message's id (or the Sent folder shows
- * it); an answer that was lost is "sending" while JOYSTICK checks.
+ * it); an answer that was lost is "sending" while JOYSTICK checks. Not finding it in Sent doesn't prove it didn't go,
+ * so it is sent again only if the person, told so, chooses to.
  */
 export function SendDesk({
   draft,
@@ -21,8 +22,8 @@ export function SendDesk({
 }: {
   draft: DraftView;
   activation: ActivationView;
-  /** sends exactly this, as approved */
-  onSend: (approved: { to: string; subject: string; body: string }) => Promise<SendOutcome>;
+  /** sends exactly this, as approved; `resendUnconfirmed` is the person's choice to send an unconfirmed send again */
+  onSend: (approved: { to: string; subject: string; body: string }, options?: { resendUnconfirmed?: boolean }) => Promise<SendOutcome>;
   /** asks Google for permission to send from the connected account */
   onAllow: () => Promise<void>;
   onVerify: () => Promise<void>;
@@ -59,9 +60,9 @@ export function SendDesk({
     }
   }
 
-  async function send() {
+  async function send(options?: { resendUnconfirmed?: boolean }) {
     await act(async () => {
-      const outcome = await onSend({ to: draft.to.address, subject: draft.subject, body: draft.body });
+      const outcome = await onSend({ to: draft.to.address, subject: draft.subject, body: draft.body }, options);
       setConfirming(false);
       if (outcome === "failed") setProblem("Google didn't send it. Nothing went; your message is still here. You can try again.");
       if (outcome === "needs_permission") {
@@ -77,12 +78,18 @@ export function SendDesk({
         <p className={styles.sendStatus} data-testid="first-ten-send-status">
           {draftStatusLine(draft.status, draft)}
         </p>
-        {/* still unconfirmed after a while: sending again is offered; JOYSTICK checks Sent first, so it never goes twice */}
+        {/* still unconfirmed after a while: the person decides, told plainly that sending again could send it twice */}
         {draft.status === "sending" && draft.handedOffAt && Date.now() - Date.parse(draft.handedOffAt) > 120_000 ? (
-          <div className={styles.tableActions}>
-            <button type="button" disabled={busy} onClick={() => void send()} data-testid="first-ten-send-again">
-              Try sending again
-            </button>
+          <div className={styles.sendConfirm} data-testid="first-ten-send-unconfirmed">
+            <p className={styles.sendAsk}>
+              Google never confirmed this message, and JOYSTICK hasn't found it in your Sent folder. That doesn't prove it didn't go:
+              sending again could send {firstName} the same message twice.
+            </p>
+            <div className={styles.tableActions}>
+              <button type="button" disabled={busy} onClick={() => void send({ resendUnconfirmed: true })} data-testid="first-ten-send-again">
+                Send it again anyway
+              </button>
+            </div>
           </div>
         ) : null}
         {problem ? (

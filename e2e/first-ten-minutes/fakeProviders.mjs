@@ -47,6 +47,8 @@ function gmailMessage(message) {
     { name: "To", value: message.to.map(to => `${to.name} <${to.email}>`).join(", ") },
     { name: "Subject", value: message.subject },
     { name: "Date", value: new Date(message.date).toUTCString() },
+    ...(message.rfc822 ? [{ name: "Message-ID", value: message.rfc822 }] : []),
+    ...(message.joystickSend ? [{ name: "X-Joystick-Send", value: message.joystickSend }] : []),
     ...(message.bulk ? [{ name: "List-Unsubscribe", value: "<mailto:unsubscribe@flowermarket.example>" }] : []),
   ];
   const parts = [{ mimeType: "text/plain", body: { data: Buffer.from(message.body, "utf8").toString("base64url"), size: message.body.length } }];
@@ -158,6 +160,8 @@ const defaults = () => ({
   refuseSend: false,
   // users.messages.send answers: "ok", a refusal ("refuse"), or accepted but the answer never arrives ("lose")
   sendAnswer: "ok",
+  // Gmail gives a message sent through the API its own Message-ID (JOYSTICK's survives in X-Joystick-Send)
+  rewriteMessageId: false,
 });
 let control = defaults();
 const revoked = [];
@@ -284,7 +288,8 @@ const server = http.createServer(async (req, res) => {
     const message = {
       id: `m-api-sent-${apiSends.length + 1}`,
       threadId: "t-sent-later",
-      rfc822: header("Message-ID"),
+      rfc822: control.rewriteMessageId ? `<CAgmail${apiSends.length + 1}@mail.gmail.com>` : header("Message-ID"),
+      joystickSend: header("X-Joystick-Send"),
       date: new Date().toISOString(),
       from: { name: corpus.owner.name, email: corpus.owner.email },
       to: [{ name: "", email: address }],
@@ -306,6 +311,11 @@ const server = http.createServer(async (req, res) => {
     if (rfc822) {
       const found = sentLater.filter(message => message.rfc822?.replace(/^<|>$/g, "") === rfc822).map(message => ({ id: message.id, threadId: message.threadId }));
       return send(res, 200, { messages: found, resultSizeEstimate: found.length });
+    }
+    // the Sent label read directly, newest first: no search involved
+    if (url.searchParams.get("labelIds") === "SENT" && !q) {
+      const ids = [...corpus.messages, ...sentLater].filter(message => message.from.email === corpus.owner.email).map(message => ({ id: message.id, threadId: message.threadId }));
+      return send(res, 200, { messages: ids.reverse().slice(0, Number(url.searchParams.get("maxResults") ?? 100)), resultSizeEstimate: ids.length });
     }
     const sent = /(^|\s)in:sent\b/.test(q);
     const to = q.match(/(?:^|\s)to:(\S+)/)?.[1]?.toLowerCase() ?? null;

@@ -104,8 +104,9 @@ test("the person's own words go exactly as approved; a refusal keeps the message
   await expect(page.getByTestId("first-ten-send-problem")).toHaveText("Google didn't send it. Nothing went; your message is still here. You can try again.");
   await expect(page.getByTestId("first-ten-send")).toHaveAttribute("data-status", "prepared");
 
-  // Google takes it but the answer never arrives: JOYSTICK finds it in Sent by its own Message-ID, and says so then
-  await request.post(`${FAKE}/__control`, { data: { sendAnswer: "lose" } });
+  // Google takes it but the answer never arrives, and gives it a Message-ID of its own: JOYSTICK reads Sent directly,
+  // recognises it by its own header, and says it went only then
+  await request.post(`${FAKE}/__control`, { data: { sendAnswer: "lose", rewriteMessageId: true } });
   await page.getByTestId("first-ten-send-start").click();
   await page.getByTestId("first-ten-send-now").click();
   await expect(page.getByTestId("first-ten-send-status")).toContainText("Sent from your Gmail", { timeout: 30_000 });

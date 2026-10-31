@@ -307,8 +307,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           <SendDesk
             draft={draft}
             activation={view}
-            onSend={async approved => {
-              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved });
+            onSend={async (approved, options) => {
+              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
               setChapter(sent.chapter);
               if (sent.outcome === "needs_permission") void activation.refetch();
               return sent.outcome;

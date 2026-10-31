@@ -7,8 +7,10 @@ import { createHash, randomUUID } from "node:crypto";
  * - **Their account, their words.** The message goes from the connected account, exactly as approved: the caller
  *   passes the digest of the recipient, subject and body the person approved, and anything else is refused.
  * - **Once.** Every send carries the caller's idempotency key. A key that has sent never sends again, whether the
- *   retry comes from a double click, a reload or a replay; one whose outcome is unknown is settled from the person's
- *   Sent folder before anything is tried again.
+ *   retry comes from a double click, a reload or a replay. One whose outcome is unknown (Google never answered) is
+ *   settled from the person's Sent folder, and is never sent again on JOYSTICK's own judgement: not finding it in Sent
+ *   doesn't prove it didn't go. Only the person, told it may already have gone, can choose to send it again
+ *   (`resendUnconfirmed`).
  * - **Only what Google showed.** `sent` means Google answered with the message's id (or the Sent folder holds it).
  *   A lost answer is `sending`, never sent; a refusal is `failed`, and nothing went.
  *
@@ -19,8 +21,15 @@ const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 /** an attempt younger than this may still be answering: it is waited on, not settled */
 const IN_FLIGHT_MS = 60_000;
-/** an unknown attempt is tried again only after its Sent folder has had this long to show it */
+/** an unknown attempt can be sent again (by the person's choice) only after its Sent folder has had this long to show it */
 const SETTLE_MS = 2 * 60_000;
+/** how many of the newest messages in Sent are read directly, past Gmail's search */
+const RECENT_SENT = 10;
+/**
+ * Every message JOYSTICK sends carries its own Message-ID in this header too, so it can be recognised in Sent even if
+ * Gmail gives a message sent through the API a Message-ID of its own.
+ */
+export const JOYSTICK_SEND_HEADER = "X-Joystick-Send";
 
 export type FetchLike = typeof fetch;
 
@@ -123,6 +132,7 @@ export function rawMessage(input: { from: string; mail: OutgoingEmail; messageId
     `To: ${name ? `${encoded(`"${name}"`)} <${to}>` : to}`,
     `Subject: ${encoded(oneLine(input.mail.subject))}`,
     `Message-ID: ${input.messageId}`,
+    `${JOYSTICK_SEND_HEADER}: ${input.messageId}`,
     `Date: ${input.date.toUTCString().replace("GMT", "+0000")}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
@@ -168,14 +178,36 @@ async function call(access: GmailSendAccess, deps: Deps, url: string, init: { me
   return { ok: false, status: 401 };
 }
 
-/** Is it in their Sent folder? Found by the Message-ID JOYSTICK gave it; null when the folder can't be read. */
+/**
+ * Is it in their Sent folder? Looked for by Gmail's search on the Message-ID JOYSTICK gave it, then, because search can
+ * lag and Gmail may replace that Message-ID, among the newest messages in Sent read directly, by either header. Null
+ * when it was looked for and isn't there (which still doesn't prove it didn't go); "unreadable" when it couldn't be.
+ */
 async function lookInSent(record: SendRecord, access: GmailSendAccess, deps: Deps): Promise<{ id: string; threadId: string | null } | null | "unreadable"> {
   if (!access.grantedScopes.includes(GMAIL_READ_SCOPE)) return "unreadable";
+  type Listed = Array<{ id?: string; threadId?: string }> | undefined;
   const query = `in:sent rfc822msgid:${record.rfc822MessageId.replace(/^<|>$/g, "")}`;
-  const answer = await call(access, deps, `${GMAIL}/messages?${new URLSearchParams({ q: query, maxResults: "2" })}`, { method: "GET" });
-  if (!answer.ok) return "unreadable";
-  const found = (answer.body.messages as Array<{ id?: string; threadId?: string }> | undefined)?.find(message => message.id);
-  return found?.id ? { id: found.id, threadId: found.threadId ?? null } : null;
+  const search = await call(access, deps, `${GMAIL}/messages?${new URLSearchParams({ q: query, maxResults: "2" })}`, { method: "GET" });
+  if (!search.ok) return "unreadable";
+  const found = (search.body.messages as Listed)?.find(message => message.id);
+  if (found?.id) return { id: found.id, threadId: found.threadId ?? null };
+
+  const listing = await call(access, deps, `${GMAIL}/messages?${new URLSearchParams({ labelIds: "SENT", maxResults: String(RECENT_SENT) })}`, { method: "GET" });
+  if (!listing.ok) return "unreadable";
+  const wanted = new Set(["message-id", JOYSTICK_SEND_HEADER.toLowerCase()]);
+  for (const message of (listing.body.messages as Listed) ?? []) {
+    if (!message.id) continue;
+    const params = new URLSearchParams({ format: "metadata" });
+    params.append("metadataHeaders", "Message-ID");
+    params.append("metadataHeaders", JOYSTICK_SEND_HEADER);
+    const one = await call(access, deps, `${GMAIL}/messages/${encodeURIComponent(message.id)}?${params}`, { method: "GET" });
+    if (!one.ok) return "unreadable";
+    const headers = (one.body.payload as { headers?: Array<{ name?: string; value?: string }> } | undefined)?.headers ?? [];
+    if (headers.some(header => wanted.has((header.name ?? "").toLowerCase()) && header.value?.trim() === record.rfc822MessageId)) {
+      return { id: message.id, threadId: message.threadId ?? (typeof one.body.threadId === "string" ? one.body.threadId : null) };
+    }
+  }
+  return null;
 }
 
 const sentOutcome = (record: Pick<SendRecord, "gmailMessageId" | "gmailThreadId" | "sentAt">, already: boolean): SendOutcome => ({
@@ -218,9 +250,13 @@ export async function checkSend(input: { key: string; access: GmailSendAccess },
 /**
  * Sends the approved message from the connected account, once per key. See the file's comment for the guarantees.
  * Throws SendRefused when the message isn't the one approved, or can't be addressed.
+ *
+ * `resendUnconfirmed`: the person was told that this message may already have gone (Google never answered, and it
+ * isn't in their Sent folder, which doesn't prove it didn't go) and chose to send it again. Without it, a send whose
+ * outcome is unknown is never sent again.
  */
 export async function sendApprovedEmail(
-  input: { key: string; actor: string; mail: OutgoingEmail; approval: SendApproval; access: GmailSendAccess },
+  input: { key: string; actor: string; mail: OutgoingEmail; approval: SendApproval; access: GmailSendAccess; resendUnconfirmed?: boolean },
   deps: Deps
 ): Promise<SendOutcome> {
   const now = deps.now ?? (() => new Date());
@@ -231,12 +267,15 @@ export async function sendApprovedEmail(
   let record = await deps.ledger.find(input.key);
   if (record?.status === "sent") return sentOutcome(record, true);
   if (record && record.status !== "failed") {
-    // in flight, or its answer was lost: settle it from the Sent folder. It is tried again only when the folder was
-    // actually read, long enough after, and doesn't have it; a folder that couldn't be read proves nothing
+    // in flight, or its answer was lost: settle it from the Sent folder. Not finding it there doesn't prove it didn't
+    // go, so it is sent again only on the person's explicit choice, once the folder was actually read, long enough
+    // after, and doesn't have it; a folder that couldn't be read proves nothing at all
     const settled = await settle(input.key, input.access, deps);
     if (settled.outcome.status !== "sending" || !settled.record) return settled.outcome;
     record = settled.record;
-    if (!settled.absentFromSent || record.status !== "unknown" || now().getTime() - record.lastAttemptAt.getTime() < SETTLE_MS) return { status: "sending" };
+    if (!input.resendUnconfirmed || !settled.absentFromSent || record.status !== "unknown" || now().getTime() - record.lastAttemptAt.getTime() < SETTLE_MS) {
+      return { status: "sending" };
+    }
   }
   if (!canSendFrom(input.access)) return { status: "needs_permission" };
 

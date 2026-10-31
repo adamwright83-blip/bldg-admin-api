@@ -46,31 +46,57 @@ function memoryLedger(): SendLedger & { rows: Map<string, SendRecord> } {
 }
 
 type Call = { method: string; url: string; body: string | null; token: string };
-/** Gmail, played: `send` answers each POST in turn; the Sent folder holds whatever `sentFolder` says. */
-function gmail(options: { send?: Array<"ok" | "lost" | "accepted_then_lost" | 400 | 401 | 403 | 503>; sentFolder?: () => Array<{ id: string; rfc822: string }>; lookup?: number } = {}) {
+type Filed = { id: string; rfc822: string; joystick?: string };
+/**
+ * Gmail, played: `send` answers each POST in turn; the Sent folder holds whatever was sent plus `sentFolder`.
+ * `rewriteId`: Gmail gives each message sent through the API its own Message-ID (JOYSTICK's survives in its header).
+ * `searchLags`: Gmail's search doesn't show anything yet; the Sent label, read directly, does.
+ */
+function gmail(
+  options: {
+    send?: Array<"ok" | "lost" | "accepted_then_lost" | 400 | 401 | 403 | 503>;
+    sentFolder?: () => Filed[];
+    lookup?: number;
+    rewriteId?: boolean;
+    searchLags?: boolean;
+  } = {}
+) {
   const calls: Call[] = [];
   const sends = [...(options.send ?? ["ok"])];
-  const folder: Array<{ id: string; rfc822: string }> = [];
+  const folder: Filed[] = [];
+  const file = (raw: string) => {
+    const own = raw.match(/^Message-ID: (.+)$/m)![1].trim();
+    const joystick = raw.match(/^X-Joystick-Send: (.+)$/m)?.[1].trim();
+    folder.push({ id: `g-${folder.length + 1}`, rfc822: options.rewriteId ? `<CAgmail${folder.length + 1}@mail.gmail.com>` : own, joystick });
+  };
+  const everything = () => [...folder, ...(options.sentFolder?.() ?? [])];
   const fetcher = (async (url: string | URL, init?: RequestInit) => {
     const call: Call = { method: init?.method ?? "GET", url: String(url), body: (init?.body as string) ?? null, token: String((init?.headers as Record<string, string>).authorization) };
     calls.push(call);
     if (call.method === "POST") {
       const answer = sends.shift() ?? "ok";
       const raw = Buffer.from(JSON.parse(call.body!).raw, "base64url").toString("utf8");
-      const rfc822 = raw.match(/^Message-ID: (.+)$/m)![1].trim();
       if (answer === "lost") throw new Error("socket hang up");
       if (answer === "accepted_then_lost") {
-        folder.push({ id: `g-${folder.length + 1}`, rfc822 });
+        file(raw);
         throw new Error("socket hang up");
       }
       if (typeof answer === "number") return new Response("{}", { status: answer });
-      folder.push({ id: `g-${folder.length + 1}`, rfc822 });
+      file(raw);
       return Response.json({ id: `g-${folder.length}`, threadId: "t-1", labelIds: ["SENT"] });
     }
     if (options.lookup) return new Response("{}", { status: options.lookup });
-    const q = new URL(call.url).searchParams.get("q") ?? "";
-    const wanted = q.match(/rfc822msgid:(\S+)/)?.[1];
-    const found = [...folder, ...(options.sentFolder?.() ?? [])].filter(item => item.rfc822.replace(/^<|>$/g, "") === wanted);
+    const at = new URL(call.url);
+    const one = at.pathname.match(/\/messages\/([^/]+)$/);
+    if (one) {
+      const item = everything().find(candidate => candidate.id === decodeURIComponent(one[1]));
+      if (!item) return new Response("{}", { status: 404 });
+      const headers = [{ name: "Message-ID", value: item.rfc822 }, ...(item.joystick ? [{ name: "X-Joystick-Send", value: item.joystick }] : [])];
+      return Response.json({ id: item.id, threadId: "t-1", payload: { headers } });
+    }
+    if (at.searchParams.get("labelIds") === "SENT") return Response.json({ messages: everything().reverse().map(item => ({ id: item.id, threadId: "t-1" })) });
+    const wanted = at.searchParams.get("q")?.match(/rfc822msgid:(\S+)/)?.[1];
+    const found = options.searchLags ? [] : everything().filter(item => item.rfc822.replace(/^<|>$/g, "") === wanted);
     return Response.json({ messages: found.map(item => ({ id: item.id, threadId: "t-1" })) });
   }) as typeof fetch;
   return { calls, posts: () => calls.filter(call => call.method === "POST"), fetch: fetcher };
@@ -179,11 +205,42 @@ describe("sending from the person's own Gmail", () => {
     now = new Date("2026-10-31T17:01:00Z");
     expect(await send({ ledger: lost, fetch: nothing.fetch, now: nowFn })).toEqual({ status: "sending" });
     expect(nothing.posts()).toHaveLength(1);
-    // long enough, and still not in Sent: it can't have gone, so it is tried again, with the same Message-ID
-    now = new Date("2026-10-31T17:05:00Z");
-    expect(await send({ ledger: lost, fetch: nothing.fetch, now: nowFn })).toMatchObject({ status: "sent" });
+    // long enough, and still not in Sent: that doesn't prove it didn't go, so JOYSTICK doesn't send it again by itself,
+    // however long it has been
+    for (const later of ["2026-10-31T17:05:00Z", "2026-11-01T17:00:00Z"]) {
+      now = new Date(later);
+      expect(await send({ ledger: lost, fetch: nothing.fetch, now: nowFn })).toEqual({ status: "sending" });
+    }
+    expect(nothing.posts()).toHaveLength(1);
+    // the person, told it may already have gone, chooses to send it again: with the same Message-ID
+    expect(await send({ ledger: lost, fetch: nothing.fetch, now: nowFn }, { resendUnconfirmed: true })).toMatchObject({ status: "sent" });
     const ids = nothing.posts().map(call => Buffer.from(JSON.parse(call.body!).raw, "base64url").toString("utf8").match(/^Message-ID: (.+)$/m)![1]);
+    expect(ids).toHaveLength(2);
     expect(ids[0]).toBe(ids[1]);
+    expect(lost.rows.get("first_ten:j1")?.attempts).toBe(2);
+  });
+
+  it("the person's choice to send again still waits for the Sent folder to have had its chance", async () => {
+    const ledger = memoryLedger();
+    let now = new Date("2026-10-31T17:00:00Z");
+    const google = gmail({ send: ["lost", "ok"] });
+    expect(await send({ ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
+    now = new Date("2026-10-31T17:01:30Z");
+    expect(await send({ ledger, fetch: google.fetch, now: () => now }, { resendUnconfirmed: true })).toEqual({ status: "sending" });
+    expect(google.posts()).toHaveLength(1);
+  });
+
+  it("a lost answer is found in Sent even when search lags and Gmail gave it its own Message-ID, and is never resent", async () => {
+    const ledger = memoryLedger();
+    let now = new Date("2026-10-31T17:00:00Z");
+    const google = gmail({ send: ["accepted_then_lost", "ok"], rewriteId: true, searchLags: true });
+    // the immediate look reads Sent directly and recognises it by JOYSTICK's own header
+    expect(await send({ ledger, fetch: google.fetch, now: () => now })).toMatchObject({ status: "sent", gmailMessageId: "g-1", already: false });
+    now = new Date("2026-10-31T17:05:00Z");
+    expect(await send({ ledger, fetch: google.fetch, now: () => now }, { resendUnconfirmed: true })).toMatchObject({ status: "sent", already: true });
+    expect(google.posts()).toHaveLength(1);
+    const raw = Buffer.from(JSON.parse(google.posts()[0].body!).raw, "base64url").toString("utf8");
+    expect(raw.match(/^X-Joystick-Send: (.+)$/m)?.[1]).toBe(raw.match(/^Message-ID: (.+)$/m)?.[1]);
   });
 
   it("without the Sent folder to look in, a lost answer stays unconfirmed and is never sent again", async () => {
@@ -205,7 +262,7 @@ describe("sending from the person's own Gmail", () => {
     expect(await send({ ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
     for (const later of ["2026-10-31T17:05:00Z", "2026-10-31T19:00:00Z", "2026-11-01T17:00:00Z"]) {
       now = new Date(later);
-      expect(await send({ ledger, fetch: google.fetch, now: () => now })).toEqual({ status: "sending" });
+      expect(await send({ ledger, fetch: google.fetch, now: () => now }, { resendUnconfirmed: true })).toEqual({ status: "sending" });
     }
     expect(google.posts()).toHaveLength(1);
   });

@@ -163,11 +163,13 @@ async function recordSend(journey: JourneyRow, outcome: SendOutcome): Promise<Se
  * The person sends the message from JOYSTICK, from their own Gmail. `approved` is exactly what they saw and approved
  * (recipient, subject, words); if the message at the table isn't that, nothing is sent. Without permission to send,
  * nothing is tried: the page asks Google for it first. While billing is open, a journey has to be active first.
+ * `resendUnconfirmed`: the person was told an unconfirmed send may already have gone, and chose to send it again.
  */
 export async function sendDraft(
   journey: JourneyRow,
   credentials: DraftCredentials,
-  approved: { to: string; subject: string; body: string }
+  approved: { to: string; subject: string; body: string },
+  options: { resendUnconfirmed?: boolean } = {}
 ): Promise<SendDraftResult> {
   if (journey.kind === "example") throw new TRPCError({ code: "BAD_REQUEST", message: "Nothing is sent from Nina's example." });
   const activation = await activationView(journey, credentials);
@@ -200,6 +202,7 @@ export async function sendDraft(
         mail,
         approval: { digest: approvalDigest(mail), approvedBy: `first_ten_journey:${journey.id}`, approvedAt: new Date() },
         access,
+        resendUnconfirmed: row.status === "sending" && options.resendUnconfirmed === true,
       },
       { ledger: gmailSendLedger, fetch: sendFetch }
     );
