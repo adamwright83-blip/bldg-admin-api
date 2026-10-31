@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   readTenantOnboardingKnowledge: vi.fn(),
   cachedAwaitingReplies: vi.fn(),
   readAwaitingReplies: vi.fn(),
+  refreshAwaitingRepliesInBackground: vi.fn(),
 }));
 
 vi.mock("../field/fieldTodayService", () => ({ getFieldToday: mocks.getFieldToday }));
@@ -20,6 +21,7 @@ vi.mock("../firstTenMinutes/knowledge/tenantKnowledge", () => ({ readTenantOnboa
 vi.mock("../firstTenMinutes/knowledge/awaitingReplies", () => ({
   cachedAwaitingReplies: mocks.cachedAwaitingReplies,
   readAwaitingReplies: mocks.readAwaitingReplies,
+  refreshAwaitingRepliesInBackground: mocks.refreshAwaitingRepliesInBackground,
 }));
 
 import { assembleClaireDriveContext } from "./contextAssembler";
@@ -124,9 +126,18 @@ describe("Claire's main context: signup knowledge and awaiting replies", () => {
     expect(context).not.toHaveProperty("awaitingReplies");
   });
 
-  it("never asks Gmail mid-turn: with nothing cached, awaiting replies are absent", async () => {
+  it("never asks Gmail mid-turn: with nothing cached, awaiting replies are absent and a background read starts", async () => {
+    mocks.refreshAwaitingRepliesInBackground.mockClear();
     await assemble();
     expect(mocks.readAwaitingReplies).not.toHaveBeenCalled();
+    expect(mocks.refreshAwaitingRepliesInBackground).toHaveBeenCalledWith("tenant-1");
+  });
+
+  it("a cached list is used as is, with no background read", async () => {
+    mocks.refreshAwaitingRepliesInBackground.mockClear();
+    mocks.cachedAwaitingReplies.mockReturnValue(awaiting);
+    await assemble();
+    expect(mocks.refreshAwaitingRepliesInBackground).not.toHaveBeenCalled();
   });
 
   it("takes injected readers in place of the production ones", async () => {

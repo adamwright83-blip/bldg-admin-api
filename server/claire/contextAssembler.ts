@@ -32,7 +32,7 @@ import {
   type SignupKnowledgeBriefing,
 } from "../../shared/firstTenMinutesKnowledge";
 import { readTenantOnboardingKnowledge } from "../firstTenMinutes/knowledge/tenantKnowledge";
-import { cachedAwaitingReplies } from "../firstTenMinutes/knowledge/awaitingReplies";
+import { cachedAwaitingReplies, refreshAwaitingRepliesInBackground } from "../firstTenMinutes/knowledge/awaitingReplies";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -360,6 +360,7 @@ export async function assembleClaireDriveContext(input: {
   /** Test seams. Production reads the tenant's own First Ten Minutes journey and the awaiting-replies cache. */
   loadSignupKnowledge?: (tenantId: string) => Promise<OnboardingKnowledge | null>;
   cachedAwaitingReplies?: (tenantId: string) => AwaitingReplies | null;
+  refreshAwaitingReplies?: (tenantId: string) => void;
 }): Promise<ClaireDriveContext> {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
@@ -492,6 +493,15 @@ export async function assembleClaireDriveContext(input: {
     awaitingReplies = (input.cachedAwaitingReplies ?? cachedAwaitingReplies)(input.tenantId) ?? undefined;
   } catch {
     awaitingReplies = undefined;
+  }
+  // nothing cached (a cold start, or the 10-minute cache expired): read Gmail in the background, never on this turn's
+  // path, so the next turn has it. One read per workspace at a time; a workspace without Gmail is a quick no-op.
+  if (!awaitingReplies) {
+    try {
+      (input.refreshAwaitingReplies ?? refreshAwaitingRepliesInBackground)(input.tenantId);
+    } catch {
+      // never fails the turn
+    }
   }
 
   const assembled: ClaireDriveContext = {
