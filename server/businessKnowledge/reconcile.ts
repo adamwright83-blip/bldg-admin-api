@@ -51,7 +51,11 @@ async function chronologyEvents(scope: KnowledgeScope, rows: TimelineRow[]): Pro
 }
 
 /** Decide every business, brand, product and project's status from its timeline and what was actually searched. */
-export async function reconcileStatuses(scope: KnowledgeScope, input: { coverage: CoverageView; now: Date }): Promise<StatusReconciliation[]> {
+/**
+ * `coverage` answers for one entity: what was searched on its behalf. A search for one business says nothing about
+ * whether another went quiet.
+ */
+export async function reconcileStatuses(scope: KnowledgeScope, input: { coverage: (entity: EntityRow) => CoverageView; now: Date }): Promise<StatusReconciliation[]> {
   const subjects = await entities(scope, BUSINESS_KINDS);
   if (!subjects.length) return [];
   const rows = await timeline(scope, { entityIds: subjects.map(entity => entity.id) });
@@ -69,7 +73,7 @@ export async function reconcileStatuses(scope: KnowledgeScope, input: { coverage
       events: own.filter(row => row.kind !== "status_statement").map(row => events.get(row.id)!),
       observed,
       user: userRow ? { status: userRow.value as ActivityStatus, at: userRow.createdAt, detail: userRow.detail, basis: userRow.basis } : null,
-      coverage: input.coverage,
+      coverage: input.coverage(entity),
       now: input.now,
     });
     let outcome: AssertOutcome | null = null;

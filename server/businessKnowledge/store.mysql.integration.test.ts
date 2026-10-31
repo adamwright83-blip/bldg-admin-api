@@ -16,7 +16,7 @@ process.env.JWT_SECRET ||= "first-ten-integration-secret-000000000000";
 
 const now = new Date("2026-10-31T16:00:00Z");
 const at = (iso: string) => new Date(`${iso}T12:00:00Z`);
-const all = { covered: () => true };
+const all = () => ({ covered: () => true });
 
 describe.skipIf(!allowed)("business knowledge on MySQL", () => {
   let db: mysql.Connection;
