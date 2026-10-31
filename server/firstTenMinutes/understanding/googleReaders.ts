@@ -201,6 +201,11 @@ export function gmailReader(access: GoogleAccess, deps: Deps = {}) {
     sentMail: (limit: number) => read("in:sent newer_than:1y", limit),
     receivedMail: (limit: number) =>
       read("newer_than:1y -in:sent -in:chats -category:promotions -category:social -category:updates -category:forums", limit),
+    /** everything the person sent since `since`, newest window first (who they're waiting on) */
+    sentSince: (since: Date, limit: number) => read(`in:sent after:${Math.floor(since.getTime() / 1000)}`, limit),
+    /** what came in since `since`, people only: no chats, promotions, social, updates or forums */
+    receivedSince: (since: Date, limit: number) =>
+      read(`-in:sent -in:chats -category:promotions -category:social -category:updates -category:forums after:${Math.floor(since.getTime() / 1000)}`, limit),
     /** messages the person sent to `address` since `since`, from their own Sent folder */
     sentTo: async (address: string, since: Date): Promise<MailItem[]> =>
       (await read(`in:sent to:${address} after:${Math.floor(since.getTime() / 1000)}`, 10)).items,

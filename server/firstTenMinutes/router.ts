@@ -18,6 +18,7 @@ import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, res
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
 import { readTenantOnboardingKnowledge } from "./knowledge/tenantKnowledge";
+import { readAwaitingReplies } from "./knowledge/awaitingReplies";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
@@ -39,6 +40,9 @@ export const firstTenMinutesRouter = router({
    * preview closes. Only the members who run the business see it.
    */
   myKnowledge: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readTenantOnboardingKnowledge(ctx.tenantId)),
+
+  /** Who the workspace's owner is waiting to hear back from, read from the Gmail they connected (cached briefly). */
+  myAwaitingReplies: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readAwaitingReplies(ctx.tenantId)),
 
   availability: publicProcedure.query(
     ({ ctx }): FirstTenAvailability => ({

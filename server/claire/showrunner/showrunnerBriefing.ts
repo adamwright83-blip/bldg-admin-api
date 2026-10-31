@@ -1,4 +1,4 @@
-import { signupKnowledgeForBriefing, type OnboardingKnowledge, type SignupKnowledgeBriefing } from "../../../shared/firstTenMinutesKnowledge";
+import { signupKnowledgeForBriefing, type AwaitingReplies, type OnboardingKnowledge, type SignupKnowledgeBriefing } from "../../../shared/firstTenMinutesKnowledge";
 import { readTenantOnboardingKnowledge } from "../../firstTenMinutes/knowledge/tenantKnowledge";
 import { proposalItemExecutionWindow, strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal } from "../../../shared/strategicIntelligence";
@@ -117,6 +117,8 @@ export type ShowrunnerBriefing = {
   preparedItems?: PreparedPropertyVisits[];
   /** What JOYSTICK's crew read from the operator's own accounts at signup (First Ten Minutes): history, with receipts. */
   signupKnowledge?: SignupKnowledgeBriefing | null;
+  /** Who the operator is waiting to hear back from, read from their own Gmail (refreshed per Desk turn from a short cache). */
+  awaitingReplies?: AwaitingReplies | null;
   opportunity?: null | {
     diagnosis: string;
     approach: string;

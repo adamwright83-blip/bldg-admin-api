@@ -1,4 +1,5 @@
-import { signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
+import { awaitingOpeningLine, signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
+import { cachedAwaitingReplies, readAwaitingReplies } from "../../firstTenMinutes/knowledge/awaitingReplies";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
@@ -266,6 +267,15 @@ export const weeklyMissionRouter = router({
           },
         };
       }
+      // Who the owner is waiting on, from their own Gmail: refreshed from the short cache every turn; the opening (no
+      // utterance yet) may wait briefly for a first read, and goes on without it rather than keep the operator waiting.
+      const opening = !input.utterance?.trim() && !input.audioDataUrl;
+      const awaiting =
+        cachedAwaitingReplies(identity.tenantId) ??
+        (opening
+          ? await Promise.race([readAwaitingReplies(identity.tenantId), new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))]).catch(() => null)
+          : null);
+      if (awaiting) session.showrunner.briefing.awaitingReplies = awaiting;
       // Claire's own voice (the same xAI voice as her calls) when configured; otherwise the client says so.
       const voiced = <T extends { speak: string }>(r: T) => ({
         ...r,
@@ -296,6 +306,7 @@ export const weeklyMissionRouter = router({
           pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
           // where the first message from signup stands (First Ten Minutes), when there is one
           signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
+          awaitingOpeningLine(b.awaitingReplies) ?? "",
           "What do you need?",
         ].filter(Boolean).join(" ");
         if (!session.history.length) session.history.push({ speaker: "claire", text: speak });

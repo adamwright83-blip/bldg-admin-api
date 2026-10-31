@@ -135,3 +135,42 @@ export function signupOpeningLine(briefing: SignupKnowledgeBriefing | null, time
   if (message.sent) return `Your note to ${message.to} went${on(message.sentOn) || " out"}; I haven't seen a reply.`;
   return `Your note to ${message.to} is still waiting at the table.`;
 }
+
+// ------------------------------------------------------------------ who the person is waiting to hear back from
+
+/** One person the operator wrote to who hasn't written back: one real message in their Sent folder. */
+export type AwaitingReply = {
+  person: { name: string | null; address: string };
+  subject: string;
+  /** the operator's last message to them */
+  sentAt: string;
+  waitingDays: number;
+  /** what the operator wrote, in their own words, shortened */
+  lastLine: string;
+  /** their message asked something (a question mark in their own words) */
+  asked: boolean;
+  messageId: string;
+  threadId: string;
+  url: string | null;
+};
+
+export type AwaitingReplies = {
+  /** when the person's Gmail was read for this */
+  checkedAt: string;
+  account: string | null;
+  items: AwaitingReply[];
+  /** plain words when it couldn't be read: Gmail not shared, Google refused, nothing connected */
+  unavailable: string | null;
+  scanned: { sent: number; received: number; days: number };
+};
+
+export const AWAITING_REPLIES_RULE =
+  "BRIEFING.awaitingReplies lists people the operator wrote to who haven't written back, read from the operator's own Gmail at checkedAt (the last scanned.days days): each item is one real message in their Sent folder (subject, sentAt, waitingDays, their own lastLine, asked = their message asked something). When asked who they are waiting on, answer from it by name with how long, and help decide what to do about each; never claim a reply arrived or didn't beyond checkedAt, and never draft or send anything yourself. If unavailable is set, say that reason.";
+
+export function awaitingOpeningLine(awaiting: AwaitingReplies | null | undefined): string | null {
+  const items = awaiting?.items ?? [];
+  if (!items.length) return null;
+  const named = items.slice(0, 2).map(item => `${item.person.name ?? item.person.address} (${item.waitingDays} days)`);
+  const more = items.length > 2 ? ` and ${items.length - 2} more` : "";
+  return `You're waiting to hear back from ${named.join(" and ")}${more}.`;
+}
