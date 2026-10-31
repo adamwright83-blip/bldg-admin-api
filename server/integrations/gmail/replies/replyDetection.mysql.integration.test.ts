@@ -37,7 +37,12 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
   beforeAll(async () => {
     connection = await mysql.createConnection(url);
     for (const table of ["gmail_inbound_messages", "gmail_push_notices", "gmail_mailbox_watches"]) await connection.query(`DELETE FROM ${table}`);
-    await connection.query("DELETE FROM gmail_sends WHERE send_key = ?", [SEND]);
+    await connection.query("DELETE FROM gmail_sends WHERE send_key IN (?, ?, ?)", [SEND, "first_ten:other-journey", "first_ten:unowned-journey"]);
+    await connection.query("DELETE FROM first_ten_journeys WHERE id IN ('replies-journey', 'other-journey', 'unowned-journey')");
+    // the journey that sent it was provisioned into tenant-replies: that tenant owns the conversation
+    await connection.query(
+      "INSERT INTO first_ten_journeys (id, acquisition_session_id, tenant_id, kind, stage) VALUES ('replies-journey', 'acq-replies', 'tenant-replies', 'own', 'first_chapter')"
+    );
     const at = new Date("2026-10-30T10:00:00Z");
     expect(
       await gmailSendLedger.claim({
@@ -135,6 +140,35 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
     expect(row).toMatchObject({ email: "new@flowers.example", status: "active", historyId: null, watchExpiresAt: null });
   });
 
+  it("two tenants watching the same Gmail address: a reply is recorded only for the tenant that owns the conversation", async () => {
+    const other = "operator:tenant-intruder";
+    await mailboxStore.create({ key: other, tenantId: "tenant-intruder", source: "operator_gmail", email: ACCOUNT }, new Date("2026-10-30T09:00:00Z"));
+    await mailboxStore.watched(other, "100", new Date("2026-11-06T10:00:00Z"), new Date("2026-10-30T10:00:00Z"));
+    const intruder = (await mailboxStore.find(other))!;
+    await processMailbox(intruder, "150", { api, tracked: sentConversations, store: replyStore });
+    const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT mailbox_key, tenant_id FROM gmail_inbound_messages WHERE gmail_message_id = 'm-reply'");
+    // before: the second tenant recorded Elena's reply too, and its Claire could read it
+    expect(rows.map(row => row.tenant_id)).toEqual(["tenant-replies"]);
+    expect(await recentInbound("tenant-intruder", new Date("2026-01-01"))).toEqual([]);
+    expect(await sentConversations.open(intruder, new Date("2026-01-01"))).toEqual([]);
+  });
+
+  it("a send no tenant owns yet (journey not provisioned) is tracked for nobody", async () => {
+    await connection.query(
+      "INSERT INTO first_ten_journeys (id, acquisition_session_id, tenant_id, kind, stage) VALUES ('unowned-journey', 'acq-unowned', NULL, 'own', 'first_chapter')"
+    );
+    const at = new Date("2026-10-30T10:00:00Z");
+    await gmailSendLedger.claim({
+      key: "first_ten:unowned-journey", actor: "first_ten_onboarding", accountEmail: ACCOUNT, recipient: "x@hotel.example", subject: "Hi", digest: "e".repeat(64),
+      approvedBy: "first_ten_journey:unowned-journey", approvedAt: at, rfc822MessageId: "<unowned@gojoystick.com>", status: "sending", gmailMessageId: null,
+      gmailThreadId: null, attempts: 1, lastAttemptAt: at, sentAt: null, failure: null,
+    });
+    await gmailSendLedger.settle("first_ten:unowned-journey", { status: "sent", gmailMessageId: "g-unowned", gmailThreadId: "th-unowned", sentAt: at, failure: null });
+    const mailbox = (await mailboxStore.find(KEY))!;
+    expect(await sentConversations.match(mailbox, { threadId: "th-unowned", referencedIds: ["<unowned@gojoystick.com>"] })).toBeNull();
+    expect((await sentConversations.match(mailbox, { threadId: "th-elena", referencedIds: [] }))?.ref).toBe(SEND);
+  });
+
   it("one pass per mailbox at a time", async () => {
     const now = new Date();
     expect(await mailboxStore.claim(KEY, now, 60_000)).toBe(true);
@@ -146,12 +180,18 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
 
   it("Claire reads it for this tenant only, and knows whether replies are watched", async () => {
     process.env.GMAIL_REPLY_DETECTION = "on";
+    // "watching" means a recent read, not just an active row: a pass that found nothing new still counts as a read
+    await replyStore.advanceCursor(KEY, "150", new Date("2026-10-31T11:55:00Z"));
+    expect((await mailboxStore.find(KEY))!.historyId).toBe("150");
+    const stale = await readCustomerReplies("tenant-replies", new Date("2026-10-31T13:00:00Z"));
+    expect(stale).toMatchObject({ watching: "not_checked_recently", lastCheckedAt: "2026-10-31T11:55:00.000Z" });
     const view = await readCustomerReplies("tenant-replies", new Date("2026-10-31T12:00:00Z"));
     expect(view.watching).toBe("watching");
     expect(view.replies).toEqual([
       expect.objectContaining({ from: "elena@larkspurhotel.example", kind: "wrote_back", excerpt: "Yes! Friday works. Could you bring the peonies?", conversation: `gmail_send:${SEND}` }),
     ]);
     // through Claire's own tool, as on a call: the verified reply, with its time in the operator's zone
+    await replyStore.advanceCursor(KEY, "150", new Date("2026-10-31T18:58:00Z"));
     const claire = await executeTool(
       { tenantId: "tenant-replies", timeZone: "America/Los_Angeles", now: () => new Date("2026-10-31T19:00:00Z") } as unknown as ToolContext,
       "read_customer_replies",

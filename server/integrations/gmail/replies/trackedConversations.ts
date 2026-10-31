@@ -1,15 +1,28 @@
-import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { firstTenJourneys } from "../../../firstTenMinutes/schema";
 import { getDb } from "../../../db";
 import { gmailSends } from "../gmailSendLedger";
 import { gmailInboundMessages } from "./replyStore";
 import type { Mailbox, TrackedConversation, TrackedConversations } from "./replyDetection";
 
 /**
- * Conversations JOYSTICK started from this mailbox's own account: messages the Gmail send service sent and Google
- * confirmed (gmail_sends, status "sent", with Google's thread id). A reply belongs to one when it is in the same Gmail
- * thread, or when it answers the Message-ID JOYSTICK gave the message. Nothing else is a tracked conversation: an
- * email from a known address in some other thread is not treated as a reply.
+ * Conversations JOYSTICK started from this mailbox's own account, and owned by this mailbox's tenant: messages the Gmail
+ * send service sent and Google confirmed (gmail_sends, status "sent", with Google's thread id). A reply belongs to one
+ * when it is in the same Gmail thread, or when it answers the Message-ID JOYSTICK gave the message. Nothing else is a
+ * tracked conversation: an email from a known address in some other thread is not treated as a reply.
+ *
+ * Ownership is the tenant boundary. Two tenants may watch the same Gmail address; a conversation is tracked only for
+ * the tenant that owns it, never for the other. gmail_sends carries no tenant, so the owner comes from the sender:
+ * a first-ten send (`first_ten:<journey>`) belongs to the tenant its journey was provisioned into. A send whose owner
+ * isn't known (a journey not provisioned yet, or a sender with no owner rule) is tracked for nobody.
  */
+const ownedBy = (tenantId: string) =>
+  and(
+    eq(gmailSends.actor, "first_ten_onboarding"),
+    sql`${gmailSends.sendKey} = CONCAT('first_ten:', ${firstTenJourneys.id})`,
+    eq(firstTenJourneys.tenantId, tenantId)
+  );
+
 export const sentConversations: TrackedConversations = {
   async match(mailbox, message) {
     const db = await getDb();
@@ -18,21 +31,23 @@ export const sentConversations: TrackedConversations = {
     const byReference = message.referencedIds.length ? inArray(gmailSends.rfc822MessageId, message.referencedIds) : undefined;
     if (!byThread && !byReference) return null;
     const [row] = await db
-      .select()
+      .select({ send: gmailSends })
       .from(gmailSends)
+      .innerJoin(firstTenJourneys, ownedBy(mailbox.tenantId))
       .where(and(eq(gmailSends.accountEmail, mailbox.email), eq(gmailSends.status, "sent"), or(byThread, byReference)))
       .orderBy(desc(gmailSends.sentAt))
       .limit(1);
-    return row ? conversationOf(row) : null;
+    return row ? conversationOf(row.send) : null;
   },
   async open(mailbox, since) {
     const db = await getDb();
     if (!db) return [];
     const rows = await db
-      .select()
+      .select({ send: gmailSends })
       .from(gmailSends)
+      .innerJoin(firstTenJourneys, ownedBy(mailbox.tenantId))
       .where(and(eq(gmailSends.accountEmail, mailbox.email), eq(gmailSends.status, "sent"), gte(gmailSends.sentAt, since)));
-    return rows.map(conversationOf);
+    return rows.map(row => conversationOf(row.send));
   },
 };
 

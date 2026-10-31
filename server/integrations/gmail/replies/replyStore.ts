@@ -77,6 +77,7 @@ const watchedOf = (row: typeof gmailMailboxWatches.$inferSelect) => ({
   watchExpiresAt: row.watchExpiresAt,
   source: row.source,
   statusChangedAt: row.statusChangedAt,
+  lastProcessedAt: row.lastProcessedAt,
 });
 
 export const replyStore: ReplyStore = {
@@ -113,16 +114,15 @@ export const replyStore: ReplyStore = {
       .where(and(eq(gmailInboundMessages.mailboxKey, mailboxKey), eq(gmailInboundMessages.gmailMessageId, gmailMessageId)));
   },
   async advanceCursor(mailboxKey, historyId, at) {
-    // forward only: a slower, older pass never moves a newer cursor back
+    // the cursor moves forward only (a slower, older pass never moves a newer one back), but every finished pass is
+    // recorded: last_processed_at is when JOYSTICK last read this mailbox, even when nothing new had arrived
     await (await db())
       .update(gmailMailboxWatches)
-      .set({ historyId, lastProcessedAt: at })
-      .where(
-        and(
-          eq(gmailMailboxWatches.mailboxKey, mailboxKey),
-          or(isNull(gmailMailboxWatches.historyId), sql`CAST(${gmailMailboxWatches.historyId} AS UNSIGNED) < CAST(${historyId} AS UNSIGNED)`)
-        )
-      );
+      .set({
+        historyId: sql`CASE WHEN ${gmailMailboxWatches.historyId} IS NULL OR CAST(${gmailMailboxWatches.historyId} AS UNSIGNED) < CAST(${historyId} AS UNSIGNED) THEN ${historyId} ELSE ${gmailMailboxWatches.historyId} END`,
+        lastProcessedAt: at,
+      })
+      .where(eq(gmailMailboxWatches.mailboxKey, mailboxKey));
   },
   async setStatus(mailboxKey, status, reason, at) {
     await (await db())
@@ -132,7 +132,7 @@ export const replyStore: ReplyStore = {
   },
 };
 
-export type WatchedMailbox = Mailbox & { watchExpiresAt: Date | null; source: string; statusChangedAt: Date | null };
+export type WatchedMailbox = Mailbox & { watchExpiresAt: Date | null; source: string; statusChangedAt: Date | null; lastProcessedAt: Date | null };
 
 export const mailboxStore = {
   /** A new mailbox: active, with no cursor and no watch yet. An existing one is left as it is. */

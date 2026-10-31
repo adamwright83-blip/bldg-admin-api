@@ -15,8 +15,12 @@ Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on
 3. **Evidence before a record.** A notice only says a mailbox changed. `users.history.list` is read from the cursor.
    Each added message is fetched (headers and Gmail's snippet only, never the body). A message is recorded in
    `gmail_inbound_messages` only when it belongs to a tracked conversation: the same Gmail thread as, or a reply to the
-   Message-ID of, a message JOYSTICK sent and Google confirmed (`gmail_sends`, status `sent`). Nothing about any other
-   mail is stored.
+   Message-ID of, a message JOYSTICK sent and Google confirmed (`gmail_sends`, status `sent`), **owned by the
+   mailbox's tenant**. Nothing about any other mail is stored.
+   - **Tenant ownership.** Two tenants may watch the same Gmail address; a conversation is tracked only for the tenant
+     that owns it. `gmail_sends` has no tenant, so the owner comes from the sender: a first-ten send
+     (`first_ten:<journey>`) belongs to the tenant its journey was provisioned into. A send with no known owner (a
+     journey not provisioned yet) is tracked for nobody.
 4. **What it is.** Each recorded message is a person writing back (`human_reply`), an automatic reply, or a delivery
    failure. This is decided from RFC 3834 and mail-server headers, and conservatively: when in doubt it is not a human
    reply. Bulk mail and the owner's own messages are never recorded.
@@ -29,7 +33,8 @@ Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on
      A removed connection marks it `disconnected`.
 6. **Claire.** `read_customer_replies` (in `server/claire/prototype/tools.ts`) reads the tenant's verified replies.
    It also reports whether replies are being watched at all, so "nobody wrote back" is never said when JOYSTICK couldn't
-   see. A reply is never called a booking, a sale or a new customer.
+   see. "Watching" means the mailbox is connected and JOYSTICK actually read it in the last 30 minutes
+   (`last_processed_at`, stamped by every finished pass); connected but not read recently is `not_checked_recently`. A reply is never called a booking, a sale or a new customer.
 7. **Follow-ups.** `followUpVerdict(conversation)` is the gate any automated follow-up must pass immediately before it
    sends. A person's reply or a bounce holds it; an out-of-office does not. It only ever holds a send: receiving
    evidence never authorises sending.
@@ -38,8 +43,10 @@ Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on
 
 - **Extreme Mode does not exist yet**, so there is no standing-authorization model to plug into. The follow-up gate is
   the seam it must call. Nothing here can send.
-- **Only conversations JOYSTICK sent through the Gmail send service are tracked.** Today those are first-ten sends. A
-  reply is seen when the onboarding account and the watched operator mailbox are the same Gmail address.
+- **Only conversations JOYSTICK sent through the Gmail send service, owned by the watching tenant, are tracked.** Today
+  those are first-ten sends whose journey was provisioned into a tenant, sent from the same Gmail address that tenant
+  connected as its operator mailbox. While JOYSTICK isn't taking payment, journeys aren't provisioned, so no
+  conversation is eligible yet: the live test needs a provisioned journey (or a future tenant-owned send path).
 - **SMS follow-ups (`scheduled_outreach_messages`, Silver Lake texting) are untouched.** An email reply is not linked to
   an SMS customer without a verified identity, so none is cancelled.
 - **First-ten's own reply check** (reading the onboarding user's mail on demand) is unchanged.
