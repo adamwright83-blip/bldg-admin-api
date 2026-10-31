@@ -1,29 +1,39 @@
 /**
- * Onboarding intelligence: the real-account acceptance test. NOT run by CI, and never run without the account
- * owner's explicit authorization.
+ * Onboarding intelligence: cold-start tests against the account owner's real, connected Google account. NOT run by
+ * CI, and never run without the account owner's explicit authorization. The operator's guide is "Cold tests against a
+ * real account" in docs/goldline/ONBOARDING_INTELLIGENCE.md; `pnpm intel:cold` (scripts/onboarding-cold-test.sh) runs
+ * this against production from a Railway-linked checkout.
  *
- *   DATABASE_URL=… JWT_SECRET=… npx tsx scripts/onboarding-intelligence-real-account.ts \
- *     --journey <first-ten journey id with a connected Google account> --i-have-authorization [--out tmp/real-account.md]
+ *   npx tsx scripts/onboarding-intelligence-real-account.ts --journey <own journey id> --i-have-authorization [options]
  *
- * What it does, read-only at Google:
- *  - uses that journey's existing Google connection (the scopes it already has; nothing is requested or changed);
- *  - runs the real investigation into a SEPARATE, throwaway knowledge scope (a new random id), so the journey's own
- *    knowledge, findings, portrait and questions are untouched; the scope is deleted at the end unless --keep;
- *  - writes a report of what it concluded, for the owner to check against what they know: current, preparing,
- *    paused, past, people, how names relate, the questions it would ask, and what it couldn't read.
+ *   --mode intelligence     the investigation alone (default): conclusions, Claire's questions, coverage, cost
+ *   --mode journey          the whole first ten minutes: the crew's reading, Claire's questions, the portrait, and the
+ *                           chapter played to the writing table (a draft is prepared there; nothing is sent)
+ *   --investigator claude|gemini|heuristic, --model <id>     the investigator model (default: the server's setting)
+ *   --answers ask|skip      journey mode: answer Claire's questions here (default when interactive) or leave them
+ *   --intelligence off      journey mode: the first ten minutes without the investigation
+ *   --expect <file>         your private expectations, for discoveries, omissions and incorrect conclusions
+ *   --runs <n>              n cold tests one after another (1 to 10), each from nothing
+ *   --out-dir <dir>         where reports go (default tmp/onboarding-intelligence/runs, readable by you only)
+ *   --input-cents-per-million <n> --output-cents-per-million <n>   price the investigator at this rate (e.g. Gemini)
+ *   --keep                  keep the test's rows to inspect them (then delete them with --sweep --yes)
  *
- * It checks only rules, never answers (no business, person or project is named in this file):
- *  - nothing paused or past is listed as current;
- *  - no two names are made one legal company, and nothing authorises a financial merge;
- *  - no sale or launch is invented for something being prepared (each listed sale cites the owner's own words);
- *  - nothing that looks like a bank, card or identity number is stored;
- *  - every source that couldn't be read completely is listed.
- * Whether the conclusions are RIGHT is for the owner to judge from the report. The report holds names, statuses,
- * dates and source labels: never message bodies or document text.
+ *   npx tsx scripts/onboarding-intelligence-real-account.ts --list
+ *     the own journeys with Google connected (id, account, stage, workspace), to find the one to test. Reads only.
+ *
+ *   npx tsx scripts/onboarding-intelligence-real-account.ts --sweep [--yes]
+ *     lists, and with --yes deletes, rows left by a test that was killed or kept. Only cold-test ids are touched.
+ *
+ * Each run reads Google read-only into a throwaway test journey ("coldtest-…") that starts from nothing, and deletes
+ * exactly what it wrote. Of the person's own journey only its connection is used: its knowledge, findings, answers and
+ * portrait, and their workspace, are never read or written. See server/businessKnowledge/coldTest.ts.
  */
-import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
+
+// Private: nothing from a test run reaches analytics (no prompts or replies captured, no PostHog client at all).
+process.env.POSTHOG_AI_CAPTURE_CONTENT = "0";
+delete process.env.POSTHOG_PROJECT_TOKEN;
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -31,80 +41,103 @@ const value = (name: string) => {
   const index = args.indexOf(name);
   return index >= 0 ? args[index + 1] : undefined;
 };
+const refuse = (message: string): never => {
+  console.error(`Refusing: ${message}`);
+  process.exit(2);
+};
 
-async function main() {
-  const journeyId = value("--journey");
-  if (!journeyId || !flag("--i-have-authorization")) {
-    console.error("Refusing: pass --journey <id> and --i-have-authorization (the account owner's explicit authorization to read their Google account for this test).");
-    process.exit(2);
+async function sweep() {
+  const { forgetColdTest, leftoverColdTests } = await import("../server/businessKnowledge/coldTest");
+  const ids = await leftoverColdTests();
+  if (!ids.length) return console.log("No cold-test rows are left.");
+  console.log(`Rows left by ${ids.length} cold test(s): ${ids.join(", ")}`);
+  if (!flag("--yes")) return console.log("Run again with --yes to delete them. Only these cold-test ids are touched.");
+  for (const id of ids) {
+    const { deleted } = await forgetColdTest(id);
+    console.log(`Deleted ${id}: ${Object.values(deleted).reduce((sum, n) => sum + n, 0)} rows; none left.`);
   }
-  const { journeyById } = await import("../server/firstTenMinutes/store");
-  const { googleAccessFor } = await import("../server/firstTenMinutes/understanding/deps");
-  const { CoverageLedger } = await import("../server/firstTenMinutes/research/coverage");
-  const { googleResearch } = await import("../server/firstTenMinutes/research/googleResearch");
-  const { investigate } = await import("../server/businessKnowledge/investigation/loop");
-  const { investigatorFor } = await import("../server/businessKnowledge/investigation/models");
-  const { readBusinessUnderstanding } = await import("../server/businessKnowledge/understanding");
-  const { forgetKnowledge, timeline, liveAssertions } = await import("../server/businessKnowledge/store");
-  const { REDACTED } = await import("../server/firstTenMinutes/research/privacy");
-
-  const journey = await journeyById(journeyId);
-  if (!journey || journey.kind !== "own") throw new Error("No own journey with that id");
-  const access = await googleAccessFor(journey);
-  if (!access) throw new Error("That journey has no Google connection");
-
-  const scope = { journeyId: randomUUID(), tenantId: null };
-  const ledger = new CoverageLedger();
-  const usage = { calls: 0, failures: 0, inputTokens: 0, outputTokens: 0, latencyMs: 0 };
-  const notes: string[] = [];
-  const { model, configured } = investigatorFor(journey.id, usage, notes);
-  const started = Date.now();
-  const result = await investigate(scope, { research: googleResearch(access, ledger), ledger, model, ownerEmail: access.ownerEmail, now: () => new Date(), trigger: "real-account acceptance", notes, usage: usage as unknown as Record<string, number> });
-  const u = await readBusinessUnderstanding(scope);
-  const events = await timeline(scope);
-  const live = await liveAssertions(scope);
-
-  const quiet = new Set([...u.dormant, ...u.historical].map(item => item.id));
-  const checks = [
-    ["nothing paused or past is listed as current", u.current.every(item => !quiet.has(item.id))],
-    ["no two names made one legal company by inference", !live.some(row => row.value === "same_legal_entity" && row.basis !== "user_confirmed" && row.basis !== "user_corrected")],
-    ["nothing authorises a financial merge", live.every(row => !row.authorizesFinancialMerge)],
-    ["no sale or launch on anything being prepared", !events.some(event => (event.kind === "sale" || event.kind === "launch") && u.prelaunch.some(item => item.id === event.entityId))],
-    ["no bank, card or identity number stored", !JSON.stringify(u).match(/\b\d{9,19}\b|\b\d{3}-\d{2}-\d{4}\b/)],
-  ] as const;
-  const line = (item: { name: string; statusWhy: string | null; lastActivityAt: string | null; statusBasis: string | null }) =>
-    `- **${item.name}**: ${item.statusWhy ?? ""} ${item.lastActivityAt ? `(last activity ${item.lastActivityAt.slice(0, 10)})` : ""} [${item.statusBasis ?? "?"}]`;
-  const report = [
-    "# Onboarding intelligence: real-account acceptance",
-    "",
-    `Run ${new Date().toISOString()} · investigator ${configured} (${model.name}) · ${result.status} after ${result.rounds} rounds, ${result.used.toolCalls} tool calls, ${Math.round((Date.now() - started) / 1000)}s · model calls ${usage.calls} (${usage.failures} failed), tokens ${usage.inputTokens}/${usage.outputTokens}`,
-    notes.length ? `\nNotes: ${notes.join("; ")}` : "",
-    "",
-    "## Rule checks",
-    ...checks.map(([name, ok]) => `- ${ok ? "PASS" : "FAIL"}: ${name}`),
-    "",
-    "## For the owner to judge (is each right?)",
-    "### Current", ...u.current.map(line),
-    "### Being prepared", ...u.prelaunch.map(line),
-    "### Paused (quiet, searched)", ...u.dormant.map(line),
-    "### Past", ...u.historical.map(line),
-    "### Unknown", ...u.unknown.map(line),
-    "### People", ...u.people.map(person => `- **${person.name}**${person.role ? `: ${person.role}` : ""} (sources: ${person.sources.map(source => source.label).join("; ") || "none"})`),
-    "### How names relate", ...u.relationships.map(rel => `- ${rel.subject} ${rel.type} ${rel.object} [${rel.basis}, ${rel.confidence}]`),
-    "### Questions Claire would ask", ...u.openQuestions.map(question => `- ${question.question}`),
-    "### What couldn't be read completely", ...u.coverageGaps.map(gap => `- ${gap.source}: ${gap.state} ${gap.reasons.join("; ")}`),
-    "",
-    `(Evidence excerpts are kept in the throwaway scope only and are not printed here; ${REDACTED} marks redactions.)`,
-  ].join("\n");
-  const out = value("--out") ?? "tmp/onboarding-intelligence/real-account.md";
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, report);
-  console.log(`Report written to ${out}`);
-  if (!flag("--keep")) await forgetKnowledge(scope);
-  process.exit(checks.every(([, ok]) => ok) ? 0 : 1);
 }
 
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : "failed");
-  process.exit(1);
-});
+/** Own journeys with a connected Google account: the ones a cold test can read. Nothing is written. */
+async function listJourneys() {
+  const { and, desc, eq } = await import("drizzle-orm");
+  const { firstTenDb } = await import("../server/firstTenMinutes/store");
+  const { firstTenConnections, firstTenJourneys } = await import("../server/firstTenMinutes/schema");
+  const db = await firstTenDb();
+  const rows = await db
+    .select({ id: firstTenJourneys.id, stage: firstTenJourneys.stage, tenantId: firstTenJourneys.tenantId, createdAt: firstTenJourneys.createdAt, account: firstTenConnections.accountLabel })
+    .from(firstTenJourneys)
+    .innerJoin(firstTenConnections, and(eq(firstTenConnections.journeyId, firstTenJourneys.id), eq(firstTenConnections.provider, "google"), eq(firstTenConnections.status, "connected")))
+    .where(eq(firstTenJourneys.kind, "own"))
+    .orderBy(desc(firstTenJourneys.createdAt));
+  if (!rows.length) return console.log("No own journey has Google connected.");
+  for (const row of rows) {
+    console.log(`${row.id}  ${row.account ?? "(no account label)"}  stage ${row.stage}  ${row.tenantId ? "workspace" : "no workspace yet"}  started ${row.createdAt.toISOString().slice(0, 10)}`);
+  }
+}
+
+async function main() {
+  if (flag("--list")) return listJourneys();
+  if (flag("--sweep")) return sweep();
+
+  const journeyId = value("--journey");
+  if (!journeyId || !flag("--i-have-authorization")) {
+    refuse("pass --journey <id> and --i-have-authorization (the account owner's explicit authorization to read their Google account for this test).");
+  }
+  const mode = value("--mode") ?? "intelligence";
+  if (mode !== "intelligence" && mode !== "journey") refuse("--mode is intelligence or journey");
+  const investigator = value("--investigator");
+  if (investigator && !["claude", "gemini", "heuristic"].includes(investigator)) refuse("--investigator is claude, gemini or heuristic");
+  const runs = Number(value("--runs") ?? 1);
+  if (!Number.isInteger(runs) || runs < 1 || runs > 10) refuse("--runs is a whole number from 1 to 10");
+  const answers = value("--answers") ?? (process.stdin.isTTY ? "ask" : "skip");
+  if (answers !== "ask" && answers !== "skip") refuse("--answers is ask or skip");
+  const priceIn = value("--input-cents-per-million");
+  const priceOut = value("--output-cents-per-million");
+  const price = priceIn || priceOut ? { input: Number(priceIn), output: Number(priceOut) } : null;
+  if (price && !(price.input >= 0 && price.output >= 0)) refuse("pass both --input-cents-per-million and --output-cents-per-million as numbers");
+  const outDir = value("--out-dir") ?? "tmp/onboarding-intelligence/runs";
+
+  const harness = await import("../server/businessKnowledge/coldTest");
+  const report = await import("../server/businessKnowledge/coldTestReport");
+  const expectPath = value("--expect");
+  const expectations = expectPath ? report.parseExpectations(JSON.parse(readFileSync(expectPath, "utf8"))) : null;
+  const source = await harness.coldTestSource(journeyId!);
+  const choice = { investigator: investigator as "claude" | "gemini" | "heuristic" | undefined, model: value("--model") };
+
+  const prompt = answers === "ask" ? createInterface({ input: process.stdin, output: process.stdout }) : null;
+  const answer = async (question: { question: string; followUp: string | null }) => {
+    if (!prompt) return null;
+    console.log(`\nClaire asks: ${question.followUp ?? question.question}`);
+    const text = (await prompt.question("Your answer (Enter to leave it): ")).trim();
+    return text || null;
+  };
+
+  let broken = false;
+  for (let run = 1; run <= runs; run += 1) {
+    console.log(`Cold test ${run} of ${runs} (${mode}), reading ${source.journey.id}'s connected accounts read-only…`);
+    const raw =
+      mode === "journey"
+        ? await harness.runJourneyColdTest({ source, choice, keep: flag("--keep"), intelligence: value("--intelligence") !== "off", answer })
+        : await harness.runIntelligenceColdTest({ source, choice, keep: flag("--keep") });
+    const outcome = price ? report.repriced(raw, price) : raw;
+    const before = report.previousOutcome(outDir, outcome);
+    const page = report.renderColdTestReport(outcome, expectations ? report.compareWithExpectations(outcome, expectations) : null, before ? report.compareWithPrevious(outcome, before) : null);
+    const files = report.writeColdTestReport(outDir, outcome, page);
+    const failed = outcome.checks.filter(check => !check.ok);
+    broken ||= failed.length > 0;
+    console.log(
+      `Test ${outcome.id}: ${"kept" in outcome.cleanup ? "kept (delete with --sweep --yes)" : "started from nothing, cleaned up, none left"}; ` +
+        `about $${(outcome.usage.totalCostCents / 100).toFixed(2)}; ${failed.length ? `${failed.length} rule check(s) FAILED` : "rule checks passed"}.\nReport: ${files.markdown}`
+    );
+  }
+  prompt?.close();
+  process.exit(broken ? 1 : 0);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch(error => {
+    console.error(error instanceof Error ? error.message : "failed");
+    process.exit(1);
+  });
