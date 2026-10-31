@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import type { AwaitingReply } from "@shared/firstTenMinutesKnowledge";
+import { gmailComposeUrl, type AwaitingReply } from "@shared/firstTenMinutesKnowledge";
 
 const SHOWN = 6;
 const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -10,7 +10,8 @@ type Outcome =
   | { status: "sending" }
   | { status: "needs_permission"; composeUrl: string }
   | { status: "failed"; reason: string }
-  | { status: "replied" };
+  | { status: "replied" }
+  | { status: "not_waiting" };
 
 export function outcomeLine(outcome: Outcome): string {
   switch (outcome.status) {
@@ -24,6 +25,8 @@ export function outcomeLine(outcome: Outcome): string {
       return `Gmail didn't send it: ${outcome.reason}. Nothing went.`;
     case "replied":
       return "They've written back since, so nothing was sent.";
+    case "not_waiting":
+      return "They're not on your waiting list any more (they may have written back), so nothing was sent.";
   }
 }
 
@@ -41,7 +44,7 @@ function FollowUp({ item, onDone }: { item: AwaitingReply; onDone: () => void })
         type="button"
         className="cd-chip"
         disabled={prepare.isPending}
-        onClick={() => void prepare.mutateAsync({ messageId: item.messageId, timeZone: zone() }).then(d => setBody(d.mail.body))}
+        onClick={() => void prepare.mutateAsync({ messageId: item.messageId, recipient: item.person.address, timeZone: zone() }).then(d => setBody(d.mail.body))}
         data-testid="claire-desk-follow-up-prepare"
       >
         {prepare.isPending ? "Preparing…" : "Prepare a follow-up"}
@@ -69,7 +72,7 @@ function FollowUp({ item, onDone }: { item: AwaitingReply; onDone: () => void })
                   setOutcome(result as Outcome);
                   // they wrote back: the list is out of date now. A sent follow-up stays on screen with its
                   // confirmation; the list catches up on its next read.
-                  if (result.status === "replied") onDone();
+                  if (result.status === "replied" || result.status === "not_waiting") onDone();
                 })
                 .catch(error => setOutcome({ status: "failed", reason: error instanceof Error ? error.message : "something went wrong" }))
             }
@@ -80,7 +83,8 @@ function FollowUp({ item, onDone }: { item: AwaitingReply; onDone: () => void })
         ) : null}
         <a
           className="cd-chip"
-          href={outcome?.status === "needs_permission" ? outcome.composeUrl : draft.composeUrl}
+          // the words as they stand now, edits included
+          href={gmailComposeUrl({ ...draft.mail, body: words }, draft.sendFrom)}
           target="_blank"
           rel="noreferrer noopener"
           data-testid="claire-desk-follow-up-gmail"
@@ -118,7 +122,7 @@ export function AwaitingReplies() {
       ) : a.items.length ? (
         <ul className="cd-ready">
           {a.items.slice(0, SHOWN).map(item => (
-            <li key={item.messageId} data-testid="claire-desk-awaiting-item">
+            <li key={`${item.messageId}:${item.person.address}`} data-testid="claire-desk-awaiting-item">
               <strong>{item.person.name ?? item.person.address}</strong> · {item.waitingDays} days
               {item.asked ? " · you asked a question" : ""}
               <br />

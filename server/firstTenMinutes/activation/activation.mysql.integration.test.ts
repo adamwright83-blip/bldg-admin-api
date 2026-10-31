@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import bcrypt from "bcryptjs";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -60,9 +61,10 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     if (!db) return;
     await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("billing_plans")} WHERE planKey = ?`, [planKey]);
     if (tenantId) {
-      for (const table of ["entitlements", "subscriptions", "memberships"].map(LEGACY_DAYFORGE_TABLE)) {
+      for (const table of ["entitlements", "subscriptions", "memberships", "user_credentials"].map(LEGACY_DAYFORGE_TABLE)) {
         await db.execute(`DELETE FROM \`${table}\` WHERE tenantId = ?`, [tenantId]).catch(() => undefined);
       }
+      await db.execute("DELETE FROM users WHERE tenantId = ?", [tenantId]).catch(() => undefined);
       await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [tenantId]).catch(() => undefined);
     }
     await db.end();
@@ -141,6 +143,25 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     tenantId = (await journeyById(journey.id))!.tenantId ?? "";
     expect(tenantId).toMatch(/^df_[0-9a-f]{24}$/);
 
+    // the workspace exists, but no one can sign in to it yet: the owner makes a password, as in today's funnel
+    const ownerEmail = `nina-${suffix}@wildrootflowers.example`;
+    expect(after).toMatchObject({ owner: "needs_password", identity: { contactName: "Nina Vale", ownerEmail } });
+    const [noOwner] = await db.query<mysql.RowDataPacket[]>(`SELECT 1 FROM ${LEGACY_DAYFORGE_TABLE("user_credentials")} WHERE tenantId = ?`, [tenantId]);
+    expect(noOwner).toHaveLength(0);
+    const { activateOnboardingOwner } = await import("../../saas/saasStore");
+    const owned = await activateOnboardingOwner({ ...credentials, name: "Nina Vale", passwordHash: await bcrypt.hash("a long first-ten password", 4) });
+    expect(owned.tenantId).toBe(tenantId);
+    expect(await activationView(journey, credentials)).toMatchObject({ status: "active", owner: "ready" });
+    // what the password sign-in route reads: her credentials, an active owner membership, the tenant active
+    const [signIn] = await db.query<mysql.RowDataPacket[]>(
+      `SELECT c.emailNormalized, m.role, m.active, t.status FROM ${LEGACY_DAYFORGE_TABLE("user_credentials")} c
+       JOIN ${LEGACY_DAYFORGE_TABLE("memberships")} m ON m.tenantId = c.tenantId AND m.userOpenId = c.userOpenId
+       JOIN ${LEGACY_DAYFORGE_TABLE("tenants")} t ON t.id = c.tenantId WHERE c.tenantId = ?`,
+      [tenantId]
+    );
+    expect(signIn).toEqual([expect.objectContaining({ emailNormalized: ownerEmail, role: "owner", active: 1, status: "active" })]);
+    expect(await bcrypt.compare("a long first-ten password", (await db.query<mysql.RowDataPacket[]>(`SELECT passwordHash FROM ${LEGACY_DAYFORGE_TABLE("user_credentials")} WHERE tenantId = ?`, [tenantId]))[0][0].passwordHash)).toBe(true);
+
     // now it can leave, from inside JOYSTICK, from her own Gmail (played by a local stand-in), once
     const sends: string[] = [];
     const gmail = http.createServer((req, res) => {
@@ -197,7 +218,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     const { startJourney } = await import("../journeys");
     const { activationView, beginActivation } = await import("./activation");
     const example = await startJourney({ requestId: randomUUID(), kind: "example" });
-    expect(await activationView(example.journey, example.credentials)).toMatchObject({ example: true, required: false, offer: null });
+    expect(await activationView(example.journey, example.credentials)).toMatchObject({ example: true, required: false, offer: null, owner: null });
     await expect(
       beginActivation(example.journey, example.credentials, { businessName: "x", contactName: "y", ownerEmail: "z@example.com", timeZone: "UTC" })
     ).rejects.toThrow(/can't be activated/);
