@@ -6,6 +6,7 @@ import { GoogleAirQualityService } from "./googleAirQualityService";
 import { GooglePlacesService, type GooglePlaceDetails } from "./googlePlacesService";
 import { GooglePlacesAggregateService, type DistrictPresence } from "./googlePlacesAggregateService";
 import { loadDistrictPresence } from "./districtPresence";
+import { geocodingEvidenceFetch } from "./geocodingEvidence";
 import { GoogleAerialViewService, type AerialViewResult } from "./googleAerialViewService";
 import { GoogleStreetViewService, type StreetViewFacadeResult } from "./googleStreetViewService";
 import {
@@ -109,7 +110,8 @@ export class GoogleWorldService {
   private streetViewService: GoogleStreetViewService;
 
   constructor() {
-    this.geocoder = new GoogleGeocoder();
+    // the fetch records what the Geocoding API answers (geocodingEvidence.ts)
+    this.geocoder = new GoogleGeocoder(undefined, geocodingEvidenceFetch());
     this.addressValidator = new GoogleAddressValidationService();
     this.weatherService = new GoogleWeatherService();
     this.airQualityService = new GoogleAirQualityService();

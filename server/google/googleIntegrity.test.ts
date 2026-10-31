@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { capabilityStateFrom, CAPABILITY_STALE_AFTER_MS, GoogleWorldService } from "./googleWorldService";
-import { classifyGoogleFailure, latestGoogleTelemetry, recordGoogleTelemetry } from "./googleTelemetry";
+import { classifyGoogleFailure, isGoogleAnswer, latestGoogleTelemetry, recordGoogleTelemetry } from "./googleTelemetry";
+import { geocodingEvidenceFetch } from "./geocodingEvidence";
 import { GooglePlacesAggregateService, resetPlacesAggregateCacheForTests, STRATEGIC_DISTRICT_CIRCLES } from "./googlePlacesAggregateService";
 import { countPresenceByDistrict } from "./districtPresence";
 import { GoogleGeocoder } from "../geography/googleGeocoder";
@@ -107,16 +108,31 @@ describe("failures are classified the same way everywhere", () => {
     expect(classifyGoogleFailure({ httpStatus: null })).toBe("provider_error");
   });
 
-  it("the geocoder records what the Geocoding API answered", async () => {
-    const denied = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: "REQUEST_DENIED", error_message: "This API project is not authorized to use this API." }) });
-    await new GoogleGeocoder("geo-key", denied as any, "").geocode("1 Main St, Los Angeles");
-    expect(latestGoogleTelemetry("geocoding")).toMatchObject({ status: "permission_denied", success: false });
-    const ok = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: "OK", results: [{ formatted_address: "1 Main St, Los Angeles, CA", place_id: "p", geometry: { location: { lat: 34, lng: -118 } } }] }),
-    });
-    await new GoogleGeocoder("geo-key", ok as any, "").geocode("1 Main St, Los Angeles");
+  it("what the Geocoding API answers is recorded, without touching the protected geocoder", async () => {
+    const denied = geocodingEvidenceFetch(async () => Response.json({ status: "REQUEST_DENIED", error_message: "This API project is not authorized to use this API." }));
+    const result = await new GoogleGeocoder("geo-key", denied, "").geocode("1 Main St, Los Angeles");
+    expect(result.status).toBe("provider_failure");
+    expect(latestGoogleTelemetry("geocoding")).toMatchObject({ status: "permission_denied", success: false, error: "This API project is not authorized to use this API." });
+    const ok = geocodingEvidenceFetch(async () =>
+      Response.json({ status: "OK", results: [{ formatted_address: "1 Main St, Los Angeles, CA", place_id: "p", geometry: { location: { lat: 34, lng: -118 } } }] })
+    );
+    // the geocoder still reads the body the wrapper looked at
+    expect((await new GoogleGeocoder("geo-key", ok, "").geocode("1 Main St, Los Angeles")).status).toBe("success");
     expect(latestGoogleTelemetry("geocoding")).toMatchObject({ status: "available", success: true });
+    // other URLs pass through unrecorded
+    const other = geocodingEvidenceFetch(async () => Response.json({ places: [] }));
+    await other("https://places.googleapis.com/v1/places:searchText");
+    expect(latestGoogleTelemetry("geocoding")).toMatchObject({ status: "available" });
+  });
+
+  it("a fallback provider's success is not Google's answer (#781 review)", () => {
+    recordGoogleTelemetry({ api: "weather", requestType: "currentConditions:lookup", elapsedMs: 5, success: false, status: "permission_denied", fallbackSelected: "open_meteo_live", error: "Google Weather HTTP 403" });
+    recordGoogleTelemetry({ api: "weather", requestType: "currentConditions:lookup", elapsedMs: 5, success: true, status: "degraded", fallbackSelected: "open_meteo_live" });
+    // before: the Open-Meteo success hid Google's refusal and counted as Google's last success
+    expect(latestGoogleTelemetry("weather")).toMatchObject({ status: "permission_denied", success: false });
+    expect(isGoogleAnswer({ success: true, fallbackSelected: "open_meteo_live" })).toBe(false);
+    expect(isGoogleAnswer({ success: false, fallbackSelected: "open_meteo_live" })).toBe(true);
+    expect(isGoogleAnswer({ success: true, cacheHit: true })).toBe(false);
   });
 });
 

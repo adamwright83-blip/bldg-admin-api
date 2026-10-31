@@ -42,8 +42,8 @@ export function recordGoogleTelemetry(event: {
     telemetryLogs.pop();
   }
 
-  // a cache hit is not an answer from Google; only real calls are evidence
-  if (!event.cacheHit) {
+  // only Google's own answers are evidence: not a cache hit, and not a fallback provider's success
+  if (isGoogleAnswer(item)) {
     void recordCapabilityEvidence({
       capability: event.api,
       status: event.status,
@@ -57,9 +57,18 @@ export function recordGoogleTelemetry(event: {
   return item;
 }
 
-/** The newest real call to this API in this process (the log is newest first; cache hits aren't calls), or null. */
+/**
+ * Whether an event is Google's own answer. A cache hit isn't a call. A success that names `fallbackSelected` is the
+ * fallback provider's answer (e.g. Open-Meteo after Google Weather refused), not Google's; the refusal before it,
+ * recorded with success false, is Google's answer and stays the evidence.
+ */
+export function isGoogleAnswer(event: Pick<GoogleTelemetryEvent, "cacheHit" | "success" | "fallbackSelected">): boolean {
+  return !event.cacheHit && !(event.success && event.fallbackSelected);
+}
+
+/** Google's newest answer for this API in this process (the log is newest first), or null. */
 export function latestGoogleTelemetry(api: GoogleCapabilityName): GoogleTelemetryEvent | null {
-  return telemetryLogs.find(event => event.api === api && !event.cacheHit) ?? null;
+  return telemetryLogs.find(event => event.api === api && isGoogleAnswer(event)) ?? null;
 }
 
 /**
