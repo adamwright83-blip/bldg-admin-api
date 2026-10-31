@@ -67,7 +67,9 @@ function FollowUp({ item, onDone }: { item: AwaitingReply; onDone: () => void })
                 .mutateAsync({ messageId: item.messageId, to: draft.mail.to, subject: draft.mail.subject, body: words })
                 .then(result => {
                   setOutcome(result as Outcome);
-                  if (result.status === "sent" || result.status === "replied") onDone();
+                  // they wrote back: the list is out of date now. A sent follow-up stays on screen with its
+                  // confirmation; the list catches up on its next read.
+                  if (result.status === "replied") onDone();
                 })
                 .catch(error => setOutcome({ status: "failed", reason: error instanceof Error ? error.message : "something went wrong" }))
             }
