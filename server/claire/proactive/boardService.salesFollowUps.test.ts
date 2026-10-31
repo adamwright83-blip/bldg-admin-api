@@ -94,7 +94,7 @@ vi.mock("../../analytics/dataFreshness", () => ({
 }));
 vi.mock("./salesInsights", () => ({ loadSalesInsight: vi.fn(async () => null) }));
 
-import { ensureOperatorBoard } from "./boardService";
+import { ensureOperatorBoard, explainProactive } from "./boardService";
 
 const DAY = 86_400_000;
 const dueIn = (days: number) => new Date(Date.now() + days * DAY);
@@ -253,5 +253,98 @@ describe("the proactive board's sales follow-ups", () => {
     expect(world.records.get(conquest.id)!.status).toBe("scheduled");
     expect(world.records.get(inFlight.id)!.status).toBe("awaiting_result");
     expect(world.records.get(unknown.id)!.status).toBe("scheduled");
+  });
+});
+
+describe("Claire's answer to a why question about the board", () => {
+  const explain = (utterance: string) => explainProactive("tenant-sales-identity", "op-sales-identity", utterance);
+
+  function storeRecovery(obligation: ProactiveObligation) {
+    world.records.set(obligation.id, {
+      id: obligation.id,
+      kind: obligation.kind,
+      subjectKey: obligation.subjectKey,
+      status: obligation.status,
+      dueDate: obligation.dueDate,
+      payload: obligation,
+      commercialFollowUpRef: null,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    world.records = new Map();
+    world.followUps = [];
+    world.statesUnreadable = false;
+  });
+
+  it("answers for a follow-up only when its account is named, never on a shared word or letter", async () => {
+    world.followUps = [
+      followUp({ id: "follow-1", missionId: 42, accountName: "The Standard" }),
+      followUp({
+        id: "follow-2",
+        missionId: 43,
+        accountName: "W Hollywood",
+        dueAt: dueIn(2),
+        note: "Confirm the linen count with housekeeping.",
+      }),
+    ];
+    await sweep();
+    expect(scheduledSales()).toHaveLength(2);
+
+    await expect(explain("Why is the route so long today?")).resolves.toBeNull();
+    await expect(explain("Why are we behind on wash and fold?")).resolves.toBeNull();
+    await expect(explain("Why is The Standard on today?")).resolves.toBe(
+      "Email the revised quote to the property manager."
+    );
+    await expect(explain("why is w hollywood on the board?")).resolves.toBe(
+      "Confirm the linen count with housekeeping."
+    );
+  });
+
+  it("answers from the copy still on the board, not one a reschedule closed", async () => {
+    const first = dueIn(1);
+    world.followUps = [followUp({ id: "follow-1", missionId: 42, accountName: "The Standard", dueAt: first })];
+    await sweep();
+    world.followUps[0]!.dueAt = dueIn(3);
+    world.followUps[0]!.note = "Send the signed contract.";
+    await sweep();
+    expect(world.records.get(`sales:42:${ymd(first)}`)!.status).toBe("superseded");
+
+    await expect(explain("Why is The Standard on today?")).resolves.toBe("Send the signed contract.");
+  });
+
+  it("still answers for a win-back by the customer's first name, as a whole word", async () => {
+    storeRecovery({
+      id: "recovery:maria",
+      kind: "dormant_recovery",
+      subjectKey: "maria",
+      subjectName: "Maria Lopez",
+      status: "draft_prepared",
+      dueDate: ymd(dueIn(0)),
+      title: "Text Maria",
+      why: "Maria usually orders every 9 days; it has been 30.",
+      draft: { message: "Hi Maria", sent: false },
+      historyIntact: true,
+      moveCount: 0,
+    });
+    storeRecovery({
+      id: "recovery:al",
+      kind: "dormant_recovery",
+      subjectKey: "al",
+      subjectName: "Al Green",
+      status: "draft_prepared",
+      dueDate: ymd(dueIn(0)),
+      title: "Text Al",
+      why: "Al usually orders every 7 days; it has been 21.",
+      draft: { message: "Hi Al", sent: false },
+      historyIntact: true,
+      moveCount: 0,
+    });
+
+    await expect(explain("Why is Maria on today?")).resolves.toBe("Maria usually orders every 9 days; it has been 30.");
+    await expect(explain("Why is Mariana's order late?")).resolves.toBeNull();
+    await expect(explain("Why are all the vans out?")).resolves.toBeNull();
+    await expect(explain("Why is Al Green on today?")).resolves.toBe("Al usually orders every 7 days; it has been 21.");
   });
 });

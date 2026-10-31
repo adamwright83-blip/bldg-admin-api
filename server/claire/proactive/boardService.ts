@@ -80,8 +80,36 @@ function followUpDueDate(dueAt: Date): string {
   return dueAt.toISOString().slice(0, 10);
 }
 
-/** States in which a sales follow-up's board copy is closed. */
-const CLOSED_SALES_STATUSES = new Set(["superseded", "completed", "cancelled"]);
+/** States in which a board copy is closed. */
+const CLOSED_OBLIGATION_STATUSES = new Set(["superseded", "completed", "cancelled"]);
+
+/** Words too common to identify anything on the board on their own. */
+const UNIDENTIFYING_WORDS = new Set(["the", "a", "an", "of", "and", "at"]);
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whether a lower-cased utterance contains `phrase` as whole words. */
+function mentionsPhrase(lower: string, phrase: string): boolean {
+  const words = phrase.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const body = words.map(escapeRegExp).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "u").test(lower);
+}
+
+/**
+ * Whether an utterance names this obligation: its full name or title as whole
+ * words. A win-back may also be named by the customer's first name, when that
+ * word is distinctive; an account is named in full ("The Standard", not "the";
+ * "W Hollywood", not the "w" in "why").
+ */
+function utteranceNamesObligation(lower: string, item: ProactiveObligation): boolean {
+  if (mentionsPhrase(lower, item.subjectName) || mentionsPhrase(lower, item.title)) return true;
+  if (item.kind === "sales_follow_up") return false;
+  const first = item.subjectName.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return first.length >= 3 && !UNIDENTIFYING_WORDS.has(first) && mentionsPhrase(lower, first);
+}
 
 export async function loadDoctrine(
   tenantId: string,
@@ -403,7 +431,7 @@ export async function ensureOperatorBoard(input: {
         const reopen =
           existing != null &&
           existing.commercialFollowUpRef != null &&
-          CLOSED_SALES_STATUSES.has(existing.status) &&
+          CLOSED_OBLIGATION_STATUSES.has(existing.status) &&
           (existing.status === "superseded" || existing.commercialFollowUpRef !== follow.id);
         if (existing && !reopen) {
           // PR4 lineage backfill must never replay the obligation constructor
@@ -505,10 +533,9 @@ export async function explainProactive(tenantId: string, operatorUserId: string,
     return whyPushingSales(hold != null && salesHeldOn({ skipSalesUntil: hold.until }, today));
   }
   const items = await loadObligations(tenantId, operatorUserId);
-  const hit = items.find(item => {
-    const first = item.subjectName.split(/\s+/)[0]?.toLowerCase() ?? "";
-    return (first && lower.includes(first)) || lower.includes(item.title.toLowerCase());
-  });
+  const named = items.filter(item => utteranceNamesObligation(lower, item));
+  // A copy still on the board answers before one a reschedule or the pipeline closed.
+  const hit = named.find(item => !CLOSED_OBLIGATION_STATUSES.has(item.status)) ?? named[0];
   return hit ? explainWhyOnToday(hit) : null;
 }
 
