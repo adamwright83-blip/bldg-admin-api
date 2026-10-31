@@ -351,6 +351,7 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
       {/* Integrated Center Correspondence Drawer */}
       <MachineCorrespondence
         open={correspondenceOpen}
+        isSimulated={adapter.isSimulated}
         example={adapter.example}
         dial={state.dial}
         opportunity={adapter.opportunity}

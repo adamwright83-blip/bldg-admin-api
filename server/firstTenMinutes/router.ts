@@ -22,6 +22,7 @@ import { readAwaitingReplies } from "./knowledge/awaitingReplies";
 import { prepareFollowUp, sendFollowUp } from "./knowledge/followUp";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS, MACHINE_MILESTONES } from "../../shared/firstTenMinutesChapter";
+import { answerOnboardingQuestion, onboardingQuestionState, readTenantBusinessUnderstanding } from "../businessKnowledge/onboarding";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -365,6 +366,28 @@ export const firstTenMinutesRouter = router({
       const { journey } = await requireJourney(input);
       return askClaire(journey, input.timeZone ?? null);
     }),
+
+  /**
+   * Claire's questions before the portrait (JOYSTICK_ONBOARDING_INTELLIGENCE): what the investigation couldn't settle
+   * from the person's accounts, one at a time, each topic once. `enabled: false, settled: true` when it is off.
+   */
+  knowledgeQuestion: publicProcedure.input(credentials).query(async ({ ctx, input }) => {
+    assertFirstTenOpen(ctx.req);
+    const { journey } = await requireJourney(input);
+    return onboardingQuestionState(journey);
+  }),
+
+  /** The person's answer, in their own words, or `null` to leave the question. Returns what Claire understood. */
+  answerKnowledgeQuestion: publicProcedure
+    .input(credentials.extend({ questionId: z.string().min(1).max(64), answer: z.string().trim().min(1).max(1000).nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      assertFirstTenOpen(ctx.req);
+      const { journey } = await requireJourney(input);
+      return answerOnboardingQuestion(journey, input.questionId, input.answer);
+    }),
+
+  /** What JOYSTICK understands about the signed-in workspace's businesses and people (null when off or none). */
+  myBusinessKnowledge: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readTenantBusinessUnderstanding(ctx.tenantId)),
 
   /** Luma's photograph: the person's own image, shown only to them, fetched when asked and never stored. */
   findingPicture: publicProcedure

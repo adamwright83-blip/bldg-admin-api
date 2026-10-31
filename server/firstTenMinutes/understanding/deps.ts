@@ -1,4 +1,5 @@
 import { GoogleGeocoder } from "../../geography/googleGeocoder";
+import { intelligenceFor, investigateJourney } from "../../businessKnowledge/onboarding";
 import { providerUrl } from "../providerFetch";
 import { connectionSecrets, updateAccessToken, type JourneyRow } from "../store";
 import { exampleGeocoder, exampleReaders } from "./exampleReaders";
@@ -64,5 +65,10 @@ export async function readingDepsFor(journey: JourneyRow): Promise<ReadingDeps> 
     slack: async limit => (slackRead ? slackRead(limit) : nothing),
     now: () => new Date(),
   };
-  return { readers, extractor: claudeExtractor(journey.id), geocoder: googleGeocoder() };
+  return {
+    readers,
+    extractor: claudeExtractor(journey.id),
+    geocoder: googleGeocoder(),
+    ...(access && intelligenceFor(journey) ? { investigate: (heartbeat: () => Promise<void>) => investigateJourney(journey, access, heartbeat) } : {}),
+  };
 }

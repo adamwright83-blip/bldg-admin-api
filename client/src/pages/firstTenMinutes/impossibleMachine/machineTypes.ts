@@ -108,6 +108,7 @@ export interface MachineMilestonePayload {
 }
 
 export interface MachineBusinessAdapter {
+  isSimulated?: boolean;
   example: boolean;
   businessName: string | null;
   opportunity: ChapterOpportunity | null;

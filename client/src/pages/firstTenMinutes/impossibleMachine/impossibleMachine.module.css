@@ -584,6 +584,72 @@
 
 /* ------------------------------------------------------------------ Correspondence Drawer */
 
+.simulatedBanner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(45, 30, 15, 0.9);
+  border: 1.5px solid #d59b3f;
+  margin-bottom: 12px;
+}
+
+.simulatedTag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #ffd97d;
+  text-transform: uppercase;
+}
+
+.simulatedExplainer {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #fbf5e8;
+  line-height: 1.4;
+}
+
+.simulatedSendDesk {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(26, 19, 14, 0.92);
+  border: 1px solid rgba(213, 155, 63, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simulatedSendNotice {
+  font-size: 13px;
+  color: #e5c178;
+  line-height: 1.4;
+}
+
+.simulatedSendNotice p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(251, 245, 232, 0.7);
+}
+
+.simulatedSendBtn {
+  align-self: flex-start;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #d59b3f 0%, #a86f21 100%);
+  color: #1a120b;
+  font-weight: 700;
+  font-size: 13.5px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.simulatedSendBtn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
 .correspondenceDrawer {
   width: 100%;
   z-index: 15;

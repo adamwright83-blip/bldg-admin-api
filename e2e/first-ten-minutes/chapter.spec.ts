@@ -248,13 +248,19 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
       }
     });
 
-    await advanceToMachineWithExample(page);
+    await page.getByTestId("first-ten-example").click();
+    await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+    await page.getByRole("button", { name: "That sounds like me" }).click();
+
+    // User B threshold
+    const threshold = page.getByTestId("first-ten-chapter-threshold");
+    await expect(threshold).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
 
     const machine = page.getByTestId("first-ten-impossible-machine");
-    await expect(machine).toBeVisible();
-
-    // Verify no inspect note button exists when there is no opportunity
-    await expect(page.getByTestId("machine-toggle-correspondence")).toHaveCount(0);
+    await expect(machine).toBeVisible({ timeout: 20_000 });
 
     // Outbound solve in THEN
     while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
@@ -291,6 +297,86 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     await page.getByTestId("machine-wind-crank").click();
 
     // Dome unlocks, Rook escapes, ending appears — 100% complete without business opportunity or email send!
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("User B (No real opportunity exists): Claire threshold -> Enter simulated machine -> Three Days Later -> Simulated Reply & Coupling -> Rescue & Ending", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    await request.post(`${FAKE}/__control`, { data: { noOpportunities: true, googleEmail: "nina@wildrootflowers.example" } });
+    await page.getByTestId("first-ten-connect-google").click();
+    await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+    await page.getByRole("button", { name: "That sounds like me" }).click();
+
+    // Verify Claire's threshold appears
+    const threshold = page.getByTestId("first-ten-chapter-threshold");
+    await expect(threshold).toBeVisible({ timeout: 20_000 });
+    await expect(threshold).toContainText("I haven’t found a customer conversation waiting for you yet. But let me show you what happens when one arrives.");
+
+    // Enter simulated machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+
+    // Solve outbound route (West=upper, East=upper, Upper Rotor=aligned)
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank to fetch key
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-dial", "NOW");
+
+    // Open correspondence drawer & inspect simulated inquiry
+    await page.getByTestId("machine-center-crossing").click();
+    const drawer = page.getByTestId("machine-correspondence-panel");
+    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId("machine-simulated-banner")).toBeVisible();
+    await expect(page.getByTestId("machine-simulated-banner")).toContainText("THREE DAYS LATER — AN IMAGINED SCENARIO");
+    await takeScreenshot("user-b-01-simulated-scenario", page);
+
+    // Prepare simulated reply
+    await page.getByTestId("machine-choice-prepare").click();
+    await expect(page.getByTestId("first-ten-send-desk")).toBeVisible();
+
+    // Simulate reply and couple central bridge
+    await page.getByTestId("first-ten-send-now").click();
+    await expect(page.getByTestId("machine-bridge-restored-banner")).toBeVisible({ timeout: 10_000 });
+    await takeScreenshot("user-b-02-bridge-restored", page);
+
+    // Close correspondence drawer
+    await page.getByTestId("machine-correspondence-close").click();
+
+    // Align central bridge (West=center, East=center)
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank to return across central bridge
+    await page.getByTestId("machine-wind-crank").click();
+
+    // Dome unlocks and Rook escape sequence plays
     await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
     await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });

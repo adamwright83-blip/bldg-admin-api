@@ -20,11 +20,19 @@ import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
+import { ClaireQuestion } from "./knowledge/ClaireQuestion";
 import { WorkspaceKey } from "./chapter/WorkspaceKey";
 import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
+import { ChapterThreshold } from "./chapter/ChapterThreshold";
+import { chapterGate } from "./chapter/chapterGate";
 import { ImpossibleMachine } from "./impossibleMachine/ImpossibleMachine";
+import {
+  generateSimulatedOpportunity,
+  createSimulatedDraft,
+} from "./impossibleMachine/simulatedOpportunity";
 import { draftStatusLine } from "@shared/firstTenMinutesActivation";
-import type { ChapterView, DraftApproach } from "@shared/firstTenMinutesChapter";
+import type { ChapterView, DraftApproach, DraftView } from "@shared/firstTenMinutesChapter";
+import type { StoredMachineProgress } from "./impossibleMachine/machinePersistence";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
@@ -178,6 +186,22 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const pastCrew = Boolean(view && AFTER_CREW.has(view.stage));
   const crewFinished = crewDone || pastCrew;
   const readingComplete = reading.view?.status === "complete";
+  // Claire's questions first, when JOYSTICK_ONBOARDING_INTELLIGENCE is on: what the reading couldn't settle, one at a
+  // time. Off, the server answers "settled" and nothing here changes.
+  const knowledgeQuestion = trpc.system.firstTenMinutes.knowledgeQuestion.useQuery(credentials!, {
+    enabled: Boolean(credentials) && crewFinished && readingComplete,
+    retry: false,
+  });
+  const answerKnowledgeQuestion = trpc.system.firstTenMinutes.answerKnowledgeQuestion.useMutation();
+  const [understood, setUnderstood] = useState<string | null>(null);
+  const questionsSettled = knowledgeQuestion.isError || Boolean(knowledgeQuestion.data?.settled);
+  async function onKnowledgeAnswer(answer: string | null) {
+    const question = knowledgeQuestion.data?.question;
+    if (!credentials || !question) return;
+    const next = await answerKnowledgeQuestion.mutateAsync({ ...credentials, questionId: question.id, answer });
+    setUnderstood(next.explanation);
+    utils.system.firstTenMinutes.knowledgeQuestion.setData(credentials, next);
+  }
   const preparePortrait = trpc.system.firstTenMinutes.preparePortrait.useMutation();
   const answerPortrait = trpc.system.firstTenMinutes.answerPortrait.useMutation();
   const portrait = trpc.system.firstTenMinutes.portrait.useQuery(credentials!, {
@@ -196,10 +220,10 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credentials]);
   useEffect(() => {
-    if (!crewFinished || !readingComplete || portrait.data?.status === "kept") return;
+    if (!crewFinished || !readingComplete || !questionsSettled || portrait.data?.status === "kept") return;
     writePortrait();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crewFinished, readingComplete, portraitBasis, writePortrait]);
+  }, [crewFinished, readingComplete, questionsSettled, portraitBasis, writePortrait]);
   // A correction made while Claire was writing couldn't start a new page then; once she has finished, ask again. The
   // server writes again only if what the page rests on has changed, so this settles after one more page at most.
   const wasWriting = useRef(false);
@@ -244,7 +268,50 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   // "Your first chapter": back on their portrait, unless they went out to the courtyard again
   const [atCourtyard, setAtCourtyard] = useState(false);
   const onFirstChapter = view?.stage === "first_chapter" && !atCourtyard;
-  const inChapter = Boolean(chapterOpen && chapter.data) && !onFirstChapter;
+
+  // User B (no opportunity found): player can opt to step into the simulated scenario
+  const [simulatedActive, setSimulatedActive] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return false;
+    try {
+      return window.localStorage.getItem(`joystick_simulated_machine_${credentials.sessionId}`) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const enterSimulated = useCallback(() => {
+    setSimulatedActive(true);
+    if (credentials?.sessionId) {
+      try {
+        window.localStorage.setItem(`joystick_simulated_machine_${credentials.sessionId}`, "true");
+      } catch {}
+    }
+  }, [credentials?.sessionId]);
+
+  // a kept page always leads somewhere visible: the chapter, or a plain word on why not yet (chapter/chapterGate.ts)
+  const gate = chapterGate({ portraitKept, chapterOpen, onFirstChapter, data: chapter.data, isError: chapter.isError });
+  const isSimulatedChapter = gate === "no_opportunity" && simulatedActive;
+  const inChapter = gate === "open" || isSimulatedChapter;
+
+  const [simulatedDraft, setSimulatedDraft] = useState<DraftView | null>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return null;
+    try {
+      const raw = window.localStorage.getItem(`joystick_simulated_draft_${credentials.sessionId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [simulatedProgress, setSimulatedProgress] = useState<Partial<StoredMachineProgress> | null>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return null;
+    try {
+      const raw = window.localStorage.getItem(`joystick_simulated_progress_${credentials.sessionId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -293,13 +360,100 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   }
 
   function renderChapter() {
+    if (!credentials) return null;
     const data = chapter.data;
-    if (!data || !credentials) return null;
+    if (!data && !isSimulatedChapter) return null;
+
+    if (isSimulatedChapter) {
+      const simulatedOpp = generateSimulatedOpportunity(businessName, reading.view?.findings);
+      return (
+        <ImpossibleMachine
+          initialProgress={simulatedProgress}
+          adapter={{
+            isSimulated: true,
+            example,
+            businessName,
+            opportunity: simulatedOpp,
+            draft: simulatedDraft,
+            activation: null,
+            checkoutNotice: null,
+            connectNotice: null,
+            onPrepareDraft: async () => {
+              const draft = createSimulatedDraft(simulatedOpp, "still_wanted");
+              setSimulatedDraft(draft);
+              try {
+                window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(draft));
+              } catch {}
+            },
+            onChangeDraft: async change => {
+              setSimulatedDraft(prev => {
+                if (!prev) return prev;
+                const updated = change.approach
+                  ? createSimulatedDraft(simulatedOpp, change.approach)
+                  : { ...prev, body: change.body ?? prev.body, edited: true };
+                try {
+                  window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(updated));
+                } catch {}
+                return updated;
+              });
+            },
+            onDeclineDraft: async () => {
+              setSimulatedDraft(prev => {
+                if (!prev) return null;
+                const declined: DraftView = { ...prev, status: "declined" };
+                try {
+                  window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(declined));
+                } catch {}
+                return declined;
+              });
+            },
+            onRecordChoice: async () => {},
+            onRecordMilestone: async payload => {
+              setSimulatedProgress(prev => {
+                const next: Partial<StoredMachineProgress> = {
+                  ...prev,
+                  keyRetrieved: payload.milestone === "key_retrieved" ? true : prev?.keyRetrieved,
+                  centerExamined: payload.milestone === "center_examined" ? true : prev?.centerExamined,
+                  returnCompleted: payload.milestone === "return_completed" ? true : prev?.returnCompleted,
+                  returnRouteUsed: payload.route ?? prev?.returnRouteUsed,
+                  rookRescued: payload.milestone === "rook_rescued" ? true : prev?.rookRescued,
+                  adventureCompleted: payload.milestone === "adventure_completed" ? true : prev?.adventureCompleted,
+                };
+                try {
+                  window.localStorage.setItem(`joystick_simulated_progress_${credentials.sessionId}`, JSON.stringify(next));
+                } catch {}
+                return next;
+              });
+            },
+            onSendDraft: async () => {
+              setSimulatedDraft(prev => {
+                if (!prev) return prev;
+                const sent: DraftView = {
+                  ...prev,
+                  status: "verified_sent",
+                  verifiedSentAt: new Date().toISOString(),
+                  sentByJoystick: true,
+                };
+                try {
+                  window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(sent));
+                } catch {}
+                return sent;
+              });
+              return "sent";
+            },
+            onFinishAdventure: backToPage,
+          }}
+        />
+      );
+    }
+
+    if (!data) return null;
     const actView = activation.data ?? null;
     return (
       <ImpossibleMachine
         initialProgress={data.machine ?? null}
         adapter={{
+          isSimulated: false,
           example,
           businessName,
           opportunity,
@@ -398,6 +552,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           ) : (
             <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
           )}
+          {!page && !inChapter && crewFinished && readingComplete && !questionsSettled && knowledgeQuestion.data?.question ? (
+            <ClaireQuestion question={knowledgeQuestion.data.question} understood={understood} onAnswer={onKnowledgeAnswer} />
+          ) : null}
           {page && reading.view && !inChapter ? (
             <PortraitPage
               view={page}
@@ -413,6 +570,15 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
             >
               {onFirstChapter && firstChapter.data ? <AskClaire view={firstChapter.data} onAsk={ask} onCourtyard={toCourtyard} /> : null}
               {onFirstChapter && activation.data?.owner && credentials ? <WorkspaceKey activation={activation.data} credentials={credentials} /> : null}
+              {gate === "loading" || gate === "error" || gate === "no_opportunity" ? (
+                <ChapterThreshold
+                  gate={gate}
+                  retrying={chapter.isFetching}
+                  onRetry={() => void chapter.refetch()}
+                  onLookCloser={() => setCloser(true)}
+                  onEnterSimulated={enterSimulated}
+                />
+              ) : null}
             </PortraitPage>
           ) : null}
           {crewFinished && portrait.data?.status === "failed" ? (

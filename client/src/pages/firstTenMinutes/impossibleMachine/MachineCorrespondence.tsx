@@ -21,6 +21,7 @@ const APPROACH_LABELS: Record<DraftApproach, string> = {
 
 interface MachineCorrespondenceProps {
   open: boolean;
+  isSimulated?: boolean;
   example: boolean;
   dial: MachineDialState;
   opportunity: ChapterOpportunity | null;
@@ -62,6 +63,7 @@ interface MachineCorrespondenceProps {
  */
 export function MachineCorrespondence({
   open,
+  isSimulated = false,
   example,
   dial,
   opportunity,
@@ -149,6 +151,14 @@ export function MachineCorrespondence({
               Your business · {who}
               {where}
             </p>
+            {isSimulated ? (
+              <div className={styles.simulatedBanner} data-testid="machine-simulated-banner">
+                <span className={styles.simulatedTag}>THREE DAYS LATER — AN IMAGINED SCENARIO</span>
+                <p className={styles.simulatedExplainer}>
+                  Claire has presented an imagined scenario to preview how JOYSTICK operates. This message is an authentic rehearsal—no email will leave your account and no real records will be created.
+                </p>
+              </div>
+            ) : null}
             {example ? (
               <p className={styles.exampleBanner} data-testid="machine-correspondence-example-banner">
                 {EXAMPLE_LABEL}
@@ -419,8 +429,45 @@ export function MachineCorrespondence({
               </div>
             ) : null}
 
-            {/* Account Activation & In-app Gmail SendDesk */}
-            {activation ? (
+            {/* User B: Simulated Send Desk (never calls Gmail, Stripe, or server) */}
+            {isSimulated ? (
+              <div className={styles.activationAndSendArea}>
+                <div className={styles.simulatedSendDesk} data-testid="first-ten-send-desk">
+                  <p className={styles.simulatedNotice}>
+                    Simulated Reply: Send is safe, rehearsed, and self-contained. No actual email leaves your account.
+                  </p>
+                  {draft.status === "verified_sent" ? (
+                    <div
+                      className={styles.closingBeatNote}
+                      data-testid="first-ten-closing"
+                      data-outcome="sent"
+                    >
+                      <p>Hazel notices the ink on your hand.</p>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.simulatedSendBtn}
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(async () => {
+                          if (onSendDraft) {
+                            await onSendDraft({
+                              to: opportunity.person.address,
+                              subject: draft?.subject ?? `Re: ${opportunity.request.subject}`,
+                              body: words || (draft?.body ?? ""),
+                            });
+                          }
+                        })
+                      }
+                      data-testid="first-ten-send-now"
+                    >
+                      Simulate Reply &amp; Couple Bridge
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : activation ? (
               <div className={styles.activationAndSendArea}>
                 {checkoutNotice === "cancelled" && activation.status !== "active" ? (
                   <p className={styles.checkoutNote} data-testid="first-ten-checkout-cancelled">

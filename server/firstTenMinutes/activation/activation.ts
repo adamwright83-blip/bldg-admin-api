@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { offerWords, type ActivationView } from "../../../shared/firstTenMinutesActivation";
+import { bindKnowledgeTenant } from "../../businessKnowledge/store";
 import { GOOGLE_SEND_SCOPE } from "../../../shared/firstTenMinutes";
 import type { FindingView } from "../../../shared/firstTenMinutesFindings";
 import { advertisedOfferForPlan } from "../../saas/joystickStripeOffer";
@@ -70,6 +71,8 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
   if (status === "active" && session.tenantId && journey.tenantId !== session.tenantId) {
     const db = await firstTenDb();
     await db.update(firstTenJourneys).set({ tenantId: session.tenantId }).where(eq(firstTenJourneys.id, journey.id));
+    // and so does what JOYSTICK understood of the person's business: stamped with the tenant, readable only by it
+    await bindKnowledgeTenant(journey.id, session.tenantId).catch(() => undefined);
   }
   return {
     example: journey.kind === "example",

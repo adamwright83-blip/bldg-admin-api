@@ -78,12 +78,19 @@ function fakePortrait(corpusText) {
   const id = (kind, test = () => true) => findings.find(finding => finding.kind === kind && test(finding))?.id;
   const ids = (...values) => values.filter(Boolean);
   const jules = id("person", finding => finding.fact.includes("Jules"));
+  // with JOYSTICK_ONBOARDING_INTELLIGENCE on, the corpus carries the reconciled understanding: write from it too
+  const understanding = corpus.understanding ?? [];
+  const related = understanding.find(fact => / is related to, but not the same company as, /.test(fact.fact));
+  const knowledge = related
+    ? [{ text: `${related.fact.split(" is related to")[0]} and ${related.fact.split("not the same company as, ")[1].split(";")[0]} are related, but not one company.`, findingIds: [related.id] }]
+    : [];
   return {
     paragraphs: [
       {
         sentences: [
           { text: "Weddings fill your weekends.", findingIds: ids(id("rhythm"), id("contrast")) },
           { text: "You're building a steadier weekday business around hotel flowers.", findingIds: ids(id("service"), id("route")) },
+          ...knowledge,
         ],
       },
       {
@@ -162,6 +169,9 @@ const defaults = () => ({
   sendAnswer: "ok",
   // Gmail gives a message sent through the API its own Message-ID (JOYSTICK's survives in X-Joystick-Send)
   rewriteMessageId: false,
+  // the readings find nobody asking for anything and propose nothing: no request, so no opportunity qualifies (the
+  // server also links opportunities itself from requests and replies), and the chapter has no conversation to open
+  noOpportunities: false,
 });
 let control = defaults();
 const revoked = [];
@@ -401,13 +411,23 @@ const server = http.createServer(async (req, res) => {
       const read = typeof result.content === "string" ? result.content : (result.content ?? []).map(part => part.text ?? "").join("");
       return send(res, 200, reply([{ type: "text", text: fakeClaire(JSON.parse(read)) }]));
     }
+    // the onboarding investigator (server/businessKnowledge): the stand-in adds nothing, so the deterministic floor's
+    // findings are what stands
+    if (system.includes("You are the investigator")) {
+      modelCalls.push("investigator");
+      const empty = { entities: [], people: [], events: [], statuses: [], relationships: [], questions: [], toolCalls: [], done: true };
+      return send(res, 200, { id: `msg_fake_${modelCalls.length}`, type: "message", role: "assistant", model: request.model, content: [{ type: "text", text: JSON.stringify(empty) }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 2000, output_tokens: 40 } });
+    }
     const conversations = system.includes("owner's email");
     const portrait = system.includes("Give the whole picture its language");
     if (conversations && control.conversationsDelayMs) await new Promise(resolve => setTimeout(resolve, control.conversationsDelayMs));
     const userText = (request.messages ?? [])
       .map(message => (typeof message.content === "string" ? message.content : (message.content ?? []).map(part => part.text ?? "").join("")))
       .join("\n");
-    const answer = portrait ? fakePortrait(userText) : conversations ? extraction.conversations : extraction.work;
+    const read = control.noOpportunities
+      ? { conversations: { ...extraction.conversations, requests: [] }, work: { ...extraction.work, opportunities: [] } }
+      : extraction;
+    const answer = portrait ? fakePortrait(userText) : conversations ? read.conversations : read.work;
     modelCalls.push(portrait ? "portrait" : conversations ? "conversations" : "work");
     return send(res, 200, {
       id: `msg_fake_${modelCalls.length}`,

@@ -6,11 +6,18 @@ on:
   pull_request:
     paths:
       - "server/firstTenMinutes/**"
+      - "server/businessKnowledge/**"
+      - "shared/businessKnowledge*"
+      - "drizzle/0163_business_knowledge.sql"
+      - "scripts/onboarding-intelligence-eval.ts"
       - "shared/firstTenMinutes*"
       - "client/src/pages/firstTenMinutes/**"
       - "client/src/App.tsx"
       - "client/src/pages/JoystickAcquisitionPage.tsx"
       - "e2e/first-ten-minutes/**"
+      - "server/claire/contextAssembler.ts"
+      - "server/claire/preDriveConversation.ts"
+      - "server/claire/verifiedFactInventoryFromContext.ts"
       - "playwright.first-ten-minutes.config.ts"
       - "scripts/first-ten-e2e.sh"
       - "scripts/migrate.mjs"
@@ -67,17 +74,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Contracts
-        run: pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes client/src/pages/firstTenMinutes shared/claireRoutines.test.ts server/claire/routines
+        run: pnpm exec vitest run server/firstTenMinutes server/businessKnowledge shared/firstTenMinutes client/src/pages/firstTenMinutes shared/claireRoutines.test.ts server/claire/routines
       - name: Migrate the disposable database, twice (idempotent)
         run: |
           node scripts/migrate.mjs
           node scripts/migrate.mjs
       - name: Journeys on MySQL
-        run: pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes server/claire/routines
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes server/businessKnowledge server/claire/routines
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
       - name: The first ten minutes in a browser
         run: scripts/first-ten-e2e.sh
+      - name: Onboarding intelligence (investigation, Claire's questions, portrait from the understanding) in a browser
+        run: FIRST_TEN_E2E_INTELLIGENCE=on FIRST_TEN_E2E_LOGS=tmp/first-ten-e2e-intelligence-logs scripts/first-ten-e2e.sh e2e/first-ten-minutes/knowledge.spec.ts
       - name: The controlled preview, server-enforced, in a browser
         run: FIRST_TEN_E2E_MODE=preview FIRST_TEN_E2E_LOGS=tmp/first-ten-e2e-preview-logs scripts/first-ten-e2e.sh e2e/first-ten-minutes/preview.spec.ts
       - name: Keep the screenshots and logs
@@ -88,6 +97,7 @@ jobs:
           path: |
             tmp/first-ten-e2e-shots
             tmp/first-ten-e2e-logs
+            tmp/first-ten-e2e-intelligence-logs
             tmp/first-ten-e2e-results
           if-no-files-found: ignore
           retention-days: 7
