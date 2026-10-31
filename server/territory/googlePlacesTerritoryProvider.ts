@@ -241,6 +241,17 @@ export class GooglePlacesTerritoryProvider
           includedRegionCodes: ["us"],
           regionCode: "US",
           languageCode: "en",
+          // Autocomplete runs from Railway, so IP bias would otherwise reflect
+          // the server rather than this tenant's current Los Angeles service area.
+          locationBias: {
+            circle: {
+              center: {
+                latitude: 34.0522,
+                longitude: -118.2437,
+              },
+              radius: 50_000,
+            },
+          },
         }),
         signal: AbortSignal.timeout(8_000),
       }

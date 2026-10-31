@@ -177,6 +177,12 @@ describe("GooglePlacesTerritoryProvider", () => {
       expect(headers.get("X-Goog-Api-Key")).toBe("places-secret");
       const request = JSON.parse(String(init?.body));
       expect(request.input).toBe("4455 Los Fel");
+      expect(request.locationBias).toEqual({
+        circle: {
+          center: { latitude: 34.0522, longitude: -118.2437 },
+          radius: 50_000,
+        },
+      });
       return new Response(
         JSON.stringify({
           suggestions: [
