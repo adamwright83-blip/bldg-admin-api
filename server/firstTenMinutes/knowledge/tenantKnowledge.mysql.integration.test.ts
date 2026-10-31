@@ -142,4 +142,41 @@ describe.skipIf(!allowed)("signup knowledge in the paid workspace, on MySQL", ()
     expect(briefing.facts.every(fact => fact.id && fact.learnedAt)).toBe(true);
     expect(briefing.readFrom.length).toBeGreaterThanOrEqual(0);
   });
+  it("carries the portrait the person kept, in their own words, without the lines they removed", async () => {
+    const portraitTenant = `df_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    const { startJourney } = await import("../journeys");
+    const { runReading } = await import("../understanding/run");
+    const { readingDepsFor } = await import("../understanding/deps");
+    const { claimReading } = await import("../understanding/store");
+    const { journeyById, setJourneyStage } = await import("../store");
+    const { preparePortrait, changePortraitLine, keepPortraitFor, portraitView } = await import("../portrait/portrait");
+    const { readTenantOnboardingKnowledge } = await import("./tenantKnowledge");
+    // Nina's example writes its portrait without a model; then it is hers, provisioned
+    const journey = (await startJourney({ requestId: randomUUID(), kind: "example" })).journey;
+    const runId = randomUUID();
+    await claimReading(journey.id, runId, { again: false });
+    await runReading(journey.id, runId, await readingDepsFor(journey));
+    await setJourneyStage(journey.id, "crew");
+    await (await preparePortrait((await journeyById(journey.id))!)).started;
+    const written = (await portraitView(journey.id))!;
+    expect(written.status).toBe("ready");
+    const removed = written.paragraphs[0][0].text;
+    await changePortraitLine(journey, "p2.s1", "Jules builds the big pieces. I do the rest.");
+    await changePortraitLine(journey, "p1.s1", null);
+    await db.query("UPDATE first_ten_journeys SET kind = 'own', tenant_id = ? WHERE id = ?", [portraitTenant, journey.id]);
+
+    const ready = (await readTenantOnboardingKnowledge(portraitTenant))!;
+    expect(ready.portrait?.kept).toBe(false);
+    expect(ready.portrait!.lines.map(line => line.text)).toContain("Jules builds the big pieces. I do the rest.");
+
+    expect((await keepPortraitFor((await journeyById(journey.id))!)).status).toBe("kept");
+    const kept = (await readTenantOnboardingKnowledge(portraitTenant))!;
+    expect(kept.portrait).not.toBeNull();
+    expect(kept.portrait!.kept).toBe(true);
+    const texts = kept.portrait!.lines.map(line => line.text);
+    expect(texts).toContain("Jules builds the big pieces. I do the rest.");
+    expect(texts).not.toContain("Jules handles the installations.");
+    expect(texts).not.toContain(removed);
+    expect(kept.portrait!.lines).toHaveLength(written.paragraphs.flat().length + (written.closing ? 1 : 0) - 1);
+  });
 });
