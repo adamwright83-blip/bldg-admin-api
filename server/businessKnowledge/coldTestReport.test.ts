@@ -61,7 +61,7 @@ function raw(over: Partial<ColdTestRaw> = {}): ColdTestRaw {
     startedAt: new Date("2026-10-31T10:00:00.000Z"),
     finishedAt: new Date("2026-10-31T10:02:00.000Z"),
     cleanup: { deleted: { business_knowledge_entities: 4, first_ten_findings: 0 } },
-    investigator: { configured: "claude", model: "claude:claude-sonnet-5-5+heuristic", status: "complete", rounds: 3, toolCalls: 20, stoppedBecause: "no new evidence", notes: [] },
+    investigator: { configured: "claude", model: "claude+heuristic", served: ["claude-sonnet-5-5"], status: "complete", rounds: 3, toolCalls: 20, stoppedBecause: "no new evidence", notes: [] },
     investigatorUsage: { calls: 3, failures: 0, inputTokens: 1_000_000, outputTokens: 100_000, latencyMs: 9000 },
     stages: null,
     timings: { investigation: 110_000 },
@@ -100,7 +100,7 @@ describe("the outcome and its page", () => {
     // Sonnet-class: 300¢ per million in, 1500¢ per million out
     expect(outcome.usage.investigator.costCents).toBe(300 + 150);
     expect(outcome.usage.totalCostCents).toBe(450);
-    const gemini = repriced(coldTestOutcome(raw({ investigator: { ...raw().investigator!, model: "gemini:gemini-2.5-flash+heuristic" } })), { input: 30, output: 250 });
+    const gemini = repriced(coldTestOutcome(raw({ investigator: { ...raw().investigator!, model: "gemini:gemini-2.5-flash+heuristic", served: ["gemini-2.5-flash"] } })), { input: 30, output: 250 });
     expect(gemini.usage.investigator.costCents).toBe(30 + 25);
     expect(gemini.usage.investigator.priceBasis).toContain("operator's rate");
   });
@@ -121,8 +121,32 @@ describe("the outcome and its page", () => {
       { category: "llm:onboarding_investigator", tokens: 1_100_000, costCents: 450 },
     ];
     expect(coldTestOutcome(raw({ mode: "journey", stages })).usage.totalCostCents).toBe(457);
-    const gemini = coldTestOutcome(raw({ mode: "journey", stages: stages.slice(0, 1), investigator: { ...raw().investigator!, model: "gemini:x+heuristic" } }));
+    const gemini = coldTestOutcome(raw({ mode: "journey", stages: stages.slice(0, 1), investigator: { ...raw().investigator!, model: "gemini:x+heuristic", served: ["gemini-x"] } }));
     expect(gemini.usage.totalCostCents).toBe(7 + gemini.usage.investigator.costCents);
+  });
+
+  it("names the model that really answered, and fails a run where the chosen model never did", () => {
+    const answered = coldTestOutcome(raw());
+    const page = renderColdTestReport(answered, null, null);
+    expect(page).toContain("- Model that answered: claude-sonnet-5-5.");
+    expect(answered.checks.find(check => check.name.startsWith("the claude model answered"))?.ok).toBe(true);
+
+    const fellBack = coldTestOutcome(raw({ investigator: { ...raw().investigator!, served: [] }, investigatorUsage: { calls: 3, failures: 3, inputTokens: 0, outputTokens: 0, latencyMs: 0 } }));
+    expect(fellBack.checks.find(check => check.name.startsWith("the claude model answered"))?.ok).toBe(false);
+    expect(renderColdTestReport(fellBack, null, null)).toContain("NONE: no model call succeeded");
+
+    const chosenFloor = coldTestOutcome(raw({ investigator: { ...raw().investigator!, configured: "heuristic", model: "heuristic", served: [] } }));
+    expect(chosenFloor.checks.some(check => check.name.includes("model answered"))).toBe(false);
+  });
+
+  it("opens with a summary: what read, how long, how right", () => {
+    const outcome = coldTestOutcome(raw());
+    const page = renderColdTestReport(outcome, compareWithExpectations(outcome, { current: ["Acme Cleaning"], people: ["Morgan Lee"] }), null);
+    expect(page).toContain("## Summary");
+    expect(page).toContain("- Took 120.0s");
+    expect(page).toContain("gmail 12 items in 1 operations");
+    expect(page).toContain("sheets 0 items in 1 operations (1 failed, 0 not granted)");
+    expect(page).toContain("- Against your expectations: 1 right, 1 missed, 0 misunderstood");
   });
 
   it("holds the run to the rules, and a broken rule is an incorrect conclusion", () => {

@@ -43,14 +43,14 @@ export async function investigateJourney(
   journey: JourneyRow,
   access: GoogleAccess,
   heartbeat: () => Promise<void>,
-  deps: { fetch?: typeof fetch; now?: () => Date; env?: NodeJS.ProcessEnv } = {}
+  deps: { fetch?: typeof fetch; now?: () => Date; env?: NodeJS.ProcessEnv; served?: Set<string> } = {}
 ): Promise<{ quietTerms: string[]; notes: string[] }> {
   const scope = scopeOf(journey);
   const now = deps.now ?? (() => new Date());
   const ledger = new CoverageLedger(now);
   const usage: ModelUsage = { calls: 0, failures: 0, inputTokens: 0, outputTokens: 0, latencyMs: 0 };
   const notes: string[] = [];
-  const { model } = investigatorFor(journey.id, usage, notes, { env: deps.env });
+  const { model } = investigatorFor(journey.id, usage, notes, { env: deps.env, served: deps.served });
   const research = googleResearch(access, ledger, { fetch: deps.fetch, now });
   const result = await investigate(scope, {
     research,
