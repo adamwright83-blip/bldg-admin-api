@@ -6,7 +6,8 @@ import { recordEvent } from "../events";
 import { setJourneyStage, type JourneyRow } from "../store";
 import { understandingView } from "../understanding/view";
 import { claimPortrait, editPortraitLine, finishPortrait, keepPortrait, portraitRow, restorePortraitEdit, type PortraitEdits } from "./store";
-import { PORTRAIT_SYSTEM, firstNameFor, portraitCorpus, portraitFindings, settlePortrait, type PortraitWriter, type WrittenPortrait } from "./write";
+import { onboardingPortraitKnowledge } from "../../businessKnowledge/onboarding";
+import { PORTRAIT_KNOWLEDGE_RULES, PORTRAIT_SYSTEM, firstNameFor, portraitCorpus, portraitFindings, settlePortrait, type PortraitKnowledge, type PortraitWriter, type WrittenPortrait } from "./write";
 import { claudePortraitWriter, examplePortraitWriter } from "./writers";
 
 /**
@@ -20,7 +21,7 @@ import { claudePortraitWriter, examplePortraitWriter } from "./writers";
  * said about it. A later reading can change a finding's content under the same id (Slack added, a calendar rhythm
  * recounted), and that changes the basis too.
  */
-export function portraitBasis(findings: readonly FindingView[]): string {
+export function portraitBasis(findings: readonly FindingView[], knowledge: PortraitKnowledge | null = null): string {
   const standing = portraitFindings(findings)
     .map(finding => [
       finding.id,
@@ -30,9 +31,10 @@ export function portraitBasis(findings: readonly FindingView[]): string {
       finding.sources.map(source => `${source.provider}:${source.ref}:${source.excerpt}`).join("|"),
     ])
     .sort((a, b) => a[0].localeCompare(b[0]));
-  return createHash("sha256")
-    .update(JSON.stringify(["portrait-v2", firstNameFor(findings), standing]))
-    .digest("hex");
+  // without knowledge the basis is exactly what it was, so pages already written aren't rewritten
+  const parts: unknown[] = ["portrait-v2", firstNameFor(findings), standing];
+  if (knowledge?.facts.length) parts.push(knowledge.facts.map(fact => [fact.id, fact.fact, fact.historical]), knowledge.quietTerms);
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
 export function portraitWriterFor(journey: JourneyRow): { writer: PortraitWriter; name: string } {
@@ -46,14 +48,16 @@ export async function runPortrait(
   journeyId: string,
   runId: string,
   findings: FindingView[],
-  writer: { writer: PortraitWriter; name: string }
+  writer: { writer: PortraitWriter; name: string },
+  knowledge: PortraitKnowledge | null = null
 ): Promise<void> {
   try {
-    const corpus = portraitCorpus(findings, firstNameFor(findings));
+    const corpus = portraitCorpus(findings, firstNameFor(findings), knowledge);
+    const system = knowledge?.facts.length ? `${PORTRAIT_SYSTEM}\n${PORTRAIT_KNOWLEDGE_RULES}` : PORTRAIT_SYSTEM;
     let written: WrittenPortrait | null = null;
     for (let attempt = 1; ; attempt++) {
       try {
-        written = settlePortrait(await writer.writer.write({ system: PORTRAIT_SYSTEM, corpus, findings }), findings);
+        written = settlePortrait(await writer.writer.write({ system, corpus, findings }), findings, knowledge);
         break;
       } catch (error) {
         if (attempt >= 2) throw error;
@@ -72,16 +76,22 @@ export async function runPortrait(
  */
 export async function preparePortrait(
   journey: JourneyRow,
-  writer: { writer: PortraitWriter; name: string } = portraitWriterFor(journey)
+  writer: { writer: PortraitWriter; name: string } = portraitWriterFor(journey),
+  knowledgeFor: (journey: JourneyRow) => ReturnType<typeof onboardingPortraitKnowledge> = onboardingPortraitKnowledge
 ): Promise<{ view: PortraitView; started: Promise<void> | null }> {
   const reading = await understandingView(journey.id);
   if (reading.status !== "complete") {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Your crew is still getting acquainted." });
   }
+  // the portrait is written from the reconciled understanding, after Claire's questions are answered (or skipped)
+  const knowledge = await knowledgeFor(journey);
+  if (knowledge === "questions_pending") {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Claire has a question for you first." });
+  }
   const runId = randomUUID();
   let started: Promise<void> | null = null;
-  if (await claimPortrait(journey.id, runId, portraitBasis(reading.findings))) {
-    started = runPortrait(journey.id, runId, reading.findings, writer);
+  if (await claimPortrait(journey.id, runId, portraitBasis(reading.findings, knowledge))) {
+    started = runPortrait(journey.id, runId, reading.findings, writer, knowledge);
     if (journey.stage === "crew") await setJourneyStage(journey.id, "portrait");
   }
   return { view: (await portraitView(journey.id)) ?? { status: "writing", greeting: null, paragraphs: [], closing: null }, started };

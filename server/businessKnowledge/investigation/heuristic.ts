@@ -45,7 +45,8 @@ export function signatureNames(text: string, ownerName: string | null): string[]
   const out: string[] = [];
   for (let i = Math.max(0, lines.length - 6); i < lines.length - 1; i += 1) {
     if (lower(lines[i]) === lower(ownerName)) {
-      const next = lines[i + 1];
+      // "Wildroot Flowers · Silver Lake": the business is what comes before the separator
+      const next = lines[i + 1]?.split(/\s+[·•|–—-]\s+|,\s+/)[0]?.trim();
       if (next && next.length <= 60 && !/[@:/]|\d{3}/.test(next)) out.push(next);
     }
   }

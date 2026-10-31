@@ -20,6 +20,7 @@ import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
+import { ClaireQuestion } from "./knowledge/ClaireQuestion";
 import { RevelationScene } from "./chapter/RevelationScene";
 import { LetterScene } from "./chapter/LetterScene";
 import { DraftTable } from "./chapter/DraftTable";
@@ -186,6 +187,22 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const pastCrew = Boolean(view && AFTER_CREW.has(view.stage));
   const crewFinished = crewDone || pastCrew;
   const readingComplete = reading.view?.status === "complete";
+  // Claire's questions first, when JOYSTICK_ONBOARDING_INTELLIGENCE is on: what the reading couldn't settle, one at a
+  // time. Off, the server answers "settled" and nothing here changes.
+  const knowledgeQuestion = trpc.system.firstTenMinutes.knowledgeQuestion.useQuery(credentials!, {
+    enabled: Boolean(credentials) && crewFinished && readingComplete,
+    retry: false,
+  });
+  const answerKnowledgeQuestion = trpc.system.firstTenMinutes.answerKnowledgeQuestion.useMutation();
+  const [understood, setUnderstood] = useState<string | null>(null);
+  const questionsSettled = knowledgeQuestion.isError || Boolean(knowledgeQuestion.data?.settled);
+  async function onKnowledgeAnswer(answer: string | null) {
+    const question = knowledgeQuestion.data?.question;
+    if (!credentials || !question) return;
+    const next = await answerKnowledgeQuestion.mutateAsync({ ...credentials, questionId: question.id, answer });
+    setUnderstood(next.explanation);
+    utils.system.firstTenMinutes.knowledgeQuestion.setData(credentials, next);
+  }
   const preparePortrait = trpc.system.firstTenMinutes.preparePortrait.useMutation();
   const answerPortrait = trpc.system.firstTenMinutes.answerPortrait.useMutation();
   const portrait = trpc.system.firstTenMinutes.portrait.useQuery(credentials!, {
@@ -204,10 +221,10 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credentials]);
   useEffect(() => {
-    if (!crewFinished || !readingComplete || portrait.data?.status === "kept") return;
+    if (!crewFinished || !readingComplete || !questionsSettled || portrait.data?.status === "kept") return;
     writePortrait();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crewFinished, readingComplete, portraitBasis, writePortrait]);
+  }, [crewFinished, readingComplete, questionsSettled, portraitBasis, writePortrait]);
   // A correction made while Claire was writing couldn't start a new page then; once she has finished, ask again. The
   // server writes again only if what the page rests on has changed, so this settles after one more page at most.
   const wasWriting = useRef(false);
@@ -445,6 +462,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           ) : (
             <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
           )}
+          {!page && !inChapter && crewFinished && readingComplete && !questionsSettled && knowledgeQuestion.data?.question ? (
+            <ClaireQuestion question={knowledgeQuestion.data.question} understood={understood} onAnswer={onKnowledgeAnswer} />
+          ) : null}
           {page && reading.view && !inChapter ? (
             <PortraitPage
               view={page}

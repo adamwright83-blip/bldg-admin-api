@@ -77,6 +77,8 @@ export type InvestigationDeps = {
   /** model usage, recorded on the run */
   usage?: Record<string, number>;
   notes?: string[];
+  /** called as the work goes on, e.g. to keep the onboarding reading's lease while the investigation runs */
+  onProgress?: () => Promise<void>;
 };
 
 export type InvestigationResult = {
@@ -166,6 +168,7 @@ export async function investigate(scope: KnowledgeScope, deps: InvestigationDeps
         if (round > 1 || skipped) break;
       }
       await renewRun(scope, runId);
+      await deps.onProgress?.();
       if (round === budget.rounds) {
         // read what the last round fetched before stopping
         const tail = book.takeChanged();
@@ -184,6 +187,7 @@ export async function investigate(scope: KnowledgeScope, deps: InvestigationDeps
     }
 
     // ---- reconcile: chronology decides, collaborators, questions for the person
+    await deps.onProgress?.();
     const history = await priorCoverage();
     const coverageFor = (entityId: string) => {
       const entries = [...agenda.filter(item => item.entityIds.includes(entityId)).flatMap(item => item.searches), ...(history.get(entityId) ?? [])];

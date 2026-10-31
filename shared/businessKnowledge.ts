@@ -170,3 +170,72 @@ export type BusinessUnderstanding = {
   resolvedQuestions: KnowledgeQuestionView[];
   coverageGaps: CoverageGap[];
 };
+
+// ------------------------------------------------------------------ Claire's briefing
+
+export type BusinessKnowledgeBriefingItem = {
+  id: string;
+  name: string;
+  kind: EntityKind;
+  /** the operator's own answer, or JOYSTICK's reading of their accounts */
+  basis: "operator" | "evidence";
+  why: string | null;
+  lastActivity: string | null;
+};
+
+/**
+ * What Claire carries of the reconciled understanding: compact, dated, every item with its basis. Present only when
+ * there is something real. Not accounting: no revenue, customers or sales come from it.
+ */
+export type BusinessKnowledgeBriefing = {
+  understoodAt: string | null;
+  current: BusinessKnowledgeBriefingItem[];
+  preparing: BusinessKnowledgeBriefingItem[];
+  /** quiet since lastActivity, searched: may be paused, never "stopped" */
+  paused: BusinessKnowledgeBriefingItem[];
+  past: BusinessKnowledgeBriefingItem[];
+  uncertain: BusinessKnowledgeBriefingItem[];
+  people: Array<{ id: string; name: string; role: string | null; basis: "operator" | "evidence" }>;
+  relationships: Array<{ id: string; a: string; relation: RelationshipType; b: string; basis: "operator" | "evidence"; operatorWords: string | null }>;
+  conflicts: Array<{ about: string; operatorSaid: string; evidenceSuggests: string; why: string }>;
+  /** still open; anything not listed has been answered or isn't being asked */
+  openQuestions: string[];
+  answered: Array<{ question: string; understood: string | null }>;
+  incompleteSources: Array<{ source: string; reasons: string[] }>;
+};
+
+const basisOf = (basis: AssertionBasis | null): "operator" | "evidence" => (basis && USER_BASES.includes(basis) ? "operator" : "evidence");
+
+export function businessKnowledgeForBriefing(understanding: BusinessUnderstanding | null): BusinessKnowledgeBriefing | null {
+  if (!understanding) return null;
+  const item = (entity: UnderstoodEntity): BusinessKnowledgeBriefingItem => ({
+    id: entity.id,
+    name: entity.name,
+    kind: entity.kind,
+    basis: basisOf(entity.statusBasis),
+    why: entity.statusWhy,
+    lastActivity: entity.lastActivityAt?.slice(0, 10) ?? null,
+  });
+  const briefing: BusinessKnowledgeBriefing = {
+    understoodAt: understanding.understoodAt,
+    current: understanding.current.map(item),
+    preparing: understanding.prelaunch.map(item),
+    paused: understanding.dormant.map(item),
+    past: understanding.historical.map(item),
+    uncertain: understanding.unknown.map(item),
+    people: understanding.people.map(person => ({ id: person.id, name: person.name, role: person.role, basis: basisOf(person.statusBasis) })),
+    relationships: understanding.relationships
+      .filter(relationship => relationship.type !== "collaborates_with")
+      .map(relationship => ({ id: relationship.id, a: relationship.subject, relation: relationship.type, b: relationship.object, basis: basisOf(relationship.basis), operatorWords: USER_BASES.includes(relationship.basis) ? relationship.detail : null })),
+    conflicts: understanding.conflicts.map(conflict => ({ about: conflict.claim, operatorSaid: conflict.confirmed, evidenceSuggests: conflict.inferred, why: conflict.why })),
+    openQuestions: understanding.openQuestions.map(question => question.followUp ?? question.question),
+    answered: understanding.resolvedQuestions.map(question => ({ question: question.question, understood: question.explanation })),
+    incompleteSources: understanding.coverageGaps.map(gap => ({ source: gap.source, reasons: gap.reasons })),
+  };
+  const empty = !briefing.current.length && !briefing.preparing.length && !briefing.paused.length && !briefing.past.length && !briefing.uncertain.length && !briefing.people.length;
+  return empty ? null : briefing;
+}
+
+/** How Claire may use it: one rule for every conversation that carries the briefing. */
+export const BUSINESS_KNOWLEDGE_RULE =
+  "currentContext.businessKnowledge is JOYSTICK's dated understanding of the operator's businesses, brands, products, projects and the people they work with, reconciled from their own accounts and their own answers. basis 'operator' is what they told you: state it plainly. basis 'evidence' is JOYSTICK's reading: say it looks that way and why (why, lastActivity), and that they can correct it. 'current' is current work; 'preparing' is being built or prepared, with no launch, sales or customers known, so never invent them; 'paused' means quiet since lastActivity, never that they stopped; 'past' is past; 'uncertain' is not known. A relationship in the operator's words is theirs; related_operation and brand_of never mean one legal company, and nothing here means combining money or records. If they correct something, say you'll remember it. Never ask an answered question again; only openQuestions are open, and ask at most one, only if it matters to what they asked. incompleteSources could not be read fully: say so rather than claiming nothing was there. It is not accounting: no revenue, customer counts or sales come from it.";
