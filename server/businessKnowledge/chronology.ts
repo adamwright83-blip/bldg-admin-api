@@ -61,7 +61,7 @@ export type StatusDecision = {
 const counts = (event: ChronologyEvent) => event.signal === "owner_action" || event.signal === "counterpart_action";
 const isProductLike = (kind: EntityKind) => kind === "product" || kind === "project";
 const day = (date: Date) => date.toISOString().slice(0, 10);
-const newest = (events: ChronologyEvent[], n = 4) => [...events].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, n);
+const newest = (events: readonly ChronologyEvent[], n = 4) => [...events].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, n);
 
 function researchSourceOf(provider: EvidenceProvider): ResearchSource | null {
   return provider === "user" ? null : provider;
