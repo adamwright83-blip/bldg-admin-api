@@ -361,13 +361,6 @@
   .cd-cctv { width: 100%; }
 }
 
-<<<<<<< HEAD
-/* An approved follow-up: the owner reads and edits the exact words before anything is sent. */
-.cd-follow-up { display: grid; gap: 8px; margin-top: 8px; }
-.cd-follow-up textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #f3ebdd33; border-radius: 10px; background: #0b151b; color: var(--sh-paper); font: 400 15px/1.45 var(--sh-sans); resize: vertical; }
-.cd-follow-up textarea:focus-visible { outline: 2px solid var(--sh-gold); outline-offset: 1px; }
-.cd-follow-up a.cd-chip { display: inline-flex; align-items: center; text-decoration: none; }
-=======
 /* Cards set in the dark dock (From your signup, Waiting to hear back) read like the desk drawer's own cards. */
 .cd-dock .cd-card { color: #22323c; }
 .cd-dock .cd-card .cd-kicker { margin: 0 0 6px; font: 500 11px var(--cd-mono); letter-spacing: 0.16em; color: #8a5d12; }
@@ -377,4 +370,8 @@
 .cd-dock .cd-card .cd-gold { background: #e2a422; color: #13294b; }
 .cd-dock .cd-card .cd-chip { color: #22323c; border-color: #e3d6bc; }
 .cd-dock .cd-card a { color: #13294b; }
->>>>>>> origin/claude/confident-ptolemy-rrtlrz-awaiting-replies
+/* An approved follow-up: the owner reads and edits the exact words before anything is sent. */
+.cd-follow-up { display: grid; gap: 8px; margin-top: 8px; }
+.cd-follow-up textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #e3d6bc; border-radius: 10px; background: #fff; color: #22323c; font: 400 15px/1.45 var(--sh-sans); resize: vertical; }
+.cd-follow-up textarea:focus-visible { outline: 2px solid #e2a422; outline-offset: 1px; }
+.cd-follow-up a.cd-chip { display: inline-flex; align-items: center; text-decoration: none; }
