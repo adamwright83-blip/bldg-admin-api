@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { FetchLike } from "../providerFetch";
 import type { CoverageLedger } from "./coverage";
 import { redactSensitive } from "./privacy";
@@ -56,25 +58,61 @@ function robotsDisallowAll(robots: string): boolean {
   return false;
 }
 
-async function bounded(fetcher: FetchLike, url: string, maxBytes: number): Promise<{ ok: boolean; status: number; text: string }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  try {
-    const response = await fetcher(url, { redirect: "follow", signal: controller.signal, headers: { "user-agent": "JOYSTICK-onboarding (public business lookup)" } });
-    const text = (await response.text()).slice(0, maxBytes);
-    return { ok: response.ok, status: response.status, text };
-  } finally {
-    clearTimeout(timer);
+/** Whether an IP address is private, loopback, link-local, or otherwise not the public internet. */
+export function privateAddress(address: string): boolean {
+  const ip = address.toLowerCase().replace(/^::ffff:/, "");
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
   }
+  if (isIP(ip) === 6) return ip === "::" || ip === "::1" || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip) || ip.startsWith("ff");
+  return true;
+}
+
+export type Resolver = (hostname: string) => Promise<string[]>;
+const systemResolver: Resolver = async hostname => (await lookup(hostname, { all: true })).map(entry => entry.address);
+
+/**
+ * GET one public page. Redirects are followed by hand, at most three, and every hop (the first included) must be
+ * plain https to a public hostname that resolves only to public addresses: a public site can't bounce the request
+ * to an internal address.
+ */
+async function bounded(fetcher: FetchLike, url: string, maxBytes: number, resolve: Resolver): Promise<{ ok: boolean; status: number; text: string }> {
+  let target = url;
+  for (let hop = 0; hop <= 3; hop += 1) {
+    const parsed = new URL(target);
+    if (parsed.protocol !== "https:" || parsed.port || !publicHostname(parsed.hostname) || publicHostname(parsed.hostname) !== parsed.hostname.replace(/^www\./, "")) {
+      throw new Error("not a public https address");
+    }
+    const addresses = await resolve(parsed.hostname);
+    if (!addresses.length || addresses.some(privateAddress)) throw new Error("not a public address");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+      const response = await fetcher(target, { redirect: "manual", signal: controller.signal, headers: { "user-agent": "JOYSTICK-onboarding (public business lookup)" } });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) return { ok: false, status: response.status, text: "" };
+        target = new URL(location, target).toString();
+        continue;
+      }
+      const text = (await response.text()).slice(0, maxBytes);
+      return { ok: response.ok, status: response.status, text };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error("too many redirects");
 }
 
 const decode = (text: string) =>
   text.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
 
-export function publicEnricher(ledger: CoverageLedger, deps: { fetch?: FetchLike; env?: NodeJS.ProcessEnv } = {}): PublicEnricher {
+export function publicEnricher(ledger: CoverageLedger, deps: { fetch?: FetchLike; env?: NodeJS.ProcessEnv; resolve?: Resolver } = {}): PublicEnricher {
   const env = deps.env ?? process.env;
   const enabled = env[ENRICHMENT_FLAG]?.trim().toLowerCase() === "on";
   const fetcher = deps.fetch ?? fetch;
+  const resolve = deps.resolve ?? systemResolver;
   return {
     async website(domain) {
       const host = publicHostname(domain);
@@ -84,12 +122,12 @@ export function publicEnricher(ledger: CoverageLedger, deps: { fetch?: FetchLike
         return { status: "disallowed", source: "website", domain, reason: "not a public business domain" };
       }
       try {
-        const robots = await bounded(fetcher, `https://${host}/robots.txt`, 20_000).catch(() => null);
+        const robots = await bounded(fetcher, `https://${host}/robots.txt`, 20_000, resolve).catch(() => null);
         if (robots?.ok && robotsDisallowAll(robots.text)) {
           ledger.record({ source: "public_web", operation: "website", target: host, status: "excluded", items: 0, reason: "robots.txt" });
           return { status: "disallowed", source: "website", domain: host, reason: "robots.txt disallows it" };
         }
-        const page = await bounded(fetcher, `https://${host}/`, 200_000);
+        const page = await bounded(fetcher, `https://${host}/`, 200_000, resolve);
         if (!page.ok) {
           ledger.record({ source: "public_web", operation: "website", target: host, status: "failed", items: 0, reason: String(page.status) });
           return { status: "failed", source: "website", domain: host, reason: String(page.status) };

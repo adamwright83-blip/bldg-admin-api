@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CoverageLedger, failureReason } from "./coverage";
-import { publicEnricher, publicHostname } from "./enrichment";
+import { privateAddress, publicEnricher, publicHostname } from "./enrichment";
 import { REDACTED, redactSensitive, sensitiveDocumentReason } from "./privacy";
 import { ProviderError } from "../providerFetch";
 
@@ -64,13 +64,31 @@ describe("public enrichment", () => {
       return new Response('<html><title>Rinse Farm &amp; Co</title><meta name="description" content="Laundry pickup in LA"></html>', { status: 200 });
     }) as any;
     void pages;
-    const enricher = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: fetcher });
+    const publicDns = async () => ["93.184.216.34"];
+    const enricher = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: fetcher, resolve: publicDns });
     expect(await enricher.website("https://www.rinsefarm.example/about")).toMatchObject({ status: "found", title: "Rinse Farm & Co", description: "Laundry pickup in LA" });
     expect((await enricher.website("gmail.com")).status).toBe("disallowed");
     expect((await enricher.website("10.0.0.1")).status).toBe("disallowed");
     expect(publicHostname("localhost")).toBeNull();
     expect(publicHostname("api.railway.internal")).toBeNull();
-    const blocked = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: (async () => new Response("User-agent: *\nDisallow: /", { status: 200 })) as any });
+    const blocked = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: (async () => new Response("User-agent: *\nDisallow: /", { status: 200 })) as any, resolve: publicDns });
     expect((await blocked.website("private.example")).status).toBe("disallowed");
+  });
+
+  it("never follows a public site to an internal address (redirects checked hop by hop, names resolved)", async () => {
+    const ledger = new CoverageLedger();
+    const requested: string[] = [];
+    const redirecting = (async (url: string) => {
+      requested.push(url);
+      return new Response("", { status: 302, headers: { location: "http://127.0.0.1:8080/admin" } });
+    }) as any;
+    const enricher = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: redirecting, resolve: async () => ["93.184.216.34"] });
+    expect((await enricher.website("bouncy.example")).status).toBe("failed");
+    expect(requested.every(url => url.startsWith("https://bouncy.example/"))).toBe(true);
+    // a public name that resolves to a private address is refused before any request
+    const rebinding = publicEnricher(ledger, { env: { JOYSTICK_PUBLIC_ENRICHMENT: "on" }, fetch: (async () => { throw new Error("must not fetch"); }) as any, resolve: async () => ["10.1.2.3"] });
+    expect((await rebinding.website("rebind.example")).status).toBe("failed");
+    expect(["127.0.0.1", "10.0.0.5", "172.20.1.1", "192.168.1.1", "169.254.169.254", "::1", "fd00::1", "::ffff:127.0.0.1"].every(privateAddress)).toBe(true);
+    expect(privateAddress("93.184.216.34")).toBe(false);
   });
 });

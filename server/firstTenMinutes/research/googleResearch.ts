@@ -404,10 +404,11 @@ export function googleResearch(access: GoogleAccess, ledger: CoverageLedger, dep
         notGranted("gmail", "count", q);
         return null;
       }
-      return guarded("gmail", "count", q, window ?? null, async () => {
+      // a count reads no message, so it never covers a window: only searches that read their results do
+      return guarded("gmail", "count", q, null, async () => {
         const page = await json<{ messages?: unknown[]; resultSizeEstimate?: number }>(`${GMAIL}/messages?${new URLSearchParams({ q, maxResults: "1" })}`);
         const count = page.resultSizeEstimate ?? page.messages?.length ?? 0;
-        ledger.record({ source: "gmail", operation: "count", target: q, status: count ? "ok" : "empty", items: count, window: window ?? null });
+        ledger.record({ source: "gmail", operation: "count", target: q, status: count ? "ok" : "empty", items: count, window: null });
         return count;
       });
     },
@@ -710,7 +711,8 @@ export function googleResearch(access: GoogleAccess, ledger: CoverageLedger, dep
       const collect = (rowsOf: string[][], firstRow: number) =>
         rowsOf.forEach((cells, rowIndex) =>
           cells.forEach((cell, columnIndex) => {
-            if (cell.startsWith("=") && formulas.length < RESEARCH_LIMITS.sheetFormulas) formulas.push({ cell: `${columnLetters(columnIndex + 1)}${firstRow + rowIndex}`, formula: clip(cell, 160) });
+            // a formula can carry the same literal its cell shows (="4111…"): redacted like every cell
+            if (cell.startsWith("=") && formulas.length < RESEARCH_LIMITS.sheetFormulas) formulas.push({ cell: `${columnLetters(columnIndex + 1)}${firstRow + rowIndex}`, formula: redactSensitive(clip(cell, 160)) });
           })
         );
       collect(formulaValues[index] ?? [], 1);

@@ -127,6 +127,28 @@ describe("Sheets: real contents through the Sheets API under drive.readonly", ()
     expect(JSON.stringify(ledger.all())).not.toMatch(/004512339871|121000358/);
   });
 
+  it("a formula carrying a sensitive literal is redacted like its cell", async () => {
+    const data = onboardingScenario(names);
+    data.files.push({
+      id: "sheet-cards",
+      name: "Supplier cards",
+      mimeType: GOOGLE_SHEET,
+      modifiedTime: "2026-10-01T00:00:00Z",
+      sheets: [{ title: "Cards", rows: [["Supplier", "Card"], ["Acme", "4111111111111111"]], formulas: { B2: '="4111111111111111"' } }],
+    });
+    const { research } = setup({ files: data.files });
+    const read = (await research.readSpreadsheet((await research.searchDrive(["Supplier cards"]))![0]))!;
+    expect(JSON.stringify(read)).not.toContain("4111111111111111");
+    expect(read.tabs[0].formulas[0].formula).toContain("[redacted]");
+  });
+
+  it("a count reads nothing, so it never covers a window", async () => {
+    const { research, ledger } = setup();
+    const window = { from: new Date("2026-05-01"), to: SCENARIO_NOW };
+    expect(await research.countMail("in:sent", window)).toBeGreaterThan(0);
+    expect(ledger.covered("gmail", window.from, window.to)).toBe(false);
+  });
+
   it("drops columns headed with bank details even inside a business sheet", async () => {
     const data = onboardingScenario(names);
     data.files.push({
