@@ -24,6 +24,7 @@ const events = [paid(120, "301"), paid(90, "302")];
 
 const obligationMocks = vi.hoisted(() => ({
   listPersistentOperatorObligationPayloads: vi.fn(async () => [] as unknown[]),
+  listPersistentOperatorObligationRecords: vi.fn(async () => [] as unknown[]),
   upsertPersistentOperatorObligation: vi.fn(async () => undefined),
   backfillPersistentOperatorCommercialFollowUpRef: vi.fn(async () => undefined),
 }));
@@ -39,6 +40,7 @@ vi.mock("../../planning/dayDirector/dayDirectorService", async importOriginal =>
 }));
 vi.mock("../../domains/commercial/commercialFollowUpReadService", () => ({
   listOpenCommercialFollowUps: vi.fn(async () => []),
+  listCommercialFollowUpStates: vi.fn(async () => []),
 }));
 vi.mock("../../analytics/paidOrderLedger", () => ({ loadPaidOrderLedger: vi.fn(async () => ({})) }));
 vi.mock("../../analytics/canonicalRevenue", async importOriginal => ({

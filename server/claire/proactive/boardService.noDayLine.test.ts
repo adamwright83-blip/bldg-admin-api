@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const obligationMocks = vi.hoisted(() => ({
   listPersistentOperatorObligationPayloads: vi.fn(async () => [] as unknown[]),
+  listPersistentOperatorObligationRecords: vi.fn(async () => [] as unknown[]),
   upsertPersistentOperatorObligation: vi.fn(async () => undefined),
   backfillPersistentOperatorCommercialFollowUpRef: vi.fn(async () => undefined),
 }));
@@ -28,8 +29,10 @@ vi.mock("../../domains/commercial/commercialFollowUpReadService", () => ({
       missionId: 42,
       dueAt: new Date(Date.now() + 86_400_000),
       note: "Email the revised quote to the property manager.",
+      accountName: null,
     },
   ]),
+  listCommercialFollowUpStates: vi.fn(async () => []),
 }));
 vi.mock("../../analytics/paidOrderLedger", () => ({
   loadPaidOrderLedger: vi.fn(async () => {

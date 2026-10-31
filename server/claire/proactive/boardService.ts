@@ -12,10 +12,14 @@ import {
 } from "../../strategy/dormantOutreachGate";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
-import { listOpenCommercialFollowUps } from "../../domains/commercial/commercialFollowUpReadService";
+import {
+  listCommercialFollowUpStates,
+  listOpenCommercialFollowUps,
+} from "../../domains/commercial/commercialFollowUpReadService";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
+  closeSalesFollowUpIfMoved,
   explainWhyOnToday,
   gumballWarning,
   isDormantEligible,
@@ -46,6 +50,7 @@ import {
   backfillPersistentOperatorCommercialFollowUpRef,
   claireProactiveObligations,
   listPersistentOperatorObligationPayloads,
+  listPersistentOperatorObligationRecords,
   upsertPersistentOperatorObligation,
 } from "../../agents/persistentOperator/obligationStore";
 import {
@@ -68,6 +73,42 @@ const surfacedSalesInsights = new Map<string, string>();
 
 function daysBetween(later: string, earlier: string): number {
   return Math.round((Date.parse(`${later}T00:00:00Z`) - Date.parse(`${earlier}T00:00:00Z`)) / 86_400_000);
+}
+
+/** The day a commercial follow-up's board copy is keyed by. */
+function followUpDueDate(dueAt: Date): string {
+  return dueAt.toISOString().slice(0, 10);
+}
+
+/** States in which a board copy is closed. */
+const CLOSED_OBLIGATION_STATUSES = new Set(["superseded", "completed", "cancelled"]);
+
+/** Words too common to identify anything on the board on their own. */
+const UNIDENTIFYING_WORDS = new Set(["the", "a", "an", "of", "and", "at"]);
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whether a lower-cased utterance contains `phrase` as whole words. */
+function mentionsPhrase(lower: string, phrase: string): boolean {
+  const words = phrase.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const body = words.map(escapeRegExp).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "u").test(lower);
+}
+
+/**
+ * Whether an utterance names this obligation: its full name or title as whole
+ * words. A win-back may also be named by the customer's first name, when that
+ * word is distinctive; an account is named in full ("The Standard", not "the";
+ * "W Hollywood", not the "w" in "why").
+ */
+function utteranceNamesObligation(lower: string, item: ProactiveObligation): boolean {
+  if (mentionsPhrase(lower, item.subjectName) || mentionsPhrase(lower, item.title)) return true;
+  if (item.kind === "sales_follow_up") return false;
+  const first = item.subjectName.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return first.length >= 3 && !UNIDENTIFYING_WORDS.has(first) && mentionsPhrase(lower, first);
 }
 
 export async function loadDoctrine(
@@ -326,14 +367,55 @@ export async function ensureOperatorBoard(input: {
     created += 1;
   }
 
+  // A follow-up the pipeline completed, cancelled or moved to another day is no
+  // longer this scheduled work: its board copy is closed the same way, so a
+  // reschedule never leaves two copies and a finished one never lingers. Only
+  // copies carrying their follow-up's id are judged; an unreadable or missing
+  // follow-up is unknown, and its copy is left as it is.
+  try {
+    const scheduled = (
+      await listPersistentOperatorObligationRecords({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+      })
+    ).filter(record =>
+      record.kind === "sales_follow_up" && record.status === "scheduled" && record.commercialFollowUpRef
+    );
+    const states = scheduled.length
+      ? await listCommercialFollowUpStates(
+          input.tenantId,
+          scheduled.map(record => record.commercialFollowUpRef!)
+        )
+      : [];
+    const stateById = new Map((states ?? []).map(state => [state.id, state] as const));
+    for (const record of scheduled) {
+      const state = stateById.get(record.commercialFollowUpRef!);
+      if (!state) continue;
+      const closed = closeSalesFollowUpIfMoved(record.payload, {
+        status: state.status,
+        accountKey: String(state.missionId),
+        dueDate: followUpDueDate(state.dueAt),
+      });
+      if (!closed) continue;
+      await upsertObligation(input.tenantId, input.operatorUserId, closed, {
+        commercialFollowUpRef: record.commercialFollowUpRef,
+      });
+    }
+  } catch (error) {
+    console.warn("[ClaireProactive] sales follow-up reconciliation unavailable", error instanceof Error ? error.message : error);
+  }
+
   if (!skipSales) {
     try {
       const due = await listOpenCommercialFollowUps(input.tenantId);
-      const already = await loadObligations(input.tenantId, input.operatorUserId);
+      const already = await listPersistentOperatorObligationRecords({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+      });
       for (const follow of due.slice(0, 5)) {
-        const dueDate = follow.dueAt.toISOString().slice(0, 10);
+        const dueDate = followUpDueDate(follow.dueAt);
         if (dueDate > addDaysYmd(today, 7)) continue;
-        const name = `Mission ${follow.missionId}`;
+        const name = follow.accountName?.trim() || `Mission ${follow.missionId}`;
         const obligation = salesFollowUpObligation({
           accountKey: String(follow.missionId),
           accountName: name,
@@ -343,7 +425,15 @@ export async function ensureOperatorBoard(input: {
           history: [follow.note],
         });
         const existing = already.find(item => item.id === obligation.id);
-        if (existing) {
+        // A closed copy for this account and day is scheduled again for the
+        // open follow-up now due that day when it was rescheduled away from
+        // this day, or was closed for a different follow-up.
+        const reopen =
+          existing != null &&
+          existing.commercialFollowUpRef != null &&
+          CLOSED_OBLIGATION_STATUSES.has(existing.status) &&
+          (existing.status === "superseded" || existing.commercialFollowUpRef !== follow.id);
+        if (existing && !reopen) {
           // PR4 lineage backfill must never replay the obligation constructor
           // over durable workflow state. Existing obligations may already be
           // draft_prepared, awaiting_result, completed, or cancelled and may
@@ -443,10 +533,9 @@ export async function explainProactive(tenantId: string, operatorUserId: string,
     return whyPushingSales(hold != null && salesHeldOn({ skipSalesUntil: hold.until }, today));
   }
   const items = await loadObligations(tenantId, operatorUserId);
-  const hit = items.find(item => {
-    const first = item.subjectName.split(/\s+/)[0]?.toLowerCase() ?? "";
-    return (first && lower.includes(first)) || lower.includes(item.title.toLowerCase());
-  });
+  const named = items.filter(item => utteranceNamesObligation(lower, item));
+  // A copy still on the board answers before one a reschedule or the pipeline closed.
+  const hit = named.find(item => !CLOSED_OBLIGATION_STATUSES.has(item.status)) ?? named[0];
   return hit ? explainWhyOnToday(hit) : null;
 }
 
