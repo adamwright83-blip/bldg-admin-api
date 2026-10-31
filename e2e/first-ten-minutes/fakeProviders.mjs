@@ -216,13 +216,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
   if (path === "/__api-sends") return send(res, 200, { sends: apiSends });
-  // the person sends the message from their own Gmail: it lands in their Sent folder, now
+  // the person sends the message from their own Gmail: it lands in their Sent folder, now (or `daysAgo`)
   if (path === "/__send-from-gmail" && req.method === "POST") {
     const input = JSON.parse(body || "{}");
     sentLater.push({
       id: `m-sent-later-${sentLater.length + 1}`,
-      threadId: "t-sent-later",
-      date: new Date().toISOString(),
+      threadId: input.threadId ?? "t-sent-later",
+      date: new Date(Date.now() - (Number(input.daysAgo) || 0) * 86_400_000).toISOString(),
       from: { name: corpus.owner.name, email: corpus.owner.email },
       to: [{ name: input.toName ?? "", email: input.to }],
       subject: input.subject ?? "",
@@ -232,13 +232,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
-  // someone writes back to the person: it lands in their inbox, now
+  // someone writes back to the person: it lands in their inbox, now (or `daysAgo`)
   if (path === "/__reply-from" && req.method === "POST") {
     const input = JSON.parse(body || "{}");
     receivedLater.push({
       id: `m-received-later-${receivedLater.length + 1}`,
-      threadId: "t-sent-later",
-      date: new Date().toISOString(),
+      threadId: input.threadId ?? "t-sent-later",
+      date: new Date(Date.now() - (Number(input.daysAgo) || 0) * 86_400_000).toISOString(),
       from: { name: input.fromName ?? "", email: input.from },
       to: [{ name: corpus.owner.name, email: corpus.owner.email }],
       subject: input.subject ?? "",
@@ -328,6 +328,13 @@ const server = http.createServer(async (req, res) => {
       .filter(message => !after || new Date(message.date).getTime() >= after)
       .map(message => ({ id: message.id, threadId: message.threadId }));
     return send(res, 200, { messages: ids.reverse(), resultSizeEstimate: ids.length });
+  }
+  // users.threads.get: a whole conversation, to see whether anyone has answered in it
+  const thread = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/threads\/([^/]+)$/);
+  if (thread) {
+    const id = decodeURIComponent(thread[1]);
+    const messages = [...corpus.messages, ...sentLater, ...receivedLater].filter(message => message.threadId === id).map(gmailMessage);
+    return messages.length ? send(res, 200, { id, messages }) : send(res, 404, { error: "not found" });
   }
   const attachment = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)\/attachments\/([^/]+)$/);
   if (attachment) return send(res, 200, { data: TINY_JPEG.toString("base64url"), size: TINY_JPEG.length });

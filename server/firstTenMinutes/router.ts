@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantOperatorProcedure, publicProcedure, router } from "../_core/trpc";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { JOURNEY_STAGES, type FirstTenAvailability } from "../../shared/firstTenMinutes";
 import { assertFirstTenOpen, firstTenMode, firstTenOpenFor } from "./flag";
@@ -17,6 +17,9 @@ import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
+import { readTenantOnboardingKnowledge } from "./knowledge/tenantKnowledge";
+import { readAwaitingReplies } from "./knowledge/awaitingReplies";
+import { prepareFollowUp, sendFollowUp } from "./knowledge/followUp";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
@@ -32,6 +35,35 @@ const provider = z.enum(["google", "slack"]);
  * needs that draft's resume token.
  */
 export const firstTenMinutesRouter = router({
+  /**
+   * The signed-in workspace's own knowledge from signup: what the crew read, with receipts, the person's corrections
+   * and where the first message stands. Not behind the first-ten flag: the workspace keeps what it learned after the
+   * preview closes. Only the members who run the business see it.
+   */
+  myKnowledge: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readTenantOnboardingKnowledge(ctx.tenantId)),
+
+  /** Who the workspace's owner is waiting to hear back from, read from the Gmail they connected (cached briefly). */
+  myAwaitingReplies: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) => readAwaitingReplies(ctx.tenantId)),
+
+  /** A follow-up to someone the owner is waiting on, for them to read and approve. Sends nothing. */
+  prepareFollowUp: legacyDayforgeTenantOperatorProcedure
+    .input(z.object({ messageId: z.string().min(1).max(191), recipient: z.string().email().max(320), timeZone: z.string().min(1).max(64) }))
+    .mutation(({ ctx, input }) => prepareFollowUp(ctx.tenantId, input.messageId, input.recipient, input.timeZone)),
+
+  /** The owner approved exactly this follow-up: the reply gate, then their own Gmail, once. */
+  sendFollowUp: legacyDayforgeTenantOperatorProcedure
+    .input(
+      z.object({
+        messageId: z.string().min(1).max(191),
+        to: z.object({ name: z.string().max(255).nullable(), address: z.string().email().max(320) }),
+        subject: z.string().trim().min(1).max(500),
+        body: z.string().trim().min(1).max(10_000),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      sendFollowUp({ tenantId: ctx.tenantId, approverOpenId: ctx.user.openId, messageId: input.messageId, mail: { to: input.to, subject: input.subject, body: input.body } })
+    ),
+
   availability: publicProcedure.query(
     ({ ctx }): FirstTenAvailability => ({
       mode: firstTenMode(),
