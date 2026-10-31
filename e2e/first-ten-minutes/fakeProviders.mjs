@@ -162,6 +162,9 @@ const defaults = () => ({
   sendAnswer: "ok",
   // Gmail gives a message sent through the API its own Message-ID (JOYSTICK's survives in X-Joystick-Send)
   rewriteMessageId: false,
+  // the readings find nobody asking for anything and propose nothing: no request, so no opportunity qualifies (the
+  // server also links opportunities itself from requests and replies), and the chapter has no conversation to open
+  noOpportunities: false,
 });
 let control = defaults();
 const revoked = [];
@@ -407,7 +410,10 @@ const server = http.createServer(async (req, res) => {
     const userText = (request.messages ?? [])
       .map(message => (typeof message.content === "string" ? message.content : (message.content ?? []).map(part => part.text ?? "").join("")))
       .join("\n");
-    const answer = portrait ? fakePortrait(userText) : conversations ? extraction.conversations : extraction.work;
+    const read = control.noOpportunities
+      ? { conversations: { ...extraction.conversations, requests: [] }, work: { ...extraction.work, opportunities: [] } }
+      : extraction;
+    const answer = portrait ? fakePortrait(userText) : conversations ? read.conversations : read.work;
     modelCalls.push(portrait ? "portrait" : conversations ? "conversations" : "work");
     return send(res, 200, {
       id: `msg_fake_${modelCalls.length}`,
