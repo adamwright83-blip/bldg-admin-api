@@ -7,6 +7,7 @@ export function factStanding(status: OnboardingKnowledge["facts"][number]["statu
 }
 
 const SHOWN = 12;
+const PROVIDER_NAMES: Record<string, string> = { google: "Google account", slack: "Slack" };
 
 /**
  * What the crew learned when the workspace was set up, kept in the workspace: where the first message stands, the
@@ -52,7 +53,7 @@ export function SignupKnowledge({ timeZone }: { timeZone: string }) {
         </details>
       ) : null}
       <p className="cd-fine">
-        Read from your own {k.readFrom.map(source => source.provider).join(" and ") || "accounts"} when you signed up. History, not today's numbers; tell Claire
+        Read from your own {k.readFrom.map(source => PROVIDER_NAMES[source.provider] ?? source.provider).join(" and ") || "accounts"} when you signed up. History, not today's numbers; tell Claire
         what's changed.
       </p>
     </section>

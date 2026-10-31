@@ -216,13 +216,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
   if (path === "/__api-sends") return send(res, 200, { sends: apiSends });
-  // the person sends the message from their own Gmail: it lands in their Sent folder, now
+  // the person sends the message from their own Gmail: it lands in their Sent folder, now (or `daysAgo`)
   if (path === "/__send-from-gmail" && req.method === "POST") {
     const input = JSON.parse(body || "{}");
     sentLater.push({
       id: `m-sent-later-${sentLater.length + 1}`,
-      threadId: "t-sent-later",
-      date: new Date().toISOString(),
+      threadId: input.threadId ?? "t-sent-later",
+      date: new Date(Date.now() - (Number(input.daysAgo) || 0) * 86_400_000).toISOString(),
       from: { name: corpus.owner.name, email: corpus.owner.email },
       to: [{ name: input.toName ?? "", email: input.to }],
       subject: input.subject ?? "",
@@ -232,13 +232,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
-  // someone writes back to the person: it lands in their inbox, now
+  // someone writes back to the person: it lands in their inbox, now (or `daysAgo`)
   if (path === "/__reply-from" && req.method === "POST") {
     const input = JSON.parse(body || "{}");
     receivedLater.push({
       id: `m-received-later-${receivedLater.length + 1}`,
-      threadId: "t-sent-later",
-      date: new Date().toISOString(),
+      threadId: input.threadId ?? "t-sent-later",
+      date: new Date(Date.now() - (Number(input.daysAgo) || 0) * 86_400_000).toISOString(),
       from: { name: input.fromName ?? "", email: input.from },
       to: [{ name: corpus.owner.name, email: corpus.owner.email }],
       subject: input.subject ?? "",
