@@ -48,9 +48,15 @@ const MAIL = [
   // answered in the same conversation by someone else at the hotel, also outside the sample
   message("s-max", "th-max", `Nina Vale <${NINA}>`, "Max Pell <max@grandhotel.example>", 5, "Lobby arrangement", "Shall I bring the lobby arrangement Monday?"),
   message("r-desk", "th-max", "Front Desk <frontdesk@grandhotel.example>", NINA, 1, "Re: Lobby arrangement", "Monday works, Max is away."),
+  // twelve older questions, every one answered outside the sample: they rank above Elena, and once Gmail confirms
+  // they were answered, the people below them (Elena) must move up rather than the list coming back empty
+  ...Array.from({ length: 12 }, (_, i) => [
+    message(`s-old-${i}`, `th-old-${i}`, `Nina Vale <${NINA}>`, `Client ${i} <client${i}@old.example>`, 10 + i, `Order ${i}`, "Could you confirm the order?"),
+    message(`r-old-${i}`, `th-old-${i}`, `Client ${i} <client${i}@old.example>`, NINA, 8 + i, `Re: Order ${i}`, "Confirmed."),
+  ]).flat(),
 ];
 /** replies the bounded inbox read never sees: only a question about that person or conversation finds them */
-const OUTSIDE_SAMPLE = new Set(["r-ana", "r-desk"]);
+const OUTSIDE_SAMPLE = new Set(["r-ana", "r-desk", ...Array.from({ length: 12 }, (_, i) => `r-old-${i}`)]);
 
 describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL and a stand-in Gmail", () => {
   let db: mysql.Connection;
