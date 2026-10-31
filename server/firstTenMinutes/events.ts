@@ -24,6 +24,11 @@ export type JourneyEventKind =
   | "draft_reported_sent"
   | "draft_not_sent_yet"
   | "draft_verified_sent"
+  /** JOYSTICK sent it from the person's Gmail: Google's message id */
+  | "draft_sent"
+  /** Google refused it, or its answer was lost (unconfirmed): nothing is claimed */
+  | "draft_send_failed"
+  | "draft_send_unconfirmed"
   | "first_chapter_opened"
   | "claire_answered"
   | "claire_unanswered";

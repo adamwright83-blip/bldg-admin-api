@@ -5837,5 +5837,15 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0157: Gmail sends, one row per message JOYSTICK sends from a person's own Gmail, keyed so nothing sends twice. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0157_gmail_sends.sql");
+  for (const statement of statements) await runRequired(statement, "Gmail sends");
+  await assertRequiredColumns("gmail_sends", [
+    "send_key", "actor", "account_email", "recipient", "subject", "approval_digest", "approved_by", "approved_at", "rfc822_message_id",
+    "status", "gmail_message_id", "gmail_thread_id", "attempts", "last_attempt_at", "sent_at", "failure", "created_at", "updated_at",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();

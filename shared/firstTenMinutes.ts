@@ -113,7 +113,7 @@ export const CONNECTION_INCLUDES: Record<ConnectionProvider | "example", Connect
       "Google Drive: the names of your recent files, and the text of your recent documents.",
     ],
     never: [
-      "Send, change or delete anything. Access is read-only.",
+      "Change or delete anything, or send without you. Connecting is read-only; if you choose to send a message from JOYSTICK, Google asks you first whether JOYSTICK may send from your account.",
       "Contact anyone. If you decide to write to someone, you'll see the recipient and every word first, and the message leaves from your own account when you send it.",
     ],
     kept: [
@@ -196,11 +196,16 @@ export function firstTenShownTo(mode: FirstTenMode, optedIn: boolean): boolean {
 }
 
 /** What /joystick-start?connect_error=… may say. Nothing from the provider is ever echoed. */
+/** Sending from the person's own Gmail: asked for only when they first send from JOYSTICK. */
+export const GOOGLE_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
 export const CONNECT_ERRORS = {
   cancelled: "You didn't finish connecting. Nothing was shared.",
   scopes: "Google connected, but without Gmail. Your crew needs to read your email to get acquainted; try again and keep the Gmail box ticked.",
   expired: "That connection took too long and expired. Please try again.",
   failed: "That didn't connect. Nothing was shared. Please try again.",
+  send_permission: "Google didn't give JOYSTICK permission to send. Nothing was sent; your message is still here.",
+  other_account: "That was a different Google account from the one your crew read. Choose the same account to send from it.",
 } as const;
 export type ConnectErrorCode = keyof typeof CONNECT_ERRORS;
 

@@ -40,7 +40,7 @@ describe("first ten minutes contracts", () => {
     expect(connectErrorCode("scopes")).toBe("scopes");
     expect(connectErrorCode("<script>")).toBeNull();
     expect(connectErrorCode("toString")).toBeNull();
-    expect(Object.keys(CONNECT_ERRORS).sort()).toEqual(["cancelled", "expired", "failed", "scopes"]);
+    expect(Object.keys(CONNECT_ERRORS).sort()).toEqual(["cancelled", "expired", "failed", "other_account", "scopes", "send_permission"]);
     expect(isJourneyStage("crew")).toBe(true);
     expect(isJourneyStage("anything")).toBe(false);
   });

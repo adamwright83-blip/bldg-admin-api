@@ -259,10 +259,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     refetchInterval: query => (query.state.data?.status === "checkout_pending" ? 2000 : false),
   });
   const beginActivation = trpc.system.firstTenMinutes.beginActivation.useMutation();
-  const handOffDraft = trpc.system.firstTenMinutes.handOffDraft.useMutation();
-  const reportDraft = trpc.system.firstTenMinutes.reportDraft.useMutation();
+  const sendDraft = trpc.system.firstTenMinutes.sendDraft.useMutation();
   const verifyDraft = trpc.system.firstTenMinutes.verifyDraft.useMutation();
-  const [notYet, setNotYet] = useState(false);
   const verify = useCallback(async () => {
     if (!credentials) return;
     setChapter(await verifyDraft.mutateAsync(credentials));
@@ -273,7 +271,6 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     const status = chapter.data?.draft?.status;
     if (status === "reported_sent" || status === "verified_sent") return "sent";
     if (status === "declined") return "not_now";
-    if (status === "handed_off" && notYet) return "not_yet";
     return null;
   }
 
@@ -310,12 +307,19 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
           <SendDesk
             draft={draft}
             activation={view}
-            onHandOff={async channel => setChapter(await handOffDraft.mutateAsync({ ...credentials, channel }))}
-            onReport={async outcome => {
-              if (outcome === "not_yet") setNotYet(true);
-              setChapter(await reportDraft.mutateAsync({ ...credentials, outcome }));
+            onSend={async approved => {
+              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved });
+              setChapter(sent.chapter);
+              if (sent.outcome === "needs_permission") void activation.refetch();
+              return sent.outcome;
+            }}
+            onAllow={async () => {
+              // Google's own permission screen, once; it comes back to this table
+              const { url } = await beginConnect.mutateAsync({ ...credentials, provider: "google", purpose: "send" });
+              window.location.assign(url);
             }}
             onVerify={verify}
+            notice={notice}
           />
         ) : null}
       </>

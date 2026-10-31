@@ -25,6 +25,7 @@ const ALL_GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.readonly",
 ];
+const SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 // a 1x1 JPEG, the stand-in for every attachment
 const TINY_JPEG = Buffer.from(
@@ -112,6 +113,7 @@ function fakeClaire(facts) {
   else parts.push(`You kept the reply as it was drafted: ${words}`);
   if (facts.message.state === "ready_not_sent") parts.push("It's ready, and it hasn't been sent.");
   if (facts.message.state === "kept_for_later") parts.push("You decided it could wait. It hasn't been sent.");
+  if (facts.message.state === "sending_not_confirmed") parts.push("JOYSTICK asked your Gmail to send it, and I haven't seen it go yet.");
   if (facts.message.state === "opened_in_their_mail" || facts.message.state === "copied_by_them") {
     const left = facts.message.state === "copied_by_them" ? "You copied it" : "You opened it in your Gmail";
     parts.push(
@@ -136,6 +138,11 @@ const modelCalls = [];
 const sentLater = [];
 /** what someone wrote back to the person during a test */
 const receivedLater = [];
+/** what JOYSTICK sent through users.messages.send, exactly as Google received it */
+const apiSends = [];
+/** the person allowed sending on Google's consent screen (asked for with gmail.send) */
+let sendGranted = false;
+const grantedScopes = () => [...control.googleScopes, ...(sendGranted ? [SEND_SCOPE] : [])].join(" ");
 
 const defaults = () => ({
   googleScopes: ALL_GOOGLE_SCOPES,
@@ -147,6 +154,10 @@ const defaults = () => ({
   claireOverclaims: false,
   // the email reading takes this long to come back, so a test can watch the reading while it works
   conversationsDelayMs: 0,
+  // on Google's consent screen, the person unticks "Send email on your behalf"
+  refuseSend: false,
+  // users.messages.send answers: "ok", a refusal ("refuse"), or accepted but the answer never arrives ("lose")
+  sendAnswer: "ok",
 });
 let control = defaults();
 const revoked = [];
@@ -183,7 +194,10 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname;
 
   if (path === "/__control" && req.method === "POST") {
-    control = { ...control, ...JSON.parse(body || "{}") };
+    const { revokeSend, ...changes } = JSON.parse(body || "{}");
+    // the person took JOYSTICK's permission to send away at Google, behind JOYSTICK's back
+    if (revokeSend) sendGranted = false;
+    control = { ...control, ...changes };
     return send(res, 200, { ok: true, control });
   }
   if (path === "/__reset" && req.method === "POST") {
@@ -192,9 +206,12 @@ const server = http.createServer(async (req, res) => {
     modelCalls.length = 0;
     sentLater.length = 0;
     receivedLater.length = 0;
+    apiSends.length = 0;
+    sendGranted = false;
     return send(res, 200, { ok: true });
   }
   if (path === "/__revoked") return send(res, 200, { revoked });
+  if (path === "/__api-sends") return send(res, 200, { sends: apiSends });
   // the person sends the message from their own Gmail: it lands in their Sent folder, now
   if (path === "/__send-from-gmail" && req.method === "POST") {
     const input = JSON.parse(body || "{}");
@@ -228,18 +245,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---------------------------------------------------------------- Google
-  if (path === "/accounts.google.com/o/oauth2/v2/auth") return consent(url, res, "fake-google-code");
+  if (path === "/accounts.google.com/o/oauth2/v2/auth") {
+    if ((url.searchParams.get("scope") ?? "").split(" ").includes(SEND_SCOPE) && !control.refuseSend && !control.deny) sendGranted = true;
+    return consent(url, res, "fake-google-code");
+  }
   if (path === "/oauth2.googleapis.com/token" && req.method === "POST") {
     const form = new URLSearchParams(body);
     if (form.get("grant_type") === "refresh_token") {
-      return send(res, 200, { access_token: `fake-google-access-${Date.now()}`, expires_in: 3599, scope: control.googleScopes.join(" ") });
+      return send(res, 200, { access_token: `fake-google-access-${Date.now()}`, expires_in: 3599, scope: grantedScopes() });
     }
     if (form.get("code") !== "fake-google-code") return send(res, 400, { error: "invalid_grant" });
     return send(res, 200, {
       access_token: "fake-google-access",
       refresh_token: "fake-google-refresh",
       expires_in: 3599,
-      scope: control.googleScopes.join(" "),
+      scope: grantedScopes(),
       token_type: "Bearer",
     });
   }
@@ -253,8 +273,40 @@ const server = http.createServer(async (req, res) => {
 
   // ---------------------------------------------------------------- Gmail, Calendar, Drive (Nina's invented corpus)
   if (path === "/gmail.googleapis.com/gmail/v1/users/me/profile") return send(res, 200, { emailAddress: control.googleEmail });
+  // JOYSTICK sends from the person's Gmail: it lands in their Sent folder, with the Message-ID it was given
+  if (path === "/gmail.googleapis.com/gmail/v1/users/me/messages/send" && req.method === "POST") {
+    if (!sendGranted) return send(res, 403, { error: { code: 403, status: "PERMISSION_DENIED", message: "Request had insufficient authentication scopes." } });
+    if (control.sendAnswer === "refuse") return send(res, 400, { error: { code: 400, status: "INVALID_ARGUMENT", message: "Invalid To header" } });
+    const raw = Buffer.from(JSON.parse(body).raw, "base64url").toString("utf8");
+    const [head, encoded] = raw.split("\r\n\r\n");
+    const header = name => head.match(new RegExp(`^${name}: (.*)$`, "mi"))?.[1]?.trim() ?? "";
+    const address = header("To").match(/<([^>]+)>/)?.[1] ?? header("To");
+    const message = {
+      id: `m-api-sent-${apiSends.length + 1}`,
+      threadId: "t-sent-later",
+      rfc822: header("Message-ID"),
+      date: new Date().toISOString(),
+      from: { name: corpus.owner.name, email: corpus.owner.email },
+      to: [{ name: "", email: address }],
+      subject: header("Subject"),
+      body: Buffer.from(encoded.replace(/\r\n/g, ""), "base64").toString("utf8"),
+      attachments: [],
+    };
+    apiSends.push({ id: message.id, from: header("From"), to: header("To"), subject: message.subject, body: message.body, messageId: message.rfc822 });
+    sentLater.push(message);
+    if (control.sendAnswer === "lose") {
+      res.destroy();
+      return;
+    }
+    return send(res, 200, { id: message.id, threadId: message.threadId, labelIds: ["SENT"] });
+  }
   if (path === "/gmail.googleapis.com/gmail/v1/users/me/messages") {
     const q = url.searchParams.get("q") ?? "";
+    const rfc822 = q.match(/(?:^|\s)rfc822msgid:(\S+)/)?.[1] ?? null;
+    if (rfc822) {
+      const found = sentLater.filter(message => message.rfc822?.replace(/^<|>$/g, "") === rfc822).map(message => ({ id: message.id, threadId: message.threadId }));
+      return send(res, 200, { messages: found, resultSizeEstimate: found.length });
+    }
     const sent = /(^|\s)in:sent\b/.test(q);
     const to = q.match(/(?:^|\s)to:(\S+)/)?.[1]?.toLowerCase() ?? null;
     const from = q.match(/(?:^|\s)from:(\S+)/)?.[1]?.toLowerCase() ?? null;

@@ -1,8 +1,9 @@
-import { GOOGLE_PRODUCT_SCOPES, GOOGLE_SCOPES } from "../../shared/firstTenMinutes";
+import { GOOGLE_PRODUCT_SCOPES, GOOGLE_SCOPES, GOOGLE_SEND_SCOPE } from "../../shared/firstTenMinutes";
 import { providerJson, ProviderError, providerUrl, type FetchLike } from "./providerFetch";
 
 /**
- * Google OAuth for the first ten minutes: read-only Gmail, Calendar and Drive, plus who the account is.
+ * Google OAuth for the first ten minutes: read-only Gmail, Calendar and Drive, plus who the account is. Sending
+ * (gmail.send) is asked for only when the person first sends from JOYSTICK, on top of what they already granted.
  * Client: JOYSTICK_GOOGLE_CLIENT_ID / JOYSTICK_GOOGLE_CLIENT_SECRET (a "Web application" OAuth client whose
  * authorised redirect URIs list each origin's /api/first-ten/oauth/google/callback).
  */
@@ -25,14 +26,14 @@ export function isGoogleConnectConfigured(env: NodeJS.ProcessEnv = process.env):
   return Boolean(c.id && c.secret);
 }
 
-export function googleAuthorizationUrl(input: { state: string; redirectUri: string }, env: NodeJS.ProcessEnv = process.env): string {
+export function googleAuthorizationUrl(input: { state: string; redirectUri: string; send?: boolean }, env: NodeJS.ProcessEnv = process.env): string {
   const c = client(env);
   if (!c.id) throw new Error("Google connection is not configured");
   const params = new URLSearchParams({
     client_id: c.id,
     redirect_uri: input.redirectUri,
     response_type: "code",
-    scope: GOOGLE_SCOPES.join(" "),
+    scope: [...GOOGLE_SCOPES, ...(input.send ? [GOOGLE_SEND_SCOPE] : [])].join(" "),
     // a refresh token, so the crew can keep reading while the visitor plays, and after activation
     access_type: "offline",
     prompt: "consent",
