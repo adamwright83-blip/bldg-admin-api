@@ -1,5 +1,7 @@
 import { signupKnowledgeForBriefing, type AwaitingReplies, type OnboardingKnowledge, type SignupKnowledgeBriefing } from "../../../shared/firstTenMinutesKnowledge";
 import { readTenantOnboardingKnowledge } from "../../firstTenMinutes/knowledge/tenantKnowledge";
+import { routinesForBriefing, type RoutinesBriefing, type RoutineView } from "../../../shared/claireRoutines";
+import { listRoutineViews } from "../routines/service";
 import { proposalItemExecutionWindow, strategicPlanningHorizon } from "../../../shared/weeklyMissionReadiness";
 import type { StrategicPlanningProposal } from "../../../shared/strategicIntelligence";
 import { weeklyHeadlineObjective } from "../../../shared/strategicHeadline";
@@ -119,6 +121,8 @@ export type ShowrunnerBriefing = {
   signupKnowledge?: SignupKnowledgeBriefing | null;
   /** Who the operator is waiting to hear back from, read from their own Gmail (refreshed per Desk turn from a short cache). */
   awaitingReplies?: AwaitingReplies | null;
+  /** The operator's routines in words, each with its latest recorded run; null when they couldn't be read. */
+  routines?: RoutinesBriefing | null;
   opportunity?: null | {
     diagnosis: string;
     approach: string;
@@ -315,6 +319,8 @@ export async function buildShowrunnerBriefing(input: {
   loadPreparedItems?: () => Promise<PreparedPropertyVisits[]>;
   /** Test seam for what was learned at signup. Production reads the tenant's provisioned First Ten Minutes journey. */
   loadSignupKnowledge?: (tenantId: string) => Promise<OnboardingKnowledge | null>;
+  /** Test seam for the workspace's Claire routines and their latest runs. */
+  loadRoutines?: (tenantId: string) => Promise<RoutineView[]>;
 }): Promise<ShowrunnerBriefing> {
   const { identity, now, timeZone } = input;
   const businessDate = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
@@ -501,8 +507,10 @@ export async function buildShowrunnerBriefing(input: {
     await (input.loadSignupKnowledge ?? readTenantOnboardingKnowledge)(identity.tenantId).catch(() => null),
     timeZone
   );
+  const routineViews = await (input.loadRoutines ?? listRoutineViews)(identity.tenantId).catch(() => null);
   return {
     signupKnowledge,
+    routines: routineViews ? routinesForBriefing(routineViews, timeZone) : null,
     standing: {
       section: standingView.section,
       heldTopics: standingView.heldTopics,

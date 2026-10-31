@@ -1,5 +1,7 @@
 import { awaitingOpeningLine, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
 import { cachedAwaitingReplies, readAwaitingReplies } from "../../firstTenMinutes/knowledge/awaitingReplies";
+import { routinesForBriefing, routinesOpeningLine } from "../../../shared/claireRoutines";
+import { listRoutineViews } from "../routines/service";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
 import type { ClaireTurnState } from "../turn/claireTurn";
@@ -303,6 +305,9 @@ export const weeklyMissionRouter = router({
         const seen = await store.load<{ at: number }>(seenKey).catch(() => null);
         const lastSeen = seen && seen.tenantId === owner.tenantId ? new Date(seen.state.at) : null;
         await store.save(seenKey, owner, { at: now.getTime() }, 60 * 86_400_000).catch(() => undefined);
+        // the operator's routines, read fresh for the opening: what a scheduled check found since their last visit
+        const routineViews = await listRoutineViews(identity.tenantId).catch(() => null);
+        if (routineViews) b.routines = routinesForBriefing(routineViews, session.showrunner.timeZone);
         const open = [...b.today, ...b.tomorrow].filter(i => i.status === "open");
         const pending = b.pendingDecision?.items ?? [];
         const speak = [
@@ -312,6 +317,7 @@ export const weeklyMissionRouter = router({
           // where the first message from signup stands (First Ten Minutes), when there is one
           signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
           sinceLastVisitLine(b.awaitingReplies, lastSeen) ?? "",
+          routinesOpeningLine(routineViews ?? [], lastSeen) ?? "",
           awaitingOpeningLine(b.awaitingReplies) ?? "",
           "What do you need?",
         ].filter(Boolean).join(" ");
