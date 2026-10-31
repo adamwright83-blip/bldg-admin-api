@@ -105,6 +105,16 @@ describe("the outcome and its page", () => {
     expect(gemini.usage.investigator.priceBasis).toContain("operator's rate");
   });
 
+  it("totals the ledger's other stages with the investigator at the operator's rate", () => {
+    const stages = [
+      { category: "llm:first_ten_conversations", tokens: 1000, costCents: 7 },
+      { category: "llm:onboarding_investigator", tokens: 1_100_000, costCents: 450 },
+    ];
+    const outcome = repriced(coldTestOutcome(raw({ mode: "journey", stages })), { input: 25, output: 50 });
+    expect(outcome.usage.investigator.costCents).toBe(25 + 5);
+    expect(outcome.usage.totalCostCents).toBe(7 + 30);
+  });
+
   it("doesn't count a Claude investigator twice when the spend ledger already holds it", () => {
     const stages = [
       { category: "llm:first_ten_conversations", tokens: 1000, costCents: 7 },
@@ -152,6 +162,27 @@ describe("against what the owner says is true", () => {
     );
     expect(comparison.omissions).toEqual(expect.arrayContaining(["Old Shop (paused (quiet, searched)): not found", "Morgan Lee (person): not found", "Lantern App product_of Acme: not concluded"]));
     expect(comparison.unexpected).toEqual(["Mystery Co (unknown)"]);
+  });
+
+  it("keeps a relationship's direction, except for the symmetric ones", () => {
+    const outcome = coldTestOutcome(
+      raw({
+        understanding: understanding({
+          relationships: [
+            { id: "r1", subject: "Acme Holdings", type: "brand_of", object: "Acme Cleaning LLC", basis: "inferred", detail: null, confidence: 60, authorizesFinancialMerge: false } as never,
+            { id: "r2", subject: "Beacon", type: "related_operation", object: "Acme Cleaning LLC", basis: "inferred", detail: null, confidence: 60, authorizesFinancialMerge: false } as never,
+          ],
+        }),
+      })
+    );
+    const comparison = compareWithExpectations(outcome, {
+      relationships: [
+        { subject: "Acme Cleaning", type: "brand_of", object: "Acme Holdings" },
+        { subject: "Acme Cleaning", type: "related_operation", object: "Beacon" },
+      ],
+    });
+    expect(comparison.omissions).toContain("Acme Cleaning brand_of Acme Holdings: not concluded");
+    expect(comparison.discoveries).toContain("Acme Cleaning related_operation Beacon: as you expect");
   });
 
   it("matches names whatever the case, punctuation or company suffix", () => {

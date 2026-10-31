@@ -215,12 +215,18 @@ function coverageSummary(entries: readonly CoverageEntry[]): ColdTestOutcome["co
   return [...bySource.values()].sort((a, b) => a.source.localeCompare(b.source));
 }
 
+/** The spend ledger's own investigator line, which the investigator's cost (at whatever rate) stands in for. */
+const INVESTIGATOR_CATEGORY = "llm:onboarding_investigator";
+
+/** Every other stage from the ledger, plus the investigator once, at its stated rate: never counted twice. */
+function totalCents(stages: StageUsage[] | null, investigatorCents: number): number {
+  return (stages ?? []).filter(stage => stage.category !== INVESTIGATOR_CATEGORY).reduce((sum, stage) => sum + stage.costCents, 0) + investigatorCents;
+}
+
 export function coldTestOutcome(raw: ColdTestRaw): ColdTestOutcome {
   const u = raw.understanding;
   const model = raw.investigator?.model ?? "";
   const investigatorCost = estimateModelCostCents(raw.investigatorUsage.inputTokens, raw.investigatorUsage.outputTokens, model);
-  const claudeInStages = raw.stages !== null && model.toLowerCase().startsWith("claude");
-  const stagesCost = (raw.stages ?? []).reduce((sum, stage) => sum + stage.costCents, 0);
   const checks = ruleChecks(u, raw.live, raw.events);
   if (raw.journey) {
     const draft = raw.journey.chapter.draft;
@@ -240,7 +246,7 @@ export function coldTestOutcome(raw: ColdTestRaw): ColdTestOutcome {
     usage: {
       investigator: { ...raw.investigatorUsage, costCents: investigatorCost, priceBasis: priceBasis(model) },
       stages: raw.stages,
-      totalCostCents: claudeInStages ? stagesCost : stagesCost + investigatorCost,
+      totalCostCents: totalCents(raw.stages, investigatorCost),
     },
     timings: raw.timings,
     understanding: {
@@ -276,14 +282,12 @@ export function coldTestOutcome(raw: ColdTestRaw): ColdTestOutcome {
 export function repriced(outcome: ColdTestOutcome, price: { input: number; output: number }): ColdTestOutcome {
   const usage = outcome.usage.investigator;
   const costCents = Math.ceil((usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000);
-  const claudeInStages = outcome.usage.stages !== null && (outcome.investigator?.model ?? "").toLowerCase().startsWith("claude");
-  const stagesCost = (outcome.usage.stages ?? []).reduce((sum, stage) => sum + stage.costCents, 0);
   return {
     ...outcome,
     usage: {
       ...outcome.usage,
       investigator: { ...usage, costCents, priceBasis: `the operator's rate: ${price.input}¢ in / ${price.output}¢ out per million tokens` },
-      totalCostCents: claudeInStages ? stagesCost : stagesCost + costCents,
+      totalCostCents: totalCents(outcome.usage.stages, costCents),
     },
   };
 }
@@ -333,6 +337,9 @@ export function parseExpectations(value: unknown): Expectations {
   };
 }
 
+/** Relationships that read the same either way round; every other type has a direction. */
+const SYMMETRIC = new Set(["related_operation", "separate_business", "same_legal_entity", "collaborates_with"]);
+
 const aliases = (entry: string) => entry.split("|").map(alias => alias.trim()).filter(Boolean);
 
 /** Same name, whatever the case, punctuation or corporate suffix; or a found name that holds every word of it. */
@@ -380,8 +387,11 @@ export function compareWithExpectations(outcome: ColdTestOutcome, expected: Expe
     if (names.some(name => nameMatches(name, entry))) out.incorrect.push(`${aliases(entry)[0]} appears; you say it shouldn't`);
   }
   for (const rel of expected.relationships ?? []) {
+    // "A product_of B" is not "B product_of A": only a symmetric relationship may be matched either way round
     const pair = relationships.filter(
-      found => (nameMatches(found.subject, rel.subject) && nameMatches(found.object, rel.object)) || (nameMatches(found.subject, rel.object) && nameMatches(found.object, rel.subject))
+      found =>
+        (nameMatches(found.subject, rel.subject) && nameMatches(found.object, rel.object)) ||
+        (SYMMETRIC.has(found.type) && SYMMETRIC.has(rel.type) && nameMatches(found.subject, rel.object) && nameMatches(found.object, rel.subject))
     );
     const label = `${aliases(rel.subject)[0]} ${rel.type} ${aliases(rel.object)[0]}`;
     if (pair.some(found => found.type === rel.type)) out.discoveries.push(`${label}: as you expect`);

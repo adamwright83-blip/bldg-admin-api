@@ -2,8 +2,8 @@
 # Onboarding intelligence cold tests against production (docs/goldline/ONBOARDING_INTELLIGENCE.md, "Cold tests
 # against a real account"). From a Railway-linked checkout:
 #
-#   pnpm intel:cold --journey <own journey id> --i-have-authorization [options]
-#   pnpm intel:cold --sweep [--yes]
+#   scripts/onboarding-cold-test.sh --journey <own journey id> --i-have-authorization [options]
+#   scripts/onboarding-cold-test.sh --sweep [--yes]
 #
 # Production's settings come from the bldg-admin-api service. Its own DATABASE_URL is private to Railway's network,
 # so the database is reached at the MySQL service's public address instead. Nothing secret is printed.

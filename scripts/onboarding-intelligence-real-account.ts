@@ -1,7 +1,7 @@
 /**
  * Onboarding intelligence: cold-start tests against the account owner's real, connected Google account. NOT run by
  * CI, and never run without the account owner's explicit authorization. The operator's guide is "Cold tests against a
- * real account" in docs/goldline/ONBOARDING_INTELLIGENCE.md; `pnpm intel:cold` (scripts/onboarding-cold-test.sh) runs
+ * real account" in docs/goldline/ONBOARDING_INTELLIGENCE.md; scripts/onboarding-cold-test.sh runs
  * this against production from a Railway-linked checkout.
  *
  *   npx tsx scripts/onboarding-intelligence-real-account.ts --journey <own journey id> --i-have-authorization [options]

@@ -69,7 +69,8 @@ interpreter always runs beside a model and is the fallback. Compare models with
 
 ## Cold tests against a real account
 
-`pnpm intel:cold` (`scripts/onboarding-intelligence-real-account.ts`, on `server/businessKnowledge/coldTest.ts`) tests
+`scripts/onboarding-cold-test.sh` (which runs `scripts/onboarding-intelligence-real-account.ts`, on
+`server/businessKnowledge/coldTest.ts`) tests
 the intelligence against a connected Google account. CI never runs it, and every run needs the account owner's
 authorization (`--i-have-authorization`).
 
@@ -103,11 +104,11 @@ Run it from a checkout that `railway link` has linked to the production project.
 public address, because production's own `DATABASE_URL` is private to Railway.
 
 ```bash
-pnpm intel:cold --list
-pnpm intel:cold --journey <journey id> --i-have-authorization
-pnpm intel:cold --journey <journey id> --i-have-authorization --mode journey
-pnpm intel:cold --journey <journey id> --i-have-authorization --investigator gemini --model gemini-2.5-flash --runs 2
-pnpm intel:cold --sweep
+scripts/onboarding-cold-test.sh --list
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization --mode journey
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization --investigator gemini --model gemini-2.5-flash --runs 2
+scripts/onboarding-cold-test.sh --sweep
 ```
 
 - `--list` shows the own journeys with Google connected: id, account, stage, and whether it has a workspace.
