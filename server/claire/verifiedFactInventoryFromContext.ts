@@ -1,8 +1,11 @@
-import type { ClaireDriveContext, ClaireTimelineItem } from "./contextAssembler";
+import { formatInTimeZone } from "date-fns-tz";
+import type { AwaitingReplies, SignupKnowledgeBriefing } from "../../shared/firstTenMinutesKnowledge";
+import { CLAIRE_BUSINESS_TIME_ZONE, type ClaireDriveContext, type ClaireTimelineItem } from "./contextAssembler";
 import {
   lintPostGenerationStateVerbs,
   lintReceiptBackedCommitSpeech,
   lintSpokenClock,
+  type InventoryCounterpart,
   type MutationReceipt,
   VerifiedFactInventory,
   VerifiedFactInventoryBuilder,
@@ -123,6 +126,9 @@ export function buildClaireVerifiedFactInventory(
     });
   }
 
+  if (context.signupKnowledge) addSignupKnowledge(builder, context.signupKnowledge);
+  if (context.awaitingReplies) addAwaitingReplies(builder, context.awaitingReplies, context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE);
+
   // Rook / recovery drafts are prepared, never sent, unless a write receipt exists.
   builder.addClaim({
     claimId: "outreach-sent:default",
@@ -143,6 +149,132 @@ export function buildClaireVerifiedFactInventory(
   });
 
   return builder.build();
+}
+
+/** Words from someone's mailbox, made safe to quote in a single inventory line. */
+function plain(value: string, max = 160): string {
+  const words = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  return words.length > max ? `${words.slice(0, max - 1)}…` : words;
+}
+
+/**
+ * What JOYSTICK's crew read at signup. Every fact keeps its finding id as its receipt; only the operator's own
+ * confirmation (or correction) makes one verified, and even then it is history, not current business truth. The
+ * note they prepared is a send to one named person: verified only on Google's own send receipt, pending on the
+ * operator's report, unknown while it has not left. A reply to it is verified only when one was seen; "none seen" is
+ * not "no reply" either, so it stays unknown and Claire says nothing was seen, not that no one answered.
+ */
+function addSignupKnowledge(builder: VerifiedFactInventoryBuilder, signup: SignupKnowledgeBriefing): void {
+  for (const fact of signup.facts) {
+    const how = fact.status === "proposed" ? "only read, never confirmed by them" : fact.status === "changed" ? "the operator's own correction" : "confirmed by the operator";
+    builder.addGeneralFact({
+      claimId: `signup-fact:${fact.id}`,
+      statement: `Signup history, not current business truth (${how}; ${fact.learnedAt}): ${plain(fact.statement)}`,
+      entityRef: `first_ten_finding:${fact.id}`,
+      status: fact.status === "proposed" ? "unknown" : "verified",
+      provenance: `first_ten.signup_knowledge.${fact.status}`,
+    });
+  }
+
+  const message = signup.message;
+  if (!message) return;
+  const to = plain(message.to, 80);
+  const person = signup.opportunity?.person;
+  // The briefing names the recipient by name, or by address when it has no name; the opportunity fills in the other.
+  const counterpart: InventoryCounterpart = to.includes("@")
+    ? { name: person && person.address.toLowerCase() === to.toLowerCase() ? person.name : null, address: to }
+    : { name: to, address: person && person.name?.trim() === to ? person.address : null };
+  const receipt = signup.opportunity ? `first_ten_finding:${signup.opportunity.factId}` : "first_ten:signup_message";
+  const note = `The operator's signup note to ${to}`;
+
+  builder.addClaim({
+    claimId: "signup-message:sent",
+    statement:
+      message.sent && message.verified
+        ? `${note} was sent on ${message.sentOn}; Google confirmed the send`
+        : message.sent
+          ? `${note}: the operator reported sending it on ${message.sentOn}; Google has not confirmed it`
+          : message.declined
+            ? `${note} was not sent: the operator chose to keep it`
+            : `${note} is prepared and has not been sent`,
+    entityRef: receipt,
+    claimedState: "sent",
+    provenance:
+      message.sent && message.verified
+        ? "first_ten.signup_knowledge.message (Google send receipt)"
+        : message.sent
+          ? "first_ten.signup_knowledge.message (operator report)"
+          : "first_ten.signup_knowledge.message",
+    // verified on Google's receipt; pending on the operator's own report (neither licensed nor contradicted); a note
+    // still at the table or kept is not sent (unknown: the guard refuses a claim that it went)
+    writtenTruthStatus: message.sent && message.verified ? "sent" : message.sent ? "pending" : "not_found",
+    counterpart,
+  });
+  builder.addClaim({
+    claimId: "signup-message:reply",
+    statement:
+      message.reply === "replied"
+        ? `${to} replied to the operator's signup note${message.replyOn ? ` on ${message.replyOn}` : ""}`
+        : message.reply === "bounced"
+          ? `${note} bounced${message.replyOn ? ` on ${message.replyOn}` : ""}: it did not arrive, and no reply came`
+          : message.reply === "none_seen"
+            ? `No reply from ${to} to the operator's signup note has been seen; nothing seen is not "no reply"`
+            : `${note} was not sent, so there is no reply to it`,
+    entityRef: receipt,
+    claimedState: "replied",
+    provenance: "first_ten.signup_knowledge.message.reply",
+    writtenTruthStatus: message.reply === "replied" ? "replied" : "not_found",
+    counterpart,
+  });
+}
+
+/**
+ * Who the operator is waiting on and who wrote back, from their own Gmail as last read (checkedAt). Each person they
+ * are waiting on is one real message in their Sent folder (a verified send, its Gmail message id the receipt) with no
+ * reply seen in that thread as of checkedAt (unknown, never "no reply"). Each person who wrote back is one real
+ * message in their inbox (a verified reply). Nothing beyond checkedAt is claimed either way.
+ */
+function addAwaitingReplies(builder: VerifiedFactInventoryBuilder, awaiting: AwaitingReplies, timeZone: string): void {
+  if (awaiting.unavailable) return;
+  const day = (iso: string) => {
+    const at = new Date(iso);
+    return Number.isNaN(at.getTime()) ? iso : formatInTimeZone(at, timeZone, "yyyy-MM-dd");
+  };
+  const read = `read ${awaiting.checkedAt}`;
+  for (const item of awaiting.items) {
+    const who = plain(item.person.name ?? item.person.address, 80);
+    const counterpart: InventoryCounterpart = { name: item.person.name ? plain(item.person.name, 80) : null, address: item.person.address };
+    builder.addClaim({
+      claimId: `awaiting:sent:${item.messageId}`,
+      statement: `The operator emailed ${who} on ${day(item.sentAt)}; the message is in their Sent folder`,
+      entityRef: `gmail:message:${item.messageId}`,
+      claimedState: "sent",
+      provenance: `gmail.sent_folder (${read})`,
+      writtenTruthStatus: "sent",
+      counterpart,
+    });
+    builder.addClaim({
+      claimId: `awaiting:reply:${item.threadId}`,
+      statement: `No reply from ${who} to that email had been seen when their Gmail was read on ${day(awaiting.checkedAt)} (waiting ${item.waitingDays} days)`,
+      entityRef: `gmail:thread:${item.threadId}`,
+      claimedState: "replied",
+      provenance: `gmail.awaiting_replies (${read})`,
+      writtenTruthStatus: "not_found",
+      counterpart,
+    });
+  }
+  for (const reply of awaiting.replies ?? []) {
+    const who = plain(reply.person.name ?? reply.person.address, 80);
+    builder.addClaim({
+      claimId: `reply:${reply.messageId}`,
+      statement: `${who} wrote back to the operator on ${day(reply.at)}; the message is in their inbox`,
+      entityRef: `gmail:message:${reply.messageId}`,
+      claimedState: "replied",
+      provenance: `gmail.inbox (${read})`,
+      writtenTruthStatus: "replied",
+      counterpart: { name: reply.person.name ? plain(reply.person.name, 80) : null, address: reply.person.address },
+    });
+  }
 }
 
 export function assertPostGenerationStateVerbs(
