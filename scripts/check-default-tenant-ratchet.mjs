@@ -1,11 +1,17 @@
 import { execFileSync } from "node:child_process";
 
 const base = process.env.DEFAULT_TENANT_RATCHET_BASE?.trim() || "HEAD^1";
+// execFileSync stops at 1 MB of output by default (spawnSync ENOBUFS). One edit
+// to a generated single-line export (client/public/joystick-landing-standalone.html
+// is one 3.6 MB line) already exceeds that. This only raises the output limit;
+// every changed line is still checked.
+const GIT_OUTPUT_MAX_BYTES = 256 * 1024 * 1024;
 
 let diff = "";
 try {
   diff = execFileSync("git", ["diff", "--unified=0", base, "HEAD", "--", "server", "shared", "client", "scripts"], {
     encoding: "utf8",
+    maxBuffer: GIT_OUTPUT_MAX_BYTES,
   });
 } catch (error) {
   console.error(`Unable to compute default-tenant ratchet diff from ${base} to HEAD.`);
