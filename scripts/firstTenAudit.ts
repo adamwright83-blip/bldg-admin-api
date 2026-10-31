@@ -38,7 +38,8 @@ const seconds = (from: Date, to: Date | null | undefined) => (to ? `${Math.round
 /** What a finding says, in one line, by kind (the field that carries the meaning). */
 function gist(payload: Record<string, unknown>): string {
   const pick = (...keys: string[]) => keys.map(key => payload[key]).find(value => typeof value === "string" && value.trim());
-  const person = (value: unknown) => (value && typeof value === "object" ? ((value as { name?: string; email?: string }).name ?? (value as { email?: string }).email) : null);
+  // PersonRef: { name: string | null; address: string }; an unnamed contact is still identified by its address
+  const person = (value: unknown) => (value && typeof value === "object" ? ((value as { name?: string | null }).name || (value as { address?: string }).address) : null);
   switch (payload.kind) {
     case "person":
       return `${clean(person(payload.person))}: ${payload.sent} sent / ${payload.received} received, last ${payload.lastAt}`;
@@ -77,7 +78,7 @@ async function main() {
     return;
   }
   const start = journey.createdAt;
-  const [connections, [reading], findings, [portrait], [draft], events] = await Promise.all([
+  const [connections, [reading], storedFindings, [portrait], [draft], events] = await Promise.all([
     db.select().from(firstTenConnections).where(eq(firstTenConnections.journeyId, journey.id)),
     db.select().from(firstTenReadings).where(eq(firstTenReadings.journeyId, journey.id)).limit(1),
     db.select().from(firstTenFindings).where(and(eq(firstTenFindings.journeyId, journey.id))).orderBy(asc(firstTenFindings.kind), asc(firstTenFindings.rank)),
@@ -85,6 +86,11 @@ async function main() {
     db.select().from(firstTenDrafts).where(eq(firstTenDrafts.journeyId, journey.id)).limit(1),
     db.select().from(firstTenEvents).where(eq(firstTenEvents.journeyId, journey.id)).orderBy(asc(firstTenEvents.createdAt)),
   ]);
+
+  // What the person was shown: the current reading's findings, plus older ones only if they reacted to them (as
+  // findingViews in understanding/store.ts). A finding an earlier reading made and this one didn't is not counted.
+  const findings = storedFindings.filter(finding => finding.runId === (reading?.runId ?? null) || finding.status !== "proposed");
+  const superseded = storedFindings.length - findings.length;
 
   console.log(`# First ten minutes audit\n`);
   console.log(`Journey ${journey.id}  kind=${journey.kind}  stage=${journey.stage}  started ${start.toISOString()}  tenant=${journey.tenantId ?? "none"}`);
@@ -106,6 +112,7 @@ async function main() {
   }
 
   console.log(`\n## Findings (${findings.length})`);
+  if (superseded) console.log(`  (${superseded} from an earlier reading that this one didn't make again, left out)`);
   const byKind = new Map<string, number>();
   const bySource = new Map<string, number>();
   const flagged: string[] = [];
