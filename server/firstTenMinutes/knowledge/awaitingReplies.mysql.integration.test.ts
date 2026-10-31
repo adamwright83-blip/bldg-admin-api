@@ -42,7 +42,15 @@ const MAIL = [
   message("s-elena", "th-elena", `Nina Vale <${NINA}>`, "Elena Ruiz <elena@larkspurhotel.example>", 4, "Re: Friday flowers?", "We now have a weekly Friday delivery. Is that still something you're looking for?"),
   message("s-teo", "th-teo", `Nina Vale <${NINA}>`, "Teo Marsh <teo@marsh.example>", 6, "Standing order", "Shall I keep the Friday order going?"),
   message("r-teo", "th-teo", "Teo Marsh <teo@marsh.example>", NINA, 3, "Re: Standing order", "Yes please."),
+  // answered, but outside the bounded inbox sample (Gmail filed it under another tab): asked about directly
+  message("s-ana", "th-ana", `Nina Vale <${NINA}>`, "Ana Ortiz <ana@studio.example>", 5, "Wreaths", "Could you use twelve wreaths in December?"),
+  message("r-ana", "th-ana", "Ana Ortiz <ana@studio.example>", NINA, 2, "Re: Wreaths", "Yes, twelve."),
+  // answered in the same conversation by someone else at the hotel, also outside the sample
+  message("s-max", "th-max", `Nina Vale <${NINA}>`, "Max Pell <max@grandhotel.example>", 5, "Lobby arrangement", "Shall I bring the lobby arrangement Monday?"),
+  message("r-desk", "th-max", "Front Desk <frontdesk@grandhotel.example>", NINA, 1, "Re: Lobby arrangement", "Monday works, Max is away."),
 ];
+/** replies the bounded inbox read never sees: only a question about that person or conversation finds them */
+const OUTSIDE_SAMPLE = new Set(["r-ana", "r-desk"]);
 
 describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL and a stand-in Gmail", () => {
   let db: mysql.Connection;
@@ -61,7 +69,16 @@ describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL 
         const q = requested.searchParams.get("q") ?? "";
         queries.push(q);
         const sent = /(^|\s)in:sent\b/.test(q);
-        return json(200, { messages: MAIL.filter(item => item.payload.headers[0].value.includes(NINA) === sent).map(item => ({ id: item.id, threadId: item.threadId })) });
+        const from = q.match(/(?:^|\s)from:(\S+)/)?.[1] ?? null;
+        const found = MAIL.filter(item => item.payload.headers[0].value.includes(NINA) === sent)
+          .filter(item => (from ? item.payload.headers[0].value.includes(from) : !OUTSIDE_SAMPLE.has(item.id)));
+        return json(200, { messages: found.map(item => ({ id: item.id, threadId: item.threadId })) });
+      }
+      const thread = requested.pathname.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/threads\/([^/]+)$/);
+      if (thread) {
+        queries.push(`thread:${thread[1]}`);
+        const messages = MAIL.filter(item => item.threadId === thread[1]);
+        return messages.length ? json(200, { id: thread[1], messages }) : json(404, {});
       }
       const one = requested.pathname.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)$/);
       const found = one ? MAIL.find(item => item.id === one[1]) : null;
@@ -106,6 +123,9 @@ describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL 
       ["Elena Ruiz", "elena@larkspurhotel.example", 4, true, "s-elena"],
     ]);
     expect(awaiting.items[0].url).toContain("th-elena");
+    // Ana and the hotel answered outside the sample: Gmail was asked about each candidate directly, so neither is listed
+    expect(queries.some(q => q.startsWith("from:ana@studio.example -in:sent"))).toBe(true);
+    expect(queries).toContain("thread:th-max");
     // it asked Gmail for the recent window only, Sent and people's mail separately
     expect(queries.some(q => /^in:sent after:\d+$/.test(q))).toBe(true);
     expect(queries.some(q => q.startsWith("-in:sent -in:chats -category:promotions") && /after:\d+$/.test(q))).toBe(true);
