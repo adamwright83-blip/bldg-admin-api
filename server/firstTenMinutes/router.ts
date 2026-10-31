@@ -263,15 +263,17 @@ export const firstTenMinutesRouter = router({
 
   /**
    * The person sends the message from JOYSTICK, from their own Gmail. `to`, `subject` and `body` are exactly what they
-   * approved; anything else at the table is refused. Once per journey: a retry or a replay never sends twice. The
-   * outcome is what Google showed: sent (with its id), still being confirmed, refused, or permission needed first.
+   * approved; anything else at the table is refused. Once per journey: a retry or a replay never sends it again. A send
+   * Google never answered is sent again only with `resendUnconfirmed`, the person's choice after being told it may
+   * already have gone. The outcome is what Google showed: sent (with its id), still being confirmed, refused, or
+   * permission needed first.
    */
   sendDraft: publicProcedure
-    .input(credentials.extend({ to: z.string().max(320), subject: z.string().max(500), body: z.string().max(2000) }))
+    .input(credentials.extend({ to: z.string().max(320), subject: z.string().max(500), body: z.string().max(2000), resendUnconfirmed: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       assertFirstTenOpen();
       const { journey } = await requireJourney(input);
-      const outcome = await sendDraft(journey, input, { to: input.to, subject: input.subject, body: input.body });
+      const outcome = await sendDraft(journey, input, { to: input.to, subject: input.subject, body: input.body }, { resendUnconfirmed: input.resendUnconfirmed });
       return { outcome, chapter: await chapterView(journey) };
     }),
 

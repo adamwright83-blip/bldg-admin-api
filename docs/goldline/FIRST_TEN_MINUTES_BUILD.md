@@ -307,12 +307,16 @@ compose window). No Gmail window, nothing to copy. Behind it:
   back exactly what it showed; the server refuses if the message at the table isn't that (`sendDraft`).
 - **Sent once, through one service.** `server/integrations/gmail/gmailSend.ts` sends with `users.messages.send`
   from the connected account, keyed `first_ten:<journey>` in `gmail_sends` (migration 0157): a retry, a reload or a
-  replay never sends twice. It is reusable as is for gameplay and Claire: any caller passes an idempotency key, the
+  replay never sends it again. It is reusable as is for gameplay and Claire: any caller passes an idempotency key, the
   digest of what the person approved, and the account's access.
 - **Never "sent" unless Google showed it.** "Sent from your Gmail at 3:44 PM." only with Google's message id (kept
   in `first_ten_drafts.verified_message_id` and `gmail_sends`). A refusal leaves the message at the table. An answer
-  that was lost is "Sending from your Gmail…" until the Sent folder shows the message by the Message-ID JOYSTICK gave
-  it; it is tried again only after the Sent folder can't have it, with the same Message-ID.
+  that was lost is "Sending from your Gmail…" until the Sent folder shows the message: by Gmail's search on the
+  Message-ID JOYSTICK gave it, then among the newest messages in Sent read directly, by that Message-ID or the
+  `X-Joystick-Send` header carrying it (search can lag, and Gmail may replace a Message-ID). Not finding it doesn't
+  prove it didn't go, so JOYSTICK never sends it again on its own judgement: after two minutes the desk says so
+  ("sending again could send Elena the same message twice") and only the person's "Send it again anyway"
+  (`resendUnconfirmed`) sends it again, with the same Message-ID.
 - **Earlier drafts.** `handed_off` and `reported_sent` remain for drafts that left by the old hand-off.
 
 **The closing beat answers what actually happened**, in the courtyard:
