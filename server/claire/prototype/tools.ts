@@ -28,6 +28,7 @@ import { DayLineAdmissionRefusedError, operatorInstructionAdmission } from "../.
 import { removeDayDirectorCommitmentsFromDay } from "../../planning/dayline/dayLineMutationService";
 import { authorizeExistingRowChange, changesOutsideOffer, offerText, verifyOperatorAuthorization } from "./authorization";
 import { drizzleStandingInstructionStore, type StandingInstructionStore } from "../../agents/daphne/standingInstructions";
+import { readCustomerReplies } from "../../integrations/gmail/replies/customerReplies";
 import { addDaysYmd, businessDateToday, resolveSpokenDate, spokenDay } from "./spokenDate";
 import { matchWork, plausibleSameWork } from "./workMatch";
 import { productionGoalProgressReaders, readGoalProgress, type GoalProgressReaders } from "../gameMaster/goalProgress";
@@ -183,6 +184,12 @@ export const CLAIRE_PROTOTYPE_TOOLS: Anthropic.Tool[] = [
     name: "read_goal_progress",
     description:
       "Read the operator's headline goal and where they stand on it: the objective, the target, the count it started from, and today's count from verified records. When current_is_complete is true, say the goal, the count and how many to go in one short sentence. When it is false, current is what the available records show today, not a final count and not a guaranteed minimum: say it as counted so far (\"23 counted so far\") and, briefly or when asked, which records are behind (sources, caveats). to_go is then null; short_by_count_so_far is only the gap to the target from that count (\"27 short by the count so far\"), never a verified distance. Never say \"at least\", never present it as final, and never estimate the missing part. When current is null, nothing could be read: say you don't have a count and why. When started_at_note is set, the starting figure came from an older, inexact count: mention it only as \"recorded at the start\" and never say they have or haven't moved by comparing it with current. The same numbers come from read_business_numbers with metric active_customers.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "read_customer_replies",
+    description:
+      "Read who has written back, from the operator's own Gmail: replies in conversations JOYSTICK sent, each one fetched from Gmail and matched to the message it answers (last 30 days, newest first): who, when, the subject, the opening of their message, and whether it is a person writing back, an automatic reply (out of office) or a delivery failure. Use it when the operator talks about growth, prospects, follow-ups or who to contact, not to announce replies unprompted. A reply means only that the person wrote back: never call it a booking, a sale or a new customer. When watching is not 'watching', JOYSTICK cannot see new replies right now: say so if it matters, and never say nobody has written back.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -626,6 +633,26 @@ export async function saveStandingInstruction(ctx: ToolContext, input: { rule: s
   return { status: active ? "active" : "not_active", id: record.id, rule: text };
 }
 
+/** Verified replies, with times in the operator's zone. Unavailable (no database, a read failure) is said as such. */
+async function readRepliesForClaire(ctx: ToolContext) {
+  try {
+    const view = await readCustomerReplies(ctx.tenantId, ctx.now());
+    return {
+      ...view,
+      replies: view.replies.map(reply => ({ ...reply, when: spokenTime(new Date(reply.receivedAt), ctx.timeZone, ctx.now()) })),
+    };
+  } catch {
+    return { status: "unavailable", watching: "unknown", replies: [] };
+  }
+}
+
+function spokenTime(at: Date, timeZone: string, now: Date): string {
+  const day = businessDateToday(at, timeZone);
+  const today = businessDateToday(now, timeZone);
+  const time = at.toLocaleTimeString("en-US", { timeZone, hour: "numeric", minute: "2-digit" });
+  return `${spokenDay(day, today)} at ${time}`;
+}
+
 export async function executeTool(ctx: ToolContext, name: string, input: Record<string, unknown>): Promise<{ output: unknown; wrote: boolean; endCall?: boolean }> {
   const today = businessDateToday(ctx.now(), ctx.timeZone);
   switch (name) {
@@ -648,6 +675,8 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
       return { output: await readBusinessNumbers(ctx, input as never), wrote: false };
     case "read_goal_progress":
       return { output: await readGoal(ctx), wrote: false };
+    case "read_customer_replies":
+      return { output: await readRepliesForClaire(ctx), wrote: false };
     case "save_standing_instruction": {
       const result = await saveStandingInstruction(ctx, input as never);
       return { output: result, wrote: result.status === "active" };
