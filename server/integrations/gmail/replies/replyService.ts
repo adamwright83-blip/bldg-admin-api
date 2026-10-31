@@ -75,8 +75,18 @@ export async function runMailbox(mailbox: Mailbox, noticedHistoryId: string | nu
 }
 
 /** A durable notice, handled: every mailbox with that address (each tenant's own), then marked processed. */
+/**
+ * The mailboxes a notice for this address may be handled for: active, and of a tenant listed in
+ * GMAIL_REPLY_DETECTION_TENANTS. A watch made before its tenant was unlisted keeps pushing until Google expires it
+ * (up to 7 days); those notices match nothing here. users.stop isn't called for them, since another tenant may
+ * share the address.
+ */
+export async function wantedMailboxes(emailAddress: string, tenants: ReadonlySet<string> = replyDetectionTenants()): Promise<Mailbox[]> {
+  return (await mailboxStore.byEmail(emailAddress)).filter(mailbox => mailbox.status === "active" && tenants.has(mailbox.tenantId));
+}
+
 export async function handleNotice(notice: GmailPushNotice): Promise<void> {
-  const mailboxes = await mailboxStore.byEmail(notice.emailAddress);
+  const mailboxes = await wantedMailboxes(notice.emailAddress);
   let outcome = mailboxes.length ? "processed" : "no_watched_mailbox";
   try {
     for (const mailbox of mailboxes) {
@@ -178,10 +188,18 @@ export async function reconcile(): Promise<void> {
  * POST /api/integrations/gmail/push. Authenticated first; then the notice is kept durably and acknowledged at once
  * (Pub/Sub must not wait on Gmail), and processed after the response. A redelivery is acknowledged and dropped.
  */
-export function gmailPushHandler(deps: { verify?: typeof verifyPushAuthorization; receive?: typeof noticeStore.receive; process?: typeof handleNotice } = {}) {
+export function gmailPushHandler(
+  deps: {
+    verify?: typeof verifyPushAuthorization;
+    receive?: typeof noticeStore.receive;
+    process?: typeof handleNotice;
+    wanted?: (emailAddress: string) => Promise<boolean>;
+  } = {}
+) {
   const verify = deps.verify ?? verifyPushAuthorization;
   const receive = deps.receive ?? noticeStore.receive;
   const process_ = deps.process ?? handleNotice;
+  const wanted = deps.wanted ?? (async (emailAddress: string) => (await wantedMailboxes(emailAddress)).length > 0);
   return async (req: Request, res: Response) => {
     if (!replyDetectionEnabled()) return res.status(404).end();
     const auth = await verify(req.header("authorization") ?? undefined, pushAuthConfig());
@@ -193,6 +211,9 @@ export function gmailPushHandler(deps: { verify?: typeof verifyPushAuthorization
     // malformed: acknowledged, so Pub/Sub doesn't redeliver it forever
     if (!notice) return res.status(204).end();
     try {
+      // no active, listed tenant watches this address (a leftover watch from an unlisted tenant): acknowledged so
+      // Pub/Sub stops redelivering, and nothing about it is kept or processed
+      if (!(await wanted(notice.emailAddress))) return res.status(204).end();
       const fresh = await receive(notice, new Date());
       res.status(204).end();
       if (fresh) void process_(notice).catch(error => console.warn("[GmailReplies] processing deferred to reconciliation:", error instanceof Error ? error.message : error));

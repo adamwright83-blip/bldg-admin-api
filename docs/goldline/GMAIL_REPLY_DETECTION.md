@@ -3,7 +3,9 @@
 JOYSTICK notices when someone writes back in a conversation it started, so Claire and the business systems know.
 Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on`, and then only for the tenants listed
 in `GMAIL_REPLY_DETECTION_TENANTS` (comma-separated; empty means none). Any other tenant's mailbox is paused, and
-resumes from its kept cursor when listed again, so rollout is one tenant at a time.
+resumes from its kept cursor when listed again, so rollout is one tenant at a time. A watch made before its tenant was unlisted
+keeps pushing until Google expires it (up to 7 days): those notices are acknowledged and dropped, never stored or
+processed. `users.stop` isn't called for them, since another tenant may share the address.
 
 ## What it does
 

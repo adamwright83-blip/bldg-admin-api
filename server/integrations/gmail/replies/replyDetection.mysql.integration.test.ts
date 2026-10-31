@@ -215,6 +215,7 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
 
   it("the push endpoint keeps a notice before acknowledging it, once per Pub/Sub message", async () => {
     process.env.GMAIL_REPLY_DETECTION = "on";
+    process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies";
     const processed: string[] = [];
     const app = express();
     app.use(express.json());
@@ -243,6 +244,50 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
     } finally {
       await new Promise(resolve => server.close(resolve));
       delete process.env.GMAIL_REPLY_DETECTION;
+    }
+  });
+
+  it("a leftover watch for a tenant no longer listed: acknowledged, never stored or processed; a listed tenant sharing the address still is", async () => {
+    process.env.GMAIL_REPLY_DETECTION = "on";
+    const unlisted = "operator:tenant-unlisted";
+    const shared = "shared@flowers.example";
+    await mailboxStore.create({ key: unlisted, tenantId: "tenant-unlisted", source: "operator_gmail", email: shared }, new Date("2026-10-30T09:00:00Z"));
+    const processed: string[] = [];
+    const app = express();
+    app.use(express.json());
+    app.post("/push", gmailPushHandler({ verify: async () => ({ ok: true, subject: "sa" }), process: async notice => void processed.push(notice.pubsubMessageId) }));
+    const server = http.createServer(app);
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/push`;
+    const push = (id: string) =>
+      fetch(base, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer good" },
+        body: JSON.stringify({ message: { data: Buffer.from(JSON.stringify({ emailAddress: shared, historyId: 300 })).toString("base64"), messageId: id } }),
+      });
+    const stored = async (id: string) => (await connection.query<mysql.RowDataPacket[]>("SELECT 1 FROM gmail_push_notices WHERE pubsub_message_id = ?", [id]))[0].length;
+    try {
+      // only an unlisted tenant watches this address: 204, nothing kept, nothing processed
+      process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies";
+      expect((await push("pm-unlisted")).status).toBe(204);
+      expect(await stored("pm-unlisted")).toBe(0);
+      // a paused mailbox of a listed tenant is not wanted either
+      await mailboxStore.setStatus(unlisted, "paused", "test");
+      process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies,tenant-unlisted";
+      expect((await push("pm-paused")).status).toBe(204);
+      expect(await stored("pm-paused")).toBe(0);
+      // a listed, active tenant shares the address: still delivered for it
+      const listed = "operator:tenant-shared";
+      await mailboxStore.create({ key: listed, tenantId: "tenant-shared", source: "operator_gmail", email: shared }, new Date("2026-10-30T09:00:00Z"));
+      process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies,tenant-shared";
+      expect((await push("pm-shared")).status).toBe(204);
+      expect(await stored("pm-shared")).toBe(1);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(processed).toEqual(["pm-shared"]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+      delete process.env.GMAIL_REPLY_DETECTION;
+      delete process.env.GMAIL_REPLY_DETECTION_TENANTS;
     }
   });
 });
