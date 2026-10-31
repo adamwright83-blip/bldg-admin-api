@@ -112,6 +112,7 @@ describe("DayForge SaaS production contract", () => {
     const shell = source("../../client/src/product/ProductShell.tsx");
     const field = source("../../client/src/product/FieldHome.tsx");
     const atlas = source("../geography/geographicTruthRouter.ts");
+    const chapterGate = source("../../client/src/components/goldline/TenantUnlockedChapterGate.tsx");
 
     expect(app).toContain("isSaasCustomerSafePath");
     expect(app).toContain('user?.role === "user"');
@@ -120,7 +121,8 @@ describe("DayForge SaaS production contract", () => {
     expect(app).toContain('"/growth/lantern-city"');
     expect(app).toContain('"/goldline-chapter"');
     expect(app).toContain("TenantOperatorGate");
-    expect(app).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(app).toContain("<TenantUnlockedChapterGate");
+    expect(chapterGate).toContain('kingdom.lanternCityStatus !== "locked"');
     expect(atlas).toContain("myAtlas: legacyDayforgeTenantOperatorProcedure");
     expect(atlas).toContain("getGeographicTruth({ tenantId: ctx.tenantId })");
     expect(shell).not.toContain("Legacy operations");

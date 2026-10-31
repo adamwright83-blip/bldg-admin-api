@@ -13,6 +13,10 @@ vi.mock("@/_core/hooks/useAuth", () => ({
   useAuth: () => authState,
 }));
 
+const kingdomState = vi.hoisted(() => ({
+  data: [] as Array<{ kingdomId: string; lanternCityStatus: string }>,
+}));
+
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ auth: { me: { invalidate: async () => undefined } } }),
@@ -22,9 +26,19 @@ vi.mock("@/lib/trpc", () => ({
           useQuery: () => ({ data: undefined, isLoading: false, isError: false }),
         },
       },
+      goldlineKingdoms: {
+        list: {
+          useQuery: () => ({ data: kingdomState.data, isLoading: false, isError: false }),
+        },
+      },
     },
   },
 }));
+
+vi.mock("@/pages/GoldlineChapterHost", async () => {
+  const { createElement: h } = await import("react");
+  return { default: () => h("p", null, "CHAPTER HOST MOUNTED") };
+});
 
 import { CustomerHostApp } from "./CustomerHostApp";
 import { JoystickApiHostRefused, WwwGojoystickRedirect } from "./JoystickHostFrames";
@@ -82,6 +96,25 @@ describe("JOYSTICK host render contract", () => {
       expect(html).not.toContain("Admin Sign In");
       expect(html).not.toContain("does not serve the control room");
     }
+  });
+
+  it("applies the admin host's kingdom-unlock check to the customer-host chapter", async () => {
+    setLocation("https://app.gojoystick.com/goldline-chapter");
+    authState.user = { role: "user", openId: "tenant-operator" };
+    authState.isAuthenticated = true;
+    kingdomState.data = [{ kingdomId: "kingdom-2-the-last-valet", lanternCityStatus: "available" }];
+    // The first render starts the lazy chapter host; once resolved it renders synchronously.
+    let unlocked = renderToStaticMarkup(createElement(CustomerHostApp));
+    for (let attempt = 0; attempt < 50 && !unlocked.includes("CHAPTER HOST MOUNTED"); attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      unlocked = renderToStaticMarkup(createElement(CustomerHostApp));
+    }
+    expect(unlocked).toContain("CHAPTER HOST MOUNTED");
+
+    kingdomState.data = [{ kingdomId: "kingdom-2-the-last-valet", lanternCityStatus: "locked" }];
+    expect(renderToStaticMarkup(createElement(CustomerHostApp))).not.toContain("CHAPTER HOST MOUNTED");
+    kingdomState.data = [];
+    expect(renderToStaticMarkup(createElement(CustomerHostApp))).not.toContain("CHAPTER HOST MOUNTED");
   });
 
   it("refuses the control room on the customer host", () => {
