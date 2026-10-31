@@ -751,8 +751,6 @@ export default function JoystickLanding() {
   // Section 12: Live proof founder clipboard dispatch log tab (0 = Silver Lake, 1 = CPE, 2 = Wilshire)
   const [activeDispatchTab, setActiveDispatchTab] = useState<number>(0);
 
-  // Section 13: Pricing billing cycle toggle ("monthly" | "annual")
-  const [pricingBillingCycle, setPricingBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   useEffect(() => {
     captureProductEvent("landing_page_visited", {
@@ -2435,36 +2433,17 @@ export default function JoystickLanding() {
           </div>
 
           <div className="jl-pricing-presentation-card" data-testid="landing-pricing-card">
-            {/* Membership Header & Billing Toggle */}
+            {/* Membership Header */}
             <div className="jl-pricing-main-block">
               <div className="jl-pricing-tier-badge">JOYSTICK OPERATOR MEMBERSHIP</div>
 
               <div className="jl-pricing-cost-display">
                 <div className="jl-cost-large">
-                  {pricingBillingCycle === "monthly" ? "$79" : "$39"}
+                  $79
                   <span className="jl-cost-period">/month</span>
                 </div>
-                <div className="jl-cost-annual-note">
-                  {pricingBillingCycle === "annual" ? "Billed annually at $468/year" : "Billed monthly. Switch to annual for $468/year"}
-                </div>
-              </div>
-
-              {/* Cycle Toggle */}
-              <div className="jl-billing-toggle-row">
-                <button
-                  type="button"
-                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "monthly" ? "is-active" : ""}`}
-                  onClick={() => setPricingBillingCycle("monthly")}
-                >
-                  Monthly billing ($79/month)
-                </button>
-                <button
-                  type="button"
-                  className={`jl-billing-toggle-btn ${pricingBillingCycle === "annual" ? "is-active" : ""}`}
-                  onClick={() => setPricingBillingCycle("annual")}
-                >
-                  Annual billing ($468/year)
-                </button>
+                {/* One plan at launch: monthly. An annual price isn't offered until it is approved. */}
+                <div className="jl-cost-annual-note">Billed monthly.</div>
               </div>
 
               {/* Commercial Terms Pills */}
