@@ -36,7 +36,8 @@ setsid bash -c '
   export JWT_SECRET=first-ten-e2e-jwt-secret-000000000000000000
   export APP_SHARED_API_SECRET=first-ten-e2e-app-secret-0000000000000000
   export STRIPE_SECRET_KEY=first-ten-e2e-placeholder-not-used
-  export JOYSTICK_FIRST_TEN_MINUTES=on
+  export JOYSTICK_FIRST_TEN_MINUTES="${FIRST_TEN_E2E_MODE:-on}"
+  export JOYSTICK_FIRST_TEN_PREVIEW_CODE=first-ten-e2e-preview-code-0000
   export JOYSTICK_GOOGLE_CLIENT_ID=fake-google-client
   export JOYSTICK_GOOGLE_CLIENT_SECRET=fake-google-secret
   export JOYSTICK_SLACK_CLIENT_ID=fake-slack-client

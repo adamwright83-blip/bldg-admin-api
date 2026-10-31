@@ -1,4 +1,3 @@
-import { FIRST_TEN_PREVIEW_PARAM } from "@shared/firstTenMinutes";
 
 /**
  * The first-ten draft's resume token lives in this origin's browser storage, like today's funnel keeps its own
@@ -8,7 +7,6 @@ import { FIRST_TEN_PREVIEW_PARAM } from "@shared/firstTenMinutes";
 export type FirstTenCredentials = { sessionId: string; resumeToken: string };
 
 const CREDENTIALS_KEY = "joystick_first_ten_credentials";
-const PREVIEW_KEY = "joystick_first_ten_preview";
 
 function safely<T>(read: () => T, fallback: T): T {
   try {
@@ -53,7 +51,8 @@ export function adoptFirstTenHandoff(): boolean {
 }
 
 export function firstTenHandoffUrl(origin: string, credentials: FirstTenCredentials): string {
-  return `${origin}/joystick-start?crew=1#first-ten=${credentials.sessionId}.${credentials.resumeToken}`;
+  // in `preview`, that origin needs its own preview pass (the cookie is per origin); the link carries no preview code
+  return `${origin}/joystick-start#first-ten=${credentials.sessionId}.${credentials.resumeToken}`;
 }
 
 export function clearFirstTenCredentials(): void {
@@ -61,18 +60,6 @@ export function clearFirstTenCredentials(): void {
     sessionStorage.removeItem(CREDENTIALS_KEY);
     localStorage.removeItem(CREDENTIALS_KEY);
   }, undefined);
-}
-
-/**
- * While the flag is `preview`, /joystick-start?crew=1 opts this tab in. A draft already started here also counts,
- * so a return from Google or Stripe lands back in the same experience.
- */
-export function readPreviewOptIn(search: string = typeof window === "undefined" ? "" : window.location.search): boolean {
-  const fromUrl = new URLSearchParams(search).get(FIRST_TEN_PREVIEW_PARAM) === "1";
-  return safely(() => {
-    if (fromUrl) sessionStorage.setItem(PREVIEW_KEY, "1");
-    return fromUrl || sessionStorage.getItem(PREVIEW_KEY) === "1" || Boolean(readFirstTenCredentials());
-  }, fromUrl);
 }
 
 /** Today's funnel's own key (JoystickAcquisitionPage.tsx). Read only to keep a Stripe return with its own page. */

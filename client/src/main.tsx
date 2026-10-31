@@ -1,4 +1,5 @@
 import { initProductAnalytics } from "./lib/posthog";
+import { takePreviewCodeFromUrl } from "./lib/previewCode";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -12,6 +13,8 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+// the first-ten preview code is an access credential: out of the URL before analytics and session recording start
+takePreviewCodeFromUrl();
 void initProductAnalytics();
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";

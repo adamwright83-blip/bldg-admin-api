@@ -186,13 +186,15 @@ export type FirstTenJourneyView = {
 
 export type FirstTenAvailability = {
   mode: FirstTenMode;
+  /** the server's answer for this browser: `on`, or `preview` with its preview pass */
+  open: boolean;
   google: boolean;
   slack: boolean;
 };
 
-/** Is the experience shown to this browser? `optedIn` is the ?crew=1 preview opt-in. */
-export function firstTenShownTo(mode: FirstTenMode, optedIn: boolean): boolean {
-  return mode === "on" || (mode === "preview" && optedIn);
+/** Is the experience shown to this browser? Only when the server says it is open to it (the pass is server-checked). */
+export function firstTenShownTo(availability: Pick<FirstTenAvailability, "mode" | "open">): boolean {
+  return availability.mode !== "off" && availability.open;
 }
 
 /** What /joystick-start?connect_error=… may say. Nothing from the provider is ever echoed. */

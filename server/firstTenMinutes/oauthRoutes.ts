@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { parse as parseCookies } from "cookie";
 import type { ConnectErrorCode, ConnectionProvider } from "../../shared/firstTenMinutes";
-import { firstTenMode } from "./flag";
+import { firstTenOpenFor } from "./flag";
 import { exchangeGoogleCode, googleAccount, googleGrantIsUsable, revokeGoogleToken } from "./google";
 import { exchangeSlackCode, revokeSlackToken, slackGrantIsUsable } from "./slack";
 import { firstTenCallbackPath, firstTenRedirectUri } from "./origins";
@@ -48,7 +48,8 @@ export async function handleFirstTenCallback(
   const query = req.query as Record<string, unknown>;
   const code = typeof query.code === "string" ? query.code : "";
   const stateToken = typeof query.state === "string" ? query.state : "";
-  if (firstTenMode(env) === "off") return back(res, "");
+  // closed, or `preview` without this browser's preview pass: the callback does nothing
+  if (!firstTenOpenFor(req, env)) return back(res, "");
   if (typeof query.error === "string" || !code) {
     clearNonce();
     return fail("cancelled");
