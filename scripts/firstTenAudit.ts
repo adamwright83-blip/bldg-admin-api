@@ -2,11 +2,16 @@
  * What the first ten minutes actually found for one real journey: read-only, from the database, for judging the
  * preview honestly (what was read, what each finding rests on, what came out generic or empty). Never prints a token.
  *
- *   railway run --service bldg-admin-api npx tsx scripts/firstTenAudit.ts                 # the newest own journey
- *   railway run --service bldg-admin-api npx tsx scripts/firstTenAudit.ts --journey <id>
- *   ... --redact      # mask email addresses and shorten quotes, for sharing the output
+ * It runs inside the deployed bldg-admin-api container, where the production database is reachable, over Railway SSH
+ * (the CLI asks to register an SSH key the first time). `railway run` will not do: it runs on your own computer with
+ * the service's variables, and the service's DATABASE_URL points at Railway's private network.
  *
- * The output contains the person's own business information (names, quotes from their mail). Share it deliberately.
+ *   railway ssh --service bldg-admin-api -- sh -c 'cd /app && npx tsx scripts/firstTenAudit.ts'                 # the newest own journey
+ *   railway ssh --service bldg-admin-api -- sh -c 'cd /app && npx tsx scripts/firstTenAudit.ts --journey <id>'
+ *   ... --redact      # mask email addresses and shorten quotes
+ *
+ * The output contains the person's own business information. --redact is partial, not anonymisation: names, business
+ * facts and short excerpts of real correspondence remain. Read it before sharing it with anyone.
  */
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../server/db";
@@ -24,6 +29,14 @@ const args = process.argv.slice(2);
 const redact = args.includes("--redact");
 const journeyArg = args[args.indexOf("--journey") + 1];
 const wantedJourney = args.includes("--journey") ? journeyArg : null;
+
+const RUN_INSIDE_RAILWAY =
+  "Run it inside the deployed service: railway ssh --service bldg-admin-api -- sh -c 'cd /app && npx tsx scripts/firstTenAudit.ts --redact'";
+/** The database's host can't be reached from here: typically `railway run` on a laptop, outside the private network. */
+const unreachable = (error: unknown) => {
+  const code = (error as { code?: string; cause?: { code?: string } } | null)?.code ?? (error as { cause?: { code?: string } } | null)?.cause?.code;
+  return ["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH"].includes(code ?? "");
+};
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const clean = (text: unknown, max = 220): string => {
@@ -69,7 +82,7 @@ function warnings(payload: Record<string, unknown>, sources: unknown[]): string[
 
 async function main() {
   const db = await getDb();
-  if (!db) throw new Error("No database (DATABASE_URL). Run through `railway run --service bldg-admin-api`.");
+  if (!db) throw new Error(`No database (DATABASE_URL isn't set). ${RUN_INSIDE_RAILWAY}`);
   const [journey] = wantedJourney
     ? await db.select().from(firstTenJourneys).where(eq(firstTenJourneys.id, wantedJourney)).limit(1)
     : await db.select().from(firstTenJourneys).where(eq(firstTenJourneys.kind, "own")).orderBy(desc(firstTenJourneys.createdAt)).limit(1);
@@ -171,6 +184,7 @@ async function main() {
 main()
   .then(() => process.exit(0))
   .catch(error => {
-    console.error(error instanceof Error ? error.message : error);
+    if (unreachable(error)) console.error(`Couldn't reach the database from here. ${RUN_INSIDE_RAILWAY}`);
+    else console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
