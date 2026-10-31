@@ -10,12 +10,15 @@ import styles from "./send.module.css";
  * (JoystickAcquisitionPage), the Goldline onboarding that builds their world; a finished one goes on to the world.
  */
 export const WORKSPACE_HOME = "/onboarding";
+// The owner sign-in page and the password route keep their historical names (docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md).
+const LEGACY_DAYFORGE_SIGN_IN_PAGE = "/dayforge-login"; // legacy route literal
+const LEGACY_DAYFORGE_PASSWORD_SIGN_IN = "/api/dayforge/auth/login"; // legacy route literal
 /** A workspace whose owner already has a password: sign in, then home. */
-export const WORKSPACE_SIGN_IN = `/dayforge-login?returnTo=${encodeURIComponent(WORKSPACE_HOME)}`;
+export const WORKSPACE_SIGN_IN = `${LEGACY_DAYFORGE_SIGN_IN_PAGE}?returnTo=${encodeURIComponent(WORKSPACE_HOME)}`;
 
 /** The owner's own sign-in, the way today's funnel does it (JoystickAcquisitionPage): the password they just made. */
 export async function signInOwner(email: string, password: string, fetcher: typeof fetch = fetch): Promise<void> {
-  const response = await fetcher(`${apiBase()}/api/dayforge/auth/login`, {
+  const response = await fetcher(`${apiBase()}${LEGACY_DAYFORGE_PASSWORD_SIGN_IN}`, {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },

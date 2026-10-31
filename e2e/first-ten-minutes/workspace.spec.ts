@@ -10,6 +10,10 @@ import { begin, connectOwn, toTheTable } from "./journey";
  * and the landing are the real server's.
  */
 const databaseUrl = process.env.E2E_DATABASE_URL ?? "";
+// The signup tables, entitlement and sign-in page keep their historical names (docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md).
+const LEGACY_DAYFORGE_TABLE = (name: string) => `dayforge_saas_${name}`; // legacy table prefix
+const LEGACY_DAYFORGE_WORKSPACE_ENTITLEMENT = "dayforge_core"; // legacy entitlement key
+const LEGACY_DAYFORGE_SIGN_IN_PAGE = "/dayforge-login"; // legacy route literal
 
 test("a paid first-ten workspace: create a password at the table, go in signed in; later, the way back in", async ({ page, request, context }) => {
   test.setTimeout(300_000);
@@ -30,18 +34,18 @@ test("a paid first-ten workspace: create a password at the table, go in signed i
     // what processLegacyDayforgeBillingWebhook leaves behind for a first-ten signup: an active tenant on a trial, its
     // entitlement, and the signup marked provisioned (server/saas/saasStore.ts)
     await db.execute(
-      `INSERT INTO dayforge_saas_tenants (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status)
+      `INSERT INTO ${LEGACY_DAYFORGE_TABLE("tenants")} (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status)
        VALUES (?,?,?,?,?,?,?,?, 'active')`,
       [tenantId, tenantId, "Wildroot Flowers", "Wildroot Flowers", "#111111", "Nina Vale", ownerEmail, "America/Los_Angeles"]
     );
     await db.execute(
-      `INSERT INTO dayforge_saas_subscriptions (tenantId,planKey,stripeCustomerId,stripeSubscriptionId,status,trialEnd,lastStripeEventId,lastStripeEventCreatedAt)
+      `INSERT INTO ${LEGACY_DAYFORGE_TABLE("subscriptions")} (tenantId,planKey,stripeCustomerId,stripeSubscriptionId,status,trialEnd,lastStripeEventId,lastStripeEventCreatedAt)
        VALUES (?, 'first-ten-e2e', ?, ?, 'trialing', DATE_ADD(NOW(), INTERVAL 7 DAY), ?, NOW())`,
       [tenantId, `cus_e2e_${tenantId}`, `sub_e2e_${tenantId}`, `evt_e2e_${tenantId}`]
     );
-    await db.execute(`INSERT INTO dayforge_saas_entitlements (tenantId,entitlementKey,source,enabled) VALUES (?, 'dayforge_core', 'plan', true)`, [tenantId]);
+    await db.execute(`INSERT INTO ${LEGACY_DAYFORGE_TABLE("entitlements")} (tenantId,entitlementKey,source,enabled) VALUES (?, ?, 'plan', true)`, [tenantId, LEGACY_DAYFORGE_WORKSPACE_ENTITLEMENT]);
     await db.execute(
-      `UPDATE dayforge_saas_onboarding_sessions
+      `UPDATE ${LEGACY_DAYFORGE_TABLE("onboarding_sessions")}
        SET tenantId = ?, status = 'provisioned', currentStep = 'owner_activation', businessName = 'Wildroot Flowers', ownerEmail = ?,
            configurationJson = JSON_OBJECT('kind', 'first_ten', 'businessName', 'Wildroot Flowers', 'contactName', 'Nina Vale', 'contactEmail', ?)
        WHERE id = ?`,
@@ -64,7 +68,7 @@ test("a paid first-ten workspace: create a password at the table, go in signed i
     const me = await (await context.request.get("/api/trpc/auth.me")).json();
     expect(JSON.stringify(me)).toContain(ownerEmail);
     const [owners] = await db.query<mysql.RowDataPacket[]>(
-      `SELECT m.role FROM dayforge_saas_memberships m JOIN dayforge_saas_user_credentials c ON c.tenantId = m.tenantId AND c.userOpenId = m.userOpenId WHERE m.tenantId = ?`,
+      `SELECT m.role FROM ${LEGACY_DAYFORGE_TABLE("memberships")} m JOIN ${LEGACY_DAYFORGE_TABLE("user_credentials")} c ON c.tenantId = m.tenantId AND c.userOpenId = m.userOpenId WHERE m.tenantId = ?`,
       [tenantId]
     );
     expect(owners.map(row => row.role)).toEqual(["owner"]);
@@ -72,12 +76,12 @@ test("a paid first-ten workspace: create a password at the table, go in signed i
     // later, at the table again: the way back in, not a second password
     await page.goto("/joystick-start");
     await expect(page.getByTestId("first-ten-workspace")).toHaveAttribute("data-owner", "ready", { timeout: 60_000 });
-    await expect(page.getByTestId("first-ten-workspace-open")).toHaveAttribute("href", "/dayforge-login?returnTo=%2Fonboarding");
+    await expect(page.getByTestId("first-ten-workspace-open")).toHaveAttribute("href", `${LEGACY_DAYFORGE_SIGN_IN_PAGE}?returnTo=%2Fonboarding`);
   } finally {
-    for (const table of ["dayforge_saas_entitlements", "dayforge_saas_subscriptions", "dayforge_saas_memberships", "dayforge_saas_user_credentials", "users"]) {
+    for (const table of [...["entitlements", "subscriptions", "memberships", "user_credentials"].map(LEGACY_DAYFORGE_TABLE), "users"]) {
       await db.execute(`DELETE FROM ${table} WHERE tenantId = ?`, [tenantId]).catch(() => undefined);
     }
-    await db.execute(`DELETE FROM dayforge_saas_tenants WHERE id = ?`, [tenantId]).catch(() => undefined);
+    await db.execute(`DELETE FROM ${LEGACY_DAYFORGE_TABLE("tenants")} WHERE id = ?`, [tenantId]).catch(() => undefined);
     await db.end();
   }
 });
