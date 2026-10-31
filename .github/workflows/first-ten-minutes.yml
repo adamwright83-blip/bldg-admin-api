@@ -10,6 +10,8 @@ on:
       - "shared/businessKnowledge*"
       - "drizzle/0163_business_knowledge.sql"
       - "scripts/onboarding-intelligence-eval.ts"
+      - "scripts/onboarding-intelligence-real-account.ts"
+      - "scripts/onboarding-cold-test.sh"
       - "shared/firstTenMinutes*"
       - "client/src/pages/firstTenMinutes/**"
       - "client/src/App.tsx"

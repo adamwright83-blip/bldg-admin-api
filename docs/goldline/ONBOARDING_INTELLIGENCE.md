@@ -67,6 +67,92 @@ Every row carries `journey_id` and, once the workspace exists, `tenant_id`. Tena
 interpreter always runs beside a model and is the fallback. Compare models with
 `scripts/onboarding-intelligence-eval.ts` against a local database.
 
+## Cold tests against a real account
+
+`scripts/onboarding-cold-test.sh` (which runs `scripts/onboarding-intelligence-real-account.ts`, on
+`server/businessKnowledge/coldTest.ts`) tests
+the intelligence against a connected Google account. CI never runs it, and every run needs the account owner's
+authorization (`--i-have-authorization`).
+
+What every run guarantees:
+
+- **It starts from nothing.** It runs on a throwaway test journey whose id is `coldtest-` and 27 hex characters. A real
+  journey id is a UUID and can't take that form. Before anything runs, every table it writes is shown to hold no row
+  for that id.
+- **Of the person's own journey, only its Google (and Slack) connection is used.** Its knowledge, findings, answers,
+  portrait, draft and workspace are never read or written. A token refreshed during the run stays in memory, so the
+  connection row isn't written either.
+- **Google is only read.** Every request goes through `readOnlyFetch`. Reads and token refreshes pass. Anything else
+  (send, change, delete, revoke) is refused before it leaves the process. Nothing beyond the granted scopes is requested.
+- **It is private.** No prompt or reply goes to analytics. Model spend is booked to `first_ten:coldtest-…`, never to
+  the person's journey. Those spend rows stay, so JOYSTICK's cost ledger keeps matching the provider's bill.
+- **It deletes exactly what it wrote**, by exact id, and proves nothing is left. Deletion refuses any id that isn't a
+  cold-test id, and any id a journey, a connection or a workspace has carried.
+
+Two kinds of test:
+
+- `--mode intelligence` (the default) runs the investigation alone. You get its conclusions, Claire's questions,
+  coverage, tokens and cost.
+- `--mode journey` runs the whole first ten minutes:
+  - the crew's reading, with the investigation;
+  - Claire's questions, which you answer in the terminal (or pass `--answers skip`);
+  - the portrait;
+  - the chapter, played as far as the writing table. A draft is prepared there; nothing is sent or activated.
+
+Run it from a checkout that `railway link` has linked to the production project. The wrapper,
+`scripts/onboarding-cold-test.sh`, runs it with production's settings. It reaches the database at the MySQL service's
+public address, because production's own `DATABASE_URL` is private to Railway.
+
+```bash
+scripts/onboarding-cold-test.sh --list
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization --mode journey
+scripts/onboarding-cold-test.sh --journey <journey id> --i-have-authorization --investigator gemini --model gemini-2.5-flash --runs 2
+scripts/onboarding-cold-test.sh --sweep
+```
+
+- `--list` shows the own journeys with Google connected: id, account, stage, and whether it has a workspace.
+- `--investigator claude|gemini|heuristic` and `--model <id>` choose the investigator; the default is the server's
+  setting. The reading and the portrait always use the server's Claude model.
+- `--expect <file>`: your expectations (below).
+- `--runs <n>`: n tests in a row, each from nothing.
+- `--out-dir <dir>`: where reports go; the default is `tmp/onboarding-intelligence/runs`.
+- `--input-cents-per-million` and `--output-cents-per-million` price a model JOYSTICK's price table doesn't know, such
+  as Gemini.
+- `--keep` keeps a run's rows so you can inspect them. Then `--sweep --yes` deletes them. Plain `--sweep` only lists
+  what a killed or kept run left.
+
+**The report** is a `.md` file with a `.json` twin, readable only by you (mode 600), under the git-ignored `tmp/`. It
+lists what JOYSTICK concluded (current, being prepared, paused, past, unknown, people, how names relate), Claire's
+questions, the rule checks, source coverage and what couldn't be read completely. It also gives the model, tokens,
+time and estimated cost, and what changed since the previous run of the same kind for the same journey.
+With `--expect` it also lists discoveries, omissions, incorrect conclusions, and names your expectations don't mention.
+It never holds message bodies, document text or quotes, email addresses or phone numbers.
+
+**Expectations** are a JSON file you keep outside the repo:
+
+```json
+{
+  "current": ["Acme Cleaning", "Acme Building Services|ABS"],
+  "prelaunch": ["New App"],
+  "paused": [],
+  "past": ["Website proposals"],
+  "people": ["Jordan Lee|Jordan"],
+  "notCurrent": ["Website proposals"],
+  "absent": [],
+  "relationships": [{ "subject": "Acme Building Services", "type": "related_operation", "object": "Acme Cleaning" }]
+}
+```
+
+- Names match whatever their case, punctuation or company suffix.
+- `|` separates aliases.
+- Relationship types are those in `shared/businessKnowledge.ts`.
+
+`server/businessKnowledge/coldTest.mysql.integration.test.ts` proves the isolation. It runs two consecutive cold tests
+of each kind against a controlled Google, for a person who already has an answer, a kept portrait and a draft. Neither
+run sees that history or the other run. Both clean up to zero rows, and the person's rows, connection included, are
+unchanged byte for byte.
+
 ## Retention and deletion
 
 - Evidence keeps ≤300-character redacted excerpts. Personal-finance and personal-record documents and bank-detail columns
