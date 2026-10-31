@@ -194,6 +194,33 @@ export type GmailReader = {
   getMessage(id: string): Promise<GmailMessage>;
 };
 
+/**
+ * The tenant's connected Gmail as an authorised client, for reading that needs more than verification codes (Gmail
+ * reply detection: users.watch and users.history, both covered by the gmail.readonly grant). Null when not connected.
+ */
+export async function jawbreakerGmailAuthFor(tenantId: string): Promise<{ auth: ReturnType<typeof oauthClient>; connectedEmail: string | null } | null> {
+  const row = await loadConnection(tenantId);
+  if (!row) return null;
+  const client = oauthClient();
+  client.setCredentials({ refresh_token: decryptGmailToken(row.encryptedRefreshToken) });
+  return { auth: client, connectedEmail: row.connectedEmail };
+}
+
+/** Connected tenants and their accounts, for Gmail reply detection to watch. */
+export async function listJawbreakerGmailConnections(): Promise<Array<{ tenantId: string; connectedEmail: string | null; updatedAt: Date | null }>> {
+  if (!isJawbreakerGmailConfigured()) return [];
+  const db = await getDb();
+  if (!db) return [];
+  await ensureTable();
+  // updatedAt moves when the operator reconnects (a new refresh token is stored)
+  const result = await db.execute(sql`SELECT tenantId, connectedEmail, updatedAt FROM jawbreaker_gmail_connections`);
+  return rows<{ tenantId: string; connectedEmail: string | null; updatedAt: Date | string | null }>(result).map(row => ({
+    tenantId: row.tenantId,
+    connectedEmail: row.connectedEmail,
+    updatedAt: row.updatedAt ? new Date(row.updatedAt) : null,
+  }));
+}
+
 async function gmailReaderFor(tenantId: string): Promise<GmailReader | null> {
   const row = await loadConnection(tenantId);
   if (!row) return null;

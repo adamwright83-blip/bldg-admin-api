@@ -70,6 +70,7 @@ import { posthogBrowserConfig } from "./posthogServer";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startCleanCloudDirectScheduler } from "../integrations/cleancloud/browserSync/cleancloudDirectScheduler";
+import { registerGmailPushRoute, startGmailReplyDetection } from "../integrations/gmail/replies/replyService";
 import { startEconomicOutboxDrainer } from "../integrations/cleancloud/browserSync/worldOutbox";
 import { startAutonomousPersistentOperatorWorkers } from "../agents/persistentOperator/autonomousWorkerService";
 import { startDaphneConsolidationWorker } from "../agents/daphne/consolidationWorker";
@@ -373,6 +374,8 @@ async function startServer() {
   registerFirstTenOAuthRoutes(app);
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
+  // Gmail reply detection: Google Cloud Pub/Sub pushes mailbox-change notices here (authenticated; off unless enabled)
+  registerGmailPushRoute(app);
   registerVendorOnboardingSessionRoutes(app);
   registerVendorBookingPublicRoutes(app);
   // Level 4 War — Twilio call-strike status callbacks (armed; quiet until
@@ -921,6 +924,8 @@ async function startServer() {
         .catch(error => console.warn("[ClaireLedger] idle sweep not started", error instanceof Error ? error.message : error));
       const stopCleanCloudDirectScheduler = startCleanCloudDirectScheduler();
       server.once("close", stopCleanCloudDirectScheduler);
+      const stopGmailReplyDetection = startGmailReplyDetection();
+      server.once("close", stopGmailReplyDetection);
       void import("../claire/conversation/transcriptLog")
         .then(({ emitLatestConfiguredClaireTranscripts }) =>
           emitLatestConfiguredClaireTranscripts()
