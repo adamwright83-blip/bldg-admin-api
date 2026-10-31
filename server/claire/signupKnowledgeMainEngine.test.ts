@@ -193,6 +193,8 @@ describe("assertion guard: a send to someone the operator wrote to", () => {
     expect(passes("Your note to Elena was sent and the win-back text to Sophie was sent too.", withSignup())).toBe(false);
     expect(passes("Your note to Elena with the win-back to Sophie was sent.", withSignup())).toBe(false);
     expect(passes("I sent your note to Elena.", withSignup())).toBe(false);
+    expect(passes("I've sent your note to Elena.", withSignup())).toBe(false);
+    expect(passes("Your note to Elena was sent by me on Friday.", withSignup())).toBe(false);
     expect(passes("Your note to Elena was sent on Friday.", base)).toBe(false);
   });
 

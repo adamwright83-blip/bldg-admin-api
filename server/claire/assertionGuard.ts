@@ -478,6 +478,11 @@ function assertedPart(clause: Clause): string | null {
 }
 
 const OUTBOUND_TARGET = /\b(?:to|for|sent)\s+(\p{Lu}[\p{L}'-]*)/gu;
+/**
+ * A send the operator made themselves (their own Sent folder, or a note they approved) licenses "your note went",
+ * never Claire or JOYSTICK claiming to have sent it: first-person or Claire-as-agent clauses are never licensed.
+ */
+const SPEAKER_AS_SENDER = /\b(?:I|I've|I'd|I'll|me|we|we've|we'd|us|Claire|JOYSTICK)\b/;
 
 /** Every named recipient in the clause ("to Elena", "for Marco") is one of these people. */
 function onlyTheseRecipients(text: string, people: InventoryCounterpart[]): boolean {
@@ -504,6 +509,7 @@ function withoutLicensedCounterpartSends(generatedText: string, patterns: RegExp
     if (!named.length || named.some(verdict => verdict.status !== "verified")) continue;
     if (!named.some(verdict => assertsSendTo(clause.text, verdict.who))) continue;
     if (!onlyTheseRecipients(clause.text, named.map(verdict => verdict.who))) continue;
+    if (SPEAKER_AS_SENDER.test(clause.text)) continue;
     for (let index = clause.start; index < clause.end; index++) units[index] = "#";
   }
   return units.join("");
