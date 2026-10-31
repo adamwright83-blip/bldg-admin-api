@@ -77,7 +77,7 @@ function monthlyPrice(overrides: Record<string, unknown> = {}) {
     active: true,
     unit_amount: JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS,
     currency: "usd",
-    recurring: { interval: "month" },
+    recurring: { interval: "month", interval_count: 1 },
     ...overrides,
   };
 }
@@ -88,7 +88,7 @@ function annualPrice(overrides: Record<string, unknown> = {}) {
     active: true,
     unit_amount: JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS,
     currency: "usd",
-    recurring: { interval: "year" },
+    recurring: { interval: "year", interval_count: 1 },
     ...overrides,
   };
 }
@@ -155,6 +155,30 @@ describe("JOYSTICK advertised Stripe offer", () => {
     });
     expect(swapped.ok).toBe(false);
     if (!swapped.ok) expect(swapped.code).toBe("stale_price");
+
+    const unprovenActive = checkAdvertisedStripePrice({
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      trialDays: 7,
+      configuredPriceId: "price_monthly_test",
+      price: monthlyPrice({ active: null }),
+    });
+    expect(unprovenActive.ok).toBe(false);
+    if (!unprovenActive.ok) expect(unprovenActive.code).toBe("stale_price");
+
+    const quarterly = checkAdvertisedStripePrice({
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      trialDays: 7,
+      configuredPriceId: "price_monthly_test",
+      price: monthlyPrice({
+        recurring: { interval: "month", interval_count: 3 },
+      }),
+    });
+    expect(quarterly.ok).toBe(false);
+    if (!quarterly.ok) {
+      expect(quarterly.code).toBe("price_mismatch");
+      expect(quarterly.reason).toContain("interval_count=3");
+      expect(quarterly.reason).toContain("expected 1");
+    }
   });
 
   it("treats a missing annual price as unconfigured and a mismatched pair as a conflict", () => {
@@ -402,6 +426,81 @@ describe("JOYSTICK public checkout fail-closed", () => {
         resumeToken: "resume-token",
         planKey: JOYSTICK_MONTHLY_PLAN_KEY,
         requestId: "req-checkout-1",
+        stripe: stripe as never,
+      })
+    ).rejects.toMatchObject({ code: "stale_price" });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it("reuses only an open card-required subscription session for the same price", async () => {
+    const stripe = checkoutStripe();
+    const plan = {
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      stripePriceId: "price_monthly_test",
+      trialDays: 7,
+    };
+    vi.mocked(requireOnboardingSession).mockResolvedValue(
+      onboarding({ stripeCheckoutSessionId: "cs_open" }) as never
+    );
+    vi.mocked(assertSaasPlanCanCheckout).mockResolvedValue(plan as never);
+    stripe.prices.retrieve.mockResolvedValue(monthlyPrice());
+    stripe.checkout.sessions.retrieve.mockResolvedValue({
+      id: "cs_open",
+      url: "https://checkout.example/open",
+      status: "open",
+      mode: "subscription",
+      payment_method_collection: "always",
+      payment_method_types: ["card"],
+      line_items: { data: [{ price: { id: "price_monthly_test" } }] },
+    });
+    const checkout = await createLegacyDayforgeSubscriptionCheckout({
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      resumeToken: "resume-token",
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      requestId: "req-checkout-reuse",
+      stripe: stripe as never,
+    });
+    expect(checkout).toEqual({
+      id: "cs_open",
+      url: "https://checkout.example/open",
+    });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+
+    stripe.checkout.sessions.retrieve.mockResolvedValue({
+      id: "cs_open",
+      url: "https://checkout.example/open",
+      status: "open",
+      mode: "subscription",
+      payment_method_collection: "if_required",
+      payment_method_types: ["card"],
+      line_items: { data: [{ price: { id: "price_monthly_test" } }] },
+    });
+    await expect(
+      createLegacyDayforgeSubscriptionCheckout({
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        resumeToken: "resume-token",
+        planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+        requestId: "req-checkout-reuse",
+        stripe: stripe as never,
+      })
+    ).rejects.toMatchObject({ code: "stale_price" });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+
+    stripe.checkout.sessions.retrieve.mockResolvedValue({
+      id: "cs_open",
+      url: "https://checkout.example/expired",
+      status: "expired",
+      mode: "subscription",
+      payment_method_collection: "always",
+      payment_method_types: ["card"],
+      line_items: { data: [{ price: { id: "price_monthly_test" } }] },
+    });
+    await expect(
+      createLegacyDayforgeSubscriptionCheckout({
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        resumeToken: "resume-token",
+        planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+        requestId: "req-checkout-reuse",
         stripe: stripe as never,
       })
     ).rejects.toMatchObject({ code: "stale_price" });

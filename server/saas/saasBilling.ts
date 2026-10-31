@@ -232,7 +232,29 @@ async function reuseAdvertisedCheckoutSession(
       `Checkout session ${sessionId} does not use configured price ${plan.stripePriceId}`
     );
   }
+  assertReusedAdvertisedSession(existing, sessionId);
   return { id: existing.id, url: existing.url };
+}
+
+function assertReusedAdvertisedSession(
+  session: Stripe.Checkout.Session,
+  sessionId: string
+): void {
+  if (session.status !== "open" || session.mode !== "subscription") {
+    throw new JoystickCheckoutClosedError(
+      "stale_price",
+      `Checkout session ${sessionId} is not an open subscription checkout`
+    );
+  }
+  if (
+    session.payment_method_collection !== "always" ||
+    !session.payment_method_types?.includes("card")
+  ) {
+    throw new JoystickCheckoutClosedError(
+      "stale_price",
+      `Checkout session ${sessionId} does not require a card`
+    );
+  }
 }
 
 function mapSubscriptionStatus(
