@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MailItem } from "../understanding/sources";
 import { awaitingOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
-import { computeAwaitingReplies } from "./awaitingReplies";
+import { clearAwaitingRepliesCache, computeAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "./awaitingReplies";
 
 const NINA = "nina@wildrootflowers.example";
 const now = new Date("2026-11-02T17:00:00Z");
@@ -79,5 +79,31 @@ describe("who the person is waiting to hear back from", () => {
       "You're waiting to hear back from Teo Marsh (9 days) and Elena Ruiz (5 days) and 1 more."
     );
     expect(awaitingOpeningLine({ checkedAt: now.toISOString(), account: NINA, items: [], unavailable: null, scanned: { sent: 0, received: 0, days: 30 } })).toBeNull();
+  });
+});
+
+describe("reading the waiting list", () => {
+  it("reads once per workspace at a time, and a background refresh goes through the same read", async () => {
+    clearAwaitingRepliesCache();
+    let calls = 0;
+    let release: (value: null) => void = () => undefined;
+    const journeyFor = () => {
+      calls += 1;
+      return new Promise<null>(resolve => (release = resolve));
+    };
+    const first = readAwaitingReplies("df_one", { journeyFor });
+    const second = readAwaitingReplies("df_one", { journeyFor });
+    refreshAwaitingRepliesInBackground("df_one", { journeyFor });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    release(null);
+    expect(await first).toBeNull();
+    expect(await second).toBeNull();
+    // finished: the next look reads again
+    const third = readAwaitingReplies("df_one", { journeyFor });
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    release(null);
+    expect(await third).toBeNull();
   });
 });

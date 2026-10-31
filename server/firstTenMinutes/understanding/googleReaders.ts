@@ -212,6 +212,42 @@ export function gmailReader(access: GoogleAccess, deps: Deps = {}) {
     /** messages from `address` to the person since `since`: has someone written back */
     receivedFrom: async (address: string, since: Date): Promise<MailItem[]> =>
       (await read(`from:${address} -in:sent -in:chats after:${Math.floor(since.getTime() / 1000)}`, 10)).items,
+    /**
+     * Has anyone answered since `since`: a message from `address`, or from anyone but the owner in `threadId`. Asked
+     * of Gmail directly for that one person and conversation, so it never rests on a bounded sample of the inbox.
+     * Every match is read back and checked (sender, time) rather than trusting the search alone. A thread Gmail no
+     * longer has is no answer. Null when Gmail wasn't shared; a Gmail failure throws.
+     */
+    async repliedSince(address: string, threadId: string | null, since: Date): Promise<boolean | null> {
+      if (!granted) return null;
+      const after = since.getTime();
+      type Meta = { id: string; internalDate?: string; labelIds?: string[]; payload?: { headers?: Array<{ name: string; value: string }> } };
+      const answers = (message: Meta, from?: string) => {
+        const headers = new Map((message.payload?.headers ?? []).map(header => [header.name.toLowerCase(), header.value]));
+        const sender = parseAddressList(headers.get("from"))[0]?.email ?? "";
+        if (!sender || Number(message.internalDate ?? 0) <= after || message.labelIds?.includes("SENT")) return false;
+        if (sameAddress(sender, access.ownerEmail)) return false;
+        if (from) return sameAddress(sender, from);
+        return !looksAutomated({ from: sender, listUnsubscribe: headers.has("list-unsubscribe") });
+      };
+      const metadata = "format=metadata&metadataHeaders=From&metadataHeaders=List-Unsubscribe";
+      const ids = await listMessageIds(client, `from:${address} -in:sent -in:chats after:${Math.floor(after / 1000)}`, 5);
+      for (const id of ids) {
+        try {
+          if (answers(await client.json<Meta>(`${GMAIL}/messages/${encodeURIComponent(id)}?${metadata}`), address)) return true;
+        } catch (error) {
+          if (!(error instanceof ProviderError && error.status === 404)) throw error;
+        }
+      }
+      if (!threadId) return false;
+      try {
+        const thread = await client.json<{ messages?: Meta[] }>(`${GMAIL}/threads/${encodeURIComponent(threadId)}?${metadata}`);
+        return (thread.messages ?? []).some(message => answers(message));
+      } catch (error) {
+        if (error instanceof ProviderError && error.status === 404) return false;
+        throw error;
+      }
+    },
     async attachment(messageId: string, attachmentId: string): Promise<Buffer> {
       const body = await client.json<{ data?: string }>(
         `${GMAIL}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`

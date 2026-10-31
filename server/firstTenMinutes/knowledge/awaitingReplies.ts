@@ -2,7 +2,7 @@ import type { AwaitingReplies, AwaitingReply } from "../../../shared/firstTenMin
 import type { JourneyRow } from "../store";
 import { googleAccessFor } from "../understanding/deps";
 import { ProviderError } from "../providerFetch";
-import { gmailReader, type GoogleAccess } from "../understanding/googleReaders";
+import { gmailReader, mapLimit, type GoogleAccess } from "../understanding/googleReaders";
 import type { MailItem } from "../understanding/sources";
 import { journeyForTenant } from "./tenantKnowledge";
 
@@ -82,6 +82,7 @@ const SENT_LIMIT = 60;
 const RECEIVED_LIMIT = 150;
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<string, { at: number; value: AwaitingReplies }>();
+const inflight = new Map<string, Promise<AwaitingReplies | null>>();
 
 /** The last answer for this tenant, if it is fresh: what Claire uses mid-conversation without asking Google again. */
 export function cachedAwaitingReplies(tenantId: string, now = Date.now()): AwaitingReplies | null {
@@ -91,6 +92,16 @@ export function cachedAwaitingReplies(tenantId: string, now = Date.now()): Await
 
 export function clearAwaitingRepliesCache(): void {
   cache.clear();
+  inflight.clear();
+}
+
+/**
+ * Start a fresh read in the background when the cached one has expired, without waiting for it: a conversation
+ * already under way keeps going on the list it has, and its next turn gets the fresh one. One read per tenant at a time.
+ */
+export function refreshAwaitingRepliesInBackground(tenantId: string, deps: AwaitingReaderDeps = {}): void {
+  if (cachedAwaitingReplies(tenantId, (deps.now ?? (() => new Date()))().getTime())) return;
+  void readAwaitingReplies(tenantId, deps).catch(() => null);
 }
 
 /**
@@ -102,6 +113,14 @@ export async function readAwaitingReplies(tenantId: string, deps: AwaitingReader
   const now = (deps.now ?? (() => new Date()))();
   const fresh = cachedAwaitingReplies(tenantId, now.getTime());
   if (fresh) return fresh;
+  const running = inflight.get(tenantId);
+  if (running) return running;
+  const read = readFromGmail(tenantId, now, deps).finally(() => inflight.delete(tenantId));
+  inflight.set(tenantId, read);
+  return read;
+}
+
+async function readFromGmail(tenantId: string, now: Date, deps: AwaitingReaderDeps): Promise<AwaitingReplies | null> {
   const journey = await (deps.journeyFor ?? journeyForTenant)(tenantId);
   if (!journey) return null;
   const empty = (unavailable: string, account: string | null = null): AwaitingReplies => ({
@@ -119,15 +138,20 @@ export async function readAwaitingReplies(tenantId: string, deps: AwaitingReader
   try {
     const [sent, received] = await Promise.all([reader.sentSince(since, SENT_LIMIT), reader.receivedSince(since, RECEIVED_LIMIT)]);
     const unavailable = sent.unavailable ?? received.unavailable;
-    value = unavailable
-      ? empty(unavailable, access.ownerEmail || null)
-      : {
-          checkedAt: now.toISOString(),
-          account: access.ownerEmail || null,
-          items: computeAwaitingReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, now }),
-          unavailable: null,
-          scanned: { sent: sent.items.length, received: received.items.length, days: AWAITING_WINDOW.maxDays },
-        };
+    if (unavailable) value = empty(unavailable, access.ownerEmail || null);
+    else {
+      // the inbox sample is bounded: before anyone is listed, Gmail is asked about that person and conversation
+      // directly, so a reply outside the sample (or filed under another tab) still counts as a reply
+      const candidates = computeAwaitingReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, now });
+      const answered = await mapLimit(candidates, 4, item => reader.repliedSince(item.person.address, item.threadId, new Date(item.sentAt)));
+      value = {
+        checkedAt: now.toISOString(),
+        account: access.ownerEmail || null,
+        items: candidates.filter((_, index) => answered[index] === false),
+        unavailable: null,
+        scanned: { sent: sent.items.length, received: received.items.length, days: AWAITING_WINDOW.maxDays },
+      };
+    }
   } catch (error) {
     value = empty(error instanceof ProviderError ? `Gmail didn't answer just now (${error.status}).` : "Gmail couldn't be read just now.", access.ownerEmail || null);
     // a failure is not cached: the next look tries again
