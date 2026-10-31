@@ -17,6 +17,10 @@ import { journeyForTenant } from "./tenantKnowledge";
  * address): a "thanks!" to a stranger is not waiting on anyone.
  */
 export const AWAITING_WINDOW = { minDays: 2, maxDays: 30 } as const;
+/** how many people the list holds */
+export const AWAITING_SHOWN = 12;
+/** how many candidates Gmail is asked about, in ranked order, to fill the list: bounds the calls per read */
+export const AWAITING_CHECKED = 30;
 
 const AUTOMATED_ADDRESS = /(?:^|[._+-])(?:no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounces?|alerts?|billing|receipts?|support)(?:[._+-]|@)/i;
 
@@ -26,6 +30,8 @@ export function computeAwaitingReplies(input: {
   ownerEmail: string;
   now: Date;
   window?: { minDays: number; maxDays: number };
+  /** how many to return, best first (default 12); the reader asks for more and confirms them with Gmail */
+  limit?: number;
 }): AwaitingReply[] {
   const window = input.window ?? AWAITING_WINDOW;
   const owner = input.ownerEmail.toLowerCase();
@@ -67,14 +73,17 @@ export function computeAwaitingReplies(input: {
     });
   }
   // a question asked first, then the longest wait
-  return items.sort((a, b) => Number(b.asked) - Number(a.asked) || b.waitingDays - a.waitingDays).slice(0, 12);
+  return items.sort((a, b) => Number(b.asked) - Number(a.asked) || b.waitingDays - a.waitingDays).slice(0, input.limit ?? AWAITING_SHOWN);
 }
 
 /**
  * Who wrote back recently: a message from a person (not automated) the owner had already written to in the window
  * before that message arrived. Newest first; one per person (their latest). Each is one real message in their inbox.
  */
-export function computeRecentReplies(input: { sent: readonly MailItem[]; received: readonly MailItem[]; ownerEmail: string }): RecentReply[] {
+/** how many recent replies a read keeps: everyone the bounded inbox read can hold, for routines to record */
+export const RECENT_REPLIES_KEPT = 150;
+
+export function computeRecentReplies(input: { sent: readonly MailItem[]; received: readonly MailItem[]; ownerEmail: string; limit?: number }): RecentReply[] {
   const owner = input.ownerEmail.toLowerCase();
   const wroteTo = new Map<string, number>();
   for (const message of input.sent) {
@@ -95,7 +104,7 @@ export function computeRecentReplies(input: { sent: readonly MailItem[]; receive
   }
   return [...latest.values()]
     .sort((a, b) => b.at.getTime() - a.at.getTime())
-    .slice(0, 12)
+    .slice(0, input.limit ?? 12)
     .map(message => {
       const words = message.text.replace(/\s+/g, " ").trim();
       return {
@@ -189,13 +198,24 @@ async function readFromGmail(tenantId: string, now: Date, deps: AwaitingReaderDe
     else {
       // the inbox sample is bounded: before anyone is listed, Gmail is asked about that person and conversation
       // directly, so a reply outside the sample (or filed under another tab) still counts as a reply
-      const candidates = computeAwaitingReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, now });
-      const answered = await mapLimit(candidates, 4, item => reader.repliedSince(item.person.address, item.threadId, new Date(item.sentAt)));
+      // ranked candidates are confirmed in order, in small batches, until the list is full: when the top ones turn
+      // out to have replied, the next ones move up instead of the list coming back short
+      const candidates = computeAwaitingReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, now, limit: AWAITING_CHECKED });
+      const confirmed: AwaitingReply[] = [];
+      for (let start = 0; start < candidates.length && confirmed.length < AWAITING_SHOWN; start += 4) {
+        const batch = candidates.slice(start, start + 4);
+        const answered = await mapLimit(batch, 4, item => reader.repliedSince(item.person.address, item.threadId, new Date(item.sentAt)));
+        batch.forEach((item, index) => {
+          if (answered[index] === false && confirmed.length < AWAITING_SHOWN) confirmed.push(item);
+        });
+      }
       value = {
         checkedAt: now.toISOString(),
         account: access.ownerEmail || null,
-        items: candidates.filter((_, index) => answered[index] === false),
-        replies: computeRecentReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail }),
+        items: confirmed,
+        // every recent reply the read saw (bounded by the inbox read), not just the newest few: a routine records them
+        // all before its next check starts after them; Claire's prompt and the card take the newest few
+        replies: computeRecentReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, limit: RECENT_REPLIES_KEPT }),
         unavailable: null,
         scanned: { sent: sent.items.length, received: received.items.length, days: AWAITING_WINDOW.maxDays },
       };

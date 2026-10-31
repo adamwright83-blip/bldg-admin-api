@@ -1,4 +1,4 @@
-import { awaitingOpeningLine, nextLastSeenMark, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
+import { awaitingForBriefing, awaitingOpeningLine, nextLastSeenMark, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
 import { cachedAwaitingReplies, readAwaitingReplies, refreshAwaitingRepliesInBackground } from "../../firstTenMinutes/knowledge/awaitingReplies";
 import { routinesForBriefing, routinesOpeningLine } from "../../../shared/claireRoutines";
 import { listRoutineViews } from "../routines/service";
@@ -280,7 +280,7 @@ export const weeklyMissionRouter = router({
         (opening
           ? await Promise.race([readAwaitingReplies(identity.tenantId), new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))]).catch(() => null)
           : null);
-      if (awaiting) session.showrunner.briefing.awaitingReplies = awaiting;
+      if (awaiting) session.showrunner.briefing.awaitingReplies = awaitingForBriefing(awaiting);
       // Claire's own voice (the same xAI voice as her calls) when configured; otherwise the client says so.
       const voiced = <T extends { speak: string }>(r: T) => ({
         ...r,
@@ -322,7 +322,7 @@ export const weeklyMissionRouter = router({
           pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
           // where the first message from signup stands (First Ten Minutes), when there is one
           signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
-          sinceLastVisitLine(b.awaitingReplies, lastSeen) ?? "",
+          sinceLastVisitLine(awaiting ?? b.awaitingReplies, lastSeen) ?? "",
           routinesOpeningLine(routineViews ?? [], lastSeen) ?? "",
           awaitingOpeningLine(b.awaitingReplies) ?? "",
           "What do you need?",

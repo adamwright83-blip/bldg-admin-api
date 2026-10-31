@@ -218,3 +218,9 @@ export function gmailComposeUrl(mail: { to: { address: string }; subject: string
   const params = new URLSearchParams({ view: "cm", fs: "1", to: mail.to.address, su: mail.subject, body: mail.body });
   return `https://mail.google.com/mail/u/${encodeURIComponent(account ?? "0")}/?${params}`;
 }
+
+/** How many recent replies Claire's prompt carries: the newest few. Routines and the "since your last visit" count use them all. */
+export const BRIEFING_REPLIES_SHOWN = 12;
+export function awaitingForBriefing(awaiting: AwaitingReplies): AwaitingReplies {
+  return awaiting.replies && awaiting.replies.length > BRIEFING_REPLIES_SHOWN ? { ...awaiting, replies: awaiting.replies.slice(0, BRIEFING_REPLIES_SHOWN) } : awaiting;
+}
