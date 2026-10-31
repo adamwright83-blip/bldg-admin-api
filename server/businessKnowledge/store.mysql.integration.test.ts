@@ -138,6 +138,35 @@ describe.skipIf(!allowed)("business knowledge on MySQL", () => {
     expect((await store.assertClaim(s, answer)).outcome).toBe("unchanged");
   });
 
+  it("the same inference on newer evidence refreshes its support without a new version", async () => {
+    const store = await import("./store");
+    const s = scope();
+    const farm = await store.upsertEntity(s, { kind: "company", name: "Fresh Farm" });
+    await store.assertClaim(s, { subjectEntityId: farm, predicate: "status", value: "active", basis: "inferred", confidence: 70, rationale: "most recently 2026-09-01", evidenceIds: ["e1"], effectiveFrom: at("2026-09-01"), createdBy: "reconciler" });
+    expect((await store.assertClaim(s, { subjectEntityId: farm, predicate: "status", value: "active", basis: "inferred", confidence: 85, rationale: "most recently 2026-10-25", evidenceIds: ["e1", "e2"], effectiveFrom: at("2026-10-25"), createdBy: "reconciler" })).outcome).toBe("unchanged");
+    const [row] = await store.liveAssertions(s, { subjectEntityId: farm });
+    expect([row.version, row.rationale, row.confidence, row.evidenceIdsJson, row.effectiveFrom?.toISOString().slice(0, 10)]).toEqual([1, "most recently 2026-10-25", 85, ["e1", "e2"], "2026-10-25"]);
+  });
+
+  it("a relationship in conflict is asked and settled as a relationship, never as a status", async () => {
+    const store = await import("./store");
+    const { proposeQuestions, answerQuestion } = await import("./clarify");
+    const s = scope();
+    const farm = await store.upsertEntity(s, { kind: "company", name: "Conflict Farm" });
+    const valet = await store.upsertEntity(s, { kind: "brand", name: "Conflict Valet" });
+    await store.assertClaim(s, { subjectEntityId: valet, predicate: "relationship", objectEntityId: farm, value: "brand_of", basis: "user_confirmed", detail: "Valet is our trading name", confidence: 100, rationale: "You said so.", evidenceIds: [], createdBy: "user" });
+    expect((await store.assertClaim(s, { subjectEntityId: valet, predicate: "relationship", objectEntityId: farm, value: "separate_business", basis: "observed", confidence: 70, rationale: "a separate invoice", evidenceIds: ["e7"], createdBy: "investigator" })).outcome).toBe("conflict");
+    await proposeQuestions(s, now);
+    const question = (await store.questions(s)).find(row => row.topicKey.startsWith("conflict:"))!;
+    expect(question.kind).toBe("relationship");
+    expect(question.entityIdsJson.sort()).toEqual([farm, valet].sort());
+    const outcome = await answerQuestion(s, question.id, "They are separate businesses now.", now);
+    expect(outcome.status).toBe("resolved");
+    const live = await store.liveAssertions(s);
+    expect(live.filter(row => row.predicate === "status")).toEqual([]);
+    expect(live.filter(row => row.predicate === "relationship").map(row => [row.value, row.state, row.basis])).toEqual([["separate_business", "current", "user_confirmed"]]);
+  });
+
   it("one investigation at a time, even when two start at once", async () => {
     const store = await import("./store");
     const raced = scope();

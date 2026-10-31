@@ -156,7 +156,15 @@ export const bkQuestions = mysqlTable(
   })
 );
 
-export type ResearchRecord = { question: string; entityIds: string[]; status: "answered" | "unanswered" | "insufficient_evidence"; searches: string[] };
+/** One research question an investigation asked itself, what it searched for it, and how it ended. */
+export type ResearchRecord = {
+  question: string;
+  entityIds: string[];
+  status: "answered" | "unanswered" | "insufficient_evidence";
+  searches: string[];
+  /** the coverage of those searches, so a later run knows what was already checked for these entities */
+  coverage?: CoverageEntry[];
+};
 
 export const bkRuns = mysqlTable(
   "business_knowledge_runs",
