@@ -291,67 +291,99 @@ export function MachineRailway({
         <JunctionSockets cx={east.x} cy={east.y} side="east" activePosition={state.eastJunction} />
 
         {/* Rotating Turntable Disks */}
-        {/* West Junction Turntable */}
+        {/* West Junction Turntable Assembly */}
         <g transform={`translate(${west.x}, ${west.y})`}>
-          <circle r="50" fill="#2a2119" stroke="#b8883b" strokeWidth="5" />
+          <circle r="58" fill="#140f0a" stroke="#5a452d" strokeWidth="2.5" filter="url(#railShadow)" />
+          <image
+            href="/assets/first-ten/impossible-machine/switch-details.png"
+            x="-62"
+            y="-62"
+            width="124"
+            height="124"
+            style={{ pointerEvents: "none" }}
+          />
+          {upperActive || lowerActive || centerActive ? (
+            <circle r="46" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+          ) : null}
           <motion.g
             animate={{ rotate: westAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 220, damping: 18 }}
           >
-            <line x1="-46" y1="0" x2="46" y2="0" stroke="url(#brassRail)" strokeWidth="11" strokeLinecap="round" />
-            <circle r="11" fill="#c98a35" stroke="#2a2119" strokeWidth="3" />
+            <image
+              href="/assets/first-ten/impossible-machine/turntable-junction.png"
+              x="-48"
+              y="-48"
+              width="96"
+              height="96"
+            />
           </motion.g>
         </g>
 
-        {/* East Junction Turntable */}
+        {/* East Junction Turntable Assembly */}
         <g transform={`translate(${east.x}, ${east.y})`}>
-          <circle r="50" fill="#2a2119" stroke="#b8883b" strokeWidth="5" />
+          <circle r="58" fill="#140f0a" stroke="#5a452d" strokeWidth="2.5" filter="url(#railShadow)" />
+          <image
+            href="/assets/first-ten/impossible-machine/switch-details.png"
+            x="-62"
+            y="-62"
+            width="124"
+            height="124"
+            style={{ pointerEvents: "none" }}
+          />
+          {upperActive || lowerActive || centerActive ? (
+            <circle r="46" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+          ) : null}
           <motion.g
             animate={{ rotate: eastAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 220, damping: 18 }}
           >
-            <line x1="-46" y1="0" x2="46" y2="0" stroke="url(#brassRail)" strokeWidth="11" strokeLinecap="round" />
-            <circle r="11" fill="#c98a35" stroke="#2a2119" strokeWidth="3" />
+            <image
+              href="/assets/first-ten/impossible-machine/turntable-junction.png"
+              x="-48"
+              y="-48"
+              width="96"
+              height="96"
+            />
           </motion.g>
         </g>
 
         {/* Upper Alignment Rotor */}
         <g transform={`translate(${upper.x}, ${upper.y})`}>
-          <circle r="52" fill="#231c15" stroke={state.dial === "THEN" ? "#d59b3f" : "#6a5a48"} strokeWidth="5" />
+          <circle r="56" fill="#1a130c" stroke={state.dial === "THEN" ? "#d59b3f" : "#4a3b2c"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {upperActive ? (
+            <circle r="54" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+          ) : null}
           <motion.g
             animate={{ rotate: upperRotorAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 210, damping: 17 }}
           >
-            <line
-              x1="-46"
-              y1="0"
-              x2="46"
-              y2="0"
-              stroke={upperActive ? "url(#activeGlow)" : "url(#brassRail)"}
-              strokeWidth="11"
-              strokeLinecap="round"
+            <image
+              href="/assets/first-ten/impossible-machine/rotor-disc.png"
+              x="-56"
+              y="-56"
+              width="112"
+              height="112"
             />
-            <rect x="-12" y="-12" width="24" height="24" rx="5" fill="#b8883b" stroke="#2a2119" strokeWidth="2.5" />
           </motion.g>
         </g>
 
         {/* Lower Alignment Rotor */}
         <g transform={`translate(${lower.x}, ${lower.y})`}>
-          <circle r="52" fill="#231c15" stroke={state.dial === "NOW" ? "#d59b3f" : "#6a5a48"} strokeWidth="5" />
+          <circle r="56" fill="#1a130c" stroke={state.dial === "NOW" ? "#d59b3f" : "#4a3b2c"} strokeWidth="2.5" filter="url(#railShadow)" />
+          {lowerActive ? (
+            <circle r="54" fill="url(#activeGlow)" opacity="0.3" filter="url(#railShadow)" />
+          ) : null}
           <motion.g
             animate={{ rotate: lowerRotorAngle }}
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 210, damping: 17 }}
           >
-            <line
-              x1="-46"
-              y1="0"
-              x2="46"
-              y2="0"
-              stroke={lowerActive ? "url(#activeGlow)" : "url(#brassRail)"}
-              strokeWidth="11"
-              strokeLinecap="round"
+            <image
+              href="/assets/first-ten/impossible-machine/rotor-disc.png"
+              x="-56"
+              y="-56"
+              width="112"
+              height="112"
             />
-            <polygon points="0,-14 14,0 0,14 -14,0" fill="#c98a35" stroke="#2a2119" strokeWidth="2.5" />
           </motion.g>
         </g>
       </svg>
