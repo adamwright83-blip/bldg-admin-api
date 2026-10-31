@@ -99,7 +99,8 @@ const COMMON = /* glsl */ `
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
 const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 
-export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean; storyLocation?: string; storyAnomaly?: string } = {}) {
+/** `opts.operationsHub: false` leaves out the Laundry Farm Operations Hub, a platform-admin-only entrance (default: built). */
+export function createIslandBoard(container: HTMLElement, events: IslandEvents = {}, opts: { assetBase?: string; capture?: boolean; intro?: boolean; skyBoard?: boolean; storyLocation?: string; storyAnomaly?: string; operationsHub?: boolean } = {}) {
   let storyLocation = opts.storyLocation;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const homeHaze = opts.skyBoard ? new THREE.Color("#203b46") : HAZE;
@@ -460,7 +461,9 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
     const nearLake = (x: number, z: number) => lakes.some(p => pointInRing(x, z, p) || p.some(([a, b]) => Math.hypot(a - x, b - z) < 60));
     islands = layoutIslands(M, { field: F, height: H, road, roadNamed, park: (x, z) => bigParks.some(p => pointInRing(x, z, p)), lake: nearLake });
     addLandmarks();
-    try { addOperationsHub(); } catch (e) { console.warn("[islands] Laundry Farm operations hub skipped", e); }
+    if (opts.operationsHub !== false) {
+      try { addOperationsHub(); } catch (e) { console.warn("[islands] Laundry Farm operations hub skipped", e); }
+    }
     try { addSuitcase(); } catch (e) { console.warn("[islands] suitcase landmark skipped", e); }   // never let the easter egg take the city down
     buildCoastTexture();
     paintGround(segs, bigParks);
