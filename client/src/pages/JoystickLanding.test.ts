@@ -79,15 +79,10 @@ describe("JOYSTICK public start", () => {
     expect(landingSource).toContain("checkout_live: false");
   });
 
-  it("does not show an annual price other than $468/year", () => {
-    const annual = [
-      ...landingSource.matchAll(
-        /\$\s*([0-9][0-9,]*)\s*(?:\/\s*year|per year)/gi
-      ),
-    ];
-    expect(
-      annual.every((match) => match[1].replace(/,/g, "") === "468")
-    ).toBe(true);
+  it("offers one plan, monthly: no annual price or annual toggle until one is approved", () => {
+    expect(landingSource).not.toMatch(/\$\s*[0-9][0-9,]*\s*(?:\/\s*year|per year)/i);
+    expect(landingSource).not.toMatch(/annual billing|billed annually|switch to annual/i);
+    expect(landingSource).toContain("Billed monthly.");
   });
 
   it("does not advertise XP, coins, gold, or streaks", () => {
