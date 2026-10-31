@@ -52,7 +52,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     await import("../journeys");
     await db.execute(
       `INSERT INTO ${LEGACY_DAYFORGE_TABLE("billing_plans")} (planKey,displayName,stripePriceId,trialDays,rulesJson,entitlementsJson,active)
-       VALUES (?,?,?,7,?,?,true)`,
+       VALUES (?,?,?,0,?,?,true)`,
       [planKey, "JOYSTICK", `price_${planKey}`, JSON.stringify({}), JSON.stringify([LEGACY_DAYFORGE_CORE])]
     );
   }, 60_000);
@@ -85,7 +85,8 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     );
 
     const before = await activationView(journey, credentials);
-    expect(before).toMatchObject({ example: false, required: true, status: "none", offer: { planKey, line: "JOYSTICK, 7 days free." } });
+    // a test plan, not the advertised one: no trial, and its price is not known here, so only the name is stated
+    expect(before).toMatchObject({ example: false, required: true, status: "none", offer: { planKey, line: "JOYSTICK.", detail: "Card required." } });
     const approved = { to: "elena@larkspurhotel.example", subject: "Re: Friday flowers?", body: "Hi Elena — ..." };
     // billing is open and the journey isn't active: the message stays at the table
     await expect(sendDraft(journey, credentials, approved)).rejects.toThrow(/Continue with JOYSTICK first/);
@@ -100,6 +101,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     expect(checkoutUrl).toBe("https://checkout.stripe.example/first-ten");
     expect(state.created?.params.success_url).toContain(`/joystick-start?session=${credentials.sessionId}&checkout=success`);
     expect(state.created?.params.cancel_url).toContain("/joystick-start?");
+    expect(state.created?.params.subscription_data).not.toHaveProperty("trial_period_days");
     expect((await activationView(journey, credentials)).status).toBe("checkout_pending");
     expect((await journeyById(journey.id))!.stage).toBe("activation");
 
@@ -120,10 +122,11 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     const subscription = {
       id: `sub_first_ten_${suffix}`,
       customer: `cus_first_ten_${suffix}`,
-      status: "trialing",
+      status: "active",
       cancel_at_period_end: false,
-      current_period_end: created + 86400 * 30,
-      trial_end: created + 86400 * 7,
+      trial_end: null,
+      // 2025-03-31.basil onward: the period end is on the subscription item
+      items: { data: [{ current_period_end: created + 86400 * 30 }] },
       latest_invoice: `in_first_ten_${suffix}`,
       metadata: { legacyDayforgeOnboardingSessionId: credentials.sessionId, legacyDayforgePlanKey: planKey },
     };

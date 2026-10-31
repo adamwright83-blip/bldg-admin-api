@@ -87,6 +87,8 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
     0,
     Number(process.env.DAYFORGE_STRIPE_TRIAL_DAYS ?? "0") || 0
   );
+  // An advertised plan syncs only with its advertised trial (monthly: 0, annual: 7). Otherwise the stored row is
+  // left alone and checkout keeps refusing it with the trial_days close code.
   if (!advertisedPlanEnvSyncAllowed(planKey, trialDays)) return;
   const db = await getDb();
   if (!db) throw new Error("Database not available");

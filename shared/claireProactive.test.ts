@@ -6,6 +6,7 @@ import {
   avoidanceSpeak,
   chooseDeadTimeWork,
   classifyDoctrineUtterance,
+  closeSalesFollowUpIfMoved,
   draftDoesNotComplete,
   explainWhyOnToday,
   gumballWarning,
@@ -117,6 +118,21 @@ describe("Adam doctrine — sales, cooling, dead time, load", () => {
     const item = salesFollowUpObligation(louise);
     expect(item.title).toBe("Follow up: The Louise");
     expect(item.dueDate).toBe("2026-09-17");
+  });
+
+  it("7b. a follow-up the pipeline closed or moved closes its board copy, keeping its reason", () => {
+    const item = salesFollowUpObligation(louise);
+    const followUp = { accountKey: "louise", dueDate: "2026-09-17" };
+    expect(closeSalesFollowUpIfMoved(item, { ...followUp, status: "open" })).toBeNull();
+    expect(closeSalesFollowUpIfMoved(item, { ...followUp, status: "completed" })).toEqual({ ...item, status: "completed" });
+    expect(closeSalesFollowUpIfMoved(item, { ...followUp, status: "cancelled" })).toEqual({ ...item, status: "cancelled" });
+    expect(closeSalesFollowUpIfMoved(item, { ...followUp, dueDate: "2026-09-19", status: "open" })).toEqual({
+      ...item,
+      status: "superseded",
+    });
+    // Work in flight, and anything that isn't a sales follow-up, are not the sweep's to close.
+    expect(closeSalesFollowUpIfMoved({ ...item, status: "awaiting_result" }, { ...followUp, status: "completed" })).toBeNull();
+    expect(closeSalesFollowUpIfMoved(recovery(), { ...followUp, status: "completed" })).toBeNull();
   });
 
   it("8. cooling requires a real cadence break, not noise", () => {

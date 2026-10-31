@@ -112,8 +112,6 @@
 .cd-title { margin: 0; font: 400 clamp(40px, 4.2vw, 60px) / 1.02 var(--sh-serif); letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .cd-title.is-settled { font-size: clamp(32px, 3.2vw, 44px); }
 .cd-hook { margin: 0; font-size: 18px; line-height: 1.45; color: #c9d3d2; }
-.cd-story-link { display: inline-flex; align-items: center; gap: 8px; color: var(--sh-gold-hi); font-weight: 600; }
-.cd-story-link svg { width: 16px; height: 16px; }
 
 .cd-cctv {
   display: flex;

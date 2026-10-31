@@ -4,6 +4,7 @@ import { storyGameFor } from "./games/registry";
 import type { StoryClosing, StoryQuestion } from "@shared/story";
 import { Keepsake } from "./Keepsake";
 import type { StoryClient } from "./storyClient";
+import { tomorrowLine } from "./tomorrowLine";
 
 /**
  * Plays tonight's chapter over the page. Every server call goes through the story client (the four `system.story.*`
@@ -12,12 +13,15 @@ import type { StoryClient } from "./storyClient";
 export function ChapterHost({
   client,
   chapterNumber,
+  chapterCount,
   title,
   arrival = null,
   onClose,
 }: {
   client: StoryClient;
   chapterNumber: number;
+  /** Chapters in the season, from tonight's view: the closing promises a next chapter only when there is one. */
+  chapterCount: number;
   title: string;
   /** Settles when the camera has reached tonight's destination; the stage rises then. Null: rise at once. */
   arrival?: Promise<void> | null;
@@ -131,6 +135,7 @@ export function ChapterHost({
           onClose={close}
           client={client}
           chapterNumber={chapterNumber}
+          chapterCount={chapterCount}
         />
       </div>
     </div>
@@ -143,9 +148,11 @@ function ChapterBody({
   onClose,
   client,
   chapterNumber,
+  chapterCount,
 }: {
   client: StoryClient;
   chapterNumber: number;
+  chapterCount: number;
   state: ChapterHostState;
   session: ReturnType<typeof createChapterSession>;
   onClose: () => void;
@@ -213,6 +220,7 @@ function ChapterBody({
           <EarnedClosing
             client={client}
             chapterNumber={chapterNumber}
+            chapterCount={chapterCount}
             question={state.question}
             answered={state.answered}
             onClose={onClose}
@@ -292,12 +300,14 @@ function ChapterBody({
 function EarnedClosing({
   client,
   chapterNumber,
+  chapterCount,
   question,
   answered,
   onClose,
 }: {
   client: StoryClient;
   chapterNumber: number;
+  chapterCount: number;
   question: StoryQuestion | null;
   answered: string;
   onClose: () => void;
@@ -319,6 +329,7 @@ function EarnedClosing({
     };
   }, [client]);
   const chosen = question?.options.find(option => option.key === answered);
+  const tomorrow = tomorrowLine(closing?.tomorrow, chapterNumber, chapterCount);
   return (
     <div
       className="story-host-closing"
@@ -342,9 +353,7 @@ function EarnedClosing({
               headingLevel={3}
             />
           ) : null}
-          <p className="story-host-tomorrow">
-            {closing?.tomorrow ?? "The next chapter opens tomorrow night."}
-          </p>
+          {tomorrow ? <p className="story-host-tomorrow">{tomorrow}</p> : null}
         </>
       )}
       <button

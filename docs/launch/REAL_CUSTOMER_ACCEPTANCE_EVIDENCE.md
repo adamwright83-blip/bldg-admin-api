@@ -118,9 +118,10 @@ made that every repository check passed.
    deployment bootstrap and required reads succeed. Acceptance compatibility
    DDL must not conceal this release gate.
 2. Supply verified JOYSTICK-owned Stripe test credentials/configuration and run
-   the real provider sequence: seven-day/$49 monthly trial, card collection,
-   single subscription and tenant, signed webhook replay, owner activation,
-   and no early charge. The existing fake billing fixture uses nine days and
+   the real provider sequence (since 2026-10-31: $79 monthly, no trial, charged
+   at checkout; it was seven-day/$49): card collection, single subscription and
+   tenant, signed webhook replay, owner activation, login, portal and
+   cancellation (docs/billing/JOYSTICK_STRIPE_SANDBOX.md). The existing fake billing fixture uses nine days and
    synthetic prices; it cannot establish these terms.
 
 No customer invitation or launched-product claim is authorized by this report.

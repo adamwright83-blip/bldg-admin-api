@@ -176,6 +176,8 @@ export async function listPersistentOperatorObligationPayloads(input: {
 /**
  * The same board, with the goal-cycle lineage stored beside each payload
  * (such as the execution type a decision recorded), for readers that rank it.
+ * Earliest due first, then by id, so "the next one" means the same work on
+ * every read.
  */
 export async function listPersistentOperatorObligationRecords(input: {
   tenantId: string;
@@ -198,6 +200,10 @@ export async function listPersistentOperatorObligationRecords(input: {
           eq(claireProactiveObligations.tenantId, tenantId),
           eq(claireProactiveObligations.operatorUserId, operatorUserId)
         )
+      )
+      .orderBy(
+        asc(claireProactiveObligations.dueDate),
+        asc(claireProactiveObligations.id)
       )
   );
 

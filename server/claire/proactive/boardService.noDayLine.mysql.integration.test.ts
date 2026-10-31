@@ -12,14 +12,20 @@ import { getDb } from "../../db";
  * commitment. Only the operator's approval does that.
  */
 const followUpMissionId = 9_100_000 + Math.floor(Math.random() * 99_999);
+const followUpDueAt = new Date(Date.now() + 86_400_000);
 vi.mock("../../domains/commercial/commercialFollowUpReadService", () => ({
   listOpenCommercialFollowUps: vi.fn(async () => [
     {
       id: `follow-${followUpMissionId}`,
       missionId: followUpMissionId,
-      dueAt: new Date(Date.now() + 86_400_000),
+      dueAt: followUpDueAt,
       note: "Email the revised quote to the property manager.",
+      accountName: null,
     },
+  ]),
+  // Still open on the same day: the second sweep leaves its board copy as it is.
+  listCommercialFollowUpStates: vi.fn(async () => [
+    { id: `follow-${followUpMissionId}`, missionId: followUpMissionId, status: "open", dueAt: followUpDueAt },
   ]),
 }));
 

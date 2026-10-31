@@ -28,9 +28,12 @@ import {
 import {
   advertisedPlanEnvSyncAllowed,
   checkAdvertisedStripePrice,
+  checkoutTrialPeriodDays,
   JOYSTICK_ANNUAL_PLAN_KEY,
+  JOYSTICK_ANNUAL_TRIAL_DAYS,
   JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS,
   JOYSTICK_MONTHLY_PLAN_KEY,
+  JOYSTICK_MONTHLY_TRIAL_DAYS,
   JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS,
   JoystickCheckoutClosedError,
   recognizedSubscriptionRevenueCents,
@@ -56,6 +59,7 @@ const originalEnv = {
   planKey: process.env.DAYFORGE_STRIPE_PLAN_KEY,
   trialDays: process.env.DAYFORGE_STRIPE_TRIAL_DAYS,
   webhook: process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET,
+  portalConfiguration: process.env.DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID,
 };
 
 afterEach(() => {
@@ -63,6 +67,7 @@ afterEach(() => {
   restore("DAYFORGE_STRIPE_PLAN_KEY", originalEnv.planKey);
   restore("DAYFORGE_STRIPE_TRIAL_DAYS", originalEnv.trialDays);
   restore("DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET", originalEnv.webhook);
+  restore("DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID", originalEnv.portalConfiguration);
   vi.clearAllMocks();
 });
 
@@ -94,9 +99,11 @@ function annualPrice(overrides: Record<string, unknown> = {}) {
 }
 
 describe("JOYSTICK advertised Stripe offer", () => {
-  it("keeps the annual offer at 46800 cents", () => {
+  it("advertises $79 a month with no trial and keeps the annual offer at 46800 cents with its seven days", () => {
     expect(JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS).toBe(46800);
-    expect(JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS).toBe(4900);
+    expect(JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS).toBe(7900);
+    expect(JOYSTICK_MONTHLY_TRIAL_DAYS).toBe(0);
+    expect(JOYSTICK_ANNUAL_TRIAL_DAYS).toBe(7);
     const rejected = checkAdvertisedStripePrice({
       planKey: JOYSTICK_ANNUAL_PLAN_KEY,
       trialDays: 7,
@@ -111,11 +118,11 @@ describe("JOYSTICK advertised Stripe offer", () => {
     }
   });
 
-  it("accepts the monthly and annual advertised prices and rejects a stale or zero-trial price", () => {
+  it("accepts the monthly and annual advertised prices and rejects a stale price or the wrong trial", () => {
     expect(
       checkAdvertisedStripePrice({
         planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-        trialDays: 7,
+        trialDays: 0,
         configuredPriceId: "price_monthly_test",
         price: monthlyPrice(),
       }).ok
@@ -129,18 +136,41 @@ describe("JOYSTICK advertised Stripe offer", () => {
       }).ok
     ).toBe(true);
 
-    const zeroTrial = checkAdvertisedStripePrice({
+    // the retired monthly contract: a seven-day trial no longer matches the advertised offer
+    const oldTrial = checkAdvertisedStripePrice({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-      trialDays: 0,
+      trialDays: 7,
       configuredPriceId: "price_monthly_test",
       price: monthlyPrice(),
     });
-    expect(zeroTrial.ok).toBe(false);
-    if (!zeroTrial.ok) expect(zeroTrial.code).toBe("trial_days");
+    expect(oldTrial.ok).toBe(false);
+    if (!oldTrial.ok) {
+      expect(oldTrial.code).toBe("trial_days");
+      expect(oldTrial.reason).toContain("expected 0");
+    }
+    const oldPrice = checkAdvertisedStripePrice({
+      planKey: JOYSTICK_MONTHLY_PLAN_KEY,
+      trialDays: 0,
+      configuredPriceId: "price_monthly_test",
+      price: monthlyPrice({ unit_amount: 4900 }),
+    });
+    expect(oldPrice.ok).toBe(false);
+    if (!oldPrice.ok) {
+      expect(oldPrice.code).toBe("price_mismatch");
+      expect(oldPrice.reason).toContain("expected 7900");
+    }
+    const annualWithoutTrial = checkAdvertisedStripePrice({
+      planKey: JOYSTICK_ANNUAL_PLAN_KEY,
+      trialDays: 0,
+      configuredPriceId: "price_annual_test",
+      price: annualPrice(),
+    });
+    expect(annualWithoutTrial.ok).toBe(false);
+    if (!annualWithoutTrial.ok) expect(annualWithoutTrial.code).toBe("trial_days");
 
     const inactive = checkAdvertisedStripePrice({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-      trialDays: 7,
+      trialDays: 0,
       configuredPriceId: "price_monthly_test",
       price: monthlyPrice({ active: false }),
     });
@@ -149,7 +179,7 @@ describe("JOYSTICK advertised Stripe offer", () => {
 
     const swapped = checkAdvertisedStripePrice({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-      trialDays: 7,
+      trialDays: 0,
       configuredPriceId: "price_monthly_test",
       price: monthlyPrice({ id: "price_old" }),
     });
@@ -174,41 +204,59 @@ describe("JOYSTICK advertised Stripe offer", () => {
     expect(conflict.status).toBe("conflict");
   });
 
-  it("does not sync an advertised plan when the env trial would fall back to zero", async () => {
-    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_MONTHLY_PLAN_KEY, 0)).toBe(false);
-    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_MONTHLY_PLAN_KEY, 7)).toBe(true);
+  it("syncs an advertised plan from the environment only with that plan's advertised trial", async () => {
+    // monthly: no trial; the retired seven days is refused
+    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_MONTHLY_PLAN_KEY, 0)).toBe(true);
+    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_MONTHLY_PLAN_KEY, 7)).toBe(false);
+    // annual keeps its seven days; an unset trial (falls back to zero) is refused
+    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_ANNUAL_PLAN_KEY, 7)).toBe(true);
+    expect(advertisedPlanEnvSyncAllowed(JOYSTICK_ANNUAL_PLAN_KEY, 0)).toBe(false);
     expect(advertisedPlanEnvSyncAllowed("growth-exam", 0)).toBe(true);
+    expect(advertisedPlanEnvSyncAllowed("growth-exam", 9)).toBe(true);
+    // refused before any database write (this unit run has no database)
     process.env.DAYFORGE_STRIPE_PRICE_ID = "price_should_not_sync";
     process.env.DAYFORGE_STRIPE_PLAN_KEY = JOYSTICK_MONTHLY_PLAN_KEY;
+    process.env.DAYFORGE_STRIPE_TRIAL_DAYS = "7";
+    await expect(syncConfiguredSaasPlan()).resolves.toBeUndefined();
+    process.env.DAYFORGE_STRIPE_PLAN_KEY = JOYSTICK_ANNUAL_PLAN_KEY;
     delete process.env.DAYFORGE_STRIPE_TRIAL_DAYS;
     await expect(syncConfiguredSaasPlan()).resolves.toBeUndefined();
+  });
+
+  it("gives Checkout no trial for advertised monthly, seven days for annual, and the row's trial otherwise", () => {
+    expect(checkoutTrialPeriodDays({ planKey: JOYSTICK_MONTHLY_PLAN_KEY, trialDays: 0 })).toBe(0);
+    // even a stale row cannot put a trial back on the advertised monthly offer
+    expect(checkoutTrialPeriodDays({ planKey: JOYSTICK_MONTHLY_PLAN_KEY, trialDays: 7 })).toBe(0);
+    expect(checkoutTrialPeriodDays({ planKey: JOYSTICK_ANNUAL_PLAN_KEY, trialDays: 7 })).toBe(7);
+    expect(checkoutTrialPeriodDays({ planKey: "growth-exam", trialDays: 9 })).toBe(9);
+    expect(checkoutTrialPeriodDays({ planKey: "growth-exam", trialDays: 0 })).toBe(0);
   });
 
   it("does not count a refund as revenue", () => {
     expect(
       recognizedSubscriptionRevenueCents({
-        amountPaidCents: 4900,
-        amountRefundedCents: 4900,
+        amountPaidCents: 7900,
+        amountRefundedCents: 7900,
       })
     ).toBe(0);
     expect(
       recognizedSubscriptionRevenueCents({
-        amountPaidCents: 4900,
+        amountPaidCents: 7900,
         amountRefundedCents: 1000,
       })
-    ).toBe(3900);
+    ).toBe(6900);
     expect(
       revenueCentsForBillingEvent({
         type: "charge.refunded",
-        data: { object: { amount: 4900, amount_refunded: 4900 } },
+        data: { object: { amount: 7900, amount_refunded: 7900 } },
       })
     ).toBe(0);
     expect(
       revenueCentsForBillingEvent({
         type: "invoice.paid",
-        data: { object: { amount_paid: 4900, amount_refunded: 0 } },
+        data: { object: { amount_paid: 7900, amount_refunded: 0 } },
       })
-    ).toBe(4900);
+    ).toBe(7900);
   });
 });
 
@@ -253,12 +301,12 @@ describe("JOYSTICK public checkout fail-closed", () => {
     vi.mocked(attachCheckoutToOnboarding).mockResolvedValue({} as never);
   }
 
-  it("refuses a zero-day trial before creating a Checkout session", async () => {
+  it("refuses the retired seven-day monthly trial before creating a Checkout session", async () => {
     const stripe = checkoutStripe();
     await preparePlan({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
       stripePriceId: "price_monthly_test",
-      trialDays: 0,
+      trialDays: 7,
     });
     await expect(
       createLegacyDayforgeSubscriptionCheckout({
@@ -276,14 +324,14 @@ describe("JOYSTICK public checkout fail-closed", () => {
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
-  it("refuses a monthly price that is not 4900 usd cents and a trial that is not seven days", async () => {
+  it("refuses a monthly price that is not 7900 usd cents (the old $49 included) and any monthly trial", async () => {
     const stripe = checkoutStripe();
     await preparePlan({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
       stripePriceId: "price_monthly_test",
-      trialDays: 7,
+      trialDays: 0,
     });
-    stripe.prices.retrieve.mockResolvedValue(monthlyPrice({ unit_amount: 49000 }));
+    stripe.prices.retrieve.mockResolvedValue(monthlyPrice({ unit_amount: 4900 }));
     await expect(
       createLegacyDayforgeSubscriptionCheckout({
         sessionId: "11111111-1111-4111-8111-111111111111",
@@ -316,7 +364,7 @@ describe("JOYSTICK public checkout fail-closed", () => {
       code: "trial_days",
     });
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
-    expect(JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS).toBe(4900);
+    expect(JOYSTICK_MONTHLY_UNIT_AMOUNT_CENTS).toBe(7900);
     expect(JOYSTICK_ANNUAL_UNIT_AMOUNT_CENTS).toBe(46800);
   });
 
@@ -352,12 +400,12 @@ describe("JOYSTICK public checkout fail-closed", () => {
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
-  it("opens monthly checkout only for the verified 4900 usd month price with a card and a seven-day trial", async () => {
+  it("opens monthly checkout only for the verified 7900 usd month price, card at signup, charged at checkout (no trial)", async () => {
     const stripe = checkoutStripe();
     await preparePlan({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
       stripePriceId: "price_monthly_test",
-      trialDays: 7,
+      trialDays: 0,
     });
     stripe.prices.retrieve.mockResolvedValue(monthlyPrice());
     const checkout = await createLegacyDayforgeSubscriptionCheckout({
@@ -373,6 +421,37 @@ describe("JOYSTICK public checkout fail-closed", () => {
         line_items: [{ price: "price_monthly_test", quantity: 1 }],
         payment_method_collection: "always",
         payment_method_types: ["card"],
+        mode: "subscription",
+      }),
+      expect.any(Object)
+    );
+    const params = stripe.checkout.sessions.create.mock.calls[0]?.[0] as unknown as {
+      subscription_data: Record<string, unknown>;
+    };
+    expect(params.subscription_data).not.toHaveProperty("trial_period_days");
+    expect(params.subscription_data).toMatchObject({
+      metadata: { legacyDayforgePlanKey: JOYSTICK_MONTHLY_PLAN_KEY },
+    });
+  });
+
+  it("opens annual checkout with the seven-day trial it was published with", async () => {
+    const stripe = checkoutStripe();
+    await preparePlan({
+      planKey: JOYSTICK_ANNUAL_PLAN_KEY,
+      stripePriceId: "price_annual_test",
+      trialDays: 7,
+    });
+    stripe.prices.retrieve.mockResolvedValue(annualPrice());
+    await createLegacyDayforgeSubscriptionCheckout({
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      resumeToken: "resume-token",
+      planKey: JOYSTICK_ANNUAL_PLAN_KEY,
+      requestId: "req-checkout-annual",
+      stripe: stripe as never,
+    });
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_annual_test", quantity: 1 }],
         subscription_data: expect.objectContaining({ trial_period_days: 7 }),
       }),
       expect.any(Object)
@@ -384,7 +463,7 @@ describe("JOYSTICK public checkout fail-closed", () => {
     const plan = {
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
       stripePriceId: "price_monthly_test",
-      trialDays: 7,
+      trialDays: 0,
     };
     vi.mocked(requireOnboardingSession).mockResolvedValue(
       onboarding({ stripeCheckoutSessionId: "cs_old" }) as never
@@ -455,8 +534,8 @@ describe("JOYSTICK billing webhook and portal guards", () => {
         object: {
           id: "ch_refunded",
           object: "charge",
-          amount: 4900,
-          amount_refunded: 4900,
+          amount: 7900,
+          amount_refunded: 7900,
         },
       },
     });
@@ -500,9 +579,10 @@ describe("JOYSTICK billing webhook and portal guards", () => {
         object: {
           id: "in_refunded",
           object: "invoice",
-          amount_paid: 4900,
-          amount_refunded: 4900,
+          amount_paid: 7900,
+          amount_refunded: 7900,
           post_payment_credit_notes_amount: 0,
+          // a payload rendered before 2025-03-31.basil: top-level subscription is still read
           subscription: subscription.id,
         },
       },
@@ -543,6 +623,7 @@ describe("JOYSTICK billing webhook and portal guards", () => {
     ).rejects.toThrow("Cross-tenant billing portal access is not allowed");
     expect(create).not.toHaveBeenCalled();
 
+    delete process.env.DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID;
     await createLegacyDayforgeBillingPortal({
       tenantId: "tenant-a",
       requestId: "req-portal-1",
@@ -554,5 +635,43 @@ describe("JOYSTICK billing webhook and portal guards", () => {
         idempotencyKey: "dayforge:portal:tenant-a:req-portal-1",
       })
     );
+    // no configured portal: Stripe's default configuration, no configuration param at all
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("configuration");
+  });
+
+  it("opens the billing portal with the configured portal configuration and refuses a malformed one", async () => {
+    vi.mocked(getStripeCustomerForTenant).mockResolvedValue("cus_a");
+    const create = vi.fn(async (params: Record<string, unknown>) => ({
+      url: "https://billing.stripe.com/p/session/test_portal",
+      configuration: params.configuration,
+      livemode: false,
+    }));
+    const stripe = { billingPortal: { sessions: { create } } };
+    process.env.DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID = "bpc_1UWX6fDygmVPA3tjqzUEn5uD";
+    const portal = await createLegacyDayforgeBillingPortal({
+      tenantId: "tenant-a",
+      requestId: "req-portal-2",
+      stripe: stripe as never,
+    });
+    expect(portal).toEqual({ url: "https://billing.stripe.com/p/session/test_portal" });
+    expect(create).toHaveBeenCalledWith(
+      {
+        customer: "cus_a",
+        return_url: "https://admin.bldg.chat/dayforge-settings",
+        configuration: "bpc_1UWX6fDygmVPA3tjqzUEn5uD",
+      },
+      { idempotencyKey: "dayforge:portal:tenant-a:req-portal-2" }
+    );
+
+    process.env.DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID = "prod_not_a_portal";
+    create.mockClear();
+    await expect(
+      createLegacyDayforgeBillingPortal({
+        tenantId: "tenant-a",
+        requestId: "req-portal-3",
+        stripe: stripe as never,
+      })
+    ).rejects.toThrow(/portal configuration id/);
+    expect(create).not.toHaveBeenCalled();
   });
 });

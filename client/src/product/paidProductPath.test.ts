@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const app = fs.readFileSync(path.join(root, "client/src/App.tsx"), "utf8");
+const customerHost = fs.readFileSync(
+  path.join(root, "client/src/hostRouting/CustomerHostApp.tsx"),
+  "utf8"
+);
+const chapterGate = fs.readFileSync(
+  path.join(root, "client/src/components/goldline/TenantUnlockedChapterGate.tsx"),
+  "utf8"
+);
 const productShell = fs.readFileSync(
   path.join(root, "client/src/product/ProductShell.tsx"),
   "utf8"
@@ -33,9 +41,20 @@ describe("paid JOYSTICK product path", () => {
     expect(app).toContain("<DriverMembershipGate>");
     expect(app).toContain("<TenantOperatorGate>");
     expect(app).toContain('me.data?.membership.role === "field"');
-    expect(app).toContain('kingdom.kingdomId === "kingdom-2-the-last-valet"');
-    expect(app).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(chapterGate).toContain('kingdom.kingdomId === "kingdom-2-the-last-valet"');
+    expect(chapterGate).toContain('kingdom.lanternCityStatus !== "locked"');
+    expect(app).toContain('<TenantUnlockedChapterGate locked={<Redirect to="/play" />}>');
     expect(app).toContain("<JoystickChapterRoute />");
+  });
+
+  it("gates the customer-host chapter with the same kingdom-unlock check as the admin host", () => {
+    const view = customerHost.slice(customerHost.indexOf('view === "customer-chapter"'));
+    const branch = view.slice(0, view.indexOf("if (view ===", 1));
+    expect(branch).toContain("<CustomerOperatorGate>");
+    expect(branch).toContain('<TenantUnlockedChapterGate locked={<CustomerReplace to="/play" />}>');
+    expect(branch.indexOf("<TenantUnlockedChapterGate")).toBeLessThan(
+      branch.indexOf("<GoldlineChapterHost />")
+    );
   });
 
   it("retires the duplicate HQ/FIELD entry points in favor of World and Play", () => {

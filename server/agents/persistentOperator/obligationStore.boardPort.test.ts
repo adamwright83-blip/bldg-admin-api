@@ -4,8 +4,21 @@ vi.mock("../../db", () => ({
   getDb: vi.fn(),
 }));
 
+import { drizzle } from "drizzle-orm/mysql2";
 import { getDb } from "../../db";
 import { listPersistentOperatorObligationPayloads } from "./obligationStore";
+
+/** A real drizzle query builder over a client that records the SQL it is sent. */
+function recordingDb(rows: unknown[][] = []) {
+  const sent: string[] = [];
+  const client = {
+    query: async (query: { sql: string }) => {
+      sent.push(query.sql);
+      return [rows, []];
+    },
+  };
+  return { db: drizzle({ client: client as never }), sent };
+}
 
 describe("Persistent Operator proactive obligation read port", () => {
   beforeEach(() => {
@@ -32,7 +45,7 @@ describe("Persistent Operator proactive obligation read port", () => {
     vi.mocked(getDb).mockResolvedValueOnce({
       select: () => ({
         from: () => ({
-          where: () => Promise.reject(queryError),
+          where: () => ({ orderBy: () => Promise.reject(queryError) }),
         }),
       }),
     } as never);
@@ -54,7 +67,7 @@ describe("Persistent Operator proactive obligation read port", () => {
     vi.mocked(getDb).mockResolvedValueOnce({
       select: () => ({
         from: () => ({
-          where: () => Promise.reject(missingTableError),
+          where: () => ({ orderBy: () => Promise.reject(missingTableError) }),
         }),
       }),
     } as never);
@@ -84,7 +97,7 @@ describe("Persistent Operator proactive obligation read port", () => {
     vi.mocked(getDb).mockResolvedValueOnce({
       select: () => ({
         from: () => ({
-          where: () => Promise.resolve([{ payloadJson: fixture }]),
+          where: () => ({ orderBy: () => Promise.resolve([{ payloadJson: fixture }]) }),
         }),
       }),
     } as never);
@@ -95,5 +108,17 @@ describe("Persistent Operator proactive obligation read port", () => {
         operatorUserId: "operator-1",
       })
     ).resolves.toEqual([fixture]);
+  });
+
+  it("reads the board earliest due first, then by id, so the next follow-up is the same on every read", async () => {
+    const { db, sent } = recordingDb();
+    vi.mocked(getDb).mockResolvedValueOnce(db as never);
+
+    await listPersistentOperatorObligationPayloads({ tenantId: "tenant-1", operatorUserId: "operator-1" });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(
+      /order by `claire_proactive_obligations`\.`dueDate` asc, `claire_proactive_obligations`\.`id` asc$/
+    );
   });
 });
