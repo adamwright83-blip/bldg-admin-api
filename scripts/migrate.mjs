@@ -5884,5 +5884,35 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0163: Business knowledge: dated evidence, timeline, versioned assertions, clarification questions, investigation
+// runs. Additive. (0161 and 0162 are reserved by earlier plans.)
+{
+  const statements = await readSqlStatements("../drizzle/0163_business_knowledge.sql");
+  for (const statement of statements) await runRequired(statement, "Business knowledge");
+  await assertRequiredColumns("business_knowledge_entities", [
+    "id", "journey_id", "tenant_id", "kind", "name", "name_key", "aliases_json", "email", "domain", "canonical_ref", "created_at", "updated_at",
+  ]);
+  await assertRequiredColumns("business_knowledge_evidence", [
+    "id", "journey_id", "tenant_id", "provider", "source_ref", "locator", "label", "excerpt", "url", "occurred_at", "discovered_at", "last_seen_at", "run_id",
+  ]);
+  await assertRequiredColumns("business_knowledge_timeline", [
+    "id", "journey_id", "tenant_id", "entity_id", "related_entity_id", "kind", "signal", "stated_status", "summary", "occurred_at", "occurred_until", "time_precision",
+    "discovered_at", "evidence_id", "basis", "conflicts_with_json", "run_id",
+  ]);
+  await assertRequiredColumns("business_knowledge_assertions", [
+    "id", "journey_id", "tenant_id", "claim_key", "subject_entity_id", "predicate", "object_entity_id", "value", "detail", "effective_from", "effective_to",
+    "basis", "confidence", "rationale", "evidence_ids_json", "authorizes_financial_merge", "state", "version", "supersedes_id", "superseded_by_id",
+    "superseded_at", "created_by", "question_id", "created_at",
+  ]);
+  await assertRequiredColumns("business_knowledge_questions", [
+    "id", "journey_id", "tenant_id", "topic_key", "kind", "entity_ids_json", "question", "why", "priority", "status", "evidence_fingerprint", "asked_at",
+    "answer_text", "answered_at", "follow_up", "follow_up_answer", "resolution_json", "created_at", "updated_at",
+  ]);
+  await assertRequiredColumns("business_knowledge_runs", [
+    "id", "journey_id", "tenant_id", "kind", "status", "model", "trigger_reason", "started_at", "finished_at", "lease_until", "watermark_at", "budget_json",
+    "used_json", "coverage_json", "research_json", "notes_json",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();
