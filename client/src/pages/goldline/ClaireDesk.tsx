@@ -3,13 +3,16 @@ import { Link, useLocation } from "wouter";
 import { ArrowRight, Box, Map, Settings, Users, Wallet, X } from "lucide-react";
 import { isCustomerHostView, resolveJoystickHostView } from "@shared/joystickHostRouting";
 import { PRODUCT_NAME } from "@shared/productIdentity";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { CLAIRE_DAILY_CALL_DEFAULTS, matchesClaireDailyCallDefaults, type ClaireDailyCallPurpose } from "../../../../shared/claireDailyCallDefaults";
 import { ChapterHost } from "@/story/ChapterHost";
 import { storyGameFor } from "@/story/games/registry";
 import { storyClient } from "@/story/storyClient";
+import { tomorrowLine } from "@/story/tomorrowLine";
 import { useRefreshStoryTonight, useStoryTonight } from "@/story/useStoryTonight";
-import { chapterEyebrow, heroLines, HOME_ART, HOME_NAV, metricView, type StoryEnabled } from "../storyHome/homeModel";
+import { chapterEyebrow, heroLines, HOME_ART, homeNavFor, metricView, type HomeNavItem, type StoryEnabled } from "../storyHome/homeModel";
+import { WonTonight } from "../storyHome/StoryHome";
 import { ClaireDailyCallSettings } from "./ClaireDailyCallSettings";
 import { ClaireStrategicCallConsent } from "./ClaireStrategicCallConsent";
 import { ClaireStrategicProposal } from "./ClaireStrategicProposal";
@@ -21,11 +24,13 @@ import "./claireDesk/claireDesk.css";
 
 /**
  * The desk renders on the admin host and on a customer's JOYSTICK host. On the customer host Home is the Day Line page
- * and only routes that host serves appear in the bar, so no link here leads to a refusal.
+ * and only routes that host serves appear in the bar, so no link here leads to a refusal. A tenant member gets the
+ * tenant routes on either host: the admin host sends them away from admin paths.
  */
 const hostView = (path: string) => resolveJoystickHostView(typeof window === "undefined" ? "" : window.location.hostname, path);
 const HOME_PATH = isCustomerHostView(hostView("/")) ? "/play" : "/";
-const BAR_NAV = HOME_NAV.filter(item => hostView(item.path) !== "customer-forbidden");
+export const barNavFor = (role: string | null | undefined): HomeNavItem[] =>
+  homeNavFor(role).filter(item => hostView(item.path) !== "customer-forbidden");
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const dayLabel = (date: string, today: string, tomorrow: string) =>
@@ -201,7 +206,9 @@ export default function ClaireDesk() {
         <KpiStrip />
 
         <div className="cd-lanes">
-          {tonight ? <StoryLane tonight={tonight} playing={playing} onPlay={() => setPlaying(true)} /> : null}
+          {tonight ? (
+            <StoryLane tonight={tonight} playing={playing} onPlay={() => setPlaying(true)} onAnswered={() => void refreshTonight()} />
+          ) : null}
 
           <aside className="cd-dock" aria-label="Claire · Day Line">
             <header className="cd-dock-head">
@@ -473,10 +480,11 @@ export default function ClaireDesk() {
         </details>
       </aside>
 
-      {playing && chapter ? (
+      {playing && tonight && chapter ? (
         <ChapterHost
           client={storyClient()}
           chapterNumber={chapter.number}
+          chapterCount={tonight.chapterCount}
           title={chapter.title}
           onClose={() => {
             setPlaying(false);
@@ -488,7 +496,7 @@ export default function ClaireDesk() {
   );
 }
 
-const NAV_ICONS: Record<(typeof HOME_NAV)[number]["key"], ComponentType<SVGProps<SVGSVGElement>>> = {
+const NAV_ICONS: Record<HomeNavItem["key"], ComponentType<SVGProps<SVGSVGElement>>> = {
   city: Map,
   customers: Users,
   operations: Box,
@@ -497,13 +505,14 @@ const NAV_ICONS: Record<(typeof HOME_NAV)[number]["key"], ComponentType<SVGProps
 };
 
 function TopBar() {
+  const { user } = useAuth();
   return (
     <header className="cd-bar">
       <Link href={HOME_PATH} className="cd-wordmark" aria-label={`${PRODUCT_NAME} home`}>
         {PRODUCT_NAME}
       </Link>
       <nav className="cd-nav" aria-label="Main">
-        {BAR_NAV.map(item => {
+        {barNavFor(user?.role).map(item => {
           const Icon = NAV_ICONS[item.key];
           return (
             <Link key={item.key} href={item.path} className="cd-nav-icon" aria-label={item.label} title={item.label}>
@@ -552,8 +561,23 @@ function KpiStrip() {
   );
 }
 
-/** Tonight's chapter. Story words come only from `system.story.tonight`; no business number appears here. */
-function StoryLane({ tonight, playing, onPlay }: { tonight: StoryEnabled; playing: boolean; onPlay: () => void }) {
+/**
+ * Tonight's chapter. Story words come only from `system.story.tonight`; no business number appears here. A won
+ * chapter's open question is answered right here (tenant members never reach the story Home, and the question is only
+ * served the night it was won); once answered here, what the answer earned stays in view.
+ */
+export function StoryLane({
+  tonight,
+  playing,
+  onPlay,
+  onAnswered,
+}: {
+  tonight: StoryEnabled;
+  playing: boolean;
+  onPlay: () => void;
+  onAnswered: () => void;
+}) {
+  const [answeredHere, setAnsweredHere] = useState(false);
   const chapter = tonight.chapter;
   if (tonight.state === "season_complete" || !chapter) {
     return (
@@ -565,20 +589,29 @@ function StoryLane({ tonight, playing, onPlay }: { tonight: StoryEnabled; playin
     );
   }
   if (tonight.state === "won_tonight") {
-    const open = chapter.question && !chapter.question.answered;
+    const open = Boolean(chapter.question && !chapter.question.answered);
+    if (open || answeredHere) {
+      return (
+        <section className="cd-story" aria-label="Tonight's chapter" data-testid="claire-desk-story" data-state="won_tonight">
+          <WonTonight
+            chapter={chapter}
+            chapterCount={tonight.chapterCount}
+            onAnswered={() => {
+              setAnsweredHere(true);
+              onAnswered();
+            }}
+          />
+        </section>
+      );
+    }
+    const tomorrow = tomorrowLine(chapter.closing?.tomorrow, chapter.number, tonight.chapterCount);
     return (
       <section className="cd-story" aria-label="Tonight's chapter" data-testid="claire-desk-story" data-state="won_tonight">
         <p className="cd-eyebrow">
-          {chapterEyebrow(chapter.number)} · {open ? "ONE QUESTION LEFT" : "REMEMBERED"}
+          {chapterEyebrow(chapter.number)} · REMEMBERED
         </p>
         <h1 className="cd-title is-settled">{chapter.title}</h1>
-        {open ? (
-          <Link href={HOME_PATH} className="cd-story-link">
-            Answer it on Home <ArrowRight aria-hidden />
-          </Link>
-        ) : (
-          <p className="cd-hook">{chapter.closing?.tomorrow ?? "The next chapter opens tomorrow night."}</p>
-        )}
+        {tomorrow ? <p className="cd-hook">{tomorrow}</p> : null}
       </section>
     );
   }

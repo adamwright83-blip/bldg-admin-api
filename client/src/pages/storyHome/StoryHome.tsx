@@ -28,6 +28,7 @@ import { ChapterHost } from "@/story/ChapterHost";
 import { storyGameFor } from "@/story/games/registry";
 import { Keepsake } from "@/story/Keepsake";
 import { storyClient } from "@/story/storyClient";
+import { tomorrowLine } from "@/story/tomorrowLine";
 import { useRefreshStoryTonight } from "@/story/useStoryTonight";
 import {
   chapterEyebrow,
@@ -192,6 +193,7 @@ export default function StoryHome({
         <ChapterHost
           client={storyClient()}
           chapterNumber={chapter.number}
+          chapterCount={tonight.chapterCount}
           title={chapter.title}
           arrival={arrival}
           onClose={leave}
@@ -496,7 +498,11 @@ function ChapterCard({
             <p className="sh-hook">Every chapter of this season is played.</p>
           </div>
         ) : tonight.state === "won_tonight" ? (
-          <WonTonight chapter={chapter} onAnswered={onAnswered} />
+          <WonTonight
+            chapter={chapter}
+            chapterCount={tonight.chapterCount}
+            onAnswered={onAnswered}
+          />
         ) : (
           <Available chapter={chapter} playing={playing} onPlay={onPlay} />
         )}
@@ -587,11 +593,15 @@ function ClaireNote({
   );
 }
 
-function WonTonight({
+/** Tonight's won chapter: the one question left, then what the answer earned. Also shown on Claire's desk. */
+export function WonTonight({
   chapter,
+  chapterCount,
   onAnswered,
 }: {
   chapter: TonightChapter;
+  /** Chapters in the season: tomorrow's chapter is promised only when there is one. */
+  chapterCount: number;
   onAnswered: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -599,6 +609,11 @@ function WonTonight({
   const [revisit, setRevisit] = useState(false);
   const question = chapter.question;
   const chosen = question?.options.find(o => o.key === question.answered);
+  const tomorrow = tomorrowLine(
+    chapter.closing?.tomorrow,
+    chapter.number,
+    chapterCount
+  );
 
   if (revisit)
     return (
@@ -650,10 +665,7 @@ function WonTonight({
             text={chapter.closing.keepsake.text}
           />
         ) : null}
-        <p className="sh-tomorrow">
-          {chapter.closing?.tomorrow ??
-            "The next chapter opens tomorrow night."}
-        </p>
+        {tomorrow ? <p className="sh-tomorrow">{tomorrow}</p> : null}
         <button
           type="button"
           className="sh-quiet-link"
