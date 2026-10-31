@@ -80,7 +80,10 @@ export function computeAwaitingReplies(input: {
  * Who wrote back recently: a message from a person (not automated) the owner had already written to in the window
  * before that message arrived. Newest first; one per person (their latest). Each is one real message in their inbox.
  */
-export function computeRecentReplies(input: { sent: readonly MailItem[]; received: readonly MailItem[]; ownerEmail: string }): RecentReply[] {
+/** how many recent replies a read keeps: everyone the bounded inbox read can hold, for routines to record */
+export const RECENT_REPLIES_KEPT = 150;
+
+export function computeRecentReplies(input: { sent: readonly MailItem[]; received: readonly MailItem[]; ownerEmail: string; limit?: number }): RecentReply[] {
   const owner = input.ownerEmail.toLowerCase();
   const wroteTo = new Map<string, number>();
   for (const message of input.sent) {
@@ -101,7 +104,7 @@ export function computeRecentReplies(input: { sent: readonly MailItem[]; receive
   }
   return [...latest.values()]
     .sort((a, b) => b.at.getTime() - a.at.getTime())
-    .slice(0, 12)
+    .slice(0, input.limit ?? 12)
     .map(message => {
       const words = message.text.replace(/\s+/g, " ").trim();
       return {
@@ -210,7 +213,9 @@ async function readFromGmail(tenantId: string, now: Date, deps: AwaitingReaderDe
         checkedAt: now.toISOString(),
         account: access.ownerEmail || null,
         items: confirmed,
-        replies: computeRecentReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail }),
+        // every recent reply the read saw (bounded by the inbox read), not just the newest few: a routine records them
+        // all before its next check starts after them; Claire's prompt and the card take the newest few
+        replies: computeRecentReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, limit: RECENT_REPLIES_KEPT }),
         unavailable: null,
         scanned: { sent: sent.items.length, received: received.items.length, days: AWAITING_WINDOW.maxDays },
       };

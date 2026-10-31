@@ -156,3 +156,21 @@ describe("reading the waiting list", () => {
     expect(await third).toBeNull();
   });
 });
+
+describe("every reply a read sees is kept for routines; Claire's prompt takes the newest few", () => {
+  it("keeps all 13 people who wrote back, and the briefing carries the newest 12", async () => {
+    const { computeRecentReplies, RECENT_REPLIES_KEPT } = await import("./awaitingReplies");
+    const { awaitingForBriefing, BRIEFING_REPLIES_SHOWN } = await import("../../../shared/firstTenMinutesKnowledge");
+    const people = Array.from({ length: 13 }, (_, i) => `client${i}@shop.example`);
+    const sent = people.map(address => mail({ from: NINA, to: [address], days: 20, text: "Does Friday work?" }));
+    const received = people.map((address, i) => mail({ from: address, to: [NINA], days: 1 + i / 10, text: `Yes ${i}` }));
+    expect(computeRecentReplies({ sent, received, ownerEmail: NINA })).toHaveLength(12);
+    const all = computeRecentReplies({ sent, received, ownerEmail: NINA, limit: RECENT_REPLIES_KEPT });
+    expect(all).toHaveLength(13);
+    const awaiting = { checkedAt: now.toISOString(), account: NINA, items: [], replies: all, unavailable: null, scanned: { sent: 13, received: 13, days: 30 } };
+    const briefed = awaitingForBriefing(awaiting);
+    expect(briefed.replies).toHaveLength(BRIEFING_REPLIES_SHOWN);
+    expect(briefed.replies![0]).toEqual(all[0]);
+    expect(awaiting.replies).toHaveLength(13);
+  });
+});

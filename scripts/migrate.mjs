@@ -5871,5 +5871,18 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0160: Claire routines: recurring read-only checks in the operator's words, and every run's findings. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0160_claire_routines.sql");
+  for (const statement of statements) await runRequired(statement, "Claire routines");
+  await assertRequiredColumns("claire_routines", [
+    "id", "tenant_id", "operator_open_id", "kind", "instruction", "cadence", "weekday", "local_time", "time_zone", "status",
+    "next_run_at", "last_run_at", "created_at", "updated_at",
+  ]);
+  await assertRequiredColumns("claire_routine_runs", [
+    "id", "routine_id", "tenant_id", "period_key", "trigger", "status", "attempts", "started_at", "finished_at", "findings_json", "summary", "error",
+  ]);
+}
+
 console.log("\nMigration complete.");
 await conn.end();
