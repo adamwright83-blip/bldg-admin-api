@@ -1,4 +1,4 @@
-import { awaitingOpeningLine, signupOpeningLine } from "../../../shared/firstTenMinutesKnowledge";
+import { awaitingOpeningLine, signupOpeningLine, sinceLastVisitLine } from "../../../shared/firstTenMinutesKnowledge";
 import { cachedAwaitingReplies, readAwaitingReplies } from "../../firstTenMinutes/knowledge/awaitingReplies";
 import { isClaireWorkLedgerEnabled } from "../workLedger/workLedgerPlanner";
 import { runWorkLedgerTurn, workLedgerPromptSection } from "../workLedger/workLedgerTurn";
@@ -298,6 +298,11 @@ export const weeklyMissionRouter = router({
       }
       if (!utterance) {
         const b = session.showrunner.briefing;
+        // what changed while they were away: who wrote back since their last visit to the desk (kept 60 days)
+        const seenKey = `claire-desk-last-seen:${identity.tenantId}:${identity.canonicalOperatorId}`;
+        const seen = await store.load<{ at: number }>(seenKey).catch(() => null);
+        const lastSeen = seen && seen.tenantId === owner.tenantId ? new Date(seen.state.at) : null;
+        await store.save(seenKey, owner, { at: now.getTime() }, 60 * 86_400_000).catch(() => undefined);
         const open = [...b.today, ...b.tomorrow].filter(i => i.status === "open");
         const pending = b.pendingDecision?.items ?? [];
         const speak = [
@@ -306,6 +311,7 @@ export const weeklyMissionRouter = router({
           pending.length ? `${pending.length === 1 ? "One prepared mission needs" : `${pending.length} prepared missions need`} your OK: ${pending.slice(0, 2).map(i => i.title).join("; ")}.` : "",
           // where the first message from signup stands (First Ten Minutes), when there is one
           signupOpeningLine(b.signupKnowledge ?? null, session.showrunner.timeZone, now) ?? "",
+          sinceLastVisitLine(b.awaitingReplies, lastSeen) ?? "",
           awaitingOpeningLine(b.awaitingReplies) ?? "",
           "What do you need?",
         ].filter(Boolean).join(" ");

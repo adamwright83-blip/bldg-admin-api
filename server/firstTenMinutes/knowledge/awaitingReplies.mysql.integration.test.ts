@@ -106,6 +106,8 @@ describe.skipIf(!allowed)("who the owner is waiting to hear back from, on MySQL 
       ["Elena Ruiz", "elena@larkspurhotel.example", 4, true, "s-elena"],
     ]);
     expect(awaiting.items[0].url).toContain("th-elena");
+    // and who wrote back: Teo answered her question three days ago
+    expect(awaiting.replies?.map(reply => [reply.person.name, reply.snippet])).toEqual([["Teo Marsh", "Yes please."]]);
     // it asked Gmail for the recent window only, Sent and people's mail separately
     expect(queries.some(q => /^in:sent after:\d+$/.test(q))).toBe(true);
     expect(queries.some(q => q.startsWith("-in:sent -in:chats -category:promotions") && /after:\d+$/.test(q))).toBe(true);

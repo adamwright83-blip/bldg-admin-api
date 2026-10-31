@@ -1,4 +1,4 @@
-import type { AwaitingReplies, AwaitingReply } from "../../../shared/firstTenMinutesKnowledge";
+import type { AwaitingReplies, AwaitingReply, RecentReply } from "../../../shared/firstTenMinutesKnowledge";
 import type { JourneyRow } from "../store";
 import { googleAccessFor } from "../understanding/deps";
 import { ProviderError } from "../providerFetch";
@@ -70,6 +70,46 @@ export function computeAwaitingReplies(input: {
   return items.sort((a, b) => Number(b.asked) - Number(a.asked) || b.waitingDays - a.waitingDays).slice(0, 12);
 }
 
+/**
+ * Who wrote back recently: a message from a person (not automated) the owner had already written to in the window
+ * before that message arrived. Newest first; one per person (their latest). Each is one real message in their inbox.
+ */
+export function computeRecentReplies(input: { sent: readonly MailItem[]; received: readonly MailItem[]; ownerEmail: string }): RecentReply[] {
+  const owner = input.ownerEmail.toLowerCase();
+  const wroteTo = new Map<string, number>();
+  for (const message of input.sent) {
+    if (!message.sentByOwner) continue;
+    for (const recipient of message.to) {
+      const address = recipient.email.toLowerCase();
+      wroteTo.set(address, Math.min(wroteTo.get(address) ?? Infinity, message.at.getTime()));
+    }
+  }
+  const latest = new Map<string, MailItem>();
+  for (const message of input.received) {
+    const address = message.from.email.toLowerCase();
+    if (message.automated || address === owner) continue;
+    const first = wroteTo.get(address);
+    if (first === undefined || first > message.at.getTime()) continue;
+    const current = latest.get(address);
+    if (!current || current.at < message.at) latest.set(address, message);
+  }
+  return [...latest.values()]
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .slice(0, 12)
+    .map(message => {
+      const words = message.text.replace(/\s+/g, " ").trim();
+      return {
+        person: { name: message.from.name, address: message.from.email },
+        subject: message.subject,
+        at: message.at.toISOString(),
+        snippet: words.length > 160 ? `${words.slice(0, 157)}…` : words,
+        messageId: message.id,
+        threadId: message.threadId,
+        url: message.url,
+      };
+    });
+}
+
 // ------------------------------------------------------------------ read from the workspace's own Gmail
 
 export type AwaitingReaderDeps = {
@@ -126,6 +166,7 @@ export async function readAwaitingReplies(tenantId: string, deps: AwaitingReader
           checkedAt: now.toISOString(),
           account: access.ownerEmail || null,
           items: computeAwaitingReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail, now }),
+          replies: computeRecentReplies({ sent: sent.items, received: received.items, ownerEmail: access.ownerEmail }),
           unavailable: null,
           scanned: { sent: sent.items.length, received: received.items.length, days: AWAITING_WINDOW.maxDays },
         };

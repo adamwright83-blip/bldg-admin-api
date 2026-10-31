@@ -375,3 +375,4 @@
 .cd-follow-up textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #e3d6bc; border-radius: 10px; background: #fff; color: #22323c; font: 400 15px/1.45 var(--sh-sans); resize: vertical; }
 .cd-follow-up textarea:focus-visible { outline: 2px solid #e2a422; outline-offset: 1px; }
 .cd-follow-up a.cd-chip { display: inline-flex; align-items: center; text-decoration: none; }
+.cd-dock .cd-card .cd-mt { margin-top: 14px; }

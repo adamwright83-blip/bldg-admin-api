@@ -81,3 +81,38 @@ describe("who the person is waiting to hear back from", () => {
     expect(awaitingOpeningLine({ checkedAt: now.toISOString(), account: NINA, items: [], unavailable: null, scanned: { sent: 0, received: 0, days: 30 } })).toBeNull();
   });
 });
+
+describe("who wrote back, and what changed while the person was away", () => {
+  it("lists people she'd written to who answered, newest first, one each; not strangers, not automated mail", async () => {
+    const { computeRecentReplies } = await import("./awaitingReplies");
+    const { sinceLastVisitLine } = await import("../../../shared/firstTenMinutesKnowledge");
+    const sent = [
+      mail({ from: NINA, to: ["elena@larkspurhotel.example"], days: 6, text: "Would Friday suit?" }),
+      mail({ from: NINA, to: ["teo@marsh.example"], days: 9, text: "Shall I keep it going?", toName: "Teo Marsh" }),
+    ];
+    const received = [
+      mail({ from: "elena@larkspurhotel.example", to: [NINA], days: 3, text: "Yes, Friday is perfect." }),
+      mail({ from: "elena@larkspurhotel.example", to: [NINA], days: 1, text: "And two vases please." }),
+      mail({ from: "teo@marsh.example", to: [NINA], days: 2, text: "Keep it going." }),
+      // a stranger she never wrote to, and a newsletter: not replies
+      mail({ from: "newcomer@shop.example", to: [NINA], days: 1, text: "Hello!" }),
+      mail({ from: "teo@marsh.example", to: [NINA], days: 1, text: "Out of office", automated: true }),
+      // Teo wrote before she ever wrote to him: not a reply to her
+      mail({ from: "teo@marsh.example", to: [NINA], days: 12, text: "Hi" }),
+    ];
+    received[0].from.name = "Elena Ruiz";
+    received[1].from.name = "Elena Ruiz";
+    received[2].from.name = "Teo Marsh";
+    const replies = computeRecentReplies({ sent, received, ownerEmail: NINA });
+    expect(replies.map(reply => [reply.person.address, reply.snippet])).toEqual([
+      ["elena@larkspurhotel.example", "And two vases please."],
+      ["teo@marsh.example", "Keep it going."],
+    ]);
+    const awaiting = { checkedAt: now.toISOString(), account: NINA, items: [], replies, unavailable: null, scanned: { sent: 2, received: 6, days: 30 } };
+    // never been to the desk before: nothing to say about "since"
+    expect(sinceLastVisitLine(awaiting, null)).toBeNull();
+    expect(sinceLastVisitLine(awaiting, daysAgo(4))).toBe("Since you were last here, Elena Ruiz and Teo Marsh wrote back.");
+    expect(sinceLastVisitLine(awaiting, new Date(now.getTime() - 1.5 * 86_400_000))).toBe("Since you were last here, Elena Ruiz wrote back.");
+    expect(sinceLastVisitLine(awaiting, now)).toBeNull();
+  });
+});
