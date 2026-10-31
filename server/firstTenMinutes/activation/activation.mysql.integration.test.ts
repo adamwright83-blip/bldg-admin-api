@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -263,7 +264,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     expect(state.created).toBeUndefined();
     expect((await activationView(journey, credentials))).toMatchObject({ status: "checkout_pending", owner: null });
 
-    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test";
+    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test"; // the legacy-named webhook secret
     const created = Math.floor(Date.now() / 1000);
     const subscription = {
       id: `sub_nodraft_${suffix}`,
@@ -339,7 +340,7 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     const { activationView, beginActivation } = await import("./activation");
     const { processLegacyDayforgeBillingWebhook } = await import("../../saas/saasBilling");
     const { activateOnboardingOwner } = await import("../../saas/saasStore");
-    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test";
+    process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET ||= "whsec_first_ten_test"; // the legacy-named webhook secret
 
     const abandoned = await startJourney({ requestId: randomUUID(), kind: "own" });
     const abandonedEmail = `abandoned-${suffix}@northsideplumbing.example`;
