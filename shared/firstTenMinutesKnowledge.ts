@@ -198,3 +198,23 @@ export function sinceLastVisitLine(awaiting: AwaitingReplies | null | undefined,
   const said = names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
   return `Since you were last here, ${said} wrote back.`;
 }
+
+/**
+ * Where the "since you were last here" mark moves after a visit: only as far as mail was actually read (that read's
+ * checkedAt), never backwards, and not at all without a successful read. Null: leave it where it is.
+ */
+export function nextLastSeenMark(read: AwaitingReplies | null | undefined, lastSeen: Date | null): number | null {
+  if (!read || read.unavailable) return null;
+  const through = Date.parse(read.checkedAt);
+  if (!Number.isFinite(through)) return null;
+  return !lastSeen || through > lastSeen.getTime() ? through : null;
+}
+
+/**
+ * Gmail's own compose window with this message filled in: what the owner opens when JOYSTICK can't send for them.
+ * Built from the words as they stand, so an edit made after preparing it goes with it.
+ */
+export function gmailComposeUrl(mail: { to: { address: string }; subject: string; body: string }, account: string | null): string {
+  const params = new URLSearchParams({ view: "cm", fs: "1", to: mail.to.address, su: mail.subject, body: mail.body });
+  return `https://mail.google.com/mail/u/${encodeURIComponent(account ?? "0")}/?${params}`;
+}

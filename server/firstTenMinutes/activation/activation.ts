@@ -63,6 +63,9 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
   const google = (await connectionRows(journey.id)).find(row => row.provider === "google" && row.status === "connected");
   const findings = (await understandingView(journey.id)).findings;
   const status = session.status === "provisioned" || session.status === "complete" ? "active" : session.status === "checkout_pending" ? "checkout_pending" : "none";
+  // provisioning creates the workspace but no one who can sign in to it: the owner does that with a password
+  const owner = journey.kind === "example" || status !== "active" ? null : session.status === "complete" ? "ready" : "needs_password";
+  const confirmed = session.configurationJson as { contactName?: string | null } | null;
   // the paid workspace, once there is one, belongs to this journey
   if (status === "active" && session.tenantId && journey.tenantId !== session.tenantId) {
     const db = await firstTenDb();
@@ -73,9 +76,10 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
     required: Boolean(offer),
     offer,
     status,
+    owner,
     identity: {
       businessName: session.businessName ?? named(findings, "business"),
-      contactName: named(findings, "owner"),
+      contactName: confirmed?.contactName?.trim() || named(findings, "owner"),
       ownerEmail: session.ownerEmail ?? google?.accountLabel ?? null,
     },
     sendFrom: google?.accountLabel ?? null,
