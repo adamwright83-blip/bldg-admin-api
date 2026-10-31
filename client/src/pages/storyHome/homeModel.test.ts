@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LanternTerritoryMetric, LanternTerritoryReport } from "@shared/lanternTerritoryReport";
-import { chapterEyebrow, heroLines, HOME_NAV, metricView, neighbourhoodCards, neighbourhoodHref, NOT_WIRED, claimDailyIntro, localDay } from "./homeModel";
+import { chapterEyebrow, heroLines, HOME_NAV, homeNavFor, metricView, neighbourhoodCards, neighbourhoodHref, NOT_WIRED, claimDailyIntro, localDay } from "./homeModel";
 
 function territory(id: string, name: string, revenueCents: number | null, locatedCustomers: number): LanternTerritoryMetric {
   return {
@@ -84,6 +84,15 @@ describe("neighbourhoodHref", () => {
 describe("top bar", () => {
   it("every icon goes somewhere real", () => {
     expect(HOME_NAV.map(item => item.path)).toEqual(["/growth/lantern-city", "/customers", "/operations", "/money", "/settings"]);
+  });
+  it("a tenant member's icons go to tenant routes; Operations has none and is left out", () => {
+    expect(homeNavFor("user").map(item => `${item.label} ${item.path}`)).toEqual([
+      "Lantern City /growth/lantern-city",
+      "Customers /product/customers",
+      "Money /product/money",
+      "Settings /billing",
+    ]);
+    for (const role of ["admin", "driver", null, undefined]) expect(homeNavFor(role).map(item => item.path)).toEqual(HOME_NAV.map(item => item.path));
   });
 });
 

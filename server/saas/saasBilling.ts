@@ -7,12 +7,17 @@ import {
   advertisedTrialRefusal,
   assertPortalCustomerForTenant,
   checkAdvertisedStripePrice,
+  checkoutTrialPeriodDays,
   isAdvertisedJoystickPlan,
   isRefundBillingEvent,
-  JOYSTICK_REQUIRED_TRIAL_DAYS,
   JoystickCheckoutClosedError,
   revenueCentsForBillingEvent,
 } from "./joystickStripeOffer";
+import {
+  invoiceSubscriptionId,
+  subscriptionCurrentPeriodEnd,
+  subscriptionScheduledToCancel,
+} from "./stripeWebhookShapes";
 import {
   attachCheckoutToOnboarding,
   assertSaasPlanCanCheckout,
@@ -27,6 +32,13 @@ import {
   reserveSaasCheckoutSlot,
 } from "./saasStore";
 
+/**
+ * API responses this client reads (prices, Checkout sessions, subscriptions) come back in this version. Webhook
+ * payloads come in the endpoint's own version (the sandbox endpoint is 2026-09-30); stripeWebhookShapes.ts reads
+ * both. Staying on basil also keeps Checkout-created subscriptions in classic billing mode: 2025-09-30.clover made
+ * flexible billing mode the default for API-created subscriptions. Moving this pin changes every response shape
+ * read here, so it moves only with tests against that version's shapes.
+ */
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
 export function getLegacyDayforgeBillingStripe(): Stripe {
@@ -37,11 +49,30 @@ export function getLegacyDayforgeBillingStripe(): Stripe {
   return new Stripe(key, { apiVersion: STRIPE_API_VERSION as any });
 }
 
+/**
+ * The origin checkout success/cancel and the billing portal return to. Unset, it is https://admin.bldg.chat, the
+ * deployed admin app that serves /joystick-start and the legacy-named onboarding and settings routes.
+ */
 function appUrl(): string {
   return (
     process.env.DAYFORGE_BILLING_APP_URL?.replace(/\/$/, "") ||
     "https://admin.bldg.chat"
   );
+}
+
+/**
+ * The Stripe customer-portal configuration (bpc_...) the billing portal opens with. Unset, Stripe uses the account's
+ * default configuration. A value that is not a portal configuration id refuses to open the portal.
+ */
+export function legacyDayforgeBillingPortalConfigurationId(): string | null {
+  const value = process.env.DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID?.trim() ?? "";
+  if (!value) return null;
+  if (!/^bpc_[A-Za-z0-9]+$/.test(value)) {
+    throw new Error(
+      "DAYFORGE_BILLING_PORTAL_CONFIGURATION_ID must be a Stripe portal configuration id (bpc_...)"
+    );
+  }
+  return value;
 }
 
 /** Where today's checkout returns, for callers outside billing (the first ten minutes). */
@@ -109,6 +140,8 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
     ? (await assertAdvertisedCheckoutIsOpen(stripe, plan)).id
     : plan.stripePriceId;
   const checkoutRequestId = onboarding.checkoutRequestId ?? input.requestId;
+  // Advertised monthly has no trial: no trial_period_days is sent and Stripe charges the first invoice at checkout.
+  const trialPeriodDays = checkoutTrialPeriodDays(plan);
   await reserveSaasCheckoutSlot({
     onboardingSessionId: onboarding.id,
     planKey: plan.planKey,
@@ -137,11 +170,7 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
           legacyDayforgeOnboardingSessionId: onboarding.id,
           legacyDayforgePlanKey: plan.planKey,
         },
-        ...(isAdvertisedJoystickPlan(plan.planKey)
-          ? { trial_period_days: JOYSTICK_REQUIRED_TRIAL_DAYS }
-          : plan.trialDays > 0
-            ? { trial_period_days: plan.trialDays }
-            : {}),
+        ...(trialPeriodDays > 0 ? { trial_period_days: trialPeriodDays } : {}),
       },
     },
     {
@@ -156,23 +185,37 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   return { id: session.id, url: session.url };
 }
 
-export async function createLegacyDayforgeBillingPortal(input: {
+type BillingPortalInput = {
   tenantId: string;
   requestId: string;
   requestedCustomerId?: string | null;
   stripe?: Stripe;
-}) {
+};
+
+/** The whole portal session, for callers that check it (the sandbox acceptance runner). */
+export async function createLegacyDayforgeBillingPortalSession(
+  input: BillingPortalInput
+): Promise<Stripe.BillingPortal.Session> {
   const customer = await getStripeCustomerForTenant(input.tenantId);
   assertPortalCustomerForTenant({
     tenantId: input.tenantId,
     tenantCustomerId: customer,
     requestedCustomerId: input.requestedCustomerId,
   });
+  const configuration = legacyDayforgeBillingPortalConfigurationId();
   const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
-  const session = await stripe.billingPortal.sessions.create(
-    { customer, return_url: `${appUrl()}/dayforge-settings` },
+  return stripe.billingPortal.sessions.create(
+    {
+      customer,
+      return_url: `${appUrl()}/dayforge-settings`,
+      ...(configuration ? { configuration } : {}),
+    },
     { idempotencyKey: `dayforge:portal:${input.tenantId}:${input.requestId}` }
   );
+}
+
+export async function createLegacyDayforgeBillingPortal(input: BillingPortalInput) {
+  const session = await createLegacyDayforgeBillingPortalSession(input);
   return { url: session.url };
 }
 
@@ -279,10 +322,7 @@ async function syncStripeSubscription(input: {
   const customerId = idFromExpandable(input.subscription.customer);
   if (!customerId)
     throw new Error("Stripe subscription is missing its customer");
-  const subscription = input.subscription as Stripe.Subscription & {
-    current_period_end?: number | null;
-    trial_end?: number | null;
-  };
+  const subscription = input.subscription;
   const eventIsFailure = input.eventType === "invoice.payment_failed";
   const eventIsPaid =
     input.recognizeRevenue && input.eventType === "invoice.paid";
@@ -303,8 +343,8 @@ async function syncStripeSubscription(input: {
     status,
     eventId: input.eventId,
     eventCreatedAt: input.eventCreatedAt,
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    currentPeriodEnd: unixDate(subscription.current_period_end),
+    cancelAtPeriodEnd: subscriptionScheduledToCancel(subscription),
+    currentPeriodEnd: unixDate(subscriptionCurrentPeriodEnd(subscription)),
     trialEnd: unixDate(subscription.trial_end),
     latestInvoiceId: idFromExpandable(subscription.latest_invoice),
     ...(eventIsFailure
@@ -348,10 +388,8 @@ async function subscriptionForEvent(
     event.type === "invoice.paid" ||
     event.type === "invoice.payment_failed"
   ) {
-    const invoice = event.data.object as Stripe.Invoice & {
-      subscription?: string | Stripe.Subscription | null;
-    };
-    const subscriptionId = idFromExpandable(invoice.subscription);
+    // 2025-03-31.basil onward: invoice.parent.subscription_details.subscription, not invoice.subscription.
+    const subscriptionId = invoiceSubscriptionId(event.data.object);
     return subscriptionId
       ? stripe.subscriptions.retrieve(subscriptionId)
       : null;

@@ -48,9 +48,10 @@ describe("JOYSTICK paid-customer lifecycle gates", () => {
   it("keeps the advertised offer and leaves public checkout closed", () => {
     assertAdvertisedOfferUnchanged();
     expect(ADVERTISED_PAID_OFFER).toEqual({
-      monthlyUnitAmountCents: 4900,
+      monthlyUnitAmountCents: 7900,
+      monthlyTrialDays: 0,
       annualUnitAmountCents: 46800,
-      trialDays: 7,
+      annualTrialDays: 7,
       checkoutLive: false,
     });
     expect(JOYSTICK_PUBLIC_CHECKOUT_LIVE).toBe(false);
@@ -90,28 +91,28 @@ describe("JOYSTICK paid-customer lifecycle gates", () => {
     const verified = {
       id: "price_test_monthly",
       active: true,
-      unit_amount: 4900,
+      unit_amount: 7900,
       currency: "usd",
       recurring: { interval: "month" },
     };
     expect(
       checkAdvertisedStripePrice({
         planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-        trialDays: 7,
+        trialDays: 0,
         configuredPriceId: "price_test_monthly",
         price: verified,
       })
     ).toEqual({ ok: true });
     const mismatched = checkAdvertisedStripePrice({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-      trialDays: 7,
+      trialDays: 0,
       configuredPriceId: "price_test_monthly",
-      price: { ...verified, unit_amount: 4901 },
+      price: { ...verified, unit_amount: 4900 },
     });
     expect(mismatched.ok).toBe(false);
     const wrongTrial = checkAdvertisedStripePrice({
       planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-      trialDays: 0,
+      trialDays: 7,
       configuredPriceId: "price_test_monthly",
       price: verified,
     });
@@ -119,7 +120,7 @@ describe("JOYSTICK paid-customer lifecycle gates", () => {
     expect(
       checkAdvertisedStripePrice({
         planKey: JOYSTICK_MONTHLY_PLAN_KEY,
-        trialDays: 7,
+        trialDays: 0,
         configuredPriceId: "price_test_monthly",
         price: null,
       }).ok
@@ -437,18 +438,17 @@ describe("one new mocked tenant through the paid lifecycle", () => {
 
     expect(
       apply("evt_north_harbor_checkout", checkoutCreated, checkoutCreated, () => {
-        status = "trialing";
+        // $79 a month, no trial: checkout charges the first invoice, so the subscription is active at once
+        status = "active";
       })
     ).toBe("in_order");
     expect(tenantId.startsWith("df_")).toBe(true);
     expect(identity.ownerEmail).toBe("ada.owner@north-harbor.example.invalid");
-    // Trial-end denial is owned by PR #686. This exam does not call the
-    // entitlement function for a bare trialing status.
     expect(
       decidePaidLogin({
         membershipActive: true,
         tenantStatus: "active",
-        entitlementAllows: true,
+        entitlementAllows: entitled(checkoutCreated),
         priorSuccessfulLogin: priorLogin,
       })
     ).toEqual({ allow: true, kind: "first" });

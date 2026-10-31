@@ -47,7 +47,7 @@ the apex serves, and `JoystickAcquisitionPage.tsx` reads only `checkout` from th
 | 2 | Three text questions before checkout: what you do all day, where you work, what you avoid (`JOYSTICK_PREPAY_QUESTION_KEYS`). The other two (best customers, 90-day change) come after checkout in `/onboarding` | `shared/goldlineOnboarding.ts:6-24` |
 | 3 | "CLAIRE'S OPENING READ": canonical address and a briefing built from the answers only | `server/goldlineOnboarding/interpreter.ts` |
 | 4 | Business name, contact, email ("SAVE THIS WORLD") | `saveJoystickIdentity` |
-| 5 | "7 days, then $49/month. Card required." then Stripe | `server/saas/joystickStripeOffer.ts` |
+| 5 | "$79 a month. Card required." then Stripe (was "7 days, then $49/month" until 2026-10-31) | `server/saas/joystickStripeOffer.ts` |
 | 6 | Wait for the signed subscription webhook, create password, log in, go to `/onboarding` | `JoystickAcquisitionPage.tsx:230-252` |
 | 7 | "Connections and customer imports can wait…" then REVEAL MY WORLD. Paid sessions never see the CSV import | `GoldlineOnboarding.tsx:85-90` |
 | 8 | Procedural water/land islands, "0 KNOWN", fog everywhere | `firstMission.ts` `revealWorld`, `LocalWorld.tsx` |
@@ -76,7 +76,7 @@ a-ha"). 4. It moves first, each card with a source icon. 5. A morning brief at a
 self-rewriting wiki. 6. Candour when unsure. 7. Free tier, no card.
 
 We copy 3, 4, 5 and 6, and the principle in 7 that the mirror comes before the card. We do **not** copy an
-unlimited free tier: the $49 / 7-day offer stays. We beat Town with a neighbourhood instead of a text page,
+unlimited free tier: the paid offer stays ($79 a month, no trial, since 2026-10-31; it was $49 with 7 days). We beat Town with a neighbourhood instead of a text page,
 stakes instead of suggestions, and a phone call Town cannot make.
 
 ---
@@ -135,7 +135,7 @@ SAMPLE BUSINESS.
 
 The operator investigates the customer inside the game and prepares the message or route. Nothing is sent.
 
-**8 — The card.** "7 days, then $49/month. Card required. One plan. Cancel anytime." Same offer, same Stripe
+**8 — The card.** "JOYSTICK, $79 a month. Card required. One plan. Cancel anytime." (no trial since 2026-10-31). Same offer, same Stripe
 contract, now after the operator has seen their own business and played with it. The prepared draft is held
 on the onboarding session.
 
@@ -200,7 +200,7 @@ throwaway business. Each PR says which was done.
 | Phone calls opt-in on day one | **Yes** |
 | Five questions become two | **Yes, and skippable where possible** |
 | First real contact before payment | **No.** Play and prepare before the card; send after activation, with the draft preserved |
-| Unlimited free tier like Town | **No.** Keep $49 / 7 days |
+| Unlimited free tier like Town | **No.** Keep the paid offer ($79 a month, no trial, since 2026-10-31) |
 
 ---
 
