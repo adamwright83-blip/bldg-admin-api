@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, normalize, posix, relative, resolve } from "node:path";
 
 const base = process.env.DOMAIN_BOUNDARY_RATCHET_BASE?.trim() || "HEAD^1";
+// execFileSync stops at 1 MB of output by default (spawnSync ENOBUFS). One edit
+// to a generated single-line export (client/public/joystick-landing-standalone.html
+// is one 3.6 MB line) already exceeds that. This only raises the output limit;
+// every added line is still checked.
+const GIT_OUTPUT_MAX_BYTES = 256 * 1024 * 1024;
 const contract = JSON.parse(
   readFileSync("docs/architecture/domain-boundaries.json", "utf8")
 );
@@ -30,7 +35,7 @@ try {
   diff = execFileSync(
     "git",
     ["diff", "--unified=0", base, "HEAD", "--", "server", "shared", "client"],
-    { encoding: "utf8" }
+    { encoding: "utf8", maxBuffer: GIT_OUTPUT_MAX_BYTES }
   );
 } catch (error) {
   console.error(`Unable to compute domain-boundary ratchet diff from ${base} to HEAD.`);
@@ -41,7 +46,7 @@ try {
 // Require Git rename evidence and the identical pre-move source line; no caller
 // or target is allowlisted. New callers and changed import forms still fail.
 const renamedPaths = new Map();
-for (const line of execFileSync("git", ["diff", "--name-status", "--find-renames", base, "HEAD"], { encoding: "utf8" }).trim().split("\n")) {
+for (const line of execFileSync("git", ["diff", "--name-status", "--find-renames", base, "HEAD"], { encoding: "utf8", maxBuffer: GIT_OUTPUT_MAX_BYTES }).trim().split("\n")) {
   const [status, oldPath, newPath] = line.split("\t");
   if (status?.startsWith("R")) renamedPaths.set(newPath, oldPath);
 }
@@ -54,7 +59,7 @@ function provenRelocatedImport(path, source, specifier, target) {
   if (oldPath === path && oldTarget === target) return false;
   if (!baseFiles.has(oldPath)) {
     try {
-      baseFiles.set(oldPath, execFileSync("git", ["show", `${base}:${oldPath}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+      baseFiles.set(oldPath, execFileSync("git", ["show", `${base}:${oldPath}`], { encoding: "utf8", maxBuffer: GIT_OUTPUT_MAX_BYTES, stdio: ["ignore", "pipe", "ignore"] }));
     } catch { baseFiles.set(oldPath, ""); }
   }
   for (const oldLine of baseFiles.get(oldPath).split("\n")) {

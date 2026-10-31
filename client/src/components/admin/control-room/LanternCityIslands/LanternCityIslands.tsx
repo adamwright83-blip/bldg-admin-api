@@ -16,6 +16,7 @@ import { buildingsWithResidents } from "./towerStack";
 import ObjectiveMarksLayer from "./ObjectiveMarksLayer";
 import type { DriverCurrentStop } from "./objectiveMarksView";
 import { devSampleCustomers } from "./devSample";
+import { islandPlatformPlaces } from "./platformPlaces";
 import styles from "./lantern-city-islands.module.css";
 import { openSilverLake3D } from "@/pages/goldline/silverLake3d/silverLakeEntry";
 import { openBeverlyHills3D } from "@/pages/goldline/beverlyHills3d/beverlyHillsEntry";
@@ -59,6 +60,7 @@ export default function LanternCityIslands({
   onReviewCustomers,
   showUtilityDock = true,
   showBrand = true,
+  platformScenes = true,
   driverCurrentStop = null,
   intro = false,
   onIntroPhase,
@@ -79,6 +81,11 @@ export default function LanternCityIslands({
   showUtilityDock?: boolean;
   /** The admin world shell owns all top-left scene chrome when this board is embedded there. */
   showBrand?: boolean;
+  /**
+   * The platform-admin-only places (Laundry Farm Operations Hub; the Silver Lake, Beverly Hills and CHANNEL 382 scenes).
+   * A tenant member's world turns them off because it cannot open them (see platformPlaces.ts). Read once, at mount.
+   */
+  platformScenes?: boolean;
   /** Set by Home when the driver line has a current stop. Other boards omit it. */
   driverCurrentStop?: DriverCurrentStop | null;
   /** Play the opening sequence (everything under cloud, the city brightens, customers' islands clear). Read once, at mount. */
@@ -136,6 +143,8 @@ export default function LanternCityIslands({
   destinationRef.current = onDestination;
   const insetAtMount = useRef(insetLeft);
   insetAtMount.current = insetLeft;
+  const placesAtMount = useRef(islandPlatformPlaces(platformScenes));
+  const places = placesAtMount.current;
 
   // The normal world always reads the authenticated tenant, never platform support authority.
   const atlas = trpc.system.geographicTruth.myAtlas.useQuery(undefined, {
@@ -180,13 +189,14 @@ export default function LanternCityIslands({
         onStats: setStats,
         onIntro: phase => introPhaseRef.current?.(phase),
         onIsland: info => {
+          const walkIn = modeRef.current === "explore" ? places.walkIn(info?.name) : null;
           // Silver Lake is a place you can walk into: clicking it opens the 3D courtyard
-          if (modeRef.current === "explore" && info?.name === "Silver Lake") {
+          if (walkIn === "silverLake3d") {
             openSilverLake3D("silver-lake");
             return;
           }
           // Beverly Hills: The Other Rodeo, a painted animal adventure with a real outreach journal.
-          if (modeRef.current === "explore" && info?.name === "Beverly Hills") {
+          if (walkIn === "beverlyHills3d") {
             openBeverlyHills3D();
             return;
           }
@@ -198,11 +208,11 @@ export default function LanternCityIslands({
           if (skyBoardAtMount.current && towerId === storyLocationRef.current && destinationRef.current) { setHover(null); destinationRef.current(); return; }
           if (modeRef.current === "explore") setTower(towerId);
         },
-        onOperationsHub: () => { if (modeRef.current === "explore") window.location.assign("/operations/floor"); },
+        onOperationsHub: () => { if (places.operationsHub && modeRef.current === "explore") window.location.assign("/operations/floor"); },
         onOperationsHubHover: setOperationsHubTip,
         onSuitcase: () => { if (modeRef.current === "explore") setInSuitcase(true); },
         onSuitcaseHover: setSuitcaseTip,
-      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current, storyAnomaly });
+      }, { intro: introAtMount.current, skyBoard: skyBoardAtMount.current, storyLocation: storyLocationRef.current, storyAnomaly, operationsHub: places.operationsHub });
     } catch (e) {
       // no WebGL (old browser, locked-down device): say so instead of a blank screen
       console.warn("Lantern City needs WebGL", e);
@@ -306,7 +316,9 @@ export default function LanternCityIslands({
                 <button key={building.id} type="button" onClick={() => setTower(building.id)}>{building.name} floors</button>
               ))}
               {/* the marketing game: a tiny TV station whose one commercial is a real ad */}
-              <button type="button" onClick={() => window.location.assign("/growth/lantern-city?level=channel-382")} data-testid="lantern-channel-382">📺 CHANNEL 382</button>
+              {places.channel382 ? (
+                <button type="button" onClick={() => window.location.assign("/growth/lantern-city?level=channel-382")} data-testid="lantern-channel-382">📺 CHANNEL 382</button>
+              ) : null}
             </div>
           ) : null}
         </>

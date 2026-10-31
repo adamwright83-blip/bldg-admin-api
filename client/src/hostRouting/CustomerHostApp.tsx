@@ -4,6 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { trpc } from "@/lib/trpc";
 import { signedInWithLegacyDriverPassword } from "@/lib/legacyDriverSession";
+import { TenantUnlockedChapterGate } from "@/components/goldline/TenantUnlockedChapterGate";
 import {
   isPlatformAdminPath,
   normalizePath,
@@ -26,6 +27,14 @@ const DigitalReceiptPage = lazy(() => import("@/pages/DigitalReceiptPage"));
 
 function CustomerFallback() {
   return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+}
+
+/** This host reads window.location directly, so leaving is a full navigation. */
+function CustomerReplace({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return <CustomerFallback />;
 }
 
 function CustomerLogin() {
@@ -123,9 +132,11 @@ function renderCustomerView(view: JoystickHostView, path: string) {
   if (view === "customer-chapter") {
     return (
       <CustomerOperatorGate>
-        <Suspense fallback={<CustomerFallback />}>
-          <GoldlineChapterHost />
-        </Suspense>
+        <TenantUnlockedChapterGate locked={<CustomerReplace to="/play" />}>
+          <Suspense fallback={<CustomerFallback />}>
+            <GoldlineChapterHost />
+          </Suspense>
+        </TenantUnlockedChapterGate>
       </CustomerOperatorGate>
     );
   }

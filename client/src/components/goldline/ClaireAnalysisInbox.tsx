@@ -2,7 +2,9 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Link } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { claireInboxDestinationOpenable } from "./claireInboxDestination";
 
 /**
  * Goldline in-app inbox. Must portal to document.body: Driver Daily Line
@@ -14,6 +16,7 @@ export function ClaireAnalysisInbox() {
     () => new Set()
   );
   const utils = trpc.useUtils();
+  const { user } = useAuth();
   const inbox = trpc.system.claire.analysisInbox.useQuery(undefined, {
     staleTime: 8_000,
     refetchInterval: 12_000,
@@ -23,6 +26,7 @@ export function ClaireAnalysisInbox() {
     trpc.system.claire.markAnalysisNotificationRead.useMutation();
   const items = (inbox.data ?? []).filter(item => !dismissedIds.has(item.id));
   if (!items.length || typeof document === "undefined") return null;
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
 
   const dismiss = async (id: string) => {
     setDismissedIds(current => new Set(current).add(id));
@@ -98,7 +102,8 @@ export function ClaireAnalysisInbox() {
           <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
             {item.body}
           </p>
-          <Link
+          {/* A destination this person cannot open is not a link, so viewing never consumes the notice. */}
+          {claireInboxDestinationOpenable({ href: item.href, hostname, role: user?.role }) ? <Link
             href={item.href}
             onClick={() => {
               void dismiss(item.id);
@@ -119,7 +124,7 @@ export function ClaireAnalysisInbox() {
             }}
           >
             {item.ctaLabel || "VIEW ANALYSIS"}
-          </Link>
+          </Link> : null}
         </div>
       ))}
     </aside>,

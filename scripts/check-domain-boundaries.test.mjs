@@ -407,3 +407,61 @@ test('legitimate Git-recognized relocation preserving same semantic import passe
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// 11. A diff larger than execFileSync's 1 MB default is still read and checked.
+// client/public/joystick-landing-standalone.html is one 3.6 MB generated line, so a
+// one-word edit there produces a multi-megabyte --unified=0 diff.
+const singleLineExport = word =>
+  `<main>${'a'.repeat(1536 * 1024)} ${word} ${'b'.repeat(1536 * 1024)}</main>\n`;
+
+test('an edit to a multi-megabyte single-line export does not crash the ratchet', () => {
+  const repo = createFixtureRepo();
+  try {
+    repo.put('client/public/standalone-export.html', singleLineExport('$49/month'));
+    repo.git('add', '.');
+    repo.git('commit', '-m', 'baseline export');
+    const baseline = repo.git('rev-parse', 'HEAD');
+
+    repo.put('client/public/standalone-export.html', singleLineExport('$79/month'));
+    repo.git('add', '.');
+    repo.git('commit', '-m', 'price edit inside the giant line');
+    const diffBytes = Buffer.byteLength(
+      execFileSync('git', ['diff', '--unified=0', baseline, 'HEAD', '--', 'client'], { cwd: repo.root, maxBuffer: 1 << 28 })
+    );
+    assert.ok(diffBytes > 1024 * 1024, `fixture diff must exceed the 1 MB default (was ${diffBytes})`);
+
+    const result = repo.check(baseline);
+    assert.doesNotMatch(result.stderr, /ENOBUFS|Unable to compute/, result.stderr);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /passed/i);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('a forbidden import beside a multi-megabyte single-line edit still fails', () => {
+  const repo = createFixtureRepo();
+  const wt = writeTargets[0];
+  try {
+    repo.put('client/public/standalone-export.html', singleLineExport('$49/month'));
+    repo.put(wt.callerPath, 'export const entry = () => "clean baseline";\n');
+    repo.git('add', '.');
+    repo.git('commit', '-m', 'baseline export and caller');
+    const baseline = repo.git('rev-parse', 'HEAD');
+
+    repo.put('client/public/standalone-export.html', singleLineExport('$79/month'));
+    repo.put(
+      wt.callerPath,
+      `import { ${wt.symbolName} } from "${wt.importSpecifier}";\nexport const entry = () => ${wt.symbolName}();\n`
+    );
+    repo.git('add', '.');
+    repo.git('commit', '-m', 'giant edit plus forbidden import');
+
+    const result = repo.check(baseline);
+    assert.equal(result.status, 1, `forbidden import must fail, not crash: ${result.stderr}`);
+    assert.doesNotMatch(result.stderr, /ENOBUFS|Unable to compute/);
+    assert.match(result.stderr, /game-does-not-import-business-implementation/);
+  } finally {
+    repo.cleanup();
+  }
+});

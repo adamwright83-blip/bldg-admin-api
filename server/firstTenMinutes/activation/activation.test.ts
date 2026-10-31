@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { draftStatusLine } from "../../../shared/firstTenMinutesActivation";
+import { draftStatusLine, offerWords } from "../../../shared/firstTenMinutesActivation";
+import { advertisedOfferForPlan, JOYSTICK_ANNUAL_PLAN_KEY, JOYSTICK_MONTHLY_PLAN_KEY } from "../../saas/joystickStripeOffer";
 import { isThePreparedMessage, latestOnSubject } from "./activation";
 
 const PREPARED = {
   subject: "Re: Friday flowers?",
   body: "Hi Elena — you asked earlier this year about Friday flowers. We now have a weekly Friday delivery. Is that still something you're looking for at the hotel?",
 };
+
+describe("the offer, stated plainly", () => {
+  it("states the advertised monthly offer as $79 a month with no trial, and annual with its seven days", () => {
+    const monthly = advertisedOfferForPlan(JOYSTICK_MONTHLY_PLAN_KEY)!;
+    expect(offerWords({ ...monthly, displayName: "JOYSTICK" })).toEqual({
+      line: "JOYSTICK, $79 a month.",
+      detail: "Card required. One plan. Cancel anytime.",
+    });
+    const annual = advertisedOfferForPlan(JOYSTICK_ANNUAL_PLAN_KEY)!;
+    expect(offerWords({ ...annual, displayName: "JOYSTICK" }).line).toBe("7 days free, then $468 a year.");
+  });
+
+  it("says only what it knows for a plan whose price it can't see", () => {
+    expect(offerWords({ trialDays: 0, unitAmountCents: null, interval: null, displayName: "JOYSTICK" })).toEqual({
+      line: "JOYSTICK.",
+      detail: "Card required.",
+    });
+  });
+});
 
 describe("the message leaving the table", () => {
   it("counts only the prepared message as found in the Sent folder: its subject, or its opening words", () => {

@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import FirstChapter from '@/game/chapters/firstChapter/FirstChapter';
 import { CHAPTER_ID, saveSchema } from '@/game/chapters/firstChapter/model';
-import { chapterFromServer, chapterToServer } from '@/game/chapters/firstChapter/persistence';
+import { chapterFromServer, chapterReplayStaysLocal, chapterStorageKey, chapterToServer } from '@/game/chapters/firstChapter/persistence';
 import { goldlineChapterFictionStateSchema, type GoldlineChapterFictionState } from '@shared/goldlineChapterState';
-const STORAGE_KEY=`goldline:chapter-dev:${CHAPTER_ID}:v1`;
 const BINDING={chapterId:CHAPTER_ID,buildingId:'century_park_east' as const};
 /** Authenticated host; all business evidence remains behind the existing server boundaries. */
 export default function GoldlineChapterHost(){
+  const {user}=useAuth();
+  if(!user)return <div className="fc-host"><p>Preparing the passage…</p></div>;
+  const storageKey=chapterStorageKey(CHAPTER_ID,{openId:user.openId,tenantId:'tenantId' in user?user.tenantId:null});
+  return <ScopedChapterHost key={storageKey} storageKey={storageKey}/>;
+}
+function ScopedChapterHost({storageKey:STORAGE_KEY}:{storageKey:string}){
   const revision=useRef(0),base=useRef<GoldlineChapterFictionState|null>(null),lastPushed=useRef(''),busy=useRef(false);
   const [seeded,setSeeded]=useState(false),[generation,setGeneration]=useState(0),[status,setStatus]=useState('Saved on this device');
   const [echoOpen,setEchoOpen]=useState(false),[echoEnabled,setEchoEnabled]=useState(false);
@@ -39,6 +45,7 @@ export default function GoldlineChapterHost(){
       let raw:string|null;try{raw=localStorage.getItem(STORAGE_KEY);}catch{return;}
       if(!raw||raw===lastPushed.current)return;
       let local;try{local=saveSchema.safeParse(JSON.parse(raw));}catch{return;}if(!local.success)return;
+      if(chapterReplayStaysLocal(local.data,base.current))return;
       busy.current=true;
       try{
         const next=chapterToServer(local.data,base.current);
@@ -59,7 +66,7 @@ export default function GoldlineChapterHost(){
   const prepare=async()=>{try{await arm.mutateAsync(BINDING);await binding.refetch();}catch{setStatus('Receiver unavailable · local chapter remains playable');}};
   const trace=()=>{setEchoEnabled(true);setEchoOpen(true);};
   return <div className="fc-host">
-    {!seeded?<p>Preparing the passage…</p>:<FirstChapter key={generation} syncStatus={status}
+    {!seeded?<p>Preparing the passage…</p>:<FirstChapter key={generation} storageKey={STORAGE_KEY} syncStatus={status}
       world={{armed:!!binding.data?.armedAt,resolved:!!binding.data?.resolvedEventId,outcome:base.current?.realOutcome??null,echo:echoEnabled&&!!echo.data?.available}}
       onPrepare={prepare} onEcho={trace}/>}
     {echoOpen?<section className="fc-echo" aria-label="Recorded follow-up" tabIndex={-1}>
