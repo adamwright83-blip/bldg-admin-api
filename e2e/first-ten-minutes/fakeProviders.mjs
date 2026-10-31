@@ -329,6 +329,13 @@ const server = http.createServer(async (req, res) => {
       .map(message => ({ id: message.id, threadId: message.threadId }));
     return send(res, 200, { messages: ids.reverse(), resultSizeEstimate: ids.length });
   }
+  // users.threads.get: a whole conversation, to see whether anyone has answered in it
+  const thread = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/threads\/([^/]+)$/);
+  if (thread) {
+    const id = decodeURIComponent(thread[1]);
+    const messages = [...corpus.messages, ...sentLater, ...receivedLater].filter(message => message.threadId === id).map(gmailMessage);
+    return messages.length ? send(res, 200, { id, messages }) : send(res, 404, { error: "not found" });
+  }
   const attachment = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)\/attachments\/([^/]+)$/);
   if (attachment) return send(res, 200, { data: TINY_JPEG.toString("base64url"), size: TINY_JPEG.length });
   const one = path.match(/^\/gmail\.googleapis\.com\/gmail\/v1\/users\/me\/messages\/([^/]+)$/);

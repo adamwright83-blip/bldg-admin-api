@@ -100,6 +100,10 @@ test("a new customer: onboarding, the first message, a paid workspace, and comin
     const body = teo.getByTestId("claire-desk-follow-up-body");
     await expect(body).toHaveValue(/^Hi Teo,\n\nFollowing up on my note from .+ about "Standing order"\. Did you have a chance to look\?\n$/);
     await body.fill("Hi Teo, shall I keep the Friday order going this month?");
+    // Gmail's own compose window carries the words as edited, not the first draft
+    const compose = new URL((await teo.getByTestId("claire-desk-follow-up-gmail").getAttribute("href")) ?? "");
+    expect(compose.searchParams.get("body")).toBe("Hi Teo, shall I keep the Friday order going this month?");
+    expect(compose.searchParams.get("to")).toBe("teo@marsh.example");
     await shot(page, "05-follow-up-ready", project);
     await teo.getByTestId("claire-desk-follow-up-send").click();
     await expect(teo.getByTestId("claire-desk-follow-up-outcome")).toContainText("Sent from your Gmail at", { timeout: 30_000 });
