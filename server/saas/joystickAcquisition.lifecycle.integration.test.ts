@@ -64,7 +64,7 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
     await db.execute(
       `INSERT INTO dayforge_saas_billing_plans
         (planKey,displayName,stripePriceId,trialDays,rulesJson,entitlementsJson,active)
-       VALUES (?,?,?,7,?,?,true)`,
+       VALUES (?,?,?,0,?,?,true)`,
       [
         planKey,
         "JOYSTICK Acquisition Test",
@@ -227,6 +227,8 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
     expect(checkout.url).toBe("https://example.invalid/checkout");
     expect(state.created.params.customer_email).toBe(`owner-${suffix}@example.invalid`);
     expect(state.created.params.success_url).toContain("/joystick-start?");
+    // no trial: Checkout charges the first invoice
+    expect(state.created.params.subscription_data).not.toHaveProperty("trial_period_days");
 
     const [beforeProvision] = await db.execute<RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM dayforge_saas_tenants"
@@ -240,10 +242,11 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
     const subscription = {
       id: `sub_acquisition_${suffix}`,
       customer: `cus_acquisition_${suffix}`,
-      status: "trialing",
+      status: "active",
       cancel_at_period_end: false,
-      current_period_end: created + 86400 * 30,
-      trial_end: created + 86400 * 7,
+      trial_end: null,
+      // 2025-03-31.basil onward: the period end is on the subscription item
+      items: { data: [{ current_period_end: created + 86400 * 30 }] },
       latest_invoice: `in_acquisition_${suffix}`,
       metadata: {
         legacyDayforgeOnboardingSessionId: sessionId,
@@ -286,6 +289,12 @@ suite("JOYSTICK acquisition draft → paid tenant lifecycle", () => {
     tenantId = String(sessions[0]?.tenantId ?? "");
     expect(tenantId).toMatch(/^df_[0-9a-f]{24}$/);
     expect(sessions[0]?.status).toBe("provisioned");
+    const [subscriptionRows] = await db.execute<RowDataPacket[]>(
+      "SELECT status, trialEnd, currentPeriodEnd FROM dayforge_saas_subscriptions WHERE tenantId = ?",
+      [tenantId]
+    );
+    expect(subscriptionRows[0]).toMatchObject({ status: "active", trialEnd: null });
+    expect(new Date(subscriptionRows[0]?.currentPeriodEnd).getTime()).toBe((created + 86400 * 30) * 1000);
 
     const [tenantRows] = await db.execute<RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM dayforge_saas_tenants WHERE id = ?",

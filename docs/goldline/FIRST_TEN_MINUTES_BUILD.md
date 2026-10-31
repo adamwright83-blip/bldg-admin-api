@@ -79,8 +79,9 @@ JOYSTICK isn't taking payment yet, and nothing is charged. On Railway → `bldg-
 - `DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET` (legacy name): the signing secret of a Stripe webhook endpoint at
   `https://admin.bldg.chat/api/dayforge/billing/stripe-webhook` (legacy path; event `checkout.session.completed` and the
   subscription events today's billing handles).
-- `DAYFORGE_STRIPE_PRICE_ID`, `DAYFORGE_STRIPE_PLAN_KEY=joystick-growth-standard`, `DAYFORGE_STRIPE_TRIAL_DAYS=7` (legacy names): the
-  monthly plan the card states ($49 a month, seven days free). Full steps are in
+- `DAYFORGE_STRIPE_PRICE_ID`, `DAYFORGE_STRIPE_PLAN_KEY=joystick-growth-standard`, `DAYFORGE_STRIPE_TRIAL_DAYS=0` (legacy names): the
+  monthly plan the card states ($79 a month, no trial, since 2026-10-31; sandbox ids in
+  `docs/billing/JOYSTICK_STRIPE_SANDBOX.md`). Full steps are in
   `docs/legacy-dayforge-saas-onboarding-billing.md` and `docs/legacy-dayforge-production-rollout.md`.
 - `DAYFORGE_BILLING_APP_URL` (legacy name): leave unset (checkout returns to `admin.bldg.chat`). A journey begun on another origin
   is carried there before checkout.
@@ -273,8 +274,8 @@ beat of the chapter is appended to `first_ten_events`, so a reload carries on wh
 
 At the writing table, once the message has value, the person can keep their crew. The card says "Keep your crew.
 Continue your story." and "Your business portrait, this conversation, and everything you've prepared will be waiting
-here." It then states the actual offer plainly, from the live plan: "7 days free, then $49 a month. Card required. One
-plan. Cancel anytime." for `joystick-growth-standard`. What JOYSTICK already knows (business, name, email) is shown for
+here." It then states the actual offer plainly, from the live plan: "JOYSTICK, $79 a month. Card required. One
+plan. Cancel anytime." for `joystick-growth-standard` (it said "7 days free, then $49 a month." before 2026-10-31). What JOYSTICK already knows (business, name, email) is shown for
 the person to confirm, and "Continue with JOYSTICK" leads to checkout.
 
 - **Checkout is today's** (`server/saas`), on the journey's own signup draft. Changes to billing code:

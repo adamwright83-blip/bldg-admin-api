@@ -27,11 +27,11 @@ test.describe("ACCEPTANCE 1: Public Landing → Start Journey", () => {
     const desktopShell = page.locator(".joystick-desktop");
     await expect(desktopShell).toBeVisible();
 
-    // 2. Verify commercial terms are visible ($49/month, 7-day trial, card required, cancel anytime)
+    // 2. Verify commercial terms are visible ($79/month, no trial: charged at signup, card required, cancel anytime)
     const terms = page.locator('[data-testid="landing-commercial-terms"]');
     await expect(terms).toBeVisible();
-    await expect(terms).toContainText("7-day trial");
-    await expect(terms).toContainText("$49/month");
+    await expect(terms).toContainText("$79/month");
+    await expect(terms).toContainText("Charged at signup");
     await expect(terms).toContainText("Card required");
     await expect(terms).toContainText("Cancel anytime");
 
@@ -59,7 +59,7 @@ test.describe("ACCEPTANCE 1: Public Landing → Start Journey", () => {
     // 4. Verify pricing card in briefing section
     const pricingCard = page.locator('[data-testid="landing-pricing-card"]');
     await expect(pricingCard).toBeAttached();
-    await expect(pricingCard).toContainText("7-Day Free Trial, Then $49/Month");
+    await expect(pricingCard).toContainText("$79/Month. Cancel Anytime.");
     await expect(pricingCard).toContainText("Card required at signup");
     await expect(pricingCard).toContainText("Checkout is not open. This does not charge a card.");
 
@@ -93,7 +93,7 @@ test.describe("ACCEPTANCE 1: Public Landing → Start Journey", () => {
     // 2. Verify commercial terms visible on mobile
     const mobileTerms = page.locator('[data-testid="mobile-commercial-terms"]');
     await expect(mobileTerms).toBeVisible();
-    await expect(mobileTerms).toContainText("7-day trial · $49/month");
+    await expect(mobileTerms).toContainText("$79/month · Charged at signup");
     await expect(mobileTerms).toContainText("Card required at signup · Cancel anytime");
     await expect(mobileTerms).toContainText("Checkout is not open. This does not charge a card.");
 
@@ -245,7 +245,7 @@ test.describe("ACCEPTANCE 2: Three-Question Onboarding & Personalized Preview", 
               {
                 planKey: "joystick-standard",
                 displayName: "JOYSTICK Standard",
-                trialDays: 7,
+                trialDays: 0,
                 rules: {},
                 entitlements: ["dayforge_core", "dayforge_field"],
               },

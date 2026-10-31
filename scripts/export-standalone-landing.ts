@@ -359,11 +359,11 @@ async function main() {
       btn.addEventListener('click', () => {
         billingBtns.forEach((b, i) => b.classList.toggle('is-active', i === idx));
         if (idx === 0) {
-          if (costLarge) costLarge.innerHTML = '$49<span class=\"jl-cost-period\">/month</span>';
+          if (costLarge) costLarge.innerHTML = '$79<span class=\"jl-cost-period\">/month</span>';
           if (costNote) costNote.textContent = 'Billed monthly. Switch to annual for $468/year';
         } else {
           if (costLarge) costLarge.innerHTML = '$39<span class=\"jl-cost-period\">/month</span>';
-          if (costNote) costNote.textContent = 'Billed annually at $468/year (saves $120 annually)';
+          if (costNote) costNote.textContent = 'Billed annually at $468/year';
         }
       });
     });
