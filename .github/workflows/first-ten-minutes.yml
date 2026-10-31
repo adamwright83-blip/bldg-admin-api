@@ -6,6 +6,10 @@ on:
   pull_request:
     paths:
       - "server/firstTenMinutes/**"
+      - "server/businessKnowledge/**"
+      - "shared/businessKnowledge*"
+      - "drizzle/0163_business_knowledge.sql"
+      - "scripts/onboarding-intelligence-eval.ts"
       - "shared/firstTenMinutes*"
       - "client/src/pages/firstTenMinutes/**"
       - "client/src/App.tsx"
@@ -67,13 +71,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Contracts
-        run: pnpm exec vitest run server/firstTenMinutes shared/firstTenMinutes client/src/pages/firstTenMinutes shared/claireRoutines.test.ts server/claire/routines
+        run: pnpm exec vitest run server/firstTenMinutes server/businessKnowledge shared/firstTenMinutes client/src/pages/firstTenMinutes shared/claireRoutines.test.ts server/claire/routines
       - name: Migrate the disposable database, twice (idempotent)
         run: |
           node scripts/migrate.mjs
           node scripts/migrate.mjs
       - name: Journeys on MySQL
-        run: pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes server/claire/routines
+        run: pnpm exec vitest run --config vitest.integration.config.ts server/firstTenMinutes server/businessKnowledge server/claire/routines
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
       - name: The first ten minutes in a browser
