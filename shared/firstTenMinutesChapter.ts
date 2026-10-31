@@ -10,6 +10,32 @@ import type { OpportunityType, SourceRef } from "./firstTenMinutesFindings";
 export const LETTER_STEPS = ["glove", "shake", "quill", "dip"] as const;
 export type LetterStep = (typeof LETTER_STEPS)[number];
 
+/** Milestones for THE IMPOSSIBLE MACHINE onboarding puzzle. */
+export const MACHINE_MILESTONES = [
+  "key_retrieved",
+  "center_examined",
+  "choice_prepare_reply",
+  "choice_keep_for_later",
+  "choice_not_for_me",
+  "center_restored",
+  "return_completed",
+  "rook_rescued",
+  "adventure_completed",
+] as const;
+export type MachineMilestone = (typeof MACHINE_MILESTONES)[number];
+
+export type MachineCorrespondenceChoice = "prepare_reply" | "keep_for_later" | "not_for_me" | null;
+
+export type MachineProgressView = {
+  keyRetrieved: boolean;
+  centerExamined: boolean;
+  correspondenceChoice: MachineCorrespondenceChoice;
+  returnCompleted: boolean;
+  returnRouteUsed: "center" | "lower" | null;
+  rookRescued: boolean;
+  adventureCompleted: boolean;
+};
+
 export const DRAFT_APPROACHES = ["still_wanted", "offer_start", "short"] as const;
 export type DraftApproach = (typeof DRAFT_APPROACHES)[number];
 export const DRAFT_APPROACH_NAMES: Record<DraftApproach, string> = {
@@ -65,6 +91,7 @@ export type DraftView = {
 export type ChapterView = {
   opportunity: ChapterOpportunity | null;
   progress: { revealed: boolean; steps: LetterStep[]; letterWritten: boolean };
+  machine?: MachineProgressView;
   draft: DraftView | null;
 };
 

@@ -1,0 +1,129 @@
+export interface AssetManifestEntry {
+  filename: string;
+  publicPath: string;
+  dimensions: { width: number; height: number };
+  hasAlphaChannel: boolean;
+  layerOrder: number;
+  animationPurpose: string;
+  dependencies: string[];
+}
+
+export const IMPOSSIBLE_MACHINE_ASSET_MANIFEST: readonly AssetManifestEntry[] = [
+  {
+    filename: "machine-background.webp",
+    publicPath: "/assets/first-ten/impossible-machine/machine-background.webp",
+    dimensions: { width: 1280, height: 720 },
+    hasAlphaChannel: false,
+    layerOrder: 1,
+    animationPurpose: "Static warm workshop tabletop environment; no characters or movable machine parts.",
+    dependencies: ["MachineBoard.tsx"],
+  },
+  {
+    filename: "machine-chassis.webp",
+    publicPath: "/assets/first-ten/impossible-machine/machine-chassis.webp",
+    dimensions: { width: 1280, height: 720 },
+    hasAlphaChannel: false,
+    layerOrder: 2,
+    animationPurpose: "Static bevelled ivory enamel and brushed brass mechanism baseplate with unobstructed track region.",
+    dependencies: ["MachineBoard.tsx"],
+  },
+  {
+    filename: "switch-details.png",
+    publicPath: "/assets/first-ten/impossible-machine/switch-details.png",
+    dimensions: { width: 260, height: 258 },
+    hasAlphaChannel: true,
+    layerOrder: 3,
+    animationPurpose: "Independently animated ornamental brass switch ring and indicator lever.",
+    dependencies: ["MachineRailway.tsx"],
+  },
+  {
+    filename: "effects/brass-coupling.png",
+    publicPath: "/assets/first-ten/impossible-machine/effects/brass-coupling.png",
+    dimensions: { width: 240, height: 110 },
+    hasAlphaChannel: true,
+    layerOrder: 4,
+    animationPurpose: "Central brass rail coupling bridge that drops into place only when a qualifying send is verified.",
+    dependencies: ["MachineRailway.tsx"],
+  },
+  {
+    filename: "effects/warm-glow.png",
+    publicPath: "/assets/first-ten/impossible-machine/effects/warm-glow.png",
+    dimensions: { width: 256, height: 256 },
+    hasAlphaChannel: true,
+    layerOrder: 4,
+    animationPurpose: "Warm golden-amber continuity accent when track segments align.",
+    dependencies: ["MachineRailway.tsx"],
+  },
+  {
+    filename: "key.png",
+    publicPath: "/assets/first-ten/impossible-machine/key.png",
+    dimensions: { width: 90, height: 220 },
+    hasAlphaChannel: true,
+    layerOrder: 5,
+    animationPurpose: "Isolated mechanical brass key at the key station and carried by the carriage claw.",
+    dependencies: ["MachineRailway.tsx"],
+  },
+  {
+    filename: "carriage.png",
+    publicPath: "/assets/first-ten/impossible-machine/carriage.png",
+    dimensions: { width: 319, height: 260 },
+    hasAlphaChannel: true,
+    layerOrder: 6,
+    animationPurpose: "Isolated clockwork railway carriage with mechanical grabber claw; travels along spline path.",
+    dependencies: ["MachineRailway.tsx"],
+  },
+  {
+    filename: "rook-trapped.png",
+    publicPath: "/assets/first-ten/impossible-machine/rook-trapped.png",
+    dimensions: { width: 284, height: 480 },
+    hasAlphaChannel: true,
+    layerOrder: 7,
+    animationPurpose: "Rook inside-dome pose with transparent background and without glass painted over him.",
+    dependencies: ["MachineRook.tsx"],
+  },
+  {
+    filename: "rook-free.png",
+    publicPath: "/assets/first-ten/impossible-machine/rook-free.png",
+    dimensions: { width: 376, height: 480 },
+    hasAlphaChannel: true,
+    layerOrder: 7,
+    animationPurpose: "Separate full-body escape pose as Rook steps out once the dome lifts.",
+    dependencies: ["MachineRook.tsx"],
+  },
+  {
+    filename: "rook-stealing.png",
+    publicPath: "/assets/first-ten/impossible-machine/rook-stealing.png",
+    dimensions: { width: 284, height: 480 },
+    hasAlphaChannel: true,
+    layerOrder: 7,
+    animationPurpose: "Separate comedic pose of Rook maneuvering the contraption into his leather satchel.",
+    dependencies: ["MachineRook.tsx", "MachineEnding.tsx"],
+  },
+  {
+    filename: "glass-dome.png",
+    publicPath: "/assets/first-ten/impossible-machine/glass-dome.png",
+    dimensions: { width: 301, height: 520 },
+    hasAlphaChannel: true,
+    layerOrder: 8,
+    animationPurpose: "Separate semi-transparent glass cloche dome overlay that lifts vertically when unlocked.",
+    dependencies: ["MachineRook.tsx"],
+  },
+  {
+    filename: "lock-details.png",
+    publicPath: "/assets/first-ten/impossible-machine/lock-details.png",
+    dimensions: { width: 220, height: 183 },
+    hasAlphaChannel: true,
+    layerOrder: 9,
+    animationPurpose: "Ornate brass keyhole escutcheon with visible tumbler gears that rotate during dome release.",
+    dependencies: ["MachineRook.tsx"],
+  },
+  {
+    filename: "dial-details.png",
+    publicPath: "/assets/first-ten/impossible-machine/dial-details.png",
+    dimensions: { width: 232, height: 240 },
+    hasAlphaChannel: true,
+    layerOrder: 10,
+    animationPurpose: "THEN/NOW rotary mechanism ornament at the upper edge of the machine.",
+    dependencies: ["MachineControls.tsx"],
+  },
+];

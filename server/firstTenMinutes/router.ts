@@ -18,7 +18,7 @@ import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, res
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
 import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
-import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
+import { DRAFT_APPROACHES, LETTER_STEPS, MACHINE_MILESTONES } from "../../shared/firstTenMinutesChapter";
 
 const credentials = z.object({
   sessionId: z.string().uuid(),
@@ -223,13 +223,18 @@ export const firstTenMinutesRouter = router({
     return chapterView(journey);
   }),
 
-  /** A beat of the chapter, played: the revelation seen, a step of Hazel's errand, the letter written. */
+  /** A beat of the chapter, played: the revelation seen, a step of Hazel's errand, the letter written, or a machine milestone. */
   chapterStep: publicProcedure
-    .input(credentials.extend({ step: z.enum(["revealed", ...LETTER_STEPS, "letter_written"]) }))
+    .input(
+      credentials.extend({
+        step: z.enum(["revealed", ...LETTER_STEPS, "letter_written", ...MACHINE_MILESTONES]),
+        route: z.enum(["center", "lower"]).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       assertFirstTenOpen(ctx.req);
       const { journey } = await requireJourney(input);
-      return recordChapterStep(journey, input.step);
+      return recordChapterStep(journey, input.step, input.route);
     }),
 
   /** "Now. Yours.": the draft at the writing table, composed from the findings. */

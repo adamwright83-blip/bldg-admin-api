@@ -26,11 +26,21 @@ LOG_DIR="${FIRST_TEN_E2E_LOGS:-tmp/first-ten-e2e-logs}"
 mkdir -p "$LOG_DIR"
 
 export FAKE_PROVIDERS_PORT=4999
+for stale_port in "$PORT" "$FAKE_PROVIDERS_PORT"; do
+  stale_pid=$(lsof -ti :"$stale_port" 2>/dev/null || true)
+  if [ -n "$stale_pid" ]; then kill -9 $stale_pid 2>/dev/null || true; fi
+done
 # Each child gets its own process group, so stopping it stops everything it started (pnpm does not forward signals).
-setsid node e2e/first-ten-minutes/fakeProviders.mjs > "$LOG_DIR/fake-providers.log" 2>&1 &
+if command -v setsid >/dev/null 2>&1; then
+  run_in_pgroup() { setsid "$@"; }
+else
+  run_in_pgroup() { perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' -- "$@"; }
+fi
+
+run_in_pgroup node e2e/first-ten-minutes/fakeProviders.mjs > "$LOG_DIR/fake-providers.log" 2>&1 &
 FAKE_PID=$!
 
-setsid bash -c '
+run_in_pgroup bash -c '
   export NODE_ENV=development
   export DATABASE_URL="$E2E_DATABASE_URL"
   export JWT_SECRET=first-ten-e2e-jwt-secret-000000000000000000

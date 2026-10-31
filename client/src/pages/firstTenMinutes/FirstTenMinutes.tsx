@@ -20,21 +20,15 @@ import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
-import { RevelationScene } from "./chapter/RevelationScene";
-import { LetterScene } from "./chapter/LetterScene";
-import { DraftTable } from "./chapter/DraftTable";
-import { ActivationCard } from "./chapter/ActivationCard";
-import { SendDesk } from "./chapter/SendDesk";
 import { WorkspaceKey } from "./chapter/WorkspaceKey";
-import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
 import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
+import { ImpossibleMachine } from "./impossibleMachine/ImpossibleMachine";
 import { draftStatusLine } from "@shared/firstTenMinutesActivation";
-import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
+import type { ChapterView, DraftApproach } from "@shared/firstTenMinutesChapter";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
 import portraitStyles from "./portrait/portrait.module.css";
-import sendStyles from "./chapter/send.module.css";
 
 /**
  * JOYSTICK's first ten minutes (docs/goldline/FIRST_TEN_MINUTES_BUILD.md). Astra's flow, in the presentation Adam
@@ -250,7 +244,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   // "Your first chapter": back on their portrait, unless they went out to the courtyard again
   const [atCourtyard, setAtCourtyard] = useState(false);
   const onFirstChapter = view?.stage === "first_chapter" && !atCourtyard;
-  const inChapter = Boolean(chapterOpen && opportunity && chapter.data) && !onFirstChapter;
+  const inChapter = Boolean(chapterOpen && chapter.data) && !onFirstChapter;
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -267,66 +261,6 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     setChapter(await verifyDraft.mutateAsync(credentials));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credentials]);
-
-  function closingOutcome(): ClosingOutcome | null {
-    const status = chapter.data?.draft?.status;
-    if (status === "reported_sent" || status === "verified_sent") return "sent";
-    if (status === "declined") return "not_now";
-    return null;
-  }
-
-  function renderTableFoot() {
-    const draft = chapter.data?.draft;
-    const view = activation.data;
-    if (!draft || !view || !credentials) return null;
-    const mustActivate = view.required && view.status !== "active";
-    return (
-      <>
-        {returned.checkout === "cancelled" && view.status !== "active" ? (
-          <p className={styles.quiet} data-testid="first-ten-checkout-cancelled">
-            Checkout closed. Nothing was charged; everything here is saved.
-          </p>
-        ) : null}
-        {view.example || mustActivate || (!view.required && draft.status === "prepared") ? (
-          // back from a paid checkout, the workspace is on its way; otherwise an open checkout can be picked up again
-          view.status === "checkout_pending" && returned.checkout === "success" ? (
-            <p className={styles.quiet} data-testid="first-ten-checkout-pending">
-              Your crew is being kept. This takes a moment.
-            </p>
-          ) : (
-            <ActivationCard
-              activation={view}
-              onBringYourOwn={bringYourOwn}
-              onContinue={async identity => {
-                const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
-                window.location.assign(url);
-              }}
-            />
-          )
-        ) : null}
-        {!view.example && !mustActivate ? (
-          <SendDesk
-            draft={draft}
-            activation={view}
-            onSend={async (approved, options) => {
-              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
-              setChapter(sent.chapter);
-              if (sent.outcome === "needs_permission") void activation.refetch();
-              return sent.outcome;
-            }}
-            onAllow={async () => {
-              // Google's own permission screen, once; it comes back to this table
-              const { url } = await beginConnect.mutateAsync({ ...credentials, provider: "google", purpose: "send" });
-              window.location.assign(url);
-            }}
-            onVerify={verify}
-            notice={notice}
-          />
-        ) : null}
-        {view.owner ? <WorkspaceKey activation={view} credentials={credentials} /> : null}
-      </>
-    );
-  }
 
   // the person returns to their portrait, where a new entry has appeared, and Claire is there to ask
   const firstChapter = trpc.system.firstTenMinutes.firstChapter.useQuery(credentials!, {
@@ -358,45 +292,68 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     await chapter.refetch();
   }
 
-  async function step(which: "revealed" | LetterStep | "letter_written") {
-    if (!credentials) return;
-    setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
-  }
-
   function renderChapter() {
     const data = chapter.data;
-    if (!data || !opportunity || !credentials) return null;
-    if (!data.progress.revealed) {
-      return <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />;
-    }
-    if (!data.draft) {
-      return (
-        <LetterScene
-          steps={data.progress.steps}
-          letterWritten={data.progress.letterWritten}
-          carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
-          onStep={which => step(which)}
-          onWritten={() => step("letter_written")}
-          onYours={() => prepareDraft.mutateAsync(credentials).then(setChapter)}
-        />
-      );
-    }
-    const outcome = closingOutcome();
+    if (!data || !credentials) return null;
+    const actView = activation.data ?? null;
     return (
-      <>
-        <DraftTable
-          opportunity={opportunity}
-          draft={data.draft}
-          onChange={async (change: { approach?: DraftApproach; body?: string }) => setChapter(await changeDraft.mutateAsync({ ...credentials, ...change }))}
-          onDecline={async () => setChapter(await declineDraft.mutateAsync(credentials))}
-        >
-          {renderTableFoot()}
-        </DraftTable>
-        {outcome ? <ClosingBeat outcome={outcome} /> : null}
-        <button type="button" className={sendStyles.backToPage} disabled={openFirstChapter.isPending} onClick={() => void backToPage()} data-testid="first-ten-back-to-page">
-          Back to your page
-        </button>
-      </>
+      <ImpossibleMachine
+        initialProgress={data.machine ?? null}
+        adapter={{
+          example,
+          businessName,
+          opportunity,
+          draft: data.draft,
+          activation: actView,
+          checkoutNotice: returned.checkout,
+          connectNotice: notice,
+          onPrepareDraft: async () => setChapter(await prepareDraft.mutateAsync(credentials)),
+          onChangeDraft: async (change: { approach?: DraftApproach; body?: string }) =>
+            setChapter(await changeDraft.mutateAsync({ ...credentials, ...change })),
+          onDeclineDraft: async () => setChapter(await declineDraft.mutateAsync(credentials)),
+          onRecordChoice: async choice => {
+            const stepName =
+              choice === "prepare_reply"
+                ? "choice_prepare_reply"
+                : choice === "keep_for_later"
+                  ? "choice_keep_for_later"
+                  : "choice_not_for_me";
+            setChapter(await chapterStep.mutateAsync({ ...credentials, step: stepName }));
+          },
+          onRecordMilestone: async payload => {
+            setChapter(
+              await chapterStep.mutateAsync({
+                ...credentials,
+                step: payload.milestone,
+                route: payload.route,
+              })
+            );
+          },
+          onBeginActivation: async identity => {
+            const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
+            window.location.assign(url);
+          },
+          onBringYourOwn: bringYourOwn,
+          onSendDraft: async (approved, options) => {
+            const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
+            setChapter(sent.chapter);
+            if (sent.outcome === "needs_permission") void activation.refetch();
+            return sent.outcome;
+          },
+          onAllowSend: async () => {
+            const { url } = await beginConnect.mutateAsync({
+              ...credentials,
+              provider: "google",
+              purpose: "send",
+            });
+            window.location.assign(url);
+          },
+          onVerifyDraft: verify,
+          onFinishAdventure: backToPage,
+        }}
+      >
+        {actView?.owner ? <WorkspaceKey activation={actView} credentials={credentials} /> : null}
+      </ImpossibleMachine>
     );
   }
 
