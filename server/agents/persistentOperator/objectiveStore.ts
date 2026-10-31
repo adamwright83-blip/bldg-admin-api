@@ -225,6 +225,23 @@ export async function listGoalCycleObjectives(input: {
   return rows.map(toRecord);
 }
 
+/**
+ * What a field event must name to credit an obligation's objective. A
+ * sales_follow_up's subjectKey is a commercial mission id (the proactive board
+ * and geographic conquest both key it by mission), so its target is that
+ * mission: the field bridge matches "commercial_mission" against the mission a
+ * driver acted on, and "commercial_account" against that mission's account id.
+ */
+export function obligationActionTarget(
+  obligation: Pick<PersistentObligation, "kind" | "subjectKey">
+): { actionTargetType: string; actionTargetId: string } {
+  return {
+    actionTargetType:
+      obligation.kind === "sales_follow_up" ? "commercial_mission" : "customer",
+    actionTargetId: obligation.subjectKey,
+  };
+}
+
 function deriveObjectiveContent(input: {
   decision: GoalCycleDecisionRecord;
   candidate?: WeeklyGrowthCandidate | null;
@@ -252,9 +269,7 @@ function deriveObjectiveContent(input: {
       description: payload.why || payload.title || "Open operational obligation due",
       executionType: executionType ?? obligation.executionType ?? "challenge",
       authority: defaultAuthorityForGoldlineAction(actionKind),
-      actionTargetType:
-        obligation.kind === "sales_follow_up" ? "commercial_account" : "customer",
-      actionTargetId: obligation.subjectKey,
+      ...obligationActionTarget(obligation),
       actionTargetDisplayName: payload.subjectName || obligation.subjectKey,
       businessDate: input.businessDate || obligation.dueDate,
     };

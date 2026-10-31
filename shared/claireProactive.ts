@@ -335,9 +335,33 @@ export function isRelationshipCooling(customer: CustomerEvidence): { cooling: bo
   return { cooling: false, why: "Variation is still inside their normal cadence." };
 }
 
+/** The board's id for the sales follow-up on one account, due on one day. */
+export function salesFollowUpObligationId(accountKey: string, dueDate: string): string {
+  return `sales:${accountKey}:${dueDate}`;
+}
+
+/**
+ * A scheduled sales follow-up whose commercial follow-up has moved on. The
+ * pipeline owns that follow-up: completed or cancelled there closes this copy
+ * the same way, and rescheduled to another day supersedes this dated copy (the
+ * sweep schedules the new day). Its reason is kept as it was. Work already in
+ * flight, and a copy that still matches its follow-up, are left alone (null).
+ */
+export function closeSalesFollowUpIfMoved(
+  obligation: ProactiveObligation,
+  followUp: { status: "open" | "completed" | "cancelled"; accountKey: string; dueDate: string }
+): ProactiveObligation | null {
+  if (obligation.kind !== "sales_follow_up" || obligation.status !== "scheduled") return null;
+  if (followUp.status === "completed" || followUp.status === "cancelled") {
+    return { ...obligation, status: followUp.status, historyIntact: true };
+  }
+  if (salesFollowUpObligationId(followUp.accountKey, followUp.dueDate) === obligation.id) return null;
+  return { ...obligation, status: "superseded", historyIntact: true };
+}
+
 export function salesFollowUpObligation(evidence: SalesFollowUpEvidence): ProactiveObligation {
   return {
-    id: `sales:${evidence.accountKey}:${evidence.dueDate}`,
+    id: salesFollowUpObligationId(evidence.accountKey, evidence.dueDate),
     kind: "sales_follow_up",
     subjectKey: evidence.accountKey,
     subjectName: evidence.accountName,
