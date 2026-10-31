@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
 import { apiBase } from "@/lib/apiBase";
 import { WORKSPACE_COPY, type ActivationView } from "@shared/firstTenMinutesActivation";
@@ -31,6 +31,19 @@ export async function signInOwner(email: string, password: string, fetcher: type
 }
 
 /**
+ * Creates the owner's password once, then signs in. If the password was set but signing in failed, trying again only
+ * signs in: creating the password again would be refused (the activation is already complete), which would leave
+ * the person stuck on a form that can never succeed.
+ */
+export async function openWorkspace(steps: { activated: boolean; activate: () => Promise<unknown>; onActivated: () => void; signIn: () => Promise<void> }): Promise<void> {
+  if (!steps.activated) {
+    await steps.activate();
+    steps.onActivated();
+  }
+  await steps.signIn();
+}
+
+/**
  * The workspace the person paid for, opened. Provisioning creates it with no one who can sign in, so the owner
  * creates a password here (server/saas activateOwner, the same step today's funnel has) and goes in signed in.
  */
@@ -39,6 +52,9 @@ export function WorkspaceKey({ activation, credentials }: { activation: Activati
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // the password was created in this visit (sign-in may still have failed): a retry only signs in
+  const activated = useRef(false);
+  const [passwordSet, setPasswordSet] = useState(false);
   const email = activation.identity.ownerEmail;
   if (!activation.owner || activation.example) return null;
 
@@ -59,12 +75,20 @@ export function WorkspaceKey({ activation, credentials }: { activation: Activati
     setBusy(true);
     setProblem(null);
     try {
-      await activate.mutateAsync({
-        ...credentials,
-        name: activation.identity.contactName?.trim() || activation.identity.businessName?.trim() || email,
-        password,
+      await openWorkspace({
+        activated: activated.current,
+        activate: () =>
+          activate.mutateAsync({
+            ...credentials,
+            name: activation.identity.contactName?.trim() || activation.identity.businessName?.trim() || email,
+            password,
+          }),
+        onActivated: () => {
+          activated.current = true;
+          setPasswordSet(true);
+        },
+        signIn: () => signInOwner(email, password),
       });
-      await signInOwner(email, password);
       window.location.assign(WORKSPACE_HOME);
     } catch (cause) {
       setProblem(cause instanceof Error ? cause.message : "Your workspace didn't open. Try again in a moment.");
@@ -101,6 +125,14 @@ export function WorkspaceKey({ activation, credentials }: { activation: Activati
         {problem ? (
           <p className={styles.activationProblem} role="alert">
             {problem}
+            {passwordSet ? (
+              <>
+                {" "}
+                <a href={WORKSPACE_SIGN_IN} data-testid="first-ten-workspace-sign-in">
+                  Sign in from the workspace page
+                </a>
+              </>
+            ) : null}
           </p>
         ) : null}
       </form>
