@@ -308,7 +308,10 @@ export async function assertClaim(scope: KnowledgeScope, input: AssertionInput):
     // the same conclusion on more evidence is not a new version; a different value, basis or wording is
     const same = (row: AssertionRow) => row.value === values.value && row.basis === values.basis && (row.detail ?? null) === values.detail;
 
-    if (current && same(current)) return { outcome: "unchanged" as const, id: current.id, version: current.version };
+    const conflicts = live.filter(row => row.state === "conflict");
+    // the same answer again settles nothing new, unless it is the person reaffirming it over a conflict: then it is
+    // a new confirmation (with its own time, after the activity they just reviewed) that closes the conflict
+    if (current && same(current) && !(isUser(input.basis) && conflicts.length)) return { outcome: "unchanged" as const, id: current.id, version: current.version };
 
     if (current && isUser(current.basis) && !isUser(input.basis)) {
       // the person's answer stands; an agreeing inference adds nothing; a disagreeing one is kept as a conflict
@@ -330,14 +333,11 @@ export async function assertClaim(scope: KnowledgeScope, input: AssertionInput):
         .where(and(inScope(bkAssertions, scope), eq(bkAssertions.id, current.id)));
     }
     // the person settled it: inferences that disagreed with an earlier version are no longer open conflicts
-    if (isUser(input.basis)) {
-      const conflicts = live.filter(row => row.state === "conflict").map(row => row.id);
-      if (conflicts.length) {
-        await tx
-          .update(bkAssertions)
-          .set({ state: "superseded", supersededById: id, supersededAt: new Date() })
-          .where(and(inScope(bkAssertions, scope), inArray(bkAssertions.id, conflicts)));
-      }
+    if (isUser(input.basis) && conflicts.length) {
+      await tx
+        .update(bkAssertions)
+        .set({ state: "superseded", supersededById: id, supersededAt: new Date() })
+        .where(and(inScope(bkAssertions, scope), inArray(bkAssertions.id, conflicts.map(row => row.id))));
     }
     return { outcome: current ? ("superseded" as const) : ("created" as const), id, version };
   });
@@ -456,25 +456,31 @@ export async function startRun(
   now = new Date()
 ): Promise<string | null> {
   const db = await knowledgeDb();
-  const running = await db
-    .select({ id: bkRuns.id })
-    .from(bkRuns)
-    .where(and(inScope(bkRuns, scope), eq(bkRuns.status, "running"), sql`${bkRuns.leaseUntil} >= ${now}`))
-    .limit(1);
-  if (running.length) return null;
+  // a run whose server went away (lease lapsed) is closed as failed, which frees the journey's running slot
+  await db
+    .update(bkRuns)
+    .set({ status: "failed", runningKey: null, finishedAt: now, notesJson: ["the server running it went away"] })
+    .where(and(inScope(bkRuns, scope), eq(bkRuns.status, "running"), sql`${bkRuns.leaseUntil} < ${now}`));
   const id = randomUUID();
-  await db.insert(bkRuns).values({
-    id,
-    journeyId: scope.journeyId,
-    tenantId: scope.tenantId,
-    kind: input.kind,
-    status: "running",
-    model: input.model,
-    triggerReason: input.trigger.slice(0, 200),
-    startedAt: now,
-    leaseUntil: new Date(now.getTime() + RUN_LEASE_MS),
-    budgetJson: input.budget,
-  });
+  try {
+    // the unique (journey_id, running_key) makes this the lease: a second concurrent insert fails, atomically
+    await db.insert(bkRuns).values({
+      id,
+      journeyId: scope.journeyId,
+      tenantId: scope.tenantId,
+      kind: input.kind,
+      status: "running",
+      runningKey: "running",
+      model: input.model,
+      triggerReason: input.trigger.slice(0, 200),
+      startedAt: now,
+      leaseUntil: new Date(now.getTime() + RUN_LEASE_MS),
+      budgetJson: input.budget,
+    });
+  } catch (error) {
+    if (isMysqlDuplicateKeyError(error)) return null;
+    throw error;
+  }
   return id;
 }
 
@@ -500,6 +506,7 @@ export async function finishRun(
     .update(bkRuns)
     .set({
       status: result.status,
+      runningKey: null,
       finishedAt: new Date(),
       leaseUntil: null,
       usedJson: result.used,

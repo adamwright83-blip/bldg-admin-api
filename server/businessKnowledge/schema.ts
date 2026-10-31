@@ -166,6 +166,8 @@ export const bkRuns = mysqlTable(
     tenantId: varchar("tenant_id", { length: 64 }),
     kind: varchar("kind", { length: 16 }).$type<"full" | "incremental">().notNull(),
     status: varchar("status", { length: 24 }).$type<"running" | "complete" | "failed" | "budget_exhausted">().notNull(),
+    /** "running" while it runs, NULL after: unique per journey, so two investigations can't run at once */
+    runningKey: varchar("running_key", { length: 16 }),
     model: varchar("model", { length: 64 }),
     triggerReason: varchar("trigger_reason", { length: 200 }),
     startedAt: timestamp("started_at").notNull(),
@@ -180,6 +182,7 @@ export const bkRuns = mysqlTable(
     notesJson: json("notes_json").$type<string[] | null>(),
   },
   table => ({
+    running: uniqueIndex("uq_bk_runs_running").on(table.journeyId, table.runningKey),
     journey: index("idx_bk_runs_journey").on(table.journeyId, table.startedAt),
     tenant: index("idx_bk_runs_tenant").on(table.tenantId, table.journeyId),
   })

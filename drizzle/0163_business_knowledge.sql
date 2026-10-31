@@ -14,7 +14,8 @@
 --   business_knowledge_assertions  what JOYSTICK concludes or the person confirmed: versioned; superseded, never
 --                                  overwritten; a person's confirmation is never superseded by an inference
 --   business_knowledge_questions   what JOYSTICK asked the person, their words, and what it resolved
---   business_knowledge_runs        each investigation: budget, what was searched, coverage and its gaps
+--   business_knowledge_runs        each investigation: budget, what was searched, coverage and its gaps; while one
+--                                  runs, running_key = 'running', unique per journey, so only one can (NULLs repeat)
 --
 -- Applied by scripts/migrate.mjs; idempotent (CREATE TABLE IF NOT EXISTS). Nothing existing is altered.
 CREATE TABLE IF NOT EXISTS `business_knowledge_entities` (
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS `business_knowledge_runs` (
   `tenant_id` varchar(64) NULL,
   `kind` varchar(16) NOT NULL,
   `status` varchar(24) NOT NULL,
+  `running_key` varchar(16) NULL,
   `model` varchar(64) NULL,
   `trigger_reason` varchar(200) NULL,
   `started_at` timestamp NOT NULL,
@@ -146,6 +148,7 @@ CREATE TABLE IF NOT EXISTS `business_knowledge_runs` (
   `research_json` json NULL,
   `notes_json` json NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_bk_runs_running` (`journey_id`, `running_key`),
   KEY `idx_bk_runs_journey` (`journey_id`, `started_at`),
   KEY `idx_bk_runs_tenant` (`tenant_id`, `journey_id`)
 );

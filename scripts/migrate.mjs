@@ -5909,7 +5909,7 @@ await ensureRequiredColumn(
     "answer_text", "answered_at", "follow_up", "follow_up_answer", "resolution_json", "created_at", "updated_at",
   ]);
   await assertRequiredColumns("business_knowledge_runs", [
-    "id", "journey_id", "tenant_id", "kind", "status", "model", "trigger_reason", "started_at", "finished_at", "lease_until", "watermark_at", "budget_json",
+    "id", "journey_id", "tenant_id", "kind", "status", "running_key", "model", "trigger_reason", "started_at", "finished_at", "lease_until", "watermark_at", "budget_json",
     "used_json", "coverage_json", "research_json", "notes_json",
   ]);
 }

@@ -123,6 +123,34 @@ describe.skipIf(!allowed)("business knowledge on MySQL", () => {
     expect((await store.questions(s))[0].answerText).toBe("Two names, one team");
   });
 
+  it("reaffirming an answer over a conflict closes the conflict with a new confirmation", async () => {
+    const store = await import("./store");
+    const s = scope();
+    const shop = await store.upsertEntity(s, { kind: "company", name: "Old Shop" });
+    const answer = { subjectEntityId: shop, predicate: "status" as const, value: "historical", detail: "Closed it", basis: "user_corrected" as const, confidence: 100, rationale: "You said so.", evidenceIds: [], createdBy: "user" as const };
+    await store.assertClaim(s, answer);
+    expect((await store.assertClaim(s, { subjectEntityId: shop, predicate: "status", value: "active", basis: "inferred", confidence: 60, rationale: "new invoice", evidenceIds: ["e9"], createdBy: "reconciler" })).outcome).toBe("conflict");
+    const again = await store.assertClaim(s, answer);
+    expect(again.outcome).toBe("superseded");
+    const live = await store.liveAssertions(s, { subjectEntityId: shop });
+    expect(live.map(row => [row.value, row.state, row.version])).toEqual([["historical", "current", 2]]);
+    // with no conflict open, the same answer again changes nothing
+    expect((await store.assertClaim(s, answer)).outcome).toBe("unchanged");
+  });
+
+  it("one investigation at a time, even when two start at once", async () => {
+    const store = await import("./store");
+    const raced = scope();
+    const both = await Promise.all(Array.from({ length: 6 }, () => store.startRun(raced, { kind: "full", trigger: "race", budget: {}, model: null })));
+    expect(both.filter(Boolean)).toHaveLength(1);
+    // a run whose lease lapsed is closed and the journey can run again
+    const lapsed = scope();
+    const old = await store.startRun(lapsed, { kind: "full", trigger: "t", budget: {}, model: null }, new Date(Date.now() - 60 * 60_000));
+    expect(old).toBeTruthy();
+    expect(await store.startRun(lapsed, { kind: "full", trigger: "t", budget: {}, model: null })).toBeTruthy();
+    expect((await store.runs(lapsed)).map(run => run.status).sort()).toEqual(["failed", "running"]);
+  });
+
   it("one investigation at a time", async () => {
     const store = await import("./store");
     const s = scope();
