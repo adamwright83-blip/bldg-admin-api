@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
+import { chapterFindings } from "../../businessKnowledge/onboarding";
 import type { FindingPayload, FindingView } from "../../../shared/firstTenMinutesFindings";
 import {
   LETTER_STEPS,
@@ -110,7 +111,7 @@ function draftView(
 export async function chapterView(journey: JourneyRow, now = new Date()): Promise<ChapterView> {
   const reading = await understandingView(journey.id);
   const row = await draftRow(journey.id);
-  const opportunity = chapterOpportunity(reading.findings, row);
+  const opportunity = chapterOpportunity(await chapterFindings(journey, reading.findings, Boolean(row)), row);
   const events = await journeyEvents(journey.id);
   const steps = new Set<LetterStep>();
   let revealed = false;

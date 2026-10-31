@@ -26,6 +26,7 @@ import {
 } from "../../shared/claireRuntime";
 import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { AWAITING_REPLIES_RULE, SIGNUP_KNOWLEDGE_RULE } from "../../shared/firstTenMinutesKnowledge";
+import { BUSINESS_KNOWLEDGE_RULE } from "../../shared/businessKnowledge";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import {
   assertPostGenerationStateVerbs,
@@ -251,6 +252,7 @@ function compactConversationContext(context: ClaireDriveContext): string {
     // Absent unless real (see ClaireDriveContext): JSON drops an undefined field.
     signupKnowledge: context.signupKnowledge,
     awaitingReplies: context.awaitingReplies,
+    businessKnowledge: context.businessKnowledge,
     factInventory: buildClaireVerifiedFactInventory(context).toPromptSection(),
   });
 }
@@ -531,6 +533,10 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "awaiting_replies",
         text: conversationalMode !== "personal" && input.context.awaitingReplies ? contextKnowledgeRule(AWAITING_REPLIES_RULE) : null,
+      },
+      {
+        label: "business_knowledge",
+        text: conversationalMode !== "personal" && input.context.businessKnowledge ? BUSINESS_KNOWLEDGE_RULE : null,
       },
       ...(input.daphnePromptSection
         ? [{ label: "daphne_v2_user_adaptation", text: input.daphnePromptSection }]

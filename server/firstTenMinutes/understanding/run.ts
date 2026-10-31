@@ -32,12 +32,19 @@ export type ReadingDeps = {
   readers: SourceReaders;
   extractor: Extractor;
   geocoder: Geocoder;
+  /**
+   * The business investigation (server/businessKnowledge), when JOYSTICK_ONBOARDING_INTELLIGENCE is on for this
+   * person's own journey: it reconstructs the dated picture before anything is concluded, and says what has gone
+   * quiet, so the chapter never leads to work the person no longer does. `heartbeat` keeps the reading's lease.
+   */
+  investigate?: (heartbeat: () => Promise<void>) => Promise<{ quietTerms: string[]; notes: string[] }>;
 };
 
 export const READING_NOTES = {
   conversations: "Some of your conversations couldn't be read closely just now. What's here came from the rest.",
   work: "Your documents and calendar couldn't be read closely just now. What's here came from the rest.",
   failed: "Your crew couldn't finish reading. Nothing was changed anywhere; you can try again.",
+  investigation: "Your crew couldn't look into everything just now. What's here came from the rest.",
 } as const;
 
 /** Same id twice (a service found in an email and in a document): one finding, both sources. */
@@ -141,6 +148,16 @@ export async function runReading(journeyId: string, runId: string, deps: Reading
       } catch (error) {
         console.warn("[FirstTen] the work reading failed:", error instanceof Error ? error.message.slice(0, 120) : "unknown");
         notes.push(READING_NOTES.work);
+      }
+    }
+    // the business investigation, when on: its understanding decides later (with the person's answers) which
+    // opportunity the chapter may open (businessKnowledge/onboarding.ts chapterFindings); nothing is dropped here
+    if (deps.investigate) {
+      try {
+        await deps.investigate(() => updateReading(journeyId, runId, {}));
+      } catch (error) {
+        console.warn("[FirstTen] the investigation failed:", error instanceof Error ? error.name : "unknown");
+        notes.push(READING_NOTES.investigation);
       }
     }
     await placeFindings(all, deps.geocoder);

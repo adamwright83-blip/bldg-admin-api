@@ -99,6 +99,9 @@ export async function readBusinessUnderstanding(scope: KnowledgeScope): Promise<
   for (const person of all.filter(entity => entity.kind === "person")) {
     if (collaborators.has(person.id) || current("role", person.id)) {
       const item = view(person);
+      // a person's basis is that of what is known about them (their role, that they work with the owner), not a status
+      const known = current("role", person.id) ?? relationships.find(row => row.value === "collaborates_with" && row.subjectEntityId === person.id);
+      item.statusBasis = known?.basis ?? null;
       if (!item.sources.length) item.sources = sourcesOf(relationships.find(row => row.subjectEntityId === person.id || row.objectEntityId === person.id));
       out.people.push(item);
     }
