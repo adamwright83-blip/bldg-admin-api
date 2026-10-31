@@ -1,5 +1,5 @@
 import { mailboxStore, recentInbound, type VerifiedInbound } from "./replyStore";
-import { replyDetectionEnabled } from "./replyService";
+import { replyDetectionEnabledFor } from "./replyService";
 
 /**
  * What Claire may know about people writing back: inbound messages recorded by Gmail reply detection in conversations
@@ -38,7 +38,7 @@ const KIND: Record<VerifiedInbound["kind"], CustomerRepliesView["replies"][numbe
 
 export async function readCustomerReplies(tenantId: string, now: Date, days = 30): Promise<CustomerRepliesView> {
   const since = new Date(now.getTime() - days * 86_400_000);
-  if (!replyDetectionEnabled()) return { watching: "off", lastCheckedAt: null, since: since.toISOString(), replies: [] };
+  if (!replyDetectionEnabledFor(tenantId)) return { watching: "off", lastCheckedAt: null, since: since.toISOString(), replies: [] };
   const mailbox = await mailboxStore.find(`operator:${tenantId}`);
   const recentlyRead = Boolean(mailbox?.lastProcessedAt && now.getTime() - mailbox.lastProcessedAt.getTime() <= WATCHING_WITHIN_MS);
   const watching: CustomerRepliesView["watching"] = !mailbox

@@ -22,6 +22,18 @@ export function replyDetectionEnabled(env: NodeJS.ProcessEnv = process.env): boo
   return env.GMAIL_REPLY_DETECTION?.trim().toLowerCase() === "on";
 }
 
+/**
+ * Which tenants' mailboxes are watched: GMAIL_REPLY_DETECTION_TENANTS, comma-separated. Empty or unset: none, so
+ * turning the global switch on never starts watching every connected mailbox at once. Rollout is one tenant at a time.
+ */
+export function replyDetectionTenants(env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+  return new Set((env.GMAIL_REPLY_DETECTION_TENANTS ?? "").split(",").map(id => id.trim()).filter(Boolean));
+}
+
+export function replyDetectionEnabledFor(tenantId: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return replyDetectionEnabled(env) && replyDetectionTenants(env).has(tenantId);
+}
+
 const operatorKey = (tenantId: string) => `operator:${tenantId}`;
 const tenantOf = (mailboxKey: string) => (mailboxKey.startsWith("operator:") ? mailboxKey.slice("operator:".length) : null);
 
@@ -86,14 +98,16 @@ export type MailboxSyncStore = Pick<typeof mailboxStore, "all" | "create" | "rep
  * the same tenant starts fresh (its own cursor and watch). The same account authorised again after Google ended
  * access, or after it was removed, is watched again from its kept cursor; a mailbox is reactivated only by a
  * connection stored after it stopped, so stale credentials are never retried in a loop. A removed connection is
- * disconnected.
+ * disconnected. Only tenants in GMAIL_REPLY_DETECTION_TENANTS are watched: any other mailbox is paused, and resumes
+ * (from its kept cursor) when its tenant is listed again.
  */
 export async function syncOperatorMailboxes(
-  deps: { connections?: typeof listJawbreakerGmailConnections; store?: MailboxSyncStore; now?: () => Date } = {}
+  deps: { connections?: typeof listJawbreakerGmailConnections; store?: MailboxSyncStore; now?: () => Date; tenants?: ReadonlySet<string> } = {}
 ): Promise<void> {
   const store = deps.store ?? mailboxStore;
   const now = (deps.now ?? (() => new Date()))();
-  const connections = await (deps.connections ?? listJawbreakerGmailConnections)();
+  const tenants = deps.tenants ?? replyDetectionTenants();
+  const connections = (await (deps.connections ?? listJawbreakerGmailConnections)()).filter(connection => tenants.has(connection.tenantId));
   const mailboxes = new Map((await store.all()).map(mailbox => [mailbox.key, mailbox]));
   const connected = new Set<string>();
   for (const connection of connections) {
@@ -104,6 +118,8 @@ export async function syncOperatorMailboxes(
     const existing = mailboxes.get(key);
     if (!existing) await store.create({ key, tenantId: connection.tenantId, source: "operator_gmail", email }, now);
     else if (existing.email !== email) await store.replaceAccount(key, email, now);
+    // its tenant was listed again: it resumes from its kept cursor
+    else if (existing.status === "paused") await store.reactivate(key, now);
     else if (
       existing.status !== "active" &&
       connection.updatedAt &&
@@ -113,7 +129,10 @@ export async function syncOperatorMailboxes(
     }
   }
   for (const mailbox of mailboxes.values()) {
-    if (mailbox.source === "operator_gmail" && mailbox.status !== "disconnected" && !connected.has(mailbox.key)) {
+    if (mailbox.source !== "operator_gmail") continue;
+    if (!tenants.has(mailbox.tenantId)) {
+      if (mailbox.status === "active") await store.setStatus(mailbox.key, "paused", "tenant not in GMAIL_REPLY_DETECTION_TENANTS", now);
+    } else if (mailbox.status !== "disconnected" && !connected.has(mailbox.key)) {
       await store.setStatus(mailbox.key, "disconnected", "Gmail was disconnected", now);
     }
   }

@@ -70,6 +70,7 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
   });
   afterAll(async () => {
     delete process.env.GMAIL_REPLY_DETECTION;
+    delete process.env.GMAIL_REPLY_DETECTION_TENANTS;
     await connection?.end();
   });
 
@@ -180,6 +181,7 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
 
   it("Claire reads it for this tenant only, and knows whether replies are watched", async () => {
     process.env.GMAIL_REPLY_DETECTION = "on";
+    process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies";
     // "watching" means a recent read, not just an active row: a pass that found nothing new still counts as a read
     await replyStore.advanceCursor(KEY, "150", new Date("2026-10-31T11:55:00Z"));
     expect((await mailboxStore.find(KEY))!.historyId).toBe("150");
@@ -202,7 +204,11 @@ describe.skipIf(!allowed)("Gmail reply detection on MySQL", () => {
       replies: [expect.objectContaining({ from: "elena@larkspurhotel.example", kind: "wrote_back", when: "today at 2:00 AM" })],
     });
     expect(await recentInbound("another-tenant", new Date("2026-01-01"))).toEqual([]);
+    // not in GMAIL_REPLY_DETECTION_TENANTS: off; listed but never connected: not_connected
+    expect((await readCustomerReplies("another-tenant", new Date("2026-10-31T12:00:00Z"))).watching).toBe("off");
+    process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies,another-tenant";
     expect((await readCustomerReplies("another-tenant", new Date("2026-10-31T12:00:00Z"))).watching).toBe("not_connected");
+    process.env.GMAIL_REPLY_DETECTION_TENANTS = "tenant-replies";
     delete process.env.GMAIL_REPLY_DETECTION;
     expect((await readCustomerReplies("tenant-replies", new Date("2026-10-31T12:00:00Z"))).watching).toBe("off");
   });

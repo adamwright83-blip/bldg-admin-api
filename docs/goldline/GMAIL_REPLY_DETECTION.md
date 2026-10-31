@@ -1,7 +1,9 @@
 # Gmail reply detection
 
 JOYSTICK notices when someone writes back in a conversation it started, so Claire and the business systems know.
-Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on`.
+Code: `server/integrations/gmail/replies/`. Off unless `GMAIL_REPLY_DETECTION=on`, and then only for the tenants listed
+in `GMAIL_REPLY_DETECTION_TENANTS` (comma-separated; empty means none). Any other tenant's mailbox is paused, and
+resumes from its kept cursor when listed again, so rollout is one tenant at a time.
 
 ## What it does
 
@@ -63,6 +65,7 @@ Railway, `bldg-admin-api`:
 | Variable | Value |
 |---|---|
 | `GMAIL_REPLY_DETECTION` | `on` |
+| `GMAIL_REPLY_DETECTION_TENANTS` | the tenant ids to watch, e.g. a QA tenant first |
 | `GMAIL_PUSH_TOPIC` | `projects/gen-lang-client-0159109182/topics/joystick-gmail-inbox` |
 | `GMAIL_PUSH_AUDIENCE` | `https://admin.bldg.chat/api/integrations/gmail/push` |
 | `GMAIL_PUSH_SERVICE_ACCOUNT` | `joystick-gmail-push@gen-lang-client-0159109182.iam.gserviceaccount.com` |
