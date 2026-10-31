@@ -30,6 +30,10 @@ export default function JoystickWorld() {
           <Link href="/play">Play</Link>
         </nav>
         <div className="cc-top-actions">
+          {/* A full page load: the customer host picks its view from the URL at load, so an in-app push would not open the desk. */}
+          <a href="/claire" className="cc-button">
+            Claire
+          </a>
           <Link href="/product/customers" className="cc-button">
             Customers
           </Link>
@@ -45,6 +49,7 @@ export default function JoystickWorld() {
         <Suspense fallback={<div className="cc-empty">Raising Lantern City…</div>}>
           <LanternCityIslands
             showUtilityDock={false}
+            platformScenes={false}
             onReviewCustomers={() => navigate("/product/customers")}
             onOpenCustomer={() => navigate("/product/customers")}
             onNavigate={navigate}
