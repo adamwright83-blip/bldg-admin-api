@@ -38,6 +38,23 @@ Write two or three short paragraphs of one or two sentences each, to the person 
 - Never mention JOYSTICK, Claire, the crew, AI, findings or data.
 - If an opportunity is listed, the page leads to it: at most, end by pointing towards that kind of conversation. Never say who it is with or what they asked.`;
 
+/**
+ * When JOYSTICK has reconciled the person's working life (server/businessKnowledge), the portrait writes from it:
+ * what is current, what is being prepared, what is past, who they work with and how their names relate, each a
+ * citeable fact. Findings about work that has gone quiet or is past are marked historical.
+ */
+export type PortraitKnowledge = {
+  facts: Array<{ id: string; fact: string; names: string[]; historical: boolean }>;
+  /** words naming work that is paused or past ("website", "Calloway"): findings that hold them are historical */
+  quietTerms: string[];
+};
+
+export const PORTRAIT_KNOWLEDGE_RULES = `
+An understanding of their working life is listed too, reconciled from dated evidence and their own answers; its facts can be cited like findings.
+- Write about the present: what is current and what is being prepared. Mention paused or past work only where it matters, and only in the past tense ("used to", "earlier", "before"), never as current. Anything marked historical is in the past.
+- How their businesses relate is as the facts say, in their own words where given. Never call two names one company unless a fact says so.
+- Never invent a launch date, revenue, customers or sales for something being prepared.`;
+
 // ------------------------------------------------------------------ what the model is shown
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -93,7 +110,14 @@ export function portraitFindings(findings: readonly FindingView[]): FindingView[
   return findings.filter(finding => finding.status !== "dismissed" && finding.payload.kind !== "owner");
 }
 
-export function portraitCorpus(findings: readonly FindingView[], firstName: string | null): string {
+/** Whether a finding is about work that is paused or past, by the words that name that work. */
+export function historicalFinding(finding: FindingView, knowledge: PortraitKnowledge | null | undefined): boolean {
+  if (!knowledge?.quietTerms.length) return false;
+  const text = findingText(finding).toLowerCase();
+  return knowledge.quietTerms.some(term => new RegExp(`\\b${term.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text));
+}
+
+export function portraitCorpus(findings: readonly FindingView[], firstName: string | null, knowledge?: PortraitKnowledge | null): string {
   return JSON.stringify({
     person: firstName,
     findings: portraitFindings(findings).map(finding => ({
@@ -103,9 +127,25 @@ export function portraitCorpus(findings: readonly FindingView[], firstName: stri
       quotes: [...new Set(finding.sources.map(source => source.excerpt).filter(Boolean))].slice(0, 3),
       ...(finding.status === "changed" ? { changedByThePerson: finding.correction ?? "This is no longer true." } : {}),
       ...(finding.status === "confirmed" ? { confirmedByThePerson: true } : {}),
+      ...(historicalFinding(finding, knowledge) ? { historical: true } : {}),
     })),
+    ...(knowledge?.facts.length ? { understanding: knowledge.facts.map(fact => ({ id: fact.id, fact: fact.fact, ...(fact.historical ? { historical: true } : {}) })) } : {}),
   });
 }
+
+/** Knowledge facts as citeable lines for verification: their names and words, nothing else. */
+export function knowledgeViews(knowledge: PortraitKnowledge | null | undefined): FindingView[] {
+  return (knowledge?.facts ?? []).map(fact => ({
+    id: fact.id,
+    companion: null,
+    status: "confirmed",
+    payload: { kind: "business", name: fact.names.join(" ") },
+    sources: [],
+    correction: fact.fact,
+  }));
+}
+
+const PAST_TENSE = /\b(used to|earlier|before|in the past|once|previously|last year|back in|years ago|had been|was|were|did|built|sent|made|ran|worked)\b/i;
 
 // ------------------------------------------------------------------ what may stand
 
@@ -228,9 +268,14 @@ export function lineProblem(text: string, cited: readonly FindingView[], everyon
   const trimmed = text.trim();
   if (trimmed.length < 6 || trimmed.length > 220) return "length";
   if (!cited.length) return "uncited";
-  if (MACHINERY.test(trimmed)) return "machinery";
   const citedText = cited.map(findingText).join("\n");
   const citedWords = new Set(wordsOf(citedText));
+  // "JOYSTICK" may be the person's own product: a machinery word stands only when a cited finding names it
+  const citedNames = new Set(cited.flatMap(namesIn));
+  if (/!/.test(trimmed)) return "machinery";
+  for (const match of trimmed.matchAll(new RegExp(MACHINERY.source.replace("|!", ""), "gi"))) {
+    if (!citedNames.has(match[0].toLowerCase())) return "machinery";
+  }
   const citedStems = new Set([...citedWords].map(stem));
   const properNames = new Set(everyone.flatMap(namesIn));
 
@@ -304,9 +349,10 @@ export type WrittenPortrait = { greeting: string; paragraphs: PortraitLine[][]; 
 /**
  * Keep what may stand. Null when fewer than two lines survive: a page that thin shouldn't be shown at all.
  */
-export function settlePortrait(draft: PortraitDraft, findings: readonly FindingView[]): WrittenPortrait | null {
-  const offered = portraitFindings(findings);
+export function settlePortrait(draft: PortraitDraft, findings: readonly FindingView[], knowledge?: PortraitKnowledge | null): WrittenPortrait | null {
+  const offered = [...portraitFindings(findings), ...knowledgeViews(knowledge)];
   const byId = new Map(offered.map(finding => [finding.id, finding]));
+  const historicalIds = new Set([...portraitFindings(findings).filter(finding => historicalFinding(finding, knowledge)).map(finding => finding.id), ...(knowledge?.facts ?? []).filter(fact => fact.historical).map(fact => fact.id)]);
   const seen = new Set<string>();
   const paragraphs: PortraitLine[][] = [];
   let count = 0;
@@ -318,6 +364,8 @@ export function settlePortrait(draft: PortraitDraft, findings: readonly FindingV
       if (seen.has(text.toLowerCase()) || ids.length !== new Set(sentence.findingIds).size) continue;
       const problem = lineProblem(text, ids.map(id => byId.get(id)!), offered);
       if (problem) continue;
+      // a line resting only on paused or past work must say it is past: old work is never presented as current
+      if (ids.every(id => historicalIds.has(id)) && !PAST_TENSE.test(text)) continue;
       seen.add(text.toLowerCase());
       kept.push({ key: "", text, findingIds: ids });
     }

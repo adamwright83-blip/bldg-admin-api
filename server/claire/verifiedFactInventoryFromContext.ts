@@ -1,5 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 import type { AwaitingReplies, SignupKnowledgeBriefing } from "../../shared/firstTenMinutesKnowledge";
+import type { BusinessKnowledgeBriefing } from "../../shared/businessKnowledge";
 import { CLAIRE_BUSINESS_TIME_ZONE, type ClaireDriveContext, type ClaireTimelineItem } from "./contextAssembler";
 import {
   lintPostGenerationStateVerbs,
@@ -128,6 +129,7 @@ export function buildClaireVerifiedFactInventory(
 
   if (context.signupKnowledge) addSignupKnowledge(builder, context.signupKnowledge);
   if (context.awaitingReplies) addAwaitingReplies(builder, context.awaitingReplies, context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE);
+  if (context.businessKnowledge) addBusinessKnowledge(builder, context.businessKnowledge);
 
   // Rook / recovery drafts are prepared, never sent, unless a write receipt exists.
   builder.addClaim({
@@ -155,6 +157,47 @@ export function buildClaireVerifiedFactInventory(
 function plain(value: string, max = 160): string {
   const words = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
   return words.length > max ? `${words.slice(0, max - 1)}…` : words;
+}
+
+/**
+ * The reconciled business understanding. The operator's own answers are verified; JOYSTICK's readings of their
+ * accounts are pending (tentative: "it looks that way"), never verified. Each carries its assertion id as receipt.
+ * A relationship between two names never licenses "one company" unless the operator said so.
+ */
+function addBusinessKnowledge(builder: VerifiedFactInventoryBuilder, knowledge: BusinessKnowledgeBriefing): void {
+  const bucket = (items: BusinessKnowledgeBriefing["current"], word: string) => {
+    for (const item of items) {
+      builder.addGeneralFact({
+        claimId: `business-status:${item.id}`,
+        statement: `${plain(item.name, 80)} is ${word}${item.basis === "operator" ? " (the operator said so)" : `, by JOYSTICK's reading of their accounts${item.lastActivity ? `; last activity ${item.lastActivity}` : ""}`}`,
+        entityRef: `business_knowledge_entity:${item.id}`,
+        status: item.basis === "operator" ? "verified" : "pending",
+        provenance: `business_knowledge.status.${item.basis}`,
+      });
+    }
+  };
+  bucket(knowledge.current, "current work");
+  bucket(knowledge.preparing, "being prepared (no launch, sales or customers known)");
+  bucket(knowledge.paused, "quiet since its last activity (may be paused, not stopped)");
+  bucket(knowledge.past, "past work");
+  for (const person of knowledge.people) {
+    builder.addGeneralFact({
+      claimId: `business-person:${person.id}`,
+      statement: `${plain(person.name, 80)} works with the operator${person.role ? `: ${plain(person.role, 80)}` : ""}`,
+      entityRef: `business_knowledge_entity:${person.id}`,
+      status: person.basis === "operator" ? "verified" : "pending",
+      provenance: `business_knowledge.person.${person.basis}`,
+    });
+  }
+  for (const relationship of knowledge.relationships) {
+    builder.addGeneralFact({
+      claimId: `business-relationship:${relationship.id}`,
+      statement: `${plain(relationship.a, 80)} ${relationship.relation.replace(/_/g, " ")} ${plain(relationship.b, 80)}${relationship.operatorWords ? ` (the operator: "${plain(relationship.operatorWords, 120)}")` : ""}`,
+      entityRef: `business_knowledge_assertion:${relationship.id}`,
+      status: relationship.basis === "operator" ? "verified" : "pending",
+      provenance: `business_knowledge.relationship.${relationship.basis}`,
+    });
+  }
 }
 
 /**

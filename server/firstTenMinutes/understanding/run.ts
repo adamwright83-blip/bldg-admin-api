@@ -32,13 +32,29 @@ export type ReadingDeps = {
   readers: SourceReaders;
   extractor: Extractor;
   geocoder: Geocoder;
+  /**
+   * The business investigation (server/businessKnowledge), when JOYSTICK_ONBOARDING_INTELLIGENCE is on for this
+   * person's own journey: it reconstructs the dated picture before anything is concluded, and says what has gone
+   * quiet, so the chapter never leads to work the person no longer does. `heartbeat` keeps the reading's lease.
+   */
+  investigate?: (heartbeat: () => Promise<void>) => Promise<{ quietTerms: string[]; notes: string[] }>;
 };
 
 export const READING_NOTES = {
   conversations: "Some of your conversations couldn't be read closely just now. What's here came from the rest.",
   work: "Your documents and calendar couldn't be read closely just now. What's here came from the rest.",
   failed: "Your crew couldn't finish reading. Nothing was changed anywhere; you can try again.",
+  investigation: "Your crew couldn't look into everything just now. What's here came from the rest.",
 } as const;
+
+/** An opportunity built on a request about work that has gone quiet or is past isn't offered: it would lead to work
+ * the person may no longer do. Matched on the request's own words. */
+export function aboutQuietWork(opportunity: DraftFinding, findings: readonly DraftFinding[], quietTerms: readonly string[]): boolean {
+  if (opportunity.payload.kind !== "opportunity" || !quietTerms.length) return false;
+  const request = findings.find(finding => finding.id === (opportunity.payload as { requestId: string }).requestId);
+  const text = JSON.stringify([request?.payload ?? null, opportunity.payload]).toLowerCase();
+  return quietTerms.some(term => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text));
+}
 
 /** Same id twice (a service found in an email and in a document): one finding, both sources. */
 export function mergeDrafts(drafts: DraftFinding[]): DraftFinding[] {
@@ -143,8 +159,17 @@ export async function runReading(journeyId: string, runId: string, deps: Reading
         notes.push(READING_NOTES.work);
       }
     }
+    let quiet: string[] = [];
+    if (deps.investigate) {
+      try {
+        quiet = (await deps.investigate(() => updateReading(journeyId, runId, {}))).quietTerms;
+      } catch (error) {
+        console.warn("[FirstTen] the investigation failed:", error instanceof Error ? error.name : "unknown");
+        notes.push(READING_NOTES.investigation);
+      }
+    }
     await placeFindings(all, deps.geocoder);
-    await keep(linkOpportunities(all, proposals, ids));
+    await keep(linkOpportunities(all, proposals, ids).filter(opportunity => !aboutQuietWork(opportunity, all, quiet)));
     // places and routes gained coordinates: store them again in place
     await saveFindings(journeyId, runId, all.filter(draft => draft.payload.kind === "place" || draft.payload.kind === "route"), origins);
     finished.push("work");

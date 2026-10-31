@@ -32,6 +32,8 @@ import {
   type SignupKnowledgeBriefing,
 } from "../../shared/firstTenMinutesKnowledge";
 import { readTenantOnboardingKnowledge } from "../firstTenMinutes/knowledge/tenantKnowledge";
+import { businessKnowledgeForBriefing, type BusinessKnowledgeBriefing, type BusinessUnderstanding } from "../../shared/businessKnowledge";
+import { readTenantBusinessUnderstanding } from "../businessKnowledge/onboarding";
 import { cachedAwaitingReplies, refreshAwaitingRepliesInBackground } from "../firstTenMinutes/knowledge/awaitingReplies";
 
 export type ClairePhase = "pre_drive" | "post_stop";
@@ -172,6 +174,14 @@ export type ClaireDriveContext = {
    * cache only, never a live Gmail read during a turn. Absent when nothing is cached.
    */
   awaitingReplies?: AwaitingReplies;
+  /**
+   * JOYSTICK's dated, reconciled understanding of the operator's businesses, products, projects and people
+   * (server/businessKnowledge, JOYSTICK_ONBOARDING_INTELLIGENCE): what is current, being prepared, paused or past,
+   * how their names relate in their own words, and what is still open. Read from what is already known: a turn
+   * never waits on Google. Absent (never null) when there is none. It is business knowledge, not how to work with
+   * the operator (that is Daphne's), and not accounting.
+   */
+  businessKnowledge?: BusinessKnowledgeBriefing;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -362,6 +372,7 @@ export async function assembleClaireDriveContext(input: {
   timeZone?: string;
   /** Test seams. Production reads the tenant's own First Ten Minutes journey and the awaiting-replies cache. */
   loadSignupKnowledge?: (tenantId: string) => Promise<OnboardingKnowledge | null>;
+  loadBusinessKnowledge?: (tenantId: string) => Promise<BusinessUnderstanding | null>;
   cachedAwaitingReplies?: (tenantId: string) => AwaitingReplies | null;
   refreshAwaitingReplies?: (tenantId: string) => void;
 }): Promise<ClaireDriveContext> {
@@ -373,6 +384,10 @@ export async function assembleClaireDriveContext(input: {
   const signupKnowledgeRead: Promise<SignupKnowledgeBriefing | undefined> = Promise.resolve()
     .then(() => (input.loadSignupKnowledge ?? readTenantOnboardingKnowledge)(input.tenantId))
     .then(knowledge => signupKnowledgeForBriefing(knowledge, timeZone) ?? undefined)
+    .catch(() => undefined);
+  const businessKnowledgeRead: Promise<BusinessKnowledgeBriefing | undefined> = Promise.resolve()
+    .then(() => (input.loadBusinessKnowledge ?? readTenantBusinessUnderstanding)(input.tenantId))
+    .then(understanding => businessKnowledgeForBriefing(understanding) ?? undefined)
     .catch(() => undefined);
   let today: any = { timeline: [], blockers: [], businessDate: clock.businessDate, nextFixedCommitment: null, items: [] };
   let tomorrow: any = { timeline: [], blockers: [], businessDate: clock.tomorrowBusinessDate, nextFixedCommitment: null, items: [] };
@@ -490,6 +505,7 @@ export async function assembleClaireDriveContext(input: {
   }
 
   const signupKnowledge = await signupKnowledgeRead;
+  const businessKnowledge = await businessKnowledgeRead;
   // Only what the last read of their Gmail already holds: a turn never waits on Google.
   let awaitingReplies: AwaitingReplies | undefined;
   try {
@@ -546,6 +562,7 @@ export async function assembleClaireDriveContext(input: {
     ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
     ...(signupKnowledge ? { signupKnowledge } : {}),
     ...(awaitingReplies ? { awaitingReplies } : {}),
+    ...(businessKnowledge ? { businessKnowledge } : {}),
   };
   assembled.runtime = assembleClaireRuntimeView(assembled, now);
   assembled.communications = await loadClaireCommunicationsContext({

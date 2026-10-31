@@ -1,0 +1,97 @@
+/*
+ * Claire's question before the page: one card, in her hand, quiet. It sits where the page will appear.
+ */
+.card {
+  position: relative;
+  z-index: 3;
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
+.inner {
+  composes: paper from "../firstTen.module.css";
+  display: grid;
+  gap: 14px;
+  padding: clamp(22px, 5vw, 34px) clamp(20px, 5vw, 36px);
+  font-family: Fraunces, Georgia, serif;
+  color: var(--ink);
+}
+
+.understood {
+  margin: 0;
+  font-size: 16px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.theirs {
+  justify-self: end;
+  max-width: 85%;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 16px 16px 4px 16px;
+  background: rgba(0, 0, 0, 0.05);
+  font-size: 16px;
+}
+
+.question {
+  margin: 0;
+  font-size: clamp(18px, 3.9vw, 21px);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.name {
+  display: block;
+  font-family: Caveat, cursive;
+  font-size: 24px;
+  color: var(--ink-soft);
+}
+
+.form {
+  display: grid;
+  gap: 10px;
+}
+
+.answer {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.later,
+.reply {
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+.later {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #5c4d3e !important;
+}
+
+.reply {
+  border: 1px solid #2a2119;
+  background: #2a2119;
+  color: #fbf5e8 !important;
+}
+
+.reply:disabled,
+.later:disabled {
+  opacity: 0.5;
+}
