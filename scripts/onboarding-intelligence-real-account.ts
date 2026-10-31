@@ -128,6 +128,7 @@ async function main() {
     broken ||= failed.length > 0;
     console.log(
       `Test ${outcome.id}: ${"kept" in outcome.cleanup ? "kept (delete with --sweep --yes)" : "started from nothing, cleaned up, none left"}; ` +
+        `model that answered: ${outcome.investigator?.served.join(", ") || "none"}; ` +
         `about $${(outcome.usage.totalCostCents / 100).toFixed(2)}; ${failed.length ? `${failed.length} rule check(s) FAILED` : "rule checks passed"}.\nReport: ${files.markdown}`
     );
   }

@@ -214,6 +214,17 @@ export function investigatorEnv(choice: InvestigatorChoice, env: NodeJS.ProcessE
   return out;
 }
 
+/**
+ * The model this run asked for must be able to run. A missing key would quietly leave the deterministic interpreter
+ * alone, which is a different test; so it is refused before anything is read.
+ */
+export function assertInvestigatorCanRun(choice: InvestigatorChoice, env?: NodeJS.ProcessEnv): string {
+  const notes: string[] = [];
+  const { configured, missing } = investigatorFor("coldtest-check", emptyUsage(), notes, { env: investigatorEnv(choice, env) });
+  if (missing) throw new Error(`The ${configured} investigator can't run here: ${missing} isn't set. Nothing was read.`);
+  return configured;
+}
+
 // ------------------------------------------------------------------ runs
 
 export type ColdTestInput = {
@@ -257,6 +268,7 @@ async function knowledgeOf(scope: KnowledgeScope) {
  * Claire would ask, and what it couldn't read.
  */
 export async function runIntelligenceColdTest(input: ColdTestInput): Promise<ColdTestOutcome> {
+  assertInvestigatorCanRun(input.choice ?? {}, input.env);
   const id = newColdTestId();
   const scope: KnowledgeScope = { journeyId: id, tenantId: null };
   const startedAt = new Date();
@@ -265,7 +277,8 @@ export async function runIntelligenceColdTest(input: ColdTestInput): Promise<Col
   const ledger = new CoverageLedger(now);
   const usage = emptyUsage();
   const notes: string[] = [];
-  const { model, configured } = investigatorFor(id, usage, notes, { env: investigatorEnv(input.choice ?? {}, input.env) });
+  const served = new Set<string>();
+  const { model, configured } = investigatorFor(id, usage, notes, { env: investigatorEnv(input.choice ?? {}, input.env), served });
   const research = googleResearch(input.source.google, ledger, { fetch: readOnlyFetch(input.fetch), now, sleep: input.sleep });
   try {
     const began = Date.now();
@@ -280,7 +293,7 @@ export async function runIntelligenceColdTest(input: ColdTestInput): Promise<Col
       startedAt,
       finishedAt: new Date(),
       cleanup,
-      investigator: { configured, model: model.name, status: result.status, rounds: result.rounds, toolCalls: result.used.toolCalls ?? 0, stoppedBecause: result.stoppedBecause, notes },
+      investigator: { configured, model: model.name, served: [...served], status: result.status, rounds: result.rounds, toolCalls: result.used.toolCalls ?? 0, stoppedBecause: result.stoppedBecause, notes },
       investigatorUsage: investigatorUsage(known.run, usage),
       stages: null,
       timings: { investigation: investigationMs },
@@ -310,6 +323,7 @@ export type JourneyColdTestInput = ColdTestInput & {
  * writing table. The draft is prepared and never sent; nothing is activated.
  */
 export async function runJourneyColdTest(input: JourneyColdTestInput): Promise<ColdTestOutcome> {
+  if (input.intelligence !== false) assertInvestigatorCanRun(input.choice ?? {}, input.env);
   const id = newColdTestId();
   const scope: KnowledgeScope = { journeyId: id, tenantId: null };
   const startedAt = new Date();
@@ -328,7 +342,8 @@ export async function runJourneyColdTest(input: JourneyColdTestInput): Promise<C
   };
   try {
     // the crew's reading, exactly as production composes it, over the person's connections, read-only
-    const built = readingDepsWith(journey, { google: input.source.google, slack: input.source.slack }, { fetch: readOnlyFetch(input.fetch), env: investigatorEnv(input.choice ?? {}, input.env), now: input.now });
+    const served = new Set<string>();
+    const built = readingDepsWith(journey, { google: input.source.google, slack: input.source.slack }, { fetch: readOnlyFetch(input.fetch), env: investigatorEnv(input.choice ?? {}, input.env), now: input.now, served });
     const deps = { ...built, ...(input.extractor ? { extractor: input.extractor } : {}), ...(input.geocoder ? { geocoder: input.geocoder } : {}) };
     const readingRun = randomUUID();
     if (!(await claimReading(id, readingRun, { again: false }))) throw new Error("The test reading couldn't start");
@@ -388,6 +403,7 @@ export async function runJourneyColdTest(input: JourneyColdTestInput): Promise<C
         ? {
             configured: (investigatorEnv(input.choice ?? {}, input.env)[INVESTIGATOR_MODEL_FLAG] ?? "claude").trim().toLowerCase(),
             model: run.model ?? "unknown",
+            served: [...served],
             status: run.status,
             rounds: Number(run.usedJson?.rounds ?? 0),
             toolCalls: Number(run.usedJson?.toolCalls ?? 0),

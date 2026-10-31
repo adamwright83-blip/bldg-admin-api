@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { COLD_TEST_ID, investigatorEnv, isColdTestId, newColdTestId, readOnlyFetch } from "./coldTest";
+import { COLD_TEST_ID, assertInvestigatorCanRun, investigatorEnv, isColdTestId, newColdTestId, readOnlyFetch } from "./coldTest";
 
 /**
  * The cold-start harness's guards, without a database: what counts as a test id, what the read-only fetch lets
@@ -97,8 +97,22 @@ describe("choosing the investigator model", () => {
   });
 });
 
+describe("the chosen model must be able to run", () => {
+  it("refuses before reading anything when the model's key is missing; the deterministic investigator needs none", () => {
+    expect(() => assertInvestigatorCanRun({ investigator: "claude" }, {})).toThrow(/ANTHROPIC_API_KEY isn't set\. Nothing was read/);
+    expect(() => assertInvestigatorCanRun({ investigator: "gemini" }, {})).toThrow(/GEMINI_API_KEY/);
+    expect(assertInvestigatorCanRun({ investigator: "claude" }, { ANTHROPIC_API_KEY: "k" })).toBe("claude");
+    expect(assertInvestigatorCanRun({ investigator: "heuristic" }, {})).toBe("heuristic");
+  });
+});
+
 describe("what the harness can reach", () => {
   const sources = ["server/businessKnowledge/coldTest.ts", "scripts/onboarding-intelligence-real-account.ts", "scripts/onboarding-cold-test.sh"].map(file => readFileSync(file, "utf8"));
+  it("never gives the investigation the owner's expectations: they are only compared afterwards", () => {
+    const harness = readFileSync("server/businessKnowledge/coldTest.ts", "utf8");
+    for (const word of ["Expectations", "expectations", "compareWith"]) expect(harness).not.toContain(word);
+  });
+
   it("never sends, activates, disconnects, revokes, or writes a person's connection", () => {
     for (const forbidden of [
       "sendDraft",

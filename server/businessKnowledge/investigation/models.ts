@@ -34,8 +34,11 @@ export function investigatorPrompt(input: InterpretInput): string {
   ].join("\n");
 }
 
-/** Claude through the existing LLM layer (structured output), attributed to the journey's AI spend. */
-export function claudeInvestigator(journeyId: string, usage: ModelUsage, env: NodeJS.ProcessEnv = process.env): InvestigatorModel {
+/**
+ * Claude through the existing LLM layer (structured output), attributed to the journey's AI spend. `served` collects the
+ * model id the provider says actually answered each call (the cold-test harness reports it).
+ */
+export function claudeInvestigator(journeyId: string, usage: ModelUsage, env: NodeJS.ProcessEnv = process.env, served?: Set<string>): InvestigatorModel {
   const model = env.JOYSTICK_INVESTIGATOR_CLAUDE_MODEL?.trim() || undefined;
   return {
     name: `claude${model ? `:${model}` : ""}`,
@@ -58,6 +61,7 @@ export function claudeInvestigator(journeyId: string, usage: ModelUsage, env: No
             json_schema: { name: "onboarding_investigation", strict: true, schema: z.toJSONSchema(interpretationSchema) as Record<string, unknown> },
           },
         });
+        if (result.model) served?.add(result.model);
         const content = result.choices[0]?.message.content;
         if (typeof content !== "string") throw new Error("The investigator returned nothing structured");
         const usageInfo = (result as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
@@ -78,7 +82,7 @@ export function claudeInvestigator(journeyId: string, usage: ModelUsage, env: No
  * Gemini through Google's Generative Language API with a JSON response schema. The key travels in a header, never
  * in the URL. Only built when GEMINI_API_KEY is configured; JOYSTICK never creates one.
  */
-export function geminiInvestigator(usage: ModelUsage, deps: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv } = {}): InvestigatorModel | null {
+export function geminiInvestigator(usage: ModelUsage, deps: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv; served?: Set<string> } = {}): InvestigatorModel | null {
   const env = deps.env ?? process.env;
   const key = env.GEMINI_API_KEY?.trim();
   if (!key) return null;
@@ -108,7 +112,9 @@ export function geminiInvestigator(usage: ModelUsage, deps: { fetch?: typeof fet
         const body = (await response.json()) as {
           candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
           usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+          modelVersion?: string;
         };
+        deps.served?.add(body.modelVersion || model);
         usage.inputTokens += body.usageMetadata?.promptTokenCount ?? 0;
         usage.outputTokens += body.usageMetadata?.candidatesTokenCount ?? 0;
         const text = body.candidates?.[0]?.content?.parts?.map(part => part.text ?? "").join("") ?? "";
@@ -165,7 +171,7 @@ export function investigatorFor(
   journeyId: string,
   usage: ModelUsage,
   notes: string[],
-  deps: { env?: NodeJS.ProcessEnv; fetch?: typeof fetch } = {}
+  deps: { env?: NodeJS.ProcessEnv; fetch?: typeof fetch; served?: Set<string> } = {}
 ): { model: InvestigatorModel; configured: string; missing: string | null } {
   const env = deps.env ?? process.env;
   const configured = env[INVESTIGATOR_MODEL_FLAG]?.trim().toLowerCase() || "claude";
@@ -182,7 +188,7 @@ export function investigatorFor(
     notes.push("No model key is configured; the deterministic investigator ran alone.");
     return { model: heuristicInvestigator(), configured, missing: "ANTHROPIC_API_KEY" };
   }
-  return { model: withFloor(claudeInvestigator(journeyId, usage, env), usage, notes), configured, missing: null };
+  return { model: withFloor(claudeInvestigator(journeyId, usage, env, deps.served), usage, notes), configured, missing: null };
 }
 
 export { EMPTY_INTERPRETATION };
