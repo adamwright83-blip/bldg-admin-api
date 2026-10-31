@@ -6,7 +6,8 @@ import { exchangeGoogleCode, googleAccount, googleGrantIsUsable, revokeGoogleTok
 import { exchangeSlackCode, revokeSlackToken, slackGrantIsUsable } from "./slack";
 import { firstTenCallbackPath, firstTenRedirectUri } from "./origins";
 import { FIRST_TEN_NONCE_COOKIE, verifyConnectState } from "./oauthState";
-import { journeyById, saveConnection } from "./store";
+import { GOOGLE_SEND_SCOPE } from "../../shared/firstTenMinutes";
+import { connectionRows, journeyById, saveConnection } from "./store";
 
 /**
  * Google and Slack send the visitor back here. The callback is a top-level GET from the provider, so it is an
@@ -23,6 +24,7 @@ type Dependencies = {
   exchangeSlack?: typeof exchangeSlackCode;
   revokeSlack?: typeof revokeSlackToken;
   loadJourney?: typeof journeyById;
+  loadConnections?: typeof connectionRows;
   save?: typeof saveConnection;
   env?: NodeJS.ProcessEnv;
 };
@@ -71,6 +73,14 @@ export async function handleFirstTenCallback(
         return fail("scopes");
       }
       const account = await (deps.account ?? googleAccount)(tokens.accessToken, { env });
+      if (checked.state.purpose === "send") {
+        // permission to send is for the account the crew already read, never another one picked on the way
+        const current = (await (deps.loadConnections ?? connectionRows)(journey.id)).find(row => row.provider === "google" && row.status === "connected");
+        if (current?.accountSubject && current.accountSubject !== account.subject) {
+          await (deps.revokeGoogle ?? revokeGoogleToken)(tokens.refreshToken ?? tokens.accessToken, { env });
+          return fail("other_account");
+        }
+      }
       await (deps.save ?? saveConnection)({
         journeyId: journey.id,
         provider,
@@ -81,6 +91,9 @@ export async function handleFirstTenCallback(
         refreshToken: tokens.refreshToken,
         accessExpiresAt: tokens.expiresAt,
       });
+      if (checked.state.purpose === "send") {
+        return tokens.grantedScopes.includes(GOOGLE_SEND_SCOPE) ? back(res, "connected=google&for=send") : fail("send_permission");
+      }
     } else {
       const grant = await (deps.exchangeSlack ?? exchangeSlackCode)({ code, redirectUri }, { env });
       if (!slackGrantIsUsable(grant.grantedScopes)) {

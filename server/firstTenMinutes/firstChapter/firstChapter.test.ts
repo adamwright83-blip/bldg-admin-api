@@ -32,6 +32,7 @@ function draft(overrides: Partial<DraftView> = {}): DraftView {
     reportedSentAt: null,
     verifiedSentAt: null,
     handedOffVia: null,
+    sentByJoystick: false,
     approaches: [],
     ...overrides,
   };
@@ -133,6 +134,11 @@ describe("what Claire reads, and what she may say", () => {
     const told = firstChapterFacts(opportunity, draft({ status: "reported_sent", reportedSentAt: "2026-10-29T17:04:00Z" }), { kind: "unknown" }, { ...LA, lookedInSent: true });
     expect(kinds("You told me you sent it at 10:04 AM.", told)).toEqual([]);
     expect(kinds("It went out at 10:04 AM.", told)).toEqual(["sent"]);
+    // JOYSTICK asked Gmail to send it and hasn't seen it go: it may not be called sent
+    const sending = firstChapterFacts(opportunity, draft({ status: "sending", handedOffAt: "2026-10-29T17:02:00Z" }), { kind: "unknown" }, { ...LA, lookedInSent: true });
+    expect(sending.message.state).toBe("sending_not_confirmed");
+    expect(kinds("It went out at 10:02 AM.", sending)).toEqual(["sent"]);
+    expect(kinds("It was sent to Elena.", sending)).toEqual(["sent"]);
     expect(kinds("It's in your Sent folder.", told)).toEqual(["sent_folder"]);
   });
 

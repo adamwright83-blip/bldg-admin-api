@@ -103,7 +103,15 @@ export function replyExcerpt(text: string): string {
 // ------------------------------------------------------------------ what Claire reads, and what she may say
 
 /** Where the message is, in words that can't be misread. */
-export type MessageState = "ready_not_sent" | "kept_for_later" | "opened_in_their_mail" | "copied_by_them" | "they_said_they_sent_it" | "in_their_sent_folder";
+/** `sending_not_confirmed`: JOYSTICK asked Google to send it and hasn't seen it go; never "sent" until Google or the Sent folder shows it. */
+export type MessageState =
+  | "ready_not_sent"
+  | "kept_for_later"
+  | "sending_not_confirmed"
+  | "opened_in_their_mail"
+  | "copied_by_them"
+  | "they_said_they_sent_it"
+  | "in_their_sent_folder";
 
 /**
  * What Claire reads before she answers: the records as they are now. Words are verbatim; times are already in the
@@ -144,13 +152,15 @@ export function firstChapterFacts(
   const now = options.now ?? new Date();
   const at = (iso: string | null) => when(iso, zone, now).trim() || null;
   const out = draft.status === "reported_sent" || draft.status === "verified_sent";
-  const pending = draft.status === "handed_off" || draft.status === "reported_sent";
+  const pending = draft.status === "sending" || draft.status === "handed_off" || draft.status === "reported_sent";
   const state: MessageState =
     draft.status === "prepared"
       ? "ready_not_sent"
       : draft.status === "declined"
         ? "kept_for_later"
-        : draft.status === "handed_off"
+        : draft.status === "sending"
+          ? "sending_not_confirmed"
+          : draft.status === "handed_off"
           ? draft.handedOffVia === "copy"
             ? "copied_by_them"
             : "opened_in_their_mail"

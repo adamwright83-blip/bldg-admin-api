@@ -22,6 +22,8 @@ export type ConnectState = {
   provider: ConnectionProvider;
   origin: string;
   nonceHash: string;
+  /** "send": the person is giving JOYSTICK permission to send from the account their crew already read */
+  purpose?: "send";
 };
 
 export function newConnectNonce(): { nonce: string; nonceHash: string } {
@@ -34,7 +36,7 @@ export function hashNonce(nonce: string): string {
 }
 
 export async function signConnectState(state: ConnectState, env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  return new SignJWT({ purpose: PURPOSE, jid: state.journeyId, prv: state.provider, org: state.origin, nh: state.nonceHash })
+  return new SignJWT({ purpose: PURPOSE, jid: state.journeyId, prv: state.provider, org: state.origin, nh: state.nonceHash, ...(state.purpose ? { for: state.purpose } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${TTL_SECONDS}s`)
@@ -67,7 +69,7 @@ export async function verifyConnectState(
     }
     return {
       ok: true,
-      state: { journeyId: payload.jid, provider: expected.provider, origin: payload.org, nonceHash: payload.nh },
+      state: { journeyId: payload.jid, provider: expected.provider, origin: payload.org, nonceHash: payload.nh, ...(payload.for === "send" ? { purpose: "send" as const } : {}) },
     };
   } catch (error) {
     if (error instanceof joseErrors.JWTExpired) return { ok: false, reason: "expired" };

@@ -127,24 +127,49 @@
   font-style: italic;
 }
 
-.copyByHand {
+/* the message exactly as it will go, and the one confirmation before it does */
+.sendMessage {
   display: grid;
-  gap: 8px;
-}
-
-.copyByHand textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid rgba(43, 33, 24, 0.25);
+  gap: 4px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(43, 33, 24, 0.2);
   border-radius: 8px;
   background: #fffaf0;
   color: var(--ink);
-  font: inherit;
-  resize: vertical;
 }
 
-.copyByHand button {
-  justify-self: start;
+.sendMessage div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+}
+
+.sendMessage dt {
+  color: rgba(43, 33, 24, 0.6);
+}
+
+.sendMessage dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sendBody {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.sendConfirm {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(43, 33, 24, 0.06);
+}
+
+.sendProblem {
+  margin: 0;
+  color: #8e2f22;
 }
 
 .sendAsk {

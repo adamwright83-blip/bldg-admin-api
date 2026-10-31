@@ -88,7 +88,8 @@ function draftView(
   row: NonNullable<Awaited<ReturnType<typeof draftRow>>>,
   opportunity: ChapterOpportunity | null,
   now: Date,
-  handedOffVia: DraftView["handedOffVia"]
+  handedOffVia: DraftView["handedOffVia"],
+  sentByJoystick: boolean
 ): DraftView {
   return {
     approach: row.approach,
@@ -101,6 +102,7 @@ function draftView(
     reportedSentAt: row.reportedSentAt?.toISOString() ?? null,
     verifiedSentAt: row.verifiedSentAt?.toISOString() ?? null,
     handedOffVia,
+    sentByJoystick,
     approaches: opportunity ? approachesFor(opportunity).map(approach => ({ approach, body: composeDraft(opportunity, approach, now).body })) : [],
   };
 }
@@ -114,7 +116,9 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   let revealed = false;
   let letterWritten = false;
   let handedOffVia: DraftView["handedOffVia"] = null;
+  let sentByJoystick = false;
   for (const event of events) {
+    if (event.kind === "draft_sent") sentByJoystick = true;
     if (event.kind === "chapter_revealed") revealed = true;
     if (event.kind === "draft_handed_off") {
       const channel = (event.payloadJson as { channel?: string } | null)?.channel;
@@ -127,7 +131,7 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   return {
     opportunity,
     progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten },
-    draft: row ? draftView(row, opportunity, now, handedOffVia) : null,
+    draft: row ? draftView(row, opportunity, now, handedOffVia, sentByJoystick) : null,
   };
 }
 

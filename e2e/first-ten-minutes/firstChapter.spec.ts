@@ -17,19 +17,17 @@ async function shots(name: string, page: Page, testInfo: { project: { name: stri
   await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-${name}.png`, fullPage: true });
 }
 
-test("your own account: the entry, the message as it really stands, and Claire's answer from what she read, remembered", async ({ page, request, context }, testInfo) => {
+test("your own account: the entry, the message as it really stands, and Claire's answer from what she read, remembered", async ({ page, request }, testInfo) => {
   test.setTimeout(300_000);
   await begin(page, request);
   await connectOwn(page, request);
   await toTheTable(page);
 
-  // the message leaves the table her way, and lands in her own Sent folder
-  await context.route("https://mail.google.com/**", route => route.fulfill({ status: 200, contentType: "text/html", body: "<title>Gmail</title>" }));
-  const [gmail] = await Promise.all([context.waitForEvent("page"), page.getByRole("button", { name: "Open in Gmail" }).click()]);
-  await gmail.close();
-  await request.post(`${FAKE}/__send-from-gmail`, { data: { to: "elena@larkspurhotel.example", toName: "Elena Ruiz", subject: "Re: Friday flowers?", body: ASTRA } });
-  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(page.getByTestId("first-ten-send-status")).toContainText("In your Sent folder", { timeout: 20_000 });
+  // she sends it from JOYSTICK, from her own Gmail, once Google allows it
+  await page.getByTestId("first-ten-allow-send").click();
+  await page.getByTestId("first-ten-send-start").click({ timeout: 60_000 });
+  await page.getByTestId("first-ten-send-now").click();
+  await expect(page.getByTestId("first-ten-send-status")).toContainText("Sent from your Gmail", { timeout: 20_000 });
 
   // back to her portrait: a new entry has appeared
   await page.getByTestId("first-ten-back-to-page").click();
@@ -40,7 +38,7 @@ test("your own account: the entry, the message as it really stands, and Claire's
   await expect(page.getByTestId("first-ten-first-chapter-entry")).toHaveText(
     "You revisited Elena's Friday request and prepared a reply using the weekly service you now offer."
   );
-  await expect(page.getByTestId("first-ten-first-chapter-status")).toContainText("In your Sent folder");
+  await expect(page.getByTestId("first-ten-first-chapter-status")).toContainText("Sent from your Gmail");
   await expect(page.getByTestId("first-ten-tomorrow")).toHaveCount(0);
   await shots("60-first-chapter", page, testInfo);
 
@@ -78,7 +76,7 @@ test("your own account: the entry, the message as it really stands, and Claire's
   // the courtyard stays open, and the way back to the page with it; no chore list anywhere
   await page.getByTestId("first-ten-courtyard-link").click();
   await expect(page.getByTestId("first-ten-draft")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("first-ten-send-status")).toContainText("In your Sent folder");
+  await expect(page.getByTestId("first-ten-send-status")).toContainText("Sent from your Gmail");
   await page.getByTestId("first-ten-back-to-page").click();
   await expect(page.getByTestId("first-ten-first-chapter")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/to-do|to do list|checklist|next steps/i)).toHaveCount(0);

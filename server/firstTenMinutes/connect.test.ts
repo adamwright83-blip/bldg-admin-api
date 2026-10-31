@@ -190,9 +190,9 @@ describe("the callback", () => {
     return res;
   }
 
-  async function signedRequest(provider: "google" | "slack", query: Record<string, string> = {}) {
+  async function signedRequest(provider: "google" | "slack", query: Record<string, string> = {}, purpose?: "send") {
     const { nonce, nonceHash } = newConnectNonce();
-    const state = await signConnectState({ journeyId: "journey-1", provider, origin: "https://gojoystick.com", nonceHash }, env);
+    const state = await signConnectState({ journeyId: "journey-1", provider, origin: "https://gojoystick.com", nonceHash, purpose }, env);
     return {
       req: { query: { code: "the-code", state, ...query }, headers: { cookie: `${FIRST_TEN_NONCE_COOKIE}=${nonce}` } } as unknown as Request,
       nonce,
@@ -237,6 +237,47 @@ describe("the callback", () => {
     expect(revokeGoogle).toHaveBeenCalledWith("r", { env });
     expect(save).not.toHaveBeenCalled();
     expect(res.location).toBe("/joystick-start?connect_error=scopes&provider=google");
+  });
+
+  it("asks for sending only when the person first sends, on the account the crew read, and says so when it's refused", async () => {
+    const SEND = "https://www.googleapis.com/auth/gmail.send";
+    expect(googleAuthorizationUrl({ state: "s", redirectUri: "https://gojoystick.com/cb" }, env)).not.toContain(encodeURIComponent(SEND));
+    expect(new URL(googleAuthorizationUrl({ state: "s", redirectUri: "https://gojoystick.com/cb", send: true }, env)).searchParams.get("scope")).toContain(SEND);
+    const connected = async () => [{ provider: "google", status: "connected", accountSubject: "sub-1" }] as never;
+    const account = async () => ({ subject: "sub-1", email: "nina@wildrootflowers.example", name: "Nina", givenName: "Nina" });
+
+    const allowed = await signedRequest("google", {}, "send");
+    const res1 = fakeRes();
+    const save = vi.fn(async () => undefined);
+    await handleFirstTenCallback("google", allowed.req, res1 as unknown as Response, {
+      env, loadJourney: ownJourney, loadConnections: connected, account, save,
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL, SEND] }),
+    });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ grantedScopes: ["openid", GMAIL, SEND] }));
+    expect(res1.location).toBe("/joystick-start?connected=google&for=send");
+
+    // sending unticked: what they granted is kept, nothing can send, and the page says so
+    const unticked = await signedRequest("google", {}, "send");
+    const res2 = fakeRes();
+    await handleFirstTenCallback("google", unticked.req, res2 as unknown as Response, {
+      env, loadJourney: ownJourney, loadConnections: connected, account, save: vi.fn(async () => undefined),
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL] }),
+    });
+    expect(res2.location).toBe("/joystick-start?connect_error=send_permission&provider=google");
+
+    // another Google account picked on the way: revoked, nothing saved
+    const other = await signedRequest("google", {}, "send");
+    const res3 = fakeRes();
+    const revokeGoogle = vi.fn(async () => true);
+    const saveOther = vi.fn();
+    await handleFirstTenCallback("google", other.req, res3 as unknown as Response, {
+      env, loadJourney: ownJourney, loadConnections: connected, revokeGoogle, save: saveOther,
+      account: async () => ({ subject: "sub-2", email: "someone@else.example", name: null, givenName: null }),
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL, SEND] }),
+    });
+    expect(revokeGoogle).toHaveBeenCalledWith("r", { env });
+    expect(saveOther).not.toHaveBeenCalled();
+    expect(res3.location).toBe("/joystick-start?connect_error=other_account&provider=google");
   });
 
   it("refuses another browser, a cancelled consent, the example, and a closed flag", async () => {

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -66,10 +68,10 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     await db.end();
   });
 
-  it("checks out a first-ten draft, comes back to the prepared message, and only then lets it leave the table", async () => {
+  it("checks out a first-ten draft, comes back to the prepared message, and only then sends it, once, from her own Gmail", async () => {
     const { startJourney } = await import("../journeys");
     const { journeyById } = await import("../store");
-    const { activationView, beginActivation, handOffDraft, reportDraft } = await import("./activation");
+    const { activationView, beginActivation, sendDraft } = await import("./activation");
     const { processLegacyDayforgeBillingWebhook } = await import("../../saas/saasBilling");
     const started = await startJourney({ requestId: randomUUID(), kind: "own" });
     const credentials = started.credentials;
@@ -82,8 +84,9 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
 
     const before = await activationView(journey, credentials);
     expect(before).toMatchObject({ example: false, required: true, status: "none", offer: { planKey, line: "JOYSTICK, 7 days free." } });
+    const approved = { to: "elena@larkspurhotel.example", subject: "Re: Friday flowers?", body: "Hi Elena — ..." };
     // billing is open and the journey isn't active: the message stays at the table
-    await expect(handOffDraft(journey, credentials, "copy")).rejects.toThrow(/Continue with JOYSTICK first/);
+    await expect(sendDraft(journey, credentials, approved)).rejects.toThrow(/Continue with JOYSTICK first/);
 
     const state = { event: null as unknown, subscription: null as unknown, created: undefined as { params: Record<string, unknown> } | undefined };
     const { url: checkoutUrl } = await beginActivation(
@@ -138,13 +141,56 @@ describe.skipIf(!allowed)("keeping the crew on MySQL", () => {
     tenantId = (await journeyById(journey.id))!.tenantId ?? "";
     expect(tenantId).toMatch(/^df_[0-9a-f]{24}$/);
 
-    // now it can leave, the person's way, and only what happened is recorded
-    await handOffDraft(journey, credentials, "copy");
-    await reportDraft(journey, "sent");
-    const [rows] = await db.query<mysql.RowDataPacket[]>("SELECT status, handed_off_at, reported_sent_at, verified_sent_at FROM first_ten_drafts WHERE journey_id = ?", [journey.id]);
-    expect(rows[0].status).toBe("reported_sent");
-    expect(rows[0].handed_off_at).not.toBeNull();
-    expect(rows[0].verified_sent_at).toBeNull();
+    // now it can leave, from inside JOYSTICK, from her own Gmail (played by a local stand-in), once
+    const sends: string[] = [];
+    const gmail = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", chunk => (body += chunk));
+      req.on("end", () => {
+        if (req.method === "POST" && req.url === "/gmail.googleapis.com/gmail/v1/users/me/messages/send") {
+          sends.push(Buffer.from(JSON.parse(body).raw, "base64url").toString("utf8"));
+          res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ id: `gmail-${sends.length}`, threadId: "thread-1", labelIds: ["SENT"] }));
+        } else res.writeHead(404).end("{}");
+      });
+    });
+    await new Promise<void>(resolve => gmail.listen(0, "127.0.0.1", resolve));
+    const previousOrigin = process.env.JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN;
+    process.env.JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN = `http://127.0.0.1:${(gmail.address() as AddressInfo).port}`;
+    try {
+      // Gmail isn't connected: nothing is tried
+      expect(await sendDraft(journey, credentials, approved)).toBe("needs_permission");
+      const { saveConnection } = await import("../store");
+      const google = { journeyId: journey.id, provider: "google" as const, accountLabel: "nina@wildrootflowers.example", accountSubject: "sub-nina", accessToken: "token", refreshToken: null, accessExpiresAt: new Date(Date.now() + 3_600_000) };
+      // connected for reading only: still nothing is tried, until Google allows sending
+      await saveConnection({ ...google, grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"] });
+      expect(await sendDraft(journey, credentials, approved)).toBe("needs_permission");
+      expect((await activationView(journey, credentials)).canSend).toBe(false);
+      await saveConnection({ ...google, grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"] });
+      expect(await activationView(journey, credentials)).toMatchObject({ sendFrom: "nina@wildrootflowers.example", canSend: true });
+
+      // only the message she approved goes
+      await expect(sendDraft(journey, credentials, { ...approved, body: "something else" })).rejects.toThrow(/changed since you looked/);
+      expect(sends).toHaveLength(0);
+      expect(await sendDraft(journey, credentials, approved)).toBe("sent");
+      // asked again (a retry, a reload, a replay): it doesn't send twice
+      expect(await sendDraft(journey, credentials, approved)).toBe("sent");
+      expect(sends).toHaveLength(1);
+      expect(sends[0]).toMatch(/^To: "Elena Ruiz" <elena@larkspurhotel\.example>\r$/m);
+      expect(sends[0]).toMatch(/^From: nina@wildrootflowers\.example\r$/m);
+
+      const [rows] = await db.query<mysql.RowDataPacket[]>("SELECT status, handed_off_at, reported_sent_at, verified_sent_at, verified_message_id FROM first_ten_drafts WHERE journey_id = ?", [journey.id]);
+      expect(rows[0]).toMatchObject({ status: "verified_sent", verified_message_id: "gmail-1", reported_sent_at: null });
+      expect(rows[0].handed_off_at).not.toBeNull();
+      expect(rows[0].verified_sent_at).not.toBeNull();
+      const [ledger] = await db.query<mysql.RowDataPacket[]>("SELECT actor, status, gmail_message_id, gmail_thread_id, attempts, recipient FROM gmail_sends WHERE send_key = ?", [`first_ten:${journey.id}`]);
+      expect(ledger[0]).toMatchObject({ actor: "first_ten_onboarding", status: "sent", gmail_message_id: "gmail-1", gmail_thread_id: "thread-1", attempts: 1, recipient: "elena@larkspurhotel.example" });
+      const [events] = await db.query<mysql.RowDataPacket[]>("SELECT kind FROM first_ten_events WHERE journey_id = ? AND kind = 'draft_sent'", [journey.id]);
+      expect(events).toHaveLength(1);
+    } finally {
+      if (previousOrigin === undefined) delete process.env.JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN;
+      else process.env.JOYSTICK_FIRST_TEN_PROVIDER_ORIGIN = previousOrigin;
+      await new Promise(resolve => gmail.close(resolve));
+    }
   });
 
   it("never activates Nina's example, and says plainly when billing isn't open", async () => {

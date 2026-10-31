@@ -127,7 +127,7 @@ export async function askClaire(
   let reading: Promise<FirstChapterFacts> | null = null;
   const readFirstChapter = () =>
     (reading ??= (async () => {
-      const pending = before.draft!.status === "handed_off" || before.draft!.status === "reported_sent";
+      const pending = before.draft!.status === "sending" || before.draft!.status === "handed_off" || before.draft!.status === "reported_sent";
       const lookedInSent = pending ? await lookInSent(journey) : false;
       const chapter = pending ? await chapterView(journey) : before;
       const draft = chapter.draft ?? before.draft!;

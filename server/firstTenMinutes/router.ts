@@ -15,7 +15,7 @@ import { understandingView } from "./understanding/view";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
-import { activationView, beginActivation, handOffDraft, reportDraft, verifyDraft } from "./activation/activation";
+import { activationView, beginActivation, sendDraft, verifyDraft } from "./activation/activation";
 import { askClaire, firstChapterView, openFirstChapter } from "./firstChapter/firstChapter";
 import { DRAFT_APPROACHES, LETTER_STEPS } from "../../shared/firstTenMinutesChapter";
 
@@ -62,9 +62,12 @@ export const firstTenMinutesRouter = router({
       return journeyView({ ...journey, stage: input.stage }, session);
     }),
 
-  /** The provider's consent URL. The browser goes there; the provider sends it back to oauthRoutes.ts. */
+  /**
+   * The provider's consent URL. The browser goes there; the provider sends it back to oauthRoutes.ts. `purpose: "send"`
+   * asks Google for permission to send from the person's Gmail as well (the first time they send from JOYSTICK).
+   */
   beginConnect: publicProcedure
-    .input(credentials.extend({ provider }))
+    .input(credentials.extend({ provider, purpose: z.enum(["send"]).optional() }))
     .mutation(async ({ ctx, input }) => {
       assertFirstTenOpen();
       const { journey } = await requireJourney(input);
@@ -79,8 +82,11 @@ export const firstTenMinutesRouter = router({
       if (!origin) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Connecting isn't available from this address." });
       }
+      if (input.purpose === "send" && input.provider !== "google") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only Gmail sends from JOYSTICK." });
+      }
       const { nonce, nonceHash } = newConnectNonce();
-      const state = await signConnectState({ journeyId: journey.id, provider: input.provider, origin, nonceHash });
+      const state = await signConnectState({ journeyId: journey.id, provider: input.provider, origin, nonceHash, purpose: input.purpose });
       ctx.res?.cookie(FIRST_TEN_NONCE_COOKIE, nonce, {
         httpOnly: true,
         sameSite: "lax",
@@ -92,7 +98,7 @@ export const firstTenMinutesRouter = router({
       return {
         url:
           input.provider === "google"
-            ? googleAuthorizationUrl({ state, redirectUri })
+            ? googleAuthorizationUrl({ state, redirectUri, send: input.purpose === "send" })
             : slackAuthorizationUrl({ state, redirectUri }),
       };
     }),
@@ -255,27 +261,21 @@ export const firstTenMinutesRouter = router({
       return beginActivation(journey, { sessionId, resumeToken }, identity);
     }),
 
-  /** The message leaves the table: the person's own Gmail opens with it ready, or they copy it. Nothing is sent. */
-  handOffDraft: publicProcedure
-    .input(credentials.extend({ channel: z.enum(["gmail", "copy"]) }))
+  /**
+   * The person sends the message from JOYSTICK, from their own Gmail. `to`, `subject` and `body` are exactly what they
+   * approved; anything else at the table is refused. Once per journey: a retry or a replay never sends twice. The
+   * outcome is what Google showed: sent (with its id), still being confirmed, refused, or permission needed first.
+   */
+  sendDraft: publicProcedure
+    .input(credentials.extend({ to: z.string().max(320), subject: z.string().max(500), body: z.string().max(2000) }))
     .mutation(async ({ input }) => {
       assertFirstTenOpen();
       const { journey } = await requireJourney(input);
-      await handOffDraft(journey, input, input.channel);
-      return chapterView(journey);
+      const outcome = await sendDraft(journey, input, { to: input.to, subject: input.subject, body: input.body });
+      return { outcome, chapter: await chapterView(journey) };
     }),
 
-  /** "Did it go?": the person's own answer, recorded as theirs. */
-  reportDraft: publicProcedure
-    .input(credentials.extend({ outcome: z.enum(["sent", "not_yet"]) }))
-    .mutation(async ({ input }) => {
-      assertFirstTenOpen();
-      const { journey } = await requireJourney(input);
-      await reportDraft(journey, input.outcome);
-      return chapterView(journey);
-    }),
-
-  /** Look in the person's own Sent folder for the message. */
+  /** Settle a send whose answer was lost, or look in the person's own Sent folder for a message that left another way. */
   verifyDraft: publicProcedure.input(credentials).mutation(async ({ input }) => {
     assertFirstTenOpen();
     const { journey } = await requireJourney(input);

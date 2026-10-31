@@ -53,7 +53,9 @@ A Stripe return for a draft that belongs to today's funnel always lands on today
 3. **Audience**: External, **Testing**. Add each test user (up to 100): Adam's Google account and the pilot owners.
    Test users see Google's "unverified app" screen; everyone else is blocked until verification.
 4. **Data Access → Add or remove scopes**: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`,
-   `.../auth/gmail.readonly`, `.../auth/calendar.readonly`, `.../auth/drive.readonly`. Nothing else.
+   `.../auth/gmail.readonly`, `.../auth/calendar.readonly`, `.../auth/drive.readonly`, and `.../auth/gmail.send`
+   ("Send email on your behalf"). Nothing else. Connecting asks only for the read scopes; `gmail.send` is asked for
+   the first time the person sends from JOYSTICK, on the same client.
 5. **Clients → Create client → Web application** ("JOYSTICK first ten minutes"). Authorised redirect URIs:
    - `https://gojoystick.com/api/first-ten/oauth/google/callback`
    - `https://admin.bldg.chat/api/first-ten/oauth/google/callback`
@@ -63,7 +65,9 @@ A Stripe return for a draft that belongs to today's funnel always lands on today
    Copy the client ID and secret into Railway.
 6. **Before a public launch**: Verification Center → submit. Gmail and Drive read access are *restricted* scopes:
    Google requires a privacy policy that covers Google user data and its Limited Use, a demo video of the consent
-   flow, and a CASA (Tier 2) security assessment by an approved assessor, renewed yearly.
+   flow, and a CASA (Tier 2) security assessment by an approved assessor, renewed yearly. `gmail.send` is a
+   *sensitive* scope: the same submission covers it, and the demo video must show the send permission being asked
+   for and a message being approved and sent. In Testing, listed test users can send without verification.
 
 ### Billing (for "Continue with JOYSTICK"; nothing here is set by an agent)
 
@@ -290,22 +294,30 @@ the person to confirm, and "Continue with JOYSTICK" leads to checkout.
   active.
 - **Nina's example** never activates and never sends.
 
-**The message leaves the person's way.** "Your message to Elena opens in your own Gmail, ready to send. You send it
-there. JOYSTICK doesn't send it." Behind it:
+**The message leaves from inside JOYSTICK, from the person's own Gmail** (2026-10-31; it used to open Gmail's own
+compose window). No Gmail window, nothing to copy. Behind it:
 
-- **Open in Gmail.** Gmail's own compose window opens with the real recipient, subject and exact text (`authuser`
-  picks the connected account). The person can also copy the message.
-- **What is recorded.** Only what is known: that the message was opened in their mail ("Opened in your mail at 3:42
-  PM. JOYSTICK didn't send it."), and what they answer to "Did it go?" ("I sent it" / "Not yet").
-- **What their Sent folder shows.** On their return, and every little while, JOYSTICK looks in their own Sent folder
-  for a message to the recipient since the hand-off, using the read-only Gmail access they gave. "In your Sent
-  folder, 3:44 PM." appears only when it is there.
-- **Never "sent" unless it was.** The draft's status, and the times it left, was reported and was found, are kept
-  in `first_ten_drafts`, and every step is in `first_ten_events`.
+- **Exactly what will go.** The send desk shows From (the connected account), To (name and address), Subject and
+  the exact words: the draft as drafted, or as the person edited it at the table.
+- **Permission, once.** Connecting asks only to read. The first time the person sends, "Allow sending from Gmail"
+  asks Google for `gmail.send` on top of what they granted (incremental consent) and comes back to the same table.
+  It must be the same Google account the crew read ("other_account" otherwise, and nothing is saved); if they untick
+  sending, nothing is sent and the page says so ("send_permission").
+- **One confirmation, naming the recipient.** "Send this message to Elena Ruiz (elena@…) from nina@…?" The page sends
+  back exactly what it showed; the server refuses if the message at the table isn't that (`sendDraft`).
+- **Sent once, through one service.** `server/integrations/gmail/gmailSend.ts` sends with `users.messages.send`
+  from the connected account, keyed `first_ten:<journey>` in `gmail_sends` (migration 0157): a retry, a reload or a
+  replay never sends twice. It is reusable as is for gameplay and Claire: any caller passes an idempotency key, the
+  digest of what the person approved, and the account's access.
+- **Never "sent" unless Google showed it.** "Sent from your Gmail at 3:44 PM." only with Google's message id (kept
+  in `first_ten_drafts.verified_message_id` and `gmail_sends`). A refusal leaves the message at the table. An answer
+  that was lost is "Sending from your Gmail…" until the Sent folder shows the message by the Message-ID JOYSTICK gave
+  it; it is tried again only after the Sent folder can't have it, with the same Message-ID.
+- **Earlier drafts.** `handed_off` and `reported_sent` remain for drafts that left by the old hand-off.
 
 **The closing beat answers what actually happened**, in the courtyard:
 
-- **Sent**, by their word or by their Sent folder: "Hazel notices the ink on your hand." / "You'll get used to that."
+- **Sent**, by Google's answer or their Sent folder (or, for an older hand-off, their word): "Hazel notices the ink on your hand." / "You'll get used to that."
 - **Not yet:** "It'll keep. Ink does."
 - **Not now:** "Some letters are better kept."
 

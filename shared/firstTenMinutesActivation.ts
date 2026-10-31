@@ -1,8 +1,8 @@
 /**
  * Activation at the moment of value (docs/goldline/FIRST_TEN_MINUTES_BUILD.md, slice 6). The person keeps their crew
  * when the prepared message has value; the offer is stated plainly, exactly as it is; checkout returns to the
- * prepared message. Sending is the person's own: their mail opens with the message ready, and nothing is ever shown as
- * sent unless they said so or their own Sent folder shows it.
+ * prepared message. The person sends it from inside JOYSTICK, from their own Gmail, once they have approved the exact
+ * recipient and words; nothing is ever shown as sent unless Google answered with its id or their Sent folder shows it.
  */
 import type { DraftStatus } from "./firstTenMinutesChapter";
 
@@ -23,10 +23,10 @@ export type ActivationView = {
   status: "none" | "checkout_pending" | "active";
   /** what JOYSTICK already knows, for the person to confirm */
   identity: { businessName: string | null; contactName: string | null; ownerEmail: string | null };
-  /** the person's own mail is connected, so the message can open there and be looked for in Sent */
-  canOpenInGmail: boolean;
-  /** the connected Gmail account, so the message opens in the right one */
-  gmailAccount: string | null;
+  /** the connected Gmail account the message is sent from; null when Google isn't connected */
+  sendFrom: string | null;
+  /** that account has allowed JOYSTICK to send; otherwise sending first asks Google for the permission */
+  canSend: boolean;
   /**
    * Where checkout comes back to (today's billing returns to one origin). A journey begun elsewhere is carried there
    * first, or the person would come back to a page that doesn't know them.
@@ -53,17 +53,9 @@ export function offerWords(input: { trialDays: number; unitAmountCents: number |
   return { line: input.trialDays > 0 ? `${input.displayName}, ${input.trialDays} days free.` : `${input.displayName}.`, detail: "Card required." };
 }
 
-/** Gmail's own compose window, with the message ready. Opening it sends nothing. */
-export function gmailComposeUrl(input: { to: string; subject: string; body: string; account: string | null }): string {
-  const params = new URLSearchParams({ view: "cm", fs: "1", to: input.to, su: input.subject, body: input.body });
-  if (input.account) params.set("authuser", input.account);
-  return `https://mail.google.com/mail/?${params.toString()}`;
-}
-
-/** What the person is told about the message, from what actually happened. */
 export function draftStatusLine(
   status: DraftStatus,
-  at: { handedOffAt: string | null; reportedSentAt: string | null; verifiedSentAt: string | null; handedOffVia?: "gmail" | "copy" | null }
+  at: { handedOffAt: string | null; reportedSentAt: string | null; verifiedSentAt: string | null; handedOffVia?: "gmail" | "copy" | null; sentByJoystick?: boolean }
 ): string | null {
   const time = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : null;
@@ -72,11 +64,14 @@ export function draftStatusLine(
       return "Prepared. Not sent.";
     case "declined":
       return "Not now. It stays here, unsent.";
+    case "sending":
+      return "Sending from your Gmail. JOYSTICK will say it went only once Google shows it.";
     case "handed_off":
       return `${at.handedOffVia === "copy" ? "Copied" : "Opened in your mail"}${at.handedOffAt ? ` at ${time(at.handedOffAt)}` : ""}. JOYSTICK didn't send it.`;
     case "reported_sent":
       return "You said you sent it.";
     case "verified_sent":
+      if (at.sentByJoystick) return `Sent from your Gmail${at.verifiedSentAt ? ` at ${time(at.verifiedSentAt)}` : ""}.`;
       return `In your Sent folder${at.verifiedSentAt ? `, ${time(at.verifiedSentAt)}` : ""}.`;
   }
 }

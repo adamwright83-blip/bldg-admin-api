@@ -18,7 +18,13 @@ export const DRAFT_APPROACH_NAMES: Record<DraftApproach, string> = {
   short: "Keep it short",
 };
 
-export type DraftStatus = "prepared" | "declined" | "handed_off" | "reported_sent" | "verified_sent";
+/**
+ * Where the message is. `sending`: JOYSTICK asked Google to send it from the person's Gmail and hasn't had Google's
+ * answer (or the Sent folder) to show it went. `verified_sent`: Google's message id, from the send or the Sent folder.
+ * `handed_off` and `reported_sent` are from the earlier hand-off to the person's own mail, kept for drafts that left
+ * that way.
+ */
+export type DraftStatus = "prepared" | "declined" | "sending" | "handed_off" | "reported_sent" | "verified_sent";
 
 export type ChapterCard = { findingId: string; quote: string; at: string; sources: SourceRef[] };
 
@@ -50,6 +56,8 @@ export type DraftView = {
   verifiedSentAt: string | null;
   /** how it left the table: their own Gmail opened with it, or they copied it */
   handedOffVia: "gmail" | "copy" | null;
+  /** JOYSTICK sent it from the person's own Gmail, and Google answered with its id */
+  sentByJoystick: boolean;
   /** the composed text of each approach, so "Try another way" shows exactly what would change */
   approaches: Array<{ approach: DraftApproach; body: string }>;
 };

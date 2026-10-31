@@ -36,4 +36,11 @@ describe("the message leaving the table", () => {
     expect(draftStatusLine("handed_off", { ...at, handedOffVia: "gmail" })).toMatch(/^Opened in your mail at .+\. JOYSTICK didn't send it\.$/);
     expect(draftStatusLine("handed_off", { ...at, handedOffVia: "copy" })).toMatch(/^Copied at .+\. JOYSTICK didn't send it\.$/);
   });
+
+  it("says sent from JOYSTICK only with Google's id, and an unconfirmed send is never called sent", () => {
+    const at = { handedOffAt: "2026-10-31T17:02:00Z", reportedSentAt: null, verifiedSentAt: "2026-10-31T17:02:05Z" };
+    expect(draftStatusLine("verified_sent", { ...at, sentByJoystick: true })).toMatch(/^Sent from your Gmail at .+\.$/);
+    expect(draftStatusLine("verified_sent", { ...at, sentByJoystick: false })).toMatch(/^In your Sent folder/);
+    expect(draftStatusLine("sending", { ...at, verifiedSentAt: null })).toBe("Sending from your Gmail. JOYSTICK will say it went only once Google shows it.");
+  });
 });
