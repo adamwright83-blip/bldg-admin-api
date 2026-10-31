@@ -28,10 +28,14 @@ describe("Gmail research: sent first, across time, bounded", () => {
     expect(later.flatMap(window => window.items).some(item => /Website proposal/.test(item.subject))).toBe(false);
     // every item is the owner's own, never a newsletter
     expect(windows.flatMap(window => window.items).every(item => item.sentByOwner && !item.automated)).toBe(true);
-    // the months were searched successfully, so silence after April means something
-    expect(ledger.covered("gmail", new Date("2026-05-01"), new Date("2026-10-31"))).toBe(true);
-    // bounded: the busy months say more existed
+    // bounded: the busy months say more existed, so a sample of them proves nothing about what wasn't read
     expect(windows.some(window => window.truncated)).toBe(true);
+    expect(ledger.covered("gmail", new Date("2026-05-01"), new Date("2026-10-31"))).toBe(false);
+    // a targeted search that read every result is what covers the quiet months
+    const after = new Date("2026-05-01");
+    const targeted = (await research.searchMail('in:sent "website"', { window: { from: after, to: SCENARIO_NOW }, limit: 50 }))!;
+    expect(targeted.items).toEqual([]);
+    expect(ledger.covered("gmail", after, SCENARIO_NOW)).toBe(true);
   });
 
   it("searches beyond the sample for one person, and reads a whole conversation", async () => {

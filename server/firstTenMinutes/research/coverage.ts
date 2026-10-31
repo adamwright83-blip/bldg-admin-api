@@ -109,12 +109,13 @@ export class CoverageLedger {
   }
 
   /**
-   * Whether `source` was successfully searched across [from, to): the union of windows of operations that read
-   * without failing covers the whole span. Used to tell "nothing happened then" from "we didn't look".
+   * Whether `source` was completely searched across [from, to): the union of windows of operations that read every
+   * result (not a failure, and not a sample that was cut short) covers the whole span. Used to tell "nothing
+   * happened then" from "we didn't look" or "we only looked at some of it".
    */
   covered(source: ResearchSource, from: Date, to: Date): boolean {
     const spans = this.entries
-      .filter(entry => entry.source === source && entry.window && (entry.status === "ok" || entry.status === "empty" || entry.status === "partial"))
+      .filter(entry => entry.source === source && entry.window && (entry.status === "ok" || entry.status === "empty"))
       .map(entry => [Date.parse(entry.window!.from), Date.parse(entry.window!.to)] as const)
       .sort((a, b) => a[0] - b[0]);
     let reach = from.getTime();
