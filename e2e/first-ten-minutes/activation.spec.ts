@@ -128,6 +128,23 @@ test("when Google isn't allowed to send, nothing is sent and the message stays",
   expect(await apiSends(request)).toHaveLength(0);
 });
 
+test("an opportunity can be left for signup before any draft exists", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  await begin(page, request);
+  await connectOwn(page, request);
+  await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+  await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+  await page.getByRole("button", { name: "That sounds like me" }).click();
+  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("first-ten-draft")).toHaveCount(0);
+  await page.getByTestId("first-ten-signup-bypass").click();
+  await expect(page.getByTestId("first-ten-signup")).toBeVisible();
+  await expect(page.getByTestId("first-ten-offer-closed")).toBeVisible();
+  await expect(page.getByTestId("first-ten-draft")).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-revelation")).toBeVisible();
+});
+
 test("Nina's example is never activated and never sends", async ({ page, request }, testInfo) => {
   test.setTimeout(240_000);
   await begin(page, request);
