@@ -70,82 +70,68 @@ intelligence to do it?
 - Real latency of the `rest` path: Gmail retrieval, Drive retrieval and Gemini, end to end.
 - How accurate the current-versus-past calls are against the owner's own expectations.
 
-## Decision (2026-10-31)
+## Decisions and corrections (2026-10-31 / 11-01)
 
-Workspace MCP is deprioritised: no new OAuth client, no Cloud Console changes. The benchmark proves the REST path:
-JOYSTICK's own Gmail and Drive readers plus Gemini.
+- **Workspace MCP is deprioritised.** No new OAuth client and no Cloud Console changes. The benchmark proves the REST
+  path: JOYSTICK's own Gmail and Drive readers, plus Gemini.
+- **Gemini 2.5 Flash is not retired. Corrected.** Google's deprecations page says the 2.5 models "are not deprecated".
+  Google limits them to projects that used them before. Production's `bldg` project hadn't, so `gemini-2.5-flash`
+  answered 404. The benchmark uses `gemini-3.8-flash`, which Google recommends for new projects.
+  - The investigator's own Gemini option (`JOYSTICK_INVESTIGATOR_GEMINI_MODEL`) also defaults to `gemini-2.5-flash`.
+  - Production runs Claude by default, so nothing live breaks.
+- **Billing was confirmed directly** (AI Studio → API keys, 2026-11-01):
+  - Production's `GEMINI_API_KEY` (ending `…eL7A`, named GOLDLINE) belongs to project `bldg`
+    (`gen-lang-client-0159109182`).
+  - That project is linked to an active billing account and is on **Tier 1 (paid)**.
+  - Paid-tier prompts are not used to improve Google's products.
+  - Gemini 3.8 Flash costs $0.75 per million input tokens and $3.75 per million output tokens, thinking included.
+    Those prices hold through 2026-12-31, then double.
 
-## The benchmark
+## The benchmark (v3)
 
 ```bash
-scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization --paths rest --strategies fast,agent --expect <file>
+scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization --runs 3 --thinking low --expect <file>
 ```
 
-**Three REST strategies, run one after another so their timings don't share quota:**
+**Variants: retrieval strategy × way of answering.** Repeated runs are interleaved.
 
-| strategy | what it reads | role |
+| retrieval | what it reads |
+|---|---|
+| `fast` | Four Sent searches at once: the last 90 days (25), plus 6–12, 12–24 and 24–48 months ago (6 each). Then whole messages. One Drive search over 18 months, and the text of up to 10 Docs and Slides. |
+| `agent` | The same four Sent searches and a Drive file list, headers and titles only. Gemini (low thinking) picks up to 6 Gmail and 4 Drive searches, which run at once. |
+
+| answering | |
+|---|---|
+| `separate` | The owner's two questions, Gmail's and Drive's. Each starts as soon as its own evidence is in. |
+| `combined` | One question over mail and files together, which can connect what the mail shows the owner doing with what the files show them building. |
+
+**Claims are single and typed.** Each claim is one fact of one kind: business, project, event, problem or
+relationship. Each quotes 1–3 cited items. The outcomes:
+
+| outcome | when | shown as |
 |---|---|---|
-| `fast` | Four Sent searches at once: the last 90 days (25), plus 6–12, 12–24 and 24–48 months ago (6 each, for contrast). Then whole messages. One Drive search over 18 months, and the text of up to 10 Docs and Slides. | the first-minute candidate |
-| `agent` | The same four Sent searches and a Drive file list, headers and titles only. Gemini (no thinking) then picks up to 6 Gmail and 4 Drive searches. They run at once, and the answer reads what they found. | Gemini as the searcher, not just the summariser |
-| `survey` | The investigation's 24 monthly Sent windows, plus 24 months of Drive. | comparison only: what the fast strategies miss; never a prerequisite for a first result |
+| `active` | The owner's own dated act (mail they sent) in the last 120 days shows it, and the judge agrees. A Drive project counts only when the claim also cites that mail (cross-source). | active now |
+| `open_problem` | In the owner's recent mail, and the judge sees no sign it was resolved. | an open problem |
+| `happened` | A dated event the evidence shows took place. Its present status isn't claimed. | a dated event |
+| `ended` | The evidence itself says it ended, and the judge agrees. | ended |
+| `relationship` | The person's role, shown by the messages they're on. The judge sees the real From/To headers. | a relationship |
+| `status_unknown` | Real, but the latest evidence is old, or is only a document edit. | "last seen <date>", never ended or active |
+| `uncertain` | Partly supported, or the judge failed, skipped the claim or was off. | not stated |
+| `contradicted`, `unsupported` | The evidence says otherwise, or nothing real supports it. | struck |
 
-**What runs at once.**
-- Gmail and Drive retrieval run concurrently.
-- Each source's reading starts as soon as its own evidence is in.
-- The report counts every Google request by kind: searches, header reads, message reads, Drive searches, exports.
-- `firstRead.test.ts` pins the counts against a fake Google: fast makes 4 Gmail searches, agent 4 plus its own,
-  survey 25.
+**Grading by meaning.** A high-thinking grader runs after the clock stops. It compares the stated claims with the
+owner's AI Overview findings, written as statements in a private file outside the repo. For each finding it gives
+found or not, and whether the status is right. Stated claims that no Overview covers are listed for hand-checking.
+Unconfirmed findings aren't scored.
 
-**How claims are checked.** Every claim must cite an evidence id together with a quote copied from that item.
-Each claim then gets one verdict:
+**Recorded.** Per run, from connect:
+- retrieval;
+- the first draft;
+- the first verified answer;
+- both sources verified;
+- each reading and judge call.
 
-| verdict | meaning | shown as |
-|---|---|---|
-| `established_current` | The quotes really are in the cited items. At least one is a dated act of the owner's (mail they sent) in the last 120 days; a file's modification time never counts. The judge actually ran and agrees it supports the claim and shows present activity. | a current fact |
-| `supported_past` | Supported, but the latest support is old. Whatever the model called it, it is past, with the date. | past |
-| `supported` | A person or relationship the quotes support. | a person |
-| `uncertain` | Undated support (every MCP result), support dated only by file edits, support that isn't the owner's own act, partial support, the judge unsure about present activity, or the judge failed, skipped the claim, or was switched off. | not shown as fact |
-| `contradicted` | The judge found the evidence says otherwise. | struck |
-| `unsupported` | No real id, no quote actually in the cited item, or the judge says the quotes don't show it. | struck |
+Also Google requests by kind, and model cost. The report gives medians and ranges over the runs.
 
-- The judge is a second Gemini call per source. It sees only each claim and its quoted evidence.
-- It can lower a verdict, never raise one. It fails closed: if it times out or errors, nothing is established as
-  current, and the report says why.
-- Drive modification times are kept for retrieval and provenance only. A Drive-only reading can call work past or
-  uncertain, but never establish it as current.
-- Every citation in the private report links to its original Gmail message and thread, or Drive file, so it can be
-  checked like an AI Overview's sources.
-- The report times the draft (checked by quote and date) and the verified reading (judged) separately.
-
-**Against the owner's own results.** `--expect` takes the Gmail and Drive AI Overviews, written as names, in a file
-kept outside the repo:
-- `current`: must come out established-current.
-- `past`: must never come out current.
-- `people` and `mention`: must be found.
-- `unconfirmed`: guesses nobody has confirmed. Each is reported on its own and never scored.
-
-The report lists what was found, what was missed and what was wrongly called current. It also lists every
-established-current claim the file doesn't name, to read by hand for inventions.
-
-**Recorded per strategy.**
-- Time from connect, auth included:
-  - Gmail and Drive retrieval;
-  - each Gemini call;
-  - the first draft;
-  - each verified reading;
-  - all done.
-- Google requests.
-- Tokens and cost, from the token counts Gemini reports, priced at Gemini 2.5 Flash's list price unless set.
-
-**Safety.**
-- Read-only: REST goes through the cold-test harness's `readOnlyFetch`.
-- Nothing is written to the database, and nothing goes to analytics.
-- The refreshed token stays in memory.
-- The report (`tmp/first-read-bench/`, mode 600) holds the readings, which are the owner's own data, so it stays on the
-  machine that ran it.
-
-## What decides the next step
-
-- **Integrate into Claire's existing first ten minutes** if a strategy reproduces most of the Overviews' specific
-  recognition, with a first draft inside 60 s and nothing wrongly called current.
-- **Over 90 s, or too much missed:** fix the measured bottleneck in retrieval before touching presentation.
+**Safety.** Read-only through `readOnlyFetch`. Nothing is written to the database or sent to analytics. Reports stay
+local, under `tmp/first-read-bench/`, mode 600.
