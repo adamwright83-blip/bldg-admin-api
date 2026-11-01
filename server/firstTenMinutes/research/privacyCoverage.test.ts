@@ -20,6 +20,31 @@ describe("privacy", () => {
     expect(out).toContain("Order 1234567890123 is ordinary.");
   });
 
+  it("redacts bare secrets by their issuers' formats, and passwords inside connection URLs", () => {
+    // built from parts so no secret-shaped literal sits in the source
+    const anthropic = ["sk", "ant", "api03", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4"].join("-");
+    const stripe = ["sk", "live", "51H8xYzAbCdEfGhIjKlMnOp"].join("_");
+    const google = "AIza" + "SyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6";
+    const github = "ghp" + "_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    const text = `Claire test: ${anthropic}\nstripe ${stripe}\nmaps ${google}\n${github}\nmysql://root:hunter22@db.example:3306/app`;
+    const out = redactSensitive(text);
+    for (const secret of [anthropic, stripe, google, github, "hunter22"]) expect(out).not.toContain(secret);
+    expect(out).toContain("Claire test:");
+    // ordinary business text is untouched
+    const plain = "Skip the ask-for-more step; GHP Laundry, eyJ notes; task-management-and-operations-review-checklist-2026";
+    expect(redactSensitive(plain)).toBe(plain);
+  });
+
+  it("never reads a key file, by name or by contents", () => {
+    expect(sensitiveDocumentReason("10292026 Claire_Test_Anthropic_api_key")).toBe("credentials");
+    expect(sensitiveDocumentReason("2026-10-21 STRIPE & google API KEY")).toBe("credentials");
+    expect(sensitiveDocumentReason("Credentials Rotation Checklist")).toBe("credentials");
+    expect(sensitiveDocumentReason("Keys rotation plan")).toBe("credentials");
+    expect(sensitiveDocumentReason("Untitled document", `notes\n${["sk", "ant", "api03", "A1b2C3d4E5f6G7h8I9j0K1l2"].join("-")}`)).toBe("credentials");
+    expect(sensitiveDocumentReason("Key accounts plan", "Our key accounts this quarter")).toBeNull();
+    expect(sensitiveDocumentReason("Token economics for the loyalty program")).toBeNull();
+  });
+
   it("excludes personal finance and records, keeps a business's own books", () => {
     expect(sensitiveDocumentReason("Personal banking")).toBe("personal_finance");
     expect(sensitiveDocumentReason("2025 tax return")).toBe("personal_records");
