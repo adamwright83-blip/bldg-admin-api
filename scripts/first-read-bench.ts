@@ -7,12 +7,12 @@
  *
  *   --paths rest|mcp      rest (default): JOYSTICK's own Gmail/Drive readers; mcp: Google's search_corpus (preview only)
  *   --strategies <list>   for rest: fast, agent, survey (default fast,agent,survey; survey is the 24-month comparison)
- *   --model <id>          the Gemini model (default gemini-2.5-flash; needs GEMINI_API_KEY)
+ *   --model <id>          the Gemini model (default gemini-3.8-flash; needs GEMINI_API_KEY. gemini-2.5-flash is closed to new users)
  *   --no-judge            skip the second model call that checks each claim against its quotes
  *   --expect <file>       your Gmail/Drive AI Overview results as expectations, kept outside the repo:
  *                         {"current": ["Name|Alias"], "past": [...], "people": [...], "mention": [...]}
  *   --out-dir <dir>       where reports go (default tmp/first-read-bench, readable by you only)
- *   --input-cents-per-million <n> --output-cents-per-million <n>   the model's price (default: Gemini 2.5 Flash list price)
+ *   --input-cents-per-million <n> --output-cents-per-million <n>   the model's price (default: Gemini 3.8 Flash, paid tier, through 2026-12-31)
  *
  * Find the journey id with: scripts/onboarding-cold-test.sh --list
  */
@@ -52,10 +52,10 @@ async function main() {
     google,
     strategies,
     geminiKey,
-    model: value("--model") ?? "gemini-2.5-flash",
+    model: value("--model") ?? "gemini-3.8-flash",
     judge: !args.includes("--no-judge"),
     expect,
-    centsPerMillion: { input: Number(value("--input-cents-per-million") ?? 30), output: Number(value("--output-cents-per-million") ?? 250) },
+    centsPerMillion: { input: Number(value("--input-cents-per-million") ?? 75), output: Number(value("--output-cents-per-million") ?? 375) },
   });
 
   const dir = value("--out-dir") ?? "tmp/first-read-bench";
