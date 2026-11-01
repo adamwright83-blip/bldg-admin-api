@@ -340,3 +340,52 @@ It now uses `PublicResearchRun`:
 - Over the day's runs the search turned up a Facebook page ID and laundry.farm, and never an X handle. An earlier run
   rejected "Adam Wright, founder and COO of LeapN, Los Angeles (LinkedIn)" as a different person. LeapN appears in the
   owner's own Drive but wasn't among the businesses passed as anchors.
+
+## Identity: handles verified, past organizations as anchors (2026-11-01, night)
+
+ChatGPT's review of 3445bcfe found two defects. Both are fixed.
+- **Handles were taken on the model's word.** `PublicResearchRun.take()` stored any returned handle, and X could start
+  on a namesake's. Now `verifyHandle` accepts a profile only if:
+  - their own mail or files mention it; or
+  - a result the search engine actually returned points at it, and that result's title or quoted text carries their
+    full name plus a business, an organization, a sending domain or an already-verified profile. A business or
+    organization name inside an X handle counts.
+
+  A city never counts. A web finding whose link the engine never returned is dropped. Adversarial test: a namesake
+  songwriter's handle is never researched.
+- **Places matching was loose.** `inOwnText` accepted a city found anywhere, or a number and a street word from
+  different places. Now `listingIsTheirs` needs one of: the listing's website is a sending domain or appears in their
+  files; its whole phone number appears there; or its street line appears there, number then street. False-positive
+  tests cover each.
+
+**Past organizations.** The LeapN profile was rejected because LeapN was never an anchor: anchors came only from the
+current businesses in the reading. Now `identityAnchors`:
+- reads organizations, current or past, from titles, headers and the first lines, in about 3–5 s;
+- keeps a name only if the item it cites contains it;
+- feeds them to the identity search.
+
+**When the identity search starts.** The earlier report said "at authorization", which was wrong: it started after
+Gmail and Drive retrieval. Now it starts at 4.7–7.8 s, after retrieval and the organization read. Name and email alone
+proved useless for a common name.
+
+**On the owner's account:**
+- With 4 searches, no profile was proposed.
+- With 8 searches (about 45–50 s) it found and verified:
+  - linkedin.com/in/adamwrightla ("Adam Wright - Founder, LeapN");
+  - X @AdamLeapN, with Threads @adamleapn alongside;
+  - laundry.farm.
+- It rejected seven namesakes, and rejected laundrybutler.com, a same-named company.
+- X then read @AdamLeapN (about 65 s; once it timed out at 90 s). It found:
+  - "an unnamed, extremely complex project he has been vibe-coding for about 8 months";
+  - reposts about AI agents and founder growth;
+  - the LeapN builder history;
+  - a post about new Speed Queens at "the sunset laundry".
+
+So the deep identity search and X feed the second reveal (about 150–170 s). The first reveal stays at 45–48 s, with
+Places.
+
+**Also caught:** "processing costs remain an open balance", a rewording of "unpaid" that passed both judges. The
+deterministic guard now covers it.
+
+The "1030 claire rule" content has been removed from Drive, and the 50-customer goal is gone from every reveal. That
+confirms the goal came from that document.

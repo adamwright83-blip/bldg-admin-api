@@ -133,7 +133,7 @@ async function main() {
     const { googleResearch } = await import("../server/firstTenMinutes/research/googleResearch");
     const { CoverageLedger } = await import("../server/firstTenMinutes/research/coverage");
     const { fastGmail, fastDrive } = await import("../server/businessKnowledge/firstRead/bench");
-    const { PublicResearchRun } = await import("../server/businessKnowledge/firstRead/publicResearch");
+    const { PublicResearchRun, identityAnchors } = await import("../server/businessKnowledge/firstRead/publicResearch");
     const publicWaitMs = Number(value("--public-wait") ?? 20) * 1000;
     const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
     const { google } = await coldTestSource(journeyId);
@@ -157,10 +157,17 @@ async function main() {
       const account = await accountP;
       const free = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|aol|proton|protonmail)\./i;
       const domains = [...new Set(gmailEvidence.map(e => /from [^<]*<[^@]+@([^>]+)>/.exec(e.people)?.[1]?.toLowerCase()).filter((d): d is string => Boolean(d) && !free.test(d!)))];
-      const ownText = evidence.map(e => `${e.title} ${e.text}`).join("\n");
-      const pub = new PublicResearchRun({ name: account.name ?? google.ownerEmail, email: google.ownerEmail, domains, businesses: [], city: null, ownText }, { fastModel: value("--fast-web-model") ?? "claude-sonnet-5-5" }).start();
-      const tWebStart = at();
-      const { value: reading, call } = await synth.geminiReading(gemini, { question: "combined", evidence, today: new Date() });
+      const ownText = evidence.map(e => `${e.title} ${e.people} ${e.text}`).join("\n");
+      // organizations current and past, from titles and headers (a few seconds), run beside the reading: the identity
+      // search can't tell a common name from a namesake without them
+      const readingP = synth.geminiReading(gemini, { question: "combined", evidence, today: new Date() });
+      const anchors = await identityAnchors(gemini, evidence, account.name ?? google.ownerEmail);
+      times["identity anchors"] = at();
+      const pub = new PublicResearchRun(
+        { name: account.name ?? google.ownerEmail, email: google.ownerEmail, domains, businesses: [], organizations: anchors.organizations.map(o => o.name), city: null, ownText },
+        { fastModel: value("--fast-web-model") ?? "claude-sonnet-5-5", t0 }
+      ).start();
+      const { value: reading, call } = await readingP;
       times["reading"] = at();
       if (!reading) {
         out.push(`# Fast path run ${n}: reading failed (${call.error})`);
@@ -169,7 +176,7 @@ async function main() {
       const checked = synth.checkClaims(reading, evidence, new Date());
       // the businesses are named: Places and the wider footprint search start now
       // "Adam Wright operates Laundry Farm, a laundry business" → "Laundry Farm"
-      const nameOf = (statement: string) => statement.replace(/^.*?\b(?:operates|runs|owns|manages|is developing|is building|develops|builds|is working on)\s+/i, "").split(/[,.;:(]| - | — | is | was | located /)[0].trim();
+      const nameOf = (statement: string) => statement.replace(/^.*?\b(?:operates|runs|owns|manages|is developing|is building|develops|builds|is working on)\s+/i, "").split(/[,.;:(]| - | — | is | was | located | at /)[0].trim();
       const businesses = [...new Set(checked.filter(c => (c.kind === "business" || c.kind === "project") && c.verdict !== "unsupported").map(c => nameOf(c.statement)))].slice(0, 6);
       pub.withBusinesses(businesses);
       const judged = await synth.judgeClaims(gemini, checked, evidence, new Date(), reading.opening);
@@ -190,7 +197,7 @@ async function main() {
       const grounded = groundedP ? await groundedP : null;
 
       // the deeper discovery, when public research lands
-      await Promise.race([pub.settled(), sleep(110_000 - at())]);
+      await Promise.race([pub.settled(), sleep(Number(value("--public-cap") ?? 150) * 1000 - at())]);
       times["public research settled"] = at();
       const publicFindings = pub.snapshot();
       const deeper = await sig.runSignificance(gemini, { ...input, publicFindings, evidence }, { thinking: sigThinking });
@@ -200,11 +207,12 @@ async function main() {
       times["second reveal (with public)"] = at();
 
       out.push(`# Fast path run ${n}: ${account.name}`, "");
-      out.push(`Timings from completed authorization: ${Object.entries(times).map(([k, ms]) => `${k} ${(ms / 1000).toFixed(1)} s`).join(" → ")}. Web research started at ${(tWebStart / 1000).toFixed(1)} s.`, "");
+      out.push(`Timings from completed authorization: ${Object.entries(times).map(([k, ms]) => `${k} ${(ms / 1000).toFixed(1)} s`).join(" → ")}. The identity search started ${((pub.identityStartedAt ?? 0) / 1000).toFixed(1)} s after authorization (after Gmail and Drive were retrieved and the organizations read from them).`, "");
       out.push(`Evidence: ${gmailEvidence.length} sent messages, ${driveEvidence.length} files.`, "");
       out.push("### Public research, as it landed", "", ...pub.runs.map(r => `- ${r.label}: landed ${(r.at / 1000).toFixed(1)} s after authorization, ${r.findings} findings${r.error ? `, error: ${r.error}` : ""}${r.note ? ` (${r.note})` : ""}`));
       out.push(`- in the first reveal: ${firstPublic.length} public findings (${firstPublic.map(f => `${f.id} ${f.source}`).join(", ") || "none"})`);
-      out.push("", "Profiles found (a profile found is not a profile read: only X is read, by its confirmed handle):", ...(Object.entries(pub.handles).filter(([, v]) => v).map(([k, v]) => `- ${k}: ${v} — found by ${pub.handleSources[k as keyof typeof pub.handles]}${k === "x" ? "; read through xAI" : k === "website" ? "" : "; known from search results only, never opened"}`)), ...(Object.values(pub.handles).some(Boolean) ? [] : ["- none"]));
+      out.push("", `Organizations read from their own mail and files (identity anchors): ${anchors.organizations.map(o => `${o.name} [${o.relation}; ${o.evidence.join(", ")}]`).join("; ") || "none"}${anchors.dropped.length ? `; dropped: ${anchors.dropped.join("; ")}` : ""}`);
+      out.push("", "Profiles proposed by the research model (a profile found is not a profile read: only X is read, and only a verified handle):", ...(pub.candidates.length ? pub.candidates.map(c => `- ${c.verified ? "VERIFIED" : "rejected"} ${c.kind}: ${c.value} — proposed by ${c.proposedBy}; ${c.why}${c.verified && c.kind !== "x" && c.kind !== "website" ? "; known from search results only, never opened" : ""}`) : ["- none proposed"]));
       if (pub.rejected.length) out.push("", "Rejected as someone else or unconfirmed:", ...pub.rejected.map(r => `- ${r.text} (${r.why})`));
       out.push("");
       const firstRead = await readerSection(reader, gemini, first.lines.filter(l => l.kept).map(l => l.line));
@@ -212,7 +220,7 @@ async function main() {
       out.push("## Second, deeper reveal (all public research)", "", `Public findings: ${publicFindings.length}`, ...publicFindings.map(f => `- ${f.id} [${f.source}; ${f.signal}] ${f.text}`), "");
       const deeperSig = deeperGrounded?.significance ?? deeper.significance;
       out.push("### What the significance became with public evidence", "", ...(deeperSig ? sig.significanceLines(deeperSig).map(l => `- ${l}`) : ["- failed"]), ...(deeperGrounded?.issues ?? []).map(i => `- source check: ${i}`), "", ...revealSection(second), "", "---", "");
-      console.log(`fast run ${n}: first reveal ${(times["FIRST REVEAL"] / 1000).toFixed(1)} s (${first.lines.filter(l => l.kept).length} lines kept, ${firstPublic.length} public findings in it, ${first.lines.filter(l => l.kept && l.combined).length} lines combining private and public, spotlight ${first.spotlight?.carried ? "carried" : "lost"}); profiles ${Object.entries(pub.handles).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}; second ${(times["second reveal (with public)"] / 1000).toFixed(1)} s`);
+      console.log(`fast run ${n}: first reveal ${(times["FIRST REVEAL"] / 1000).toFixed(1)} s (${first.lines.filter(l => l.kept).length} lines kept, ${firstPublic.length} public findings in it, ${first.lines.filter(l => l.kept && l.combined).length} lines combining private and public, spotlight ${first.spotlight?.carried ? "carried" : "lost"}); profiles verified ${Object.entries(pub.handles).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}, rejected ${pub.candidates.filter(c => !c.verified).map(c => c.kind).join(", ") || "none"}; organizations ${anchors.organizations.length}; identity search from ${((pub.identityStartedAt ?? 0) / 1000).toFixed(1)} s; second ${(times["second reveal (with public)"] / 1000).toFixed(1)} s`);
     }
   }
 

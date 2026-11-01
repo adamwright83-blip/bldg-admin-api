@@ -206,7 +206,7 @@ export async function runSignificance(
  * text behind it: these are the claims that do harm when they drift from what the person wrote.
  */
 export const SENSITIVE =
-  /\b(unpaid|unfunded|owe[sd]?|owing|debts?|overdue|behind on|late on|past due|(?:is|are|went|gone|flat) broke|bankrupt\w*|insolven\w*|losing money|lost money|in the red|underwater|can'?t afford|cannot afford|struggl\w* to pay|short on cash|cash[- ]strapped|evict\w*|foreclos\w*|lawsuits?|sued|suing|arrest\w*|divorc\w*|diagnosed with|illness|terminal(?:ly)? ill)\b/gi;
+  /\b(unpaid|unfunded|owe[sd]?|owing|debts?|overdue|open balances?|unpaid balances?|in arrears|arrears|behind on|late on|past due|(?:is|are|went|gone|flat) broke|bankrupt\w*|insolven\w*|losing money|lost money|in the red|underwater|can'?t afford|cannot afford|struggl\w* to pay|short on cash|cash[- ]strapped|evict\w*|foreclos\w*|lawsuits?|sued|suing|arrest\w*|divorc\w*|diagnosed with|illness|terminal(?:ly)? ill)\b/gi;
 
 /** The sensitive words in a line that its source text never uses. */
 export function unbackedSensitive(line: string, source: string): string[] {
