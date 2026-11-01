@@ -1,6 +1,7 @@
 import { GOOGLE_PRODUCT_SCOPES } from "../../../shared/firstTenMinutes";
 import { refreshGoogleAccess } from "../google";
 import { ProviderError, providerUrl, type FetchLike } from "../providerFetch";
+import { redactSensitive, sensitiveDocumentReason } from "../research/privacy";
 import type { EventItem, FileItem, MailItem, Owner, ReadResult } from "./sources";
 import { htmlToText, looksAutomated, parseAddressList, sameAddress, stripQuotedReply } from "./text";
 
@@ -148,8 +149,9 @@ export function parseGmailMessage(message: GmailMessage, ownerEmail: string, acc
     at,
     from,
     to: [...parseAddressList(headers.get("to")), ...parseAddressList(headers.get("cc"))],
-    subject: headers.get("subject") ?? "",
-    text,
+    // the crew's reading, Claire's portrait and the investigation all start here: nothing secret goes further
+    subject: redactSensitive(headers.get("subject") ?? ""),
+    text: redactSensitive(text),
     sentByOwner: sameAddress(from.email, ownerEmail),
     automated: looksAutomated({ from: from.email, listUnsubscribe: headers.has("list-unsubscribe") }),
     attachments,
@@ -338,10 +340,12 @@ export function driveReader(access: GoogleAccess, deps: Deps = {}) {
       const items = await mapLimit(files, 4, async (file): Promise<FileItem> => {
         let text: string | null = null;
         const exportAs = DOC_EXPORTS[file.mimeType];
-        if (exportAs && docs < docLimit) {
+        // a key file, a bank statement or medical record is never read: by its name first, then by what's in it
+        if (exportAs && docs < docLimit && !sensitiveDocumentReason(file.name)) {
           docs += 1;
           try {
-            text = (await client.text(`${DRIVE}/${encodeURIComponent(file.id)}/export?mimeType=${encodeURIComponent(exportAs)}`)).slice(0, 6000);
+            const raw = await client.text(`${DRIVE}/${encodeURIComponent(file.id)}/export?mimeType=${encodeURIComponent(exportAs)}`);
+            text = sensitiveDocumentReason(file.name, raw) ? null : redactSensitive(raw.slice(0, 6000));
           } catch {
             text = null;
           }
