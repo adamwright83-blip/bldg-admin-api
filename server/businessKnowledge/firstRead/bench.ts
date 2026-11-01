@@ -12,6 +12,8 @@ import {
   geminiReading,
   judgeClaims,
   scoreExpectations,
+  stamp,
+  unverified,
   type CheckedClaim,
   type Evidence,
   type Expectations,
@@ -87,7 +89,10 @@ function mailEvidence(items: readonly MailHeader[], texts: ReadonlyArray<string 
     id: `g${index + 1}`,
     source: "gmail",
     at: item.at,
+    dated: "activity",
     byOwner: item.sentByOwner,
+    ref: `gmail message ${item.id}, thread ${item.threadId}`,
+    url: item.url || null,
     title: item.subject || "(no subject)",
     people: who(item.to),
     text: clipText(texts[index] || item.snippet, 900),
@@ -107,7 +112,10 @@ async function readFiles(research: GoogleResearch, files: readonly DriveEntry[],
     id: `d${index + 1}`,
     source: "drive",
     at: file.modifiedAt,
+    dated: "modified",
     byOwner: sameEmail(file.lastModifiedBy?.email, owner),
+    ref: `drive file ${file.id}`,
+    url: file.url,
     title: `${file.name} (${file.mimeType === GOOGLE_SHEET ? "sheet" : file.mimeType === GOOGLE_SLIDES ? "slides" : "doc"}, last modified)`,
     people: who([...file.owners, ...(file.lastModifiedBy ? [file.lastModifiedBy] : [])]),
     text: clipText(text.get(file.id) ?? "(title and date only)", 1100),
@@ -320,7 +328,7 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
       const search = (source: FirstReadSource) =>
         searchCorpus({ accessToken: access.accessToken, query: FIRST_READ_PROMPTS[source], pageSize: 50 }, { fetch: base }).then(result => {
           (run.mcp ??= []).push(result);
-          return result.hits.map((hit, index): Evidence => ({ id: `${source === "gmail" ? "m" : "n"}${index + 1}`, source: hit.corpus, at: null, byOwner: null, title: hit.title || "(untitled)", people: hit.detail, text: clipText(hit.snippet, 900) }));
+          return result.hits.map((hit, index): Evidence => ({ id: `${source === "gmail" ? "m" : "n"}${index + 1}`, source: hit.corpus, at: null, dated: null, byOwner: null, ref: `${hit.corpus} result ${hit.rank + 1}`, url: hit.url, title: hit.title || "(untitled)", people: hit.detail, text: clipText(hit.snippet, 900) }));
         });
       sources = { gmail: search("gmail"), drive: search("drive") };
       run.notes.push("search_corpus returns no dates, so nothing it finds can be established as current.");
@@ -341,13 +349,14 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
         if (!value) return;
         run.claims[source] = checkReading(value, evidence, now());
         run.draftReadyMs[source] = sinceConnect();
-        if (input.judge !== false) {
+        if (input.judge === false) run.claims[source] = run.claims[source].map(claim => unverified(claim, "the judge was switched off (--no-judge)"));
+        else {
           const judged = await judgeClaims(gemini, run.claims[source], evidence, now());
           run.claims[source] = judged.claims;
           if (judged.call) {
             run.calls.push(judged.call);
             run.judgeMs[source] = judged.call.latencyMs;
-            if (judged.call.error) run.notes.push(`${source} judge failed (${judged.call.error}): its claims carry the deterministic grade only`);
+            if (judged.call.error) run.notes.push(`${source} judge failed (${judged.call.error}): nothing from ${source} is established as current`);
           }
         }
         run.verifiedReadyMs[source] = sinceConnect();
@@ -428,6 +437,7 @@ export function benchReport(result: BenchResult): string {
         `- People found: ${e.peopleFound.join(", ") || "none"}; missed: ${e.peopleMissed.join(", ") || "none"}`,
         `- Other names found: ${e.mentionFound.join(", ") || "none"}; missed: ${e.mentionMissed.join(", ") || "none"}`,
         `- Established-current claims you didn't list (check each for invention): ${e.unexpectedCurrent.join(", ") || "none"}`,
+        ...e.unconfirmed.map(u => `- UNCONFIRMED guess (${u.guess}), not scored: ${u.name} — ${u.calledCurrent ? "came out current" : u.found ? "found, not current" : "not found"}`),
         ""
       );
     }
@@ -459,12 +469,14 @@ export function benchReport(result: BenchResult): string {
             .map(c => {
               const item = evidence.get(c.id);
               const mark = !c.valid ? "✗ no such evidence" : !c.quoted ? "✗ quote not found" : "✓";
-              return `${c.id} ${item?.at ? item.at.toISOString().slice(0, 10) : "undated"} ${mark} “${clipText(c.quote, 90)}”`;
+              const source = item ? ` [${item.ref}${item.url ? `](${item.url})` : "]"}` : "";
+              return `${c.id} ${item ? stamp(item) : "—"} ${mark} “${clipText(c.quote, 90)}”${source}`;
             })
-            .join("; ");
+            .join("\n    - ");
           const kind = claim.kind === "person" ? "person" : claim.kind === "older" ? "older ambition" : `priority, model said ${claim.claimed}`;
           lines.push(`- **${claim.label}** (${kind}): ${claim.summary}${claim.people.length ? ` People: ${claim.people.join(", ")}.` : ""}`);
-          lines.push(`  - ${cites}${claim.reasons.length ? ` — ${claim.reasons.join("; ")}` : ""}`);
+          if (claim.reasons.length) lines.push(`  - why: ${claim.reasons.join("; ")}`);
+          lines.push(`  - evidence:\n    - ${cites}`);
         }
         lines.push("");
       }

@@ -78,7 +78,7 @@ JOYSTICK's own Gmail and Drive readers plus Gemini.
 ## The benchmark
 
 ```bash
-scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization --paths rest --strategies fast,agent,survey --expect <file>
+scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization --paths rest --strategies fast,agent --expect <file>
 ```
 
 **Three REST strategies, run one after another so their timings don't share quota:**
@@ -101,15 +101,20 @@ Each claim then gets one verdict:
 
 | verdict | meaning | shown as |
 |---|---|---|
-| `established_current` | The quotes really are in the cited items. At least one is the owner's own act (mail they sent, a file they last changed) in the last 120 days. The judge agrees it supports the claim and shows present activity. | a current fact |
+| `established_current` | The quotes really are in the cited items. At least one is a dated act of the owner's (mail they sent) in the last 120 days; a file's modification time never counts. The judge actually ran and agrees it supports the claim and shows present activity. | a current fact |
 | `supported_past` | Supported, but the latest support is old. Whatever the model called it, it is past, with the date. | past |
 | `supported` | A person or relationship the quotes support. | a person |
-| `uncertain` | Undated support (every MCP result), support that isn't the owner's own act, partial support, or the judge unsure about present activity. | not shown as fact |
+| `uncertain` | Undated support (every MCP result), support dated only by file edits, support that isn't the owner's own act, partial support, the judge unsure about present activity, or the judge failed, skipped the claim, or was switched off. | not shown as fact |
 | `contradicted` | The judge found the evidence says otherwise. | struck |
 | `unsupported` | No real id, no quote actually in the cited item, or the judge says the quotes don't show it. | struck |
 
 - The judge is a second Gemini call per source. It sees only each claim and its quoted evidence.
-- It can lower a verdict, never raise one.
+- It can lower a verdict, never raise one. It fails closed: if it times out or errors, nothing is established as
+  current, and the report says why.
+- Drive modification times are kept for retrieval and provenance only. A Drive-only reading can call work past or
+  uncertain, but never establish it as current.
+- Every citation in the private report links to its original Gmail message and thread, or Drive file, so it can be
+  checked like an AI Overview's sources.
 - The report times the draft (checked by quote and date) and the verified reading (judged) separately.
 
 **Against the owner's own results.** `--expect` takes the Gmail and Drive AI Overviews, written as names, in a file
@@ -117,6 +122,7 @@ kept outside the repo:
 - `current`: must come out established-current.
 - `past`: must never come out current.
 - `people` and `mention`: must be found.
+- `unconfirmed`: guesses nobody has confirmed. Each is reported on its own and never scored.
 
 The report lists what was found, what was missed and what was wrongly called current. It also lists every
 established-current claim the file doesn't name, to read by hand for inventions.
