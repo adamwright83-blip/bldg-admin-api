@@ -54,10 +54,12 @@ test("the Friday that didn't exist, Hazel's proper letter, and the real draft at
   await expect(revelation).not.toContainText("Someone already asked");
   await shots("40-then", page, testInfo);
 
-  // now: today, the Friday delivery, the route; the invitation brought onto today's map
+  // now: today, the Friday delivery, the route; the invitation brought onto today's map.
+  // "Today" is the clock's UTC month (RevelationScene), not a month frozen when this was written.
+  const todayMonth = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(new Date());
   await page.getByTestId("first-ten-turn-to-today").click();
   await expect(revelation).toHaveAttribute("data-phase", "now", { timeout: 20_000 });
-  await expect(page.getByTestId("first-ten-calendar")).toHaveAttribute("data-month", "October");
+  await expect(page.getByTestId("first-ten-calendar")).toHaveAttribute("data-month", todayMonth);
   await expect(page.getByTestId("first-ten-service-now")).toContainText("Wildroot has a weekly Friday delivery");
   await page.getByRole("button", { name: "Bring Elena Ruiz's request onto today's map" }).click();
   await expect(page.getByTestId("first-ten-crossing")).toHaveAttribute("data-crossing", "open");

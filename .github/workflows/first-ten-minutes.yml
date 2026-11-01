@@ -47,7 +47,7 @@ jobs:
   first-ten:
     name: first ten minutes
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     services:
       mysql:
         image: mysql:8.0

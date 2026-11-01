@@ -57,9 +57,15 @@ test("an edited page, kept, with no conversation to pick up: says so, invents no
   await expect(threshold).toBeVisible();
   await expect(threshold).toContainText("Your page is kept.");
   await expect(threshold).toContainText("there's no letter to write today");
+  await expect(threshold).toContainText("Nothing has to be sent.");
   await expect(page.getByTestId("first-ten-revelation")).toHaveCount(0);
   await expect(page.getByTestId("first-ten-letter")).toHaveCount(0);
   await expect(page.getByTestId("first-ten-draft")).toHaveCount(0);
+  const signup = page.getByTestId("first-ten-signup");
+  await expect(signup).toBeVisible();
+  await expect(signup.getByTestId("first-ten-activation")).toBeVisible();
+  await expect(signup.getByTestId("first-ten-offer-closed")).toHaveText("JOYSTICK isn't taking payment yet. Everything here is saved.");
+  await expect(page.getByTestId("first-ten-workspace")).toHaveCount(0);
   await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-35-kept-no-opportunity.png`, fullPage: true });
 
   // a next action that does something: the crew's findings, as they stand
@@ -77,7 +83,17 @@ test("an edited page, kept, with no conversation to pick up: says so, invents no
   await page.reload();
   await expect(page.getByTestId("first-ten-portrait-kept")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("first-ten-chapter-threshold")).toHaveAttribute("data-state", "no_opportunity", { timeout: 20_000 });
+  await expect(page.getByTestId("first-ten-signup")).toBeVisible();
   await expect(page.getByTestId("first-ten-revelation")).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-draft")).toHaveCount(0);
+
+  // a cancelled return keeps the offer and does not open a workspace
+  await page.goto("/joystick-start?checkout=cancelled");
+  await expect(page.getByTestId("first-ten-checkout-cancelled")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("first-ten-signup")).toBeVisible();
+  await expect(page.getByTestId("first-ten-workspace")).toHaveCount(0);
+  await expect(page.getByTestId("first-ten-draft")).toHaveCount(0);
+  await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-36-signup-without-draft.png`, fullPage: true });
 });
 
 test("a chapter that couldn't be read: the kept page says so and tries again", async ({ page }) => {
