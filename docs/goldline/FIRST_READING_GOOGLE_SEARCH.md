@@ -389,3 +389,37 @@ deterministic guard now covers it.
 
 The "1030 claire rule" content has been removed from Drive, and the 50-customer goal is gone from every reveal. That
 confirms the goal came from that document.
+
+## In onboarding: the first read (PR #811, behind `JOYSTICK_FIRST_READ_REVEAL`, off)
+
+**The flow.**
+1. The Google OAuth callback saves the connection.
+2. It claims one `first_ten_first_reads` row for the journey (awaited, so the next page finds it running), then runs
+   `runFirstRead` in the background.
+3. The client polls `firstTenMinutes.firstRead`. The crew waits for the lines, and only at the `understanding` stage:
+   - until they arrive, for at most 75 s after consent;
+   - then while they are being read: one line every 2.6 s, then "Go on", or 6 s.
+4. Then everything continues as before: crew, portrait (Claire named), chapter, Lantern City, goal-setting.
+
+**What a stranger gets.**
+- Lines from their sent mail and their own documents only. Files others sent them are never read here.
+- Places listings tied to them.
+- An account with fewer than four items, fewer than two stated claims, or fewer than two lines that survive: nothing,
+  never a thin remark.
+- No line may disclose a third party's confidential matters.
+
+**Kept for later, never forced into words.**
+- `understanding_json`: claims, the grounded significance and the identity organizations.
+- `public_json`: verified profiles, every candidate with its verdict, and findings with their sources.
+
+**Enable for preview-pass browsers only.** Set `JOYSTICK_FIRST_READ_REVEAL=on` on `bldg-admin-api`. While
+`JOYSTICK_FIRST_TEN_MINUTES=preview`, only browsers that opened `/joystick-start?crew=<JOYSTICK_FIRST_TEN_PREVIEW_CODE>`
+reach the callback at all. Without the crew link, `/joystick-start` shows the customer-list signup, which has no
+Google step.
+
+**Measured on the production code path, against the owner's stored grant, with no DB writes**
+(`scripts/first-read-onboarding.sh`):
+- lines ready 46.2 s after consent;
+- deeper research kept at 131 s, with LinkedIn and X verified.
+
+The browser path (consent → callback → redirect → page → visible lines) still needs a real sign-in.
