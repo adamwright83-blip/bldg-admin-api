@@ -27,7 +27,8 @@ export type Anchors = {
 export type PublicFinding = {
   /** p1, p2 … */
   id: string;
-  source: "web" | "x" | "places";
+  /** user: handed over by the person themselves (screenshots, an export), never presented as discovered */
+  source: "web" | "x" | "places" | "user";
   /** what was found, in a sentence or two */
   text: string;
   /** what kind of signal: a self-description, a public post or repost, a listing, press … */

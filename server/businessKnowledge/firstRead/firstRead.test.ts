@@ -381,3 +381,27 @@ describe("runFirstReadBench", () => {
     }
   });
 });
+
+describe("the reveal speaks as the established Claire", () => {
+  it("takes her personality lock and core canon from the runtime compiler, not a separate persona", async () => {
+    const { claireCharacterSection } = await import("./reveal");
+    const { CLAIRE_PERSONALITY_LOCK } = await import("../../claire/character/personalityLock");
+    const section = claireCharacterSection();
+    expect(section).toContain(CLAIRE_PERSONALITY_LOCK);
+    expect(section).toMatch(/Claire is British/);
+    expect(section).toMatch(/field-intelligence \/ operations partner/);
+    expect(section).not.toMatch(/\bassistant\b/i);
+    // nothing tier-gated reaches a first meeting
+    expect(section).not.toMatch(/father/i);
+  });
+
+  it("strikes lines that show the trick or turn her into a product, and leaves ordinary verbs alone", async () => {
+    const { NOT_CLAIRE, TRICK } = await import("./reveal");
+    expect(TRICK.test("I read your emails last night")).toBe(true);
+    expect(TRICK.test("Those reposts about seed rounds say plenty")).toBe(true);
+    expect(TRICK.test("You'll drive Bellaire harder than Westheimer")).toBe(false);
+    expect(NOT_CLAIRE.test("I'm Claire, your assistant")).toBe(true);
+    expect(NOT_CLAIRE.test("an assistant who already understands the business")).toBe(true);
+    expect(NOT_CLAIRE.test("I think I found it.")).toBe(false);
+  });
+});

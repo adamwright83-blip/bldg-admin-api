@@ -6,9 +6,11 @@
  *   scripts/first-read-reveal.sh --personas plumber,laundromat,electrician
  *     synthetic owners (fictional; their public findings stand in for the public stream): tests the reasoning
  *
- *   scripts/first-read-reveal.sh --journey <own journey id> --i-have-authorization
+ *   scripts/first-read-reveal.sh --journey <own journey id> --i-have-authorization [--user-evidence <file.json>]
  *     a real connected account: Gmail and Drive (the discover strategy) and live public research (Claude web search,
- *     xAI X search, Google Places) at once, then the reveal
+ *     xAI X search, Google Places) at once, then three reveals from that one retrieval: Gmail and Drive alone; plus
+ *     public research; plus what the person handed over themselves (--user-evidence: a JSON list of
+ *     {text, signal, url?, date?}, kept outside the repo; labelled user-provided, never passed off as discovered)
  *
  * Each subject's report has:
  *   1. what Gmail and Drive alone find, and the opening Claire would give from them alone
@@ -17,7 +19,7 @@
  *   4. Claire's opening
  *   5. internally, which lines are confirmed and which are inferred
  */
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 process.env.POSTHOG_AI_CAPTURE_CONTENT = "0";
@@ -76,13 +78,14 @@ function sectionReport(s: Section): string {
     if (r.discrepancies.length) lines.push("Discrepancies (recognised, not explained):", ...r.discrepancies.map(x => `- ${x.statement} — ${x.supports.join(", ")}`), "");
   }
 
+  if (s.reveal.spotlight) lines.push(`**Spotlight (strongest discovery she built the opening on):** ${s.reveal.spotlight.item}: ${s.reveal.spotlight.text} — ${s.reveal.spotlight.why}`, "");
   lines.push("## 4. What Claire says first", "");
   const kept = s.reveal.lines.filter(l => l.kept);
   lines.push(kept.length ? kept.map(l => `> ${l.line}`).join("\n>\n") : "> (nothing survived the checks)", "");
 
   lines.push("## 5. Behind the curtain: each line", "");
   for (const l of s.reveal.lines) {
-    lines.push(`- ${l.kept ? "SAID" : "STRUCK"} [${l.basis}${l.combined ? ", combined" : ""}] “${l.line}” — rests on ${l.rests.join(", ")}${l.why ? ` — ${l.why}` : ""}`);
+    lines.push(`- ${l.kept ? "SAID" : "STRUCK"} [${l.basis}${l.combined ? ", combined" : ""}${l.userProvided ? ", uses user-provided evidence" : ""}] “${l.line}” — rests on ${l.rests.join(", ")}${l.why ? ` — ${l.why}` : ""}`);
   }
   if (r) {
     lines.push("", "Confirmed items:", ...r.confirmed.map((x, i) => `- F${i} ${x.statement} — ${x.supports.join(", ")}`));
@@ -193,19 +196,42 @@ async function main() {
       (found?.findings ?? []).filter(f => f.identity !== "different_person" && f.matchedAnchors.length >= 2).map(f => ({ source, text: f.text, signal: f.signal, url: f.url || null, at: /^\d{4}-\d{2}-\d{2}$/.test(f.date) ? new Date(f.date) : null, identity: f.identity === "certain" ? ("certain" as const) : ("likely" as const) }));
     const publicFindings = [...keep(w.found, "web"), ...keep(x.found, "x"), ...places.findings].map((f, i) => ({ ...f, id: `p${i + 1}` }));
     const rejected = [...(w.found?.findings ?? []), ...(x.found?.findings ?? [])].filter(f => f.identity === "different_person" || f.matchedAnchors.length < 2).map(f => ({ text: f.text, why: f.identity === "different_person" ? "a different person" : `matched only ${f.matchedAnchors.join(", ") || "nothing"}` }));
-    const reveal = await runReveal(gemini, { claims: answer?.claims ?? [], publicFindings, today: new Date(), ownerName: anchors.name });
-    sections.push({
-      title: `Real account: ${anchors.name}`,
-      privateClaims: answer?.claims ?? [],
-      privateOpening: answer?.opening ?? [],
-      publicFindings,
-      rejected,
-      publicRuns: [w.run, x.run, places.run],
-      reveal,
-      timings: { anchors: tAnchors, "public started": w.startedAt, "private done": priv.ms, "web done": w.end, "both streams in": tAfter, "x + places done": x0.end, "reveal done": Date.now() - t0 },
-      costCents: run.costCents + w.run.costCents + places.run.costCents + price(reveal.calls),
+    // One retrieval, three reveals: what changes is only the evidence Claire is given.
+    //   A: Gmail and Drive alone. B: plus what public research found on its own. C: plus what the person handed over.
+    const userFile = value("--user-evidence");
+    const userProvided = userFile
+      ? (JSON.parse(readFileSync(userFile, "utf8")) as Array<{ text: string; signal: string; url?: string; date?: string }>).map((u, i) => ({
+          id: `u${i + 1}`,
+          source: "user" as const,
+          text: u.text,
+          signal: u.signal,
+          url: u.url ?? null,
+          at: u.date ? new Date(u.date) : null,
+          identity: "certain" as const,
+        }))
+      : [];
+    const tReveal = Date.now();
+    const conditions: Array<[string, Parameters<typeof runReveal>[1]]> = [
+      ["A. Gmail and Drive alone", { claims: answer?.claims ?? [], publicFindings: [], today: new Date(), ownerName: anchors.name }],
+      ["B. plus independent public research", { claims: answer?.claims ?? [], publicFindings, today: new Date(), ownerName: anchors.name }],
+      ...(userProvided.length ? [["C. plus the screenshots the person provided (user-provided, not discovered)", { claims: answer?.claims ?? [], publicFindings, userProvided, today: new Date(), ownerName: anchors.name }] as [string, Parameters<typeof runReveal>[1]]] : []),
+    ];
+    const reveals = await Promise.all(conditions.map(([, input]) => runReveal(gemini, input)));
+    reveals.forEach((reveal, i) => {
+      sections.push({
+        title: `Real account: ${anchors.name}, ${conditions[i][0]}`,
+        privateClaims: answer?.claims ?? [],
+        privateOpening: answer?.opening ?? [],
+        publicFindings: [...(conditions[i][1].publicFindings ?? []), ...(conditions[i][1].userProvided ?? [])],
+        rejected: i === 0 ? [] : rejected,
+        publicRuns: i === 0 ? [] : [w.run, x.run, places.run],
+        reveal,
+        timings: { anchors: tAnchors, "public started": w.startedAt, "private done": priv.ms, "web done": w.end, "both streams in": tAfter, "x + places done": x0.end, "reveal (all three, in parallel)": Date.now() - tReveal },
+        costCents: (i === 0 ? run.costCents + w.run.costCents + places.run.costCents : 0) + price(reveal.calls),
+      });
+      console.log(`${conditions[i][0]}: ${reveal.lines.filter(l => l.kept).length} of ${reveal.lines.length} lines kept`);
     });
-    console.log(`real account: private ${priv.ms} ms, public ${tPublic} ms, reveal done ${Date.now() - t0} ms; ${reveal.lines.filter(l => l.kept).length} lines kept`);
+    console.log(`real account: private ${priv.ms} ms, public ${tPublic} ms, reveals ${Date.now() - tReveal} ms`);
   }
 
   if (!sections.length) refuse("nothing to run: pass --personas and/or --journey");
