@@ -51,6 +51,30 @@
   color: #f6ead4;
 }
 
+.topBackToPageBtn {
+  margin-left: auto;
+  min-height: 34px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1.5px solid #ffd97d;
+  background: #d5a045;
+  color: #181008 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  transition: transform 150ms ease, background 150ms ease;
+  touch-action: manipulation;
+}
+
+.topBackToPageBtn:hover {
+  transform: translateY(-1px);
+  background: #ffe399;
+}
+
 .cameraControls {
   display: none;
   flex-wrap: wrap;
@@ -509,6 +533,19 @@
   border-color: #ffd97d;
   background: linear-gradient(135deg, #8b5e20 0%, #462e0f 100%);
   box-shadow: 0 0 22px rgba(255, 217, 125, 0.45);
+}
+
+.crankComplete {
+  border-color: #ffd97d !important;
+  background: linear-gradient(135deg, #5b3e1b 0%, #291b0d 100%) !important;
+  box-shadow: 0 0 20px rgba(255, 217, 125, 0.5) !important;
+  color: #ffd97d !important;
+  cursor: pointer !important;
+}
+
+.crankComplete:hover {
+  filter: brightness(1.18);
+  transform: translateY(-2px);
 }
 
 .crankWheel {
@@ -982,14 +1019,27 @@
 }
 
 .continueJoystickBtn {
-  min-height: 44px;
-  padding: 10px 22px;
+  min-height: 48px;
+  padding: 12px 28px;
   border-radius: 999px;
-  border: 0;
-  background: #2a2119;
-  color: #fbf5e8 !important;
+  border: 2px solid #ffd97d;
+  background: linear-gradient(135deg, #3d2816 0%, #1e130a 100%);
+  color: #fff4cf !important;
   font-family: Fraunces, Georgia, serif;
-  font-size: 16.5px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6), 0 0 14px rgba(255, 217, 125, 0.35);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.continueJoystickBtn:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #573a21 0%, #2a1a0e 100%);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7), 0 0 20px rgba(255, 217, 125, 0.55);
 }
 
 /* ------------------------------------------------------------------ Mobile & Camera Responsive Design */

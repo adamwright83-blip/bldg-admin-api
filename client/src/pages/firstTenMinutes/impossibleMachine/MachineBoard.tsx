@@ -58,6 +58,16 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
     "locked" | "key_inserted" | "tumblers_turning" | "dome_lifting" | "escaped" | "stealing"
   >(() => (state.adventureCompleted ? "stealing" : state.domeUnlocked ? "escaped" : "locked"));
   const [cameraFocus, setCameraFocus] = useState<CameraFocus>("full");
+  const endingRef = useRef<HTMLElement | null>(null);
+
+  const scrollToEnding = useCallback(() => {
+    if (endingRef.current) {
+      endingRef.current.scrollIntoView({
+        behavior: reduce ? "auto" : "smooth",
+        block: "center",
+      });
+    }
+  }, [reduce]);
 
   const timersRef = useRef<number[]>([]);
   const clearTimers = useCallback(() => {
@@ -68,8 +78,22 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
   useEffect(() => () => clearTimers(), [clearTimers]);
 
   useEffect(() => {
-    if (adapter.draft) setCorrespondenceOpen(true);
-  }, [adapter.draft]);
+    if (adapter.draft && !state.domeUnlocked) setCorrespondenceOpen(true);
+  }, [adapter.draft, state.domeUnlocked]);
+
+  // Once the dome unlocks and rescue completes, close the correspondence drawer and smoothly reveal the finale
+  useEffect(() => {
+    if (state.domeUnlocked) {
+      setCorrespondenceOpen(false);
+      const timer = window.setTimeout(
+        () => {
+          scrollToEnding();
+        },
+        reduce ? 40 : 650
+      );
+      return () => window.clearTimeout(timer);
+    }
+  }, [state.domeUnlocked, reduce, scrollToEnding]);
 
   // Synchronize verified send status from the business adapter into the pure puzzle engine
   useEffect(() => {
@@ -164,6 +188,7 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
       const t2 = window.setTimeout(() => {
         setUnlockStage("dome_lifting");
         setState(prev => reduceMachineState(prev, { type: "COMPLETE_RETURN_TRAVEL" }));
+        setCorrespondenceOpen(false);
         void adapter
           .onRecordMilestone({ milestone: "return_completed", route: routeUsed })
           .catch(() => undefined);
@@ -231,8 +256,18 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
                 ? state.centerBridgeRestored
                   ? "Return (NOW): Central crossing coupled! Point junctions Center or use the lower NOW track."
                   : "Return (NOW): Upper gate locked. Inspect the center note or align the lower NOW rotor."
-                : "Rescue complete: Rook is out of the dome."}
+                : "Rescue complete! Rook is attempting to slide the railway into his satchel."}
           </span>
+          {state.domeUnlocked && adapter.onFinishAdventure ? (
+            <button
+              type="button"
+              className={styles.topBackToPageBtn}
+              onClick={() => void adapter.onFinishAdventure!()}
+              data-testid="machine-top-back-to-page"
+            >
+              Back to your page →
+            </button>
+          ) : null}
         </div>
 
         {/* Mobile / Touch Camera Focus Controls */}
@@ -296,6 +331,7 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
             }
             onExamineCenter={handleExamineCenter}
             hasOpportunity={Boolean(adapter.opportunity)}
+            onScrollToEnding={scrollToEnding}
           />
 
           {/* Layer 4: Rook Character + Independent Glass Dome Overlay + Lock */}
@@ -308,10 +344,12 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
           crankSpinning={crankSpinning}
           disabled={traveling || state.domeUnlocked}
           routeConnected={routeEval.connected}
+          domeUnlocked={state.domeUnlocked}
           onToggleDial={() =>
             setState(prev => reduceMachineState(prev, { type: "SET_DIAL" }))
           }
           onWindCrank={handleWindCrank}
+          onScrollToEnding={scrollToEnding}
         />
       </div>
 
@@ -348,34 +386,37 @@ export function MachineBoard({ adapter, initialProgress = null, children }: Mach
         ) : null}
       </div>
 
-      {/* Integrated Center Correspondence Drawer */}
-      <MachineCorrespondence
-        open={correspondenceOpen}
-        isSimulated={adapter.isSimulated}
-        example={adapter.example}
-        dial={state.dial}
-        opportunity={adapter.opportunity}
-        draft={adapter.draft}
-        activation={adapter.activation}
-        correspondenceChoice={state.correspondenceChoice}
-        centerBridgeRestored={state.centerBridgeRestored}
-        checkoutNotice={adapter.checkoutNotice}
-        connectNotice={adapter.connectNotice}
-        onToggleDial={() => setState(prev => reduceMachineState(prev, { type: "SET_DIAL" }))}
-        onChoose={handleCorrespondenceChoice}
-        onChangeDraft={async change => {
-          await adapter.onChangeDraft(change);
-        }}
-        onBeginActivation={adapter.onBeginActivation}
-        onBringYourOwn={adapter.onBringYourOwn}
-        onSendDraft={adapter.onSendDraft}
-        onAllowSend={adapter.onAllowSend}
-        onVerifyDraft={adapter.onVerifyDraft}
-        onClose={() => setCorrespondenceOpen(false)}
-      />
+      {/* Integrated Center Correspondence Drawer — automatically suppressed upon puzzle completion */}
+      {!state.domeUnlocked && (
+        <MachineCorrespondence
+          open={correspondenceOpen}
+          isSimulated={adapter.isSimulated}
+          example={adapter.example}
+          dial={state.dial}
+          opportunity={adapter.opportunity}
+          draft={adapter.draft}
+          activation={adapter.activation}
+          correspondenceChoice={state.correspondenceChoice}
+          centerBridgeRestored={state.centerBridgeRestored}
+          checkoutNotice={adapter.checkoutNotice}
+          connectNotice={adapter.connectNotice}
+          onToggleDial={() => setState(prev => reduceMachineState(prev, { type: "SET_DIAL" }))}
+          onChoose={handleCorrespondenceChoice}
+          onChangeDraft={async change => {
+            await adapter.onChangeDraft(change);
+          }}
+          onBeginActivation={adapter.onBeginActivation}
+          onBringYourOwn={adapter.onBringYourOwn}
+          onSendDraft={adapter.onSendDraft}
+          onAllowSend={adapter.onAllowSend}
+          onVerifyDraft={adapter.onVerifyDraft}
+          onClose={() => setCorrespondenceOpen(false)}
+        />
+      )}
 
       {/* State I: Rescue & Comedic Theft Ending (also surfaces ClosingBeat when draft has a sent/declined outcome) */}
       <MachineEnding
+        ref={endingRef}
         state={state}
         draftStatus={adapter.draft?.status ?? null}
         onContinueToPage={adapter.onFinishAdventure ? () => void adapter.onFinishAdventure!() : undefined}

@@ -7,8 +7,10 @@ interface MachineControlsProps {
   crankSpinning: boolean;
   disabled: boolean;
   routeConnected: boolean;
+  domeUnlocked?: boolean;
   onToggleDial: () => void;
   onWindCrank: () => void;
+  onScrollToEnding?: () => void;
 }
 
 /**
@@ -20,10 +22,15 @@ export function MachineControls({
   crankSpinning,
   disabled,
   routeConnected,
+  domeUnlocked = false,
   onToggleDial,
   onWindCrank,
+  onScrollToEnding,
 }: MachineControlsProps) {
   const reduce = useReducedMotion();
+
+  const handleCrankClick = domeUnlocked && onScrollToEnding ? onScrollToEnding : onWindCrank;
+  const handleDialClick = domeUnlocked && onScrollToEnding ? onScrollToEnding : onToggleDial;
 
   return (
     <>
@@ -38,9 +45,13 @@ export function MachineControls({
         <button
           type="button"
           className={styles.dialButton}
-          onClick={onToggleDial}
-          disabled={disabled}
-          aria-label={`Time configuration dial: currently ${dial}. Activate to switch between THEN and NOW.`}
+          onClick={handleDialClick}
+          disabled={disabled && !domeUnlocked}
+          aria-label={
+            domeUnlocked
+              ? "Rescue complete. Contraption solved."
+              : `Time configuration dial: currently ${dial}. Activate to switch between THEN and NOW.`
+          }
           data-testid="machine-dial-toggle"
           data-state={dial}
         >
@@ -62,12 +73,17 @@ export function MachineControls({
       <div className={styles.crankHousing} data-testid="machine-crank-housing">
         <button
           type="button"
-          className={`${styles.crankButton} ${routeConnected ? styles.crankReady : ""}`}
-          onClick={onWindCrank}
-          disabled={disabled}
-          aria-label="Wind the brass crank to run the railway carriage"
+          className={`${styles.crankButton} ${domeUnlocked ? styles.crankComplete : routeConnected ? styles.crankReady : ""}`}
+          onClick={handleCrankClick}
+          disabled={disabled && !domeUnlocked}
+          aria-label={
+            domeUnlocked
+              ? "Rescue complete. Contraption solved — view finale below."
+              : "Wind the brass crank to run the railway carriage"
+          }
           data-testid="machine-wind-crank"
           data-connected={routeConnected ? "yes" : "no"}
+          data-completed={domeUnlocked ? "yes" : "no"}
         >
           <motion.span
             className={styles.crankWheel}
@@ -78,7 +94,11 @@ export function MachineControls({
             <span className={styles.crankHandleKnob} />
           </motion.span>
           <span className={styles.crankLabel}>
-            {crankSpinning ? "WINDING…" : "WIND CRANK"}
+            {domeUnlocked
+              ? "RESCUE COMPLETE · VIEW FINALE ↓"
+              : crankSpinning
+                ? "WINDING…"
+                : "WIND CRANK"}
           </span>
         </button>
       </div>

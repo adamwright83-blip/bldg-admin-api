@@ -25,6 +25,7 @@ interface MachineRailwayProps {
   onToggleLowerRotor: () => void;
   onExamineCenter: () => void;
   hasOpportunity: boolean;
+  onScrollToEnding?: () => void;
 }
 
 /**
@@ -144,6 +145,7 @@ export function MachineRailway({
   onToggleLowerRotor,
   onExamineCenter,
   hasOpportunity,
+  onScrollToEnding,
 }: MachineRailwayProps) {
   const reduce = useReducedMotion();
   const routeEval = evaluateMachineRoute(state);
@@ -460,8 +462,12 @@ export function MachineRailway({
         type="button"
         className={styles.junctionButton}
         style={{ left: `${(west.x / MACHINE_WIDTH) * 100}%`, top: `${(west.y / MACHINE_HEIGHT) * 100}%` }}
-        onClick={onRotateWest}
-        aria-label={`West junction: pointing ${state.westJunction}. Activate to rotate.`}
+        onClick={state.domeUnlocked && onScrollToEnding ? onScrollToEnding : onRotateWest}
+        aria-label={
+          state.domeUnlocked
+            ? "Rescue complete. Contraption solved."
+            : `West junction: pointing ${state.westJunction}. Activate to rotate.`
+        }
         data-testid="machine-west-junction"
         data-position={state.westJunction}
       >
@@ -472,8 +478,12 @@ export function MachineRailway({
         type="button"
         className={styles.junctionButton}
         style={{ left: `${(east.x / MACHINE_WIDTH) * 100}%`, top: `${(east.y / MACHINE_HEIGHT) * 100}%` }}
-        onClick={onRotateEast}
-        aria-label={`East junction: pointing ${state.eastJunction}. Activate to rotate.`}
+        onClick={state.domeUnlocked && onScrollToEnding ? onScrollToEnding : onRotateEast}
+        aria-label={
+          state.domeUnlocked
+            ? "Rescue complete. Contraption solved."
+            : `East junction: pointing ${state.eastJunction}. Activate to rotate.`
+        }
         data-testid="machine-east-junction"
         data-position={state.eastJunction}
       >
@@ -484,8 +494,12 @@ export function MachineRailway({
         type="button"
         className={styles.rotorButton}
         style={{ left: `${(upper.x / MACHINE_WIDTH) * 100}%`, top: `${(upper.y / MACHINE_HEIGHT) * 100}%` }}
-        onClick={onToggleUpperRotor}
-        aria-label={`Upper alignment rotor: ${state.upperRotor}. Activate to toggle orientation.`}
+        onClick={state.domeUnlocked && onScrollToEnding ? onScrollToEnding : onToggleUpperRotor}
+        aria-label={
+          state.domeUnlocked
+            ? "Rescue complete. Contraption solved."
+            : `Upper alignment rotor: ${state.upperRotor}. Activate to toggle orientation.`
+        }
         data-testid="machine-upper-rotor"
         data-orientation={state.upperRotor}
       >
@@ -498,8 +512,12 @@ export function MachineRailway({
         type="button"
         className={styles.rotorButton}
         style={{ left: `${(lower.x / MACHINE_WIDTH) * 100}%`, top: `${(lower.y / MACHINE_HEIGHT) * 100}%` }}
-        onClick={onToggleLowerRotor}
-        aria-label={`Lower alignment rotor: ${state.lowerRotor}. Activate to toggle orientation.`}
+        onClick={state.domeUnlocked && onScrollToEnding ? onScrollToEnding : onToggleLowerRotor}
+        aria-label={
+          state.domeUnlocked
+            ? "Rescue complete. Contraption solved."
+            : `Lower alignment rotor: ${state.lowerRotor}. Activate to toggle orientation.`
+        }
         data-testid="machine-lower-rotor"
         data-orientation={state.lowerRotor}
       >

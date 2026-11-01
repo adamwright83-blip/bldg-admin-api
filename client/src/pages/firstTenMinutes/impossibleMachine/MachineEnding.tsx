@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { DraftStatus } from "@shared/firstTenMinutesChapter";
 import type { MachineEngineState } from "./machineTypes";
@@ -15,7 +16,10 @@ interface MachineEndingProps {
  * Once Rook steps out of the dome, he notices the machine is unattended and attempts to maneuver it into his satchel.
  * Invites the player onward into JOYSTICK without requiring a real business action as a prerequisite.
  */
-export function MachineEnding({ state, draftStatus = null, onContinueToPage, children }: MachineEndingProps) {
+export const MachineEnding = forwardRef<HTMLElement, MachineEndingProps>(function MachineEnding(
+  { state, draftStatus = null, onContinueToPage, children },
+  ref
+) {
   const reduce = useReducedMotion();
 
   // The ending banner and comedic theft art ONLY render after the actual rescue of Rook from the dome
@@ -32,6 +36,7 @@ export function MachineEnding({ state, draftStatus = null, onContinueToPage, chi
 
   return (
     <motion.section
+      ref={ref}
       className={styles.endingBanner}
       data-testid="machine-ending-banner"
       data-outcome={outcomeKind ?? "rescued"}
@@ -67,7 +72,7 @@ export function MachineEnding({ state, draftStatus = null, onContinueToPage, chi
                 onClick={onContinueToPage}
                 data-testid="first-ten-back-to-page"
               >
-                Back to your page
+                Back to your page →
               </button>
             </div>
           ) : null}
@@ -76,4 +81,4 @@ export function MachineEnding({ state, draftStatus = null, onContinueToPage, chi
       {children}
     </motion.section>
   );
-}
+});

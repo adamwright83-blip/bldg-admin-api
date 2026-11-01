@@ -465,7 +465,7 @@ export default function ImpossibleMachinePlayablePreview() {
                   cursor: "pointer",
                   fontWeight: 600,
                 }}
-                data-testid="first-ten-back-to-page"
+                data-testid="preview-top-back-to-page"
               >
                 ← Back to your page (Pause &amp; Exit)
               </button>
