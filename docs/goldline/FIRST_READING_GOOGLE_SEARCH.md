@@ -70,42 +70,76 @@ intelligence to do it?
 - Real latency of the `rest` path: Gmail retrieval, Drive retrieval and Gemini, end to end.
 - How accurate the current-versus-past calls are against the owner's own expectations.
 
+## Decision (2026-10-31)
+
+Workspace MCP is deprioritised: no new OAuth client, no Cloud Console changes. The benchmark proves the REST path:
+JOYSTICK's own Gmail and Drive readers plus Gemini.
+
 ## The benchmark
 
 ```bash
-scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization [--paths rest,mcp] [--expect file]
-scripts/first-read-bench.sh --consent --i-have-authorization --paths mcp      # separate "AI agent" probe client
+scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization --paths rest --strategies fast,agent,survey --expect <file>
 ```
 
-- **Read-only.**
-  - REST goes through the cold-test harness's `readOnlyFetch`.
-  - MCP goes through `workspaceSearchFetch`, which refuses anything but the handshake, `tools/list` and
-    `search_corpus`.
-  - Nothing is written to the database. Tokens stay in memory, and a `--consent` grant is revoked at the end.
-- **Isolated.** It uses only a journey's Google connection, or its own sign-in, never another person's.
-- **Private.** No analytics. The report (`tmp/first-read-bench/`, mode 600) holds the readings, which are the owner's
-  own data, so it stays on the machine that ran it.
-- **What it reports.**
-  - Time, per path and per source: auth (a token refresh), retrieval, model, when each answer is ready, and when both
-    are.
-  - Evidence counts by source, and tokens and cost.
-  - Each reading after verification:
-    - claims citing no real evidence are struck;
-    - a "current" claim resting only on old evidence is flagged;
-    - a "current" claim resting only on undated evidence (every MCP result) is flagged.
-  - With `--expect`, the names the owner expected that were found or missed, and anything wrongly called current.
+**Three REST strategies, run one after another so their timings don't share quota:**
 
-## Recommendation (pending the benchmark)
+| strategy | what it reads | role |
+|---|---|---|
+| `fast` | Four Sent searches at once: the last 90 days (25), plus 6–12, 12–24 and 24–48 months ago (6 each, for contrast). Then whole messages. One Drive search over 18 months, and the text of up to 10 Docs and Slides. | the first-minute candidate |
+| `agent` | The same four Sent searches and a Drive file list, headers and titles only. Gemini (no thinking) then picks up to 6 Gmail and 4 Drive searches. They run at once, and the answer reads what they found. | Gemini as the searcher, not just the summariser |
+| `survey` | The investigation's 24 monthly Sent windows, plus 24 months of Drive. | comparison only: what the fast strategies miss; never a prerequisite for a first result |
 
-1. **Build on the `rest` path, not MCP.**
-   - It runs on scopes customers already grant, for every account type, with dates, today. MCP can't legally serve
-     customers before GA.
-   - It would be a first-reading stage that runs right after connect, beside the existing reading and before the
-     investigation.
-   - It is shown as Claire's early, provisional read. The investigation then corrects and extends it, and the portrait
-     still comes from the reconciled understanding.
-2. **Keep MCP as a probe.** Re-test it when Google announces GA. If it proves better at finding relevant threads, it
-   could feed ids to the REST readers, which fetch the dated, whole messages.
-3. **Prove the result is personal before wiring anything.** Run the benchmark on the owner's account (with his
-   go-ahead) and on one or two pilot owners'. For each: total time to the first reading, the share of claims with real
-   citations, the owner's found/missed list, and zero "current" claims resting on stale evidence.
+**What runs at once.**
+- Gmail and Drive retrieval run concurrently.
+- Each source's reading starts as soon as its own evidence is in.
+- The report counts every Google request by kind: searches, header reads, message reads, Drive searches, exports.
+- `firstRead.test.ts` pins the counts against a fake Google: fast makes 4 Gmail searches, agent 4 plus its own,
+  survey 25.
+
+**How claims are checked.** Every claim must cite an evidence id together with a quote copied from that item.
+Each claim then gets one verdict:
+
+| verdict | meaning | shown as |
+|---|---|---|
+| `established_current` | The quotes really are in the cited items. At least one is the owner's own act (mail they sent, a file they last changed) in the last 120 days. The judge agrees it supports the claim and shows present activity. | a current fact |
+| `supported_past` | Supported, but the latest support is old. Whatever the model called it, it is past, with the date. | past |
+| `supported` | A person or relationship the quotes support. | a person |
+| `uncertain` | Undated support (every MCP result), support that isn't the owner's own act, partial support, or the judge unsure about present activity. | not shown as fact |
+| `contradicted` | The judge found the evidence says otherwise. | struck |
+| `unsupported` | No real id, no quote actually in the cited item, or the judge says the quotes don't show it. | struck |
+
+- The judge is a second Gemini call per source. It sees only each claim and its quoted evidence.
+- It can lower a verdict, never raise one.
+- The report times the draft (checked by quote and date) and the verified reading (judged) separately.
+
+**Against the owner's own results.** `--expect` takes the Gmail and Drive AI Overviews, written as names, in a file
+kept outside the repo:
+- `current`: must come out established-current.
+- `past`: must never come out current.
+- `people` and `mention`: must be found.
+
+The report lists what was found, what was missed and what was wrongly called current. It also lists every
+established-current claim the file doesn't name, to read by hand for inventions.
+
+**Recorded per strategy.**
+- Time from connect, auth included:
+  - Gmail and Drive retrieval;
+  - each Gemini call;
+  - the first draft;
+  - each verified reading;
+  - all done.
+- Google requests.
+- Tokens and cost, from the token counts Gemini reports, priced at Gemini 2.5 Flash's list price unless set.
+
+**Safety.**
+- Read-only: REST goes through the cold-test harness's `readOnlyFetch`.
+- Nothing is written to the database, and nothing goes to analytics.
+- The refreshed token stays in memory.
+- The report (`tmp/first-read-bench/`, mode 600) holds the readings, which are the owner's own data, so it stays on the
+  machine that ran it.
+
+## What decides the next step
+
+- **Integrate into Claire's existing first ten minutes** if a strategy reproduces most of the Overviews' specific
+  recognition, with a first draft inside 60 s and nothing wrongly called current.
+- **Over 90 s, or too much missed:** fix the measured bottleneck in retrieval before touching presentation.

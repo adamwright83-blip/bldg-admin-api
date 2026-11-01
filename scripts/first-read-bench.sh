@@ -2,7 +2,7 @@
 # The first-reading benchmark against production (scripts/first-read-bench.ts). Read-only. From a Railway-linked
 # checkout:
 #
-#   scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization [--paths rest,mcp]
+#   scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization [--strategies fast,agent,survey]
 #
 # Production's settings come from the bldg-admin-api service. Its own DATABASE_URL is private to Railway's network,
 # so the database is reached at the MySQL service's public address instead. Nothing secret is printed.
