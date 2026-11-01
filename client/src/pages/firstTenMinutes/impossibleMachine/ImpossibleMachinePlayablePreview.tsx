@@ -163,7 +163,7 @@ export default function ImpossibleMachinePlayablePreview() {
     },
   };
 
-  // Adapter for User A (Real opportunity)
+  // Adapter for User A (Sample customer inquiry)
   const realAdapter: MachineBusinessAdapter = {
     isSimulated: false,
     example: false,
@@ -173,7 +173,7 @@ export default function ImpossibleMachinePlayablePreview() {
     activation: {
       required: false,
       example: false,
-      offer: { planKey: "standard", line: "$290 a month", detail: "Card required. One plan. Cancel anytime." },
+      offer: null,
       status: signupComplete ? "active" : "none",
       owner: signupComplete ? "ready" : null,
       identity: { businessName: "Wildroot Floral Studio", contactName: "Nina", ownerEmail: "owner@wildroot.example" },
@@ -308,7 +308,7 @@ export default function ImpossibleMachinePlayablePreview() {
               }}
               data-testid="preview-mode-user-a"
             >
-              User A (Real Opportunity)
+              User A (Sample Customer Inquiry)
             </button>
           </div>
 
@@ -360,14 +360,19 @@ export default function ImpossibleMachinePlayablePreview() {
                   marginBottom: "10px",
                 }}
               >
-                {mode === "user_b" ? "USER B EXPERIENCE · NO CORRESPONDENCE" : "USER A EXPERIENCE · REAL INQUIRY"}
+                {mode === "user_b" ? "USER B EXPERIENCE · NO CORRESPONDENCE" : "USER A EXPERIENCE · SAMPLE CUSTOMER INQUIRY"}
               </div>
               <h1 style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: "28px", margin: "6px 0", color: "#fdf5e6" }}>
                 {mode === "user_b" ? "Northside Mechanical" : "Wildroot Floral Studio"}
               </h1>
-              <p style={{ color: "#cbb396", fontSize: "14px", margin: 0 }}>
+              <p style={{ color: "#cbb396", fontSize: "14px", margin: "0 0 6px" }}>
                 Claire’s portrait of your business is kept.
               </p>
+              {mode === "user_a" && (
+                <p style={{ color: "#ffd97d", fontSize: "12px", margin: 0, fontStyle: "italic" }}>
+                  Sample customer inquiry (Elena Ruiz) for gameplay preview · Not real connected customer data.
+                </p>
+              )}
             </div>
 
             {/* Threshold with Claire's Introduction & Simulated Machine Entry */}
@@ -396,8 +401,8 @@ export default function ImpossibleMachinePlayablePreview() {
                       </h4>
                       <p style={{ margin: 0, fontSize: "12px", color: "#cfbba6" }}>
                         {signupComplete
-                          ? "Owner activation complete. You can access your workspace anytime."
-                          : "7-day trial · $290/month. No customer email required to purchase."}
+                          ? "Owner activation simulated. Access your workspace anytime."
+                          : "Gameplay preview mode · No customer email required to activate."}
                       </p>
                     </div>
                     {!signupComplete ? (
@@ -419,10 +424,10 @@ export default function ImpossibleMachinePlayablePreview() {
                         }}
                         data-testid="first-ten-mock-checkout"
                       >
-                        Simulate Checkout ($290)
+                        Simulate Activation
                       </button>
                     ) : (
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#68d391" }}>✓ Subscribed</span>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#68d391" }}>✓ Activated</span>
                     )}
                   </div>
                 </div>
@@ -445,7 +450,7 @@ export default function ImpossibleMachinePlayablePreview() {
               }}
             >
               <span style={{ fontSize: "13px", color: "#f8ecd5" }}>
-                Mode: <strong style={{ color: "#ffd97d" }}>{mode === "user_b" ? "User B (Three Days Later Scenario)" : "User A (Real Elena Ruiz Inquiry)"}</strong>
+                Mode: <strong style={{ color: "#ffd97d" }}>{mode === "user_b" ? "User B (Three Days Later Scenario)" : "User A (Sample Customer Inquiry — Elena Ruiz)"}</strong>
               </span>
               <button
                 type="button"
