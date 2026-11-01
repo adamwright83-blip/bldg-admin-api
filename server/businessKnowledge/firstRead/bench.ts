@@ -7,45 +7,55 @@ import type { Mailbox } from "../../firstTenMinutes/understanding/sources";
 import { readOnlyFetch } from "../coldTest";
 import {
   FIRST_READ_PROMPTS,
-  checkReading,
+  STATED,
+  checkClaims,
   geminiJson,
   geminiReading,
+  gradeReading,
+  gradeScore,
   judgeClaims,
-  scoreExpectations,
   stamp,
   unverified,
   type CheckedClaim,
   type Evidence,
   type Expectations,
-  type FirstReadSource,
+  type FirstReadQuestion,
   type GeminiConfig,
+  type Grade,
   type ModelCall,
 } from "./synthesis";
-import { searchCorpus, type WorkspaceSearch } from "./workspaceSearch";
 
 /**
- * The first-sixty-seconds benchmark: how fast, and how well, can JOYSTICK answer the owner's two questions right after
- * Google is connected? Each strategy is timed stage by stage. Gmail and Drive run concurrently. Each source's answer
- * starts as soon as its own evidence is in, is checked at once (the draft), then judged (the verified reading).
+ * The first-sixty-seconds benchmark: how fast, and how well, can JOYSTICK answer the owner's questions right after
+ * Google is connected? Every variant is a retrieval strategy with a way of answering, timed stage by stage:
  *
- *  - `fast`: the first-minute candidate. Recent Sent mail, three small older samples to tell current work from past
- *    ventures, and recent Docs with their text. Four Gmail searches, one Drive search.
- *  - `agent`: Gemini as the searcher. A quick look at recent Sent subjects and Drive titles, then Gemini chooses up to
- *    six Gmail searches and four Drive searches. They run concurrently, and the answer reads what they found.
- *  - `survey`: the investigation's 24-month Sent survey (24 monthly searches), kept only as a comparison, to
- *    measure what the fast strategies miss. It is never a prerequisite for a first result.
- *  - `mcp`: Google's Universal Search MCP `search_corpus` (Developer Preview: not usable for customers before GA).
+ * Retrieval (Gmail and Drive always run concurrently):
+ *  - `fast`: four Sent searches at once (the last 90 days, plus three small older samples for contrast), then whole
+ *    messages; one Drive search with the text of up to 10 documents.
+ *  - `agent`: Gemini as the searcher. A quick look at recent Sent subjects and Drive titles, then Gemini (low
+ *    thinking) chooses up to six Gmail searches and four Drive searches, which run at once.
  *
- * Read-only throughout: REST goes through the cold-test harness's `readOnlyFetch`; MCP through `workspaceSearchFetch`,
- * which lets only `search_corpus` out. Nothing is written to the database; a refreshed token stays in memory.
+ * Answering:
+ *  - `separate`: the owner's two questions, Gmail's and Drive's. Each starts as soon as its own evidence is in.
+ *  - `combined`: one question over both sources, which can connect what the mail shows the owner doing with what the
+ *    files show them building.
+ *
+ * Each answer is checked (quotes, dates), then judged, then graded by meaning against the owner's own AI Overviews.
+ * Grading happens after the clock stops. Variants run interleaved, run after run, so no one variant always goes
+ * first or always gets warm caches.
+ *
+ * Read-only: every Google request goes through the cold-test harness's `readOnlyFetch` and is counted. Nothing is
+ * written to the database; a refreshed token stays in memory.
  */
 
-export type Strategy = "fast" | "agent" | "survey" | "mcp";
-export const STRATEGIES: readonly Strategy[] = ["fast", "agent", "survey", "mcp"];
+export type Strategy = "fast" | "agent";
+export type Synthesis = "separate" | "combined";
+export type Variant = `${Strategy}:${Synthesis}`;
+export const VARIANTS: readonly Variant[] = ["fast:separate", "fast:combined", "agent:separate", "agent:combined"];
 
 const DAY = 86_400_000;
 const RECENT_DAYS = 90;
-/** Older Sent samples for the fast strategy, in days ago: did that work stop, or is it still going? */
+/** Older Sent samples, in days ago: did that work stop, or is it still going? */
 const OLDER_WINDOWS: ReadonlyArray<readonly [number, number]> = [
   [180, 365],
   [365, 730],
@@ -84,24 +94,21 @@ function counting(base: typeof fetch, counts: Partial<Record<RequestKind, number
 
 // ------------------------------------------------------------------ evidence
 
-function mailEvidence(items: readonly MailHeader[], texts: ReadonlyArray<string | null | undefined>): Evidence[] {
+async function readMail(research: GoogleResearch, items: readonly MailHeader[]): Promise<Evidence[]> {
+  const full = await mapLimit(items, 8, item => research.readMessage(item.id));
   return items.map((item, index) => ({
     id: `g${index + 1}`,
     source: "gmail",
     at: item.at,
     dated: "activity",
     byOwner: item.sentByOwner,
+    title: item.subject || "(no subject)",
+    // the real headers: who wrote to whom is often the only evidence of a relationship
+    people: `from ${who([item.from])} to ${who(item.to) || "(no recipient)"}`,
+    text: clipText(full[index]?.text || item.snippet, 900),
     ref: `gmail message ${item.id}, thread ${item.threadId}`,
     url: item.url || null,
-    title: item.subject || "(no subject)",
-    people: who(item.to),
-    text: clipText(texts[index] || item.snippet, 900),
   }));
-}
-
-async function readMail(research: GoogleResearch, items: readonly MailHeader[]): Promise<Evidence[]> {
-  const full = await mapLimit(items, 8, item => research.readMessage(item.id));
-  return mailEvidence(items, full.map(message => message?.text));
 }
 
 async function readFiles(research: GoogleResearch, files: readonly DriveEntry[], owner: string, focus: readonly string[] = []): Promise<Evidence[]> {
@@ -114,11 +121,11 @@ async function readFiles(research: GoogleResearch, files: readonly DriveEntry[],
     at: file.modifiedAt,
     dated: "modified",
     byOwner: sameEmail(file.lastModifiedBy?.email, owner),
+    title: `${file.name} (${file.mimeType === GOOGLE_SHEET ? "sheet" : file.mimeType === GOOGLE_SLIDES ? "slides" : "doc"})`,
+    people: `owned by ${who(file.owners) || "?"}; last edited by ${file.lastModifiedBy ? who([file.lastModifiedBy]) : "?"}`,
+    text: clipText(text.get(file.id) ?? "(title and date only)", 1100),
     ref: `drive file ${file.id}`,
     url: file.url,
-    title: `${file.name} (${file.mimeType === GOOGLE_SHEET ? "sheet" : file.mimeType === GOOGLE_SLIDES ? "slides" : "doc"}, last modified)`,
-    people: who([...file.owners, ...(file.lastModifiedBy ? [file.lastModifiedBy] : [])]),
-    text: clipText(text.get(file.id) ?? "(title and date only)", 1100),
   }));
 }
 
@@ -128,7 +135,6 @@ function ownFirst(files: readonly DriveEntry[], owner: string): DriveEntry[] {
   return [...files.filter(mine), ...files.filter(file => !mine(file))];
 }
 
-/** Fast: recent Sent closely, three small older samples for contrast. Four Gmail searches, all at once. */
 async function fastGmail(research: GoogleResearch, now: Date): Promise<Evidence[]> {
   const [recent, ...older] = await Promise.all([
     research.searchMail("in:sent", { limit: 25, window: ago(now, 0, RECENT_DAYS) }),
@@ -145,28 +151,6 @@ async function fastDrive(research: GoogleResearch, now: Date, owner: string): Pr
   return readFiles(research, ownFirst(files, owner).slice(0, 20), owner);
 }
 
-/** Survey (comparison only): the investigation's 24 monthly Sent searches. */
-async function surveyGmail(research: GoogleResearch, now: Date): Promise<Evidence[]> {
-  const [recent, history] = await Promise.all([
-    research.searchMail("in:sent", { limit: 40, window: ago(now, 0, 120) }),
-    research.sentHistory({ months: 24, perWindow: 3 }),
-  ]);
-  const latest = own(recent?.items ?? []).sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 25);
-  const seen = new Set(latest.map(item => item.threadId));
-  const older = (history ?? [])
-    .filter(window => window.to.getTime() < now.getTime() - 120 * DAY)
-    .flatMap(window => own(window.items).filter(item => !seen.has(item.threadId)).slice(0, 1))
-    .slice(0, 16);
-  return readMail(research, [...latest, ...older]);
-}
-
-async function surveyDrive(research: GoogleResearch, now: Date, owner: string): Promise<Evidence[]> {
-  const files = (await research.recentFiles({ since: new Date(now.getTime() - 730 * DAY), limit: 40, mimeTypes: DOCS })) ?? [];
-  return readFiles(research, ownFirst(files, owner).slice(0, 30), owner);
-}
-
-// ------------------------------------------------------------------ agent: Gemini chooses the searches
-
 export const searchPlanSchema = z.object({
   gmail: z.array(z.object({ query: z.string(), why: z.string() })).max(6),
   drive: z.array(z.object({ terms: z.array(z.string()).max(4), why: z.string() })).max(4),
@@ -174,7 +158,7 @@ export const searchPlanSchema = z.object({
 export type SearchPlan = z.infer<typeof searchPlanSchema>;
 
 export const PLAN_SYSTEM = [
-  "You plan a few searches of one business owner's Gmail and Google Drive to answer their two questions about themselves.",
+  "You plan a few searches of one business owner's Gmail and Google Drive to answer their questions about themselves.",
   "You see only subjects, recipients and file names. Choose searches that will surface the evidence: their businesses and",
   "products, the organisations and people they work with, and whether older ventures are still active.",
   "Gmail queries use Gmail's search syntax (in:sent, to:, from:, subject:, \"exact phrase\", after:YYYY/MM/DD, before:). Prefer",
@@ -187,8 +171,7 @@ export function planPrompt(input: { today: Date; sent: readonly MailHeader[]; ol
   const mail = (items: readonly MailHeader[]) => items.map(item => `${item.at.toISOString().slice(0, 10)} → ${who(item.to)} | ${item.subject}`).join("\n");
   return [
     `Today is ${input.today.toISOString().slice(0, 10)}.`,
-    `Question 1: ${FIRST_READ_PROMPTS.gmail}`,
-    `Question 2: ${FIRST_READ_PROMPTS.drive}`,
+    `Question: ${FIRST_READ_PROMPTS.combined}`,
     `Recent Sent mail:\n${mail(input.sent)}`,
     `Older Sent mail:\n${mail(input.older)}`,
     `Recent Drive files:\n${input.files.map(file => `${file.modifiedAt.toISOString().slice(0, 10)} | ${file.name}`).join("\n")}`,
@@ -204,7 +187,7 @@ function agentRetrieval(research: GoogleResearch, now: Date, owner: string, gemi
   const planned = seed.then(async ([recent, older, files]) => {
     const sent = own(recent?.items ?? []).sort((a, b) => b.at.getTime() - a.at.getTime());
     const past = older.flatMap(search => own(search?.items ?? []));
-    const { value, call } = await geminiJson(gemini, { purpose: "plan", schema: searchPlanSchema, system: PLAN_SYSTEM, prompt: planPrompt({ today: now, sent, older: past, files: files ?? [] }), thinkingBudget: 0, timeoutMs: 20_000 });
+    const { value, call } = await geminiJson(gemini, { purpose: "plan", schema: searchPlanSchema, system: PLAN_SYSTEM, prompt: planPrompt({ today: now, sent, older: past, files: files ?? [] }), thinking: "low", timeoutMs: 20_000 });
     calls.push(call);
     return { sent, past, files: ownFirst(files ?? [], owner), plan: value ?? { gmail: [], drive: [] } };
   });
@@ -228,29 +211,32 @@ function agentRetrieval(research: GoogleResearch, now: Date, owner: string, gemi
 
 // ------------------------------------------------------------------ runs
 
-export type StrategyRun = {
-  strategy: Strategy;
-  retrievalMs: Record<FirstReadSource, number>;
-  /** the reading call itself */
-  synthesisMs: Record<FirstReadSource, number>;
-  /** the judge call */
-  judgeMs: Record<FirstReadSource, number>;
-  /** connect → this source's checked draft (auth + retrieval + reading + deterministic checks) */
-  draftReadyMs: Record<FirstReadSource, number>;
-  /** connect → this source's judged reading */
-  verifiedReadyMs: Record<FirstReadSource, number>;
-  /** connect → the first draft of either source: what Claire could show first */
-  firstResultMs: number;
-  /** connect → both judged readings */
-  totalMs: number;
+export type Answer = {
+  question: FirstReadQuestion;
+  evidence: Evidence[];
+  claims: CheckedClaim[];
+  /** connect → checked draft */
+  draftMs: number;
+  /** connect → judged */
+  verifiedMs: number;
+};
+
+export type VariantRun = {
+  variant: Variant;
+  run: number;
+  retrievalMs: { gmail: number; drive: number };
+  answers: Answer[];
+  /** connect → the first judged answer: what Claire could show first */
+  firstVerifiedMs: number;
+  /** connect → every answer judged (both sources covered) */
+  allVerifiedMs: number;
+  firstDraftMs: number;
   requests: Partial<Record<RequestKind, number>>;
-  evidence: Record<FirstReadSource, Evidence[]>;
-  claims: Record<FirstReadSource, CheckedClaim[]>;
   calls: ModelCall[];
+  /** model cost of the first-minute path: plan, readings and judge (grading excluded) */
   costCents: number;
   plan?: SearchPlan;
-  mcp?: WorkspaceSearch[];
-  expectations: ReturnType<typeof scoreExpectations> | null;
+  grading: { grades: Grade[]; beyond: string[]; recall: number; statusRight: number; call: ModelCall | null; costCents: number } | null;
   notes: string[];
 };
 
@@ -259,16 +245,21 @@ export type BenchResult = {
   account: string;
   grantedScopes: string[];
   authMs: number;
-  runs: StrategyRun[];
-  costCents: number;
+  model: string;
+  thinking: string;
+  runs: VariantRun[];
+  expectations: Expectations | null;
 };
 
 export type BenchInput = {
   google: GoogleAccess;
-  strategies: Strategy[];
+  variants: Variant[];
+  runs: number;
   geminiKey: string;
   model: string;
-  /** run the judge (a second model call per source); on by default */
+  /** thinkingLevel for the readings; undefined = the model's default (medium) */
+  thinking?: GeminiConfig["thinking"];
+  /** run the judge (a second model call per answer); on by default */
   judge?: boolean;
   expect?: Expectations | null;
   centsPerMillion: { input: number; output: number };
@@ -277,11 +268,14 @@ export type BenchInput = {
   now?: () => Date;
 };
 
+const centsOf = (calls: readonly ModelCall[], price: BenchInput["centsPerMillion"]) =>
+  calls.reduce((sum, call) => sum + (call.inputTokens * price.input + call.outputTokens * price.output) / 1_000_000, 0);
+
 export async function runFirstReadBench(input: BenchInput): Promise<BenchResult> {
   const now = input.now ?? (() => new Date());
   const startedAt = now();
   const base = input.fetch ?? fetch;
-  const gemini: GeminiConfig = { apiKey: input.geminiKey, model: input.model, fetch: base };
+  const gemini: GeminiConfig = { apiKey: input.geminiKey, model: input.model, thinking: input.thinking, fetch: base };
 
   // Auth overhead: a fresh access token, as a new connection would have one. Kept in memory only.
   const authStarted = Date.now();
@@ -292,85 +286,94 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
   const access: GoogleAccess = { ...input.google, accessToken: tokens.accessToken, accessExpiresAt: tokens.expiresAt, onRefreshed: async () => undefined };
   const owner = access.ownerEmail;
 
-  const runs: StrategyRun[] = [];
-  // One strategy at a time, so their timings don't contend for the same quota.
-  for (const strategy of input.strategies) {
-    const started = Date.now();
-    const sinceConnect = () => authMs + (Date.now() - started);
-    const requests: StrategyRun["requests"] = {};
-    const research = googleResearch(access, new CoverageLedger(now), { fetch: readOnlyFetch(counting(base, requests)), env: input.env, now });
-    const run: StrategyRun = {
-      strategy,
-      retrievalMs: { gmail: 0, drive: 0 },
-      synthesisMs: { gmail: 0, drive: 0 },
-      judgeMs: { gmail: 0, drive: 0 },
-      draftReadyMs: { gmail: 0, drive: 0 },
-      verifiedReadyMs: { gmail: 0, drive: 0 },
-      firstResultMs: 0,
-      totalMs: 0,
-      requests,
-      evidence: { gmail: [], drive: [] },
-      claims: { gmail: [], drive: [] },
-      calls: [],
-      costCents: 0,
-      expectations: null,
-      notes: [],
-    };
+  const runs: VariantRun[] = [];
+  for (let n = 1; n <= input.runs; n += 1) {
+    for (const variant of input.variants) {
+      const [strategy, synthesis] = variant.split(":") as [Strategy, Synthesis];
+      const started = Date.now();
+      const sinceConnect = () => authMs + (Date.now() - started);
+      const requests: VariantRun["requests"] = {};
+      const research = googleResearch(access, new CoverageLedger(now), { fetch: readOnlyFetch(counting(base, requests)), env: input.env, now });
+      const run: VariantRun = {
+        variant,
+        run: n,
+        retrievalMs: { gmail: 0, drive: 0 },
+        answers: [],
+        firstVerifiedMs: 0,
+        allVerifiedMs: 0,
+        firstDraftMs: 0,
+        requests,
+        calls: [],
+        costCents: 0,
+        grading: null,
+        notes: [],
+      };
 
-    let sources: Record<FirstReadSource, Promise<Evidence[]>>;
-    if (strategy === "fast") sources = { gmail: fastGmail(research, now()), drive: fastDrive(research, now(), owner) };
-    else if (strategy === "survey") sources = { gmail: surveyGmail(research, now()), drive: surveyDrive(research, now(), owner) };
-    else if (strategy === "agent") {
-      const agent = agentRetrieval(research, now(), owner, gemini, run.calls);
-      sources = { gmail: agent.gmail, drive: agent.drive };
-      agent.planned.then(({ plan }) => (run.plan = plan)).catch(() => undefined);
-    } else {
-      const search = (source: FirstReadSource) =>
-        searchCorpus({ accessToken: access.accessToken, query: FIRST_READ_PROMPTS[source], pageSize: 50 }, { fetch: base }).then(result => {
-          (run.mcp ??= []).push(result);
-          return result.hits.map((hit, index): Evidence => ({ id: `${source === "gmail" ? "m" : "n"}${index + 1}`, source: hit.corpus, at: null, dated: null, byOwner: null, ref: `${hit.corpus} result ${hit.rank + 1}`, url: hit.url, title: hit.title || "(untitled)", people: hit.detail, text: clipText(hit.snippet, 900) }));
-        });
-      sources = { gmail: search("gmail"), drive: search("drive") };
-      run.notes.push("search_corpus returns no dates, so nothing it finds can be established as current.");
-    }
+      let gmail: Promise<Evidence[]>;
+      let drive: Promise<Evidence[]>;
+      if (strategy === "fast") {
+        gmail = fastGmail(research, now());
+        drive = fastDrive(research, now(), owner);
+      } else {
+        const agent = agentRetrieval(research, now(), owner, gemini, run.calls);
+        gmail = agent.gmail;
+        drive = agent.drive;
+        agent.planned.then(({ plan }) => (run.plan = plan)).catch(() => undefined);
+      }
+      const timed = (source: "gmail" | "drive", evidence: Promise<Evidence[]>) =>
+        evidence
+          .catch(error => {
+            run.notes.push(`${source} retrieval failed: ${error instanceof Error ? error.message : String(error)}`);
+            return [] as Evidence[];
+          })
+          .then(items => {
+            run.retrievalMs[source] = sinceConnect();
+            return items;
+          });
+      const fetched = { gmail: timed("gmail", gmail), drive: timed("drive", drive) };
 
-    await Promise.all(
-      (["gmail", "drive"] as const).map(async source => {
-        const evidence = await sources[source].catch(error => {
-          run.notes.push(`${source} retrieval failed: ${error instanceof Error ? error.message : String(error)}`);
-          return [] as Evidence[];
-        });
-        run.retrievalMs[source] = Date.now() - started;
-        run.evidence[source] = evidence;
+      const answer = async (question: FirstReadQuestion, evidence: Evidence[]) => {
         if (!evidence.length) return;
-        const { value, call } = await geminiReading(gemini, { question: FIRST_READ_PROMPTS[source], evidence, today: now() });
+        const { value, call } = await geminiReading(gemini, { question, evidence, today: now() });
         run.calls.push(call);
-        run.synthesisMs[source] = call.latencyMs;
-        if (!value) return;
-        run.claims[source] = checkReading(value, evidence, now());
-        run.draftReadyMs[source] = sinceConnect();
-        if (input.judge === false) run.claims[source] = run.claims[source].map(claim => unverified(claim, "the judge was switched off (--no-judge)"));
+        if (!value) {
+          run.notes.push(`${question} reading failed: ${call.error}`);
+          return;
+        }
+        const result: Answer = { question, evidence, claims: checkClaims(value, evidence, now()), draftMs: sinceConnect(), verifiedMs: 0 };
+        if (input.judge === false) result.claims = result.claims.map(claim => unverified(claim, "the judge was switched off (--no-judge)"));
         else {
-          const judged = await judgeClaims(gemini, run.claims[source], evidence, now());
-          run.claims[source] = judged.claims;
+          const judged = await judgeClaims(gemini, result.claims, evidence, now());
+          result.claims = judged.claims;
           if (judged.call) {
             run.calls.push(judged.call);
-            run.judgeMs[source] = judged.call.latencyMs;
-            if (judged.call.error) run.notes.push(`${source} judge failed (${judged.call.error}): nothing from ${source} is established as current`);
+            if (judged.call.error) run.notes.push(`${question} judge failed (${judged.call.error}): nothing from it needing the judge is stated`);
           }
         }
-        run.verifiedReadyMs[source] = sinceConnect();
-      })
-    );
-    run.totalMs = sinceConnect();
-    const drafts = Object.values(run.draftReadyMs).filter(ms => ms > 0);
-    run.firstResultMs = drafts.length ? Math.min(...drafts) : 0;
-    const tokensIn = run.calls.reduce((sum, call) => sum + call.inputTokens, 0);
-    const tokensOut = run.calls.reduce((sum, call) => sum + call.outputTokens, 0);
-    run.costCents = (tokensIn * input.centsPerMillion.input + tokensOut * input.centsPerMillion.output) / 1_000_000;
-    if (input.expect) run.expectations = scoreExpectations([...run.claims.gmail, ...run.claims.drive], input.expect);
-    if (strategy !== "mcp") run.notes.push("Drive dates are last-modified times: a starting point, never proof of activity.");
-    runs.push(run);
+        result.verifiedMs = sinceConnect();
+        run.answers.push(result);
+      };
+
+      if (synthesis === "separate") await Promise.all([fetched.gmail.then(e => answer("gmail", e)), fetched.drive.then(e => answer("drive", e))]);
+      else await answer("combined", [...(await fetched.gmail), ...(await fetched.drive)]);
+
+      const verified = run.answers.map(a => a.verifiedMs);
+      run.firstVerifiedMs = verified.length ? Math.min(...verified) : 0;
+      run.firstDraftMs = run.answers.length ? Math.min(...run.answers.map(a => a.draftMs)) : 0;
+      const covered = synthesis === "combined" ? run.answers.length === 1 : run.answers.length === 2;
+      run.allVerifiedMs = covered ? Math.max(...verified) : 0;
+      if (!covered) run.notes.push("not every answer completed: no both-source time");
+      run.costCents = centsOf(run.calls, input.centsPerMillion);
+
+      // after the clock: grade by meaning against the owner's Overviews
+      if (input.expect) {
+        const graded = await gradeReading(gemini, run.answers.flatMap(a => a.claims), input.expect);
+        const score = gradeScore(graded.grades, input.expect);
+        run.grading = { grades: graded.grades, beyond: graded.beyond, recall: score.recall, statusRight: score.statusRight, call: graded.call, costCents: centsOf([graded.call], input.centsPerMillion) };
+        if (graded.call.error) run.notes.push(`grading failed: ${graded.call.error}`);
+      }
+      runs.push(run);
+    }
   }
 
   return {
@@ -378,108 +381,118 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
     account: access.ownerEmail,
     grantedScopes: access.grantedScopes,
     authMs,
+    model: input.model,
+    thinking: input.thinking ?? "default (medium)",
     runs,
-    costCents: runs.reduce((sum, run) => sum + run.costCents, 0),
+    expectations: input.expect ?? null,
   };
 }
 
 // ------------------------------------------------------------------ report
 
-const seconds = (ms: number) => (ms ? `${(ms / 1000).toFixed(1)} s` : "—");
-const VERDICT_ORDER = ["established_current", "supported_past", "supported", "uncertain", "contradicted", "unsupported"] as const;
+const seconds = (ms: number) => (ms ? `${(ms / 1000).toFixed(1)}` : "—");
+const percent = (x: number) => `${Math.round(x * 100)}%`;
+const median = (xs: number[]) => {
+  const s = xs.filter(x => x > 0).sort((a, b) => a - b);
+  if (!s.length) return 0;
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+const range = (xs: number[], show: (x: number) => string) => {
+  const s = xs.filter(x => x > 0);
+  return s.length ? `${show(median(s))} (${show(Math.min(...s))}–${show(Math.max(...s))})` : "—";
+};
+const VERDICT_ORDER = ["active", "open_problem", "happened", "ended", "relationship", "status_unknown", "uncertain", "contradicted", "unsupported"] as const;
 const VERDICT_HEADING: Record<(typeof VERDICT_ORDER)[number], string> = {
-  established_current: "Current (established)",
-  supported_past: "Past (supported)",
-  supported: "People and relationships (supported)",
-  uncertain: "Uncertain: not shown as fact",
-  contradicted: "Contradicted by the evidence: struck",
+  active: "Active now",
+  open_problem: "Open problems",
+  happened: "Dated events",
+  ended: "Ended (the evidence says so)",
+  relationship: "Relationships",
+  status_unknown: "Status unknown (last seen …)",
+  uncertain: "Uncertain: not stated",
+  contradicted: "Contradicted: struck",
   unsupported: "Unsupported: struck",
 };
 
-function verdictCounts(claims: readonly CheckedClaim[]): string {
-  return VERDICT_ORDER.map(v => `${v} ${claims.filter(c => c.verdict === v).length}`).join(", ");
+function claimLines(claims: readonly CheckedClaim[], evidence: readonly Evidence[]): string[] {
+  const byId = new Map(evidence.map(item => [item.id, item]));
+  const lines: string[] = [];
+  for (const verdict of VERDICT_ORDER) {
+    const these = claims.filter(c => c.verdict === verdict);
+    if (!these.length) continue;
+    lines.push(`**${VERDICT_HEADING[verdict]}**`, "");
+    for (const claim of these) {
+      lines.push(`- ${claim.statement} _(${claim.kind}; model said ${claim.claimed}${claim.crossSource ? "; mail + files" : ""}${claim.lastSeen ? `; last seen ${claim.lastSeen.toISOString().slice(0, 10)}` : ""})_`);
+      if (claim.reasons.length) lines.push(`  - why: ${claim.reasons.join("; ")}`);
+      for (const c of claim.citations) {
+        const item = byId.get(c.id);
+        const mark = !c.valid ? "✗ no such evidence" : !c.quoted ? "✗ quote not found" : "✓";
+        lines.push(`  - ${c.id} ${item ? stamp(item) : "—"} ${mark} “${clipText(c.quote, 110)}”${item ? ` [${item.ref}${item.url ? `](${item.url})` : "]"}` : ""}`);
+      }
+    }
+    lines.push("");
+  }
+  return lines;
 }
 
 export function benchReport(result: BenchResult): string {
+  const variants = [...new Set(result.runs.map(run => run.variant))];
+  const of = (variant: Variant) => result.runs.filter(run => run.variant === variant);
   const lines: string[] = [
     `# First reading benchmark, ${result.startedAt}`,
     "",
-    `Account: ${result.account}. Granted: ${result.grantedScopes.map(scope => scope.replace("https://www.googleapis.com/auth/", "")).join(", ")}.`,
-    `Auth (token refresh): ${seconds(result.authMs)}. Model cost, all strategies: ${result.costCents.toFixed(2)}¢.`,
+    `Account: ${result.account}. Model ${result.model}, thinking ${result.thinking}. Auth (token refresh) ${seconds(result.authMs)} s.`,
     "",
-    "Times are from connect (auth included). Draft = reading checked against its quotes and dates; verified = judged too.",
+    "Seconds from connect, median (min–max) over runs. First verified = the first judged answer; both sources = every answer judged.",
     "",
-    "| strategy | Gmail retrieval | Drive retrieval | Gmail reading | Drive reading | first draft | Gmail verified | Drive verified | all done | cost |",
-    "|---|---|---|---|---|---|---|---|---|---|",
-    ...result.runs.map(
-      run =>
-        `| ${run.strategy} | ${seconds(run.retrievalMs.gmail)} | ${seconds(run.retrievalMs.drive)} | ${seconds(run.synthesisMs.gmail)} | ${seconds(run.synthesisMs.drive)} | ${seconds(run.firstResultMs)} | ${seconds(run.verifiedReadyMs.gmail)} | ${seconds(run.verifiedReadyMs.drive)} | ${seconds(run.totalMs)} | ${run.costCents.toFixed(2)}¢ |`
-    ),
+    "| variant | runs | retrieval done | first draft | first verified | both sources verified | reading call | judge call | cost / run | recall | status right |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
+    ...variants.map(variant => {
+      const runs = of(variant);
+      const calls = (purpose: string) => runs.flatMap(run => run.calls.filter(call => call.purpose.startsWith(purpose)).map(call => call.latencyMs));
+      return `| ${variant} | ${runs.length} | ${range(runs.map(r => Math.max(r.retrievalMs.gmail, r.retrievalMs.drive)), x => seconds(x))} | ${range(runs.map(r => r.firstDraftMs), x => seconds(x))} | ${range(runs.map(r => r.firstVerifiedMs), x => seconds(x))} | ${range(runs.map(r => r.allVerifiedMs), x => seconds(x))} | ${range(calls("reading"), x => seconds(x))} | ${range(calls("judge"), x => seconds(x))} | ${range(runs.map(r => r.costCents), x => `${x.toFixed(1)}¢`)} | ${range(runs.map(r => r.grading?.recall ?? 0), percent)} | ${range(runs.map(r => r.grading?.statusRight ?? 0), percent)} |`;
+    }),
     "",
-    "Google requests per strategy (the proof of how much each one reads):",
+    "Google requests (first run of each variant):",
     "",
-    ...result.runs.map(run => `- ${run.strategy}: ${Object.entries(run.requests).map(([kind, n]) => `${kind} ${n}`).join(", ") || "none"}`),
+    ...variants.map(variant => `- ${variant}: ${Object.entries(of(variant)[0].requests).map(([kind, n]) => `${kind} ${n}`).join(", ")}`),
     "",
   ];
-  const scored = result.runs.filter(run => run.expectations);
-  if (scored.length) {
-    lines.push("## Against your Gmail and Drive AI Overviews", "");
-    for (const run of scored) {
-      const e = run.expectations!;
-      lines.push(
-        `**${run.strategy}**`,
-        `- Current, established: ${e.currentFound.join(", ") || "none"}`,
-        `- Current, found but not established as current: ${e.currentWrongStatus.join(", ") || "none"}`,
-        `- Current, missed: ${e.currentMissed.join(", ") || "none"}`,
-        `- Past, found and not called current: ${e.pastFound.join(", ") || "none"}`,
-        `- Past, WRONGLY CURRENT: ${e.pastWronglyCurrent.join(", ") || "none"}`,
-        `- Past, missed: ${e.pastMissed.join(", ") || "none"}`,
-        `- People found: ${e.peopleFound.join(", ") || "none"}; missed: ${e.peopleMissed.join(", ") || "none"}`,
-        `- Other names found: ${e.mentionFound.join(", ") || "none"}; missed: ${e.mentionMissed.join(", ") || "none"}`,
-        `- Established-current claims you didn't list (check each for invention): ${e.unexpectedCurrent.join(", ") || "none"}`,
-        ...e.unconfirmed.map(u => `- UNCONFIRMED guess (${u.guess}), not scored: ${u.name} — ${u.calledCurrent ? "came out current" : u.found ? "found, not current" : "not found"}`),
-        ""
-      );
+
+  if (result.expectations) {
+    lines.push("## Your AI Overviews, finding by finding", "", `| finding | ${variants.join(" | ")} |`, `|---|${variants.map(() => "---").join("|")}|`);
+    for (const finding of result.expectations.findings) {
+      const cells = variants.map(variant => {
+        const grades = of(variant).map(run => run.grading?.grades.find(g => g.id === finding.id));
+        const yes = grades.filter(g => g?.found === "yes").length;
+        const partly = grades.filter(g => g?.found === "partly").length;
+        const right = grades.filter(g => g && g.found !== "no" && g.statusRight === "yes").length;
+        return `${yes} yes, ${partly} partly / ${grades.length}; status right ${right}`;
+      });
+      lines.push(`| ${finding.id}${finding.unconfirmed ? " (UNCONFIRMED)" : ""}: ${clipText(finding.statement, 90)} | ${cells.join(" | ")} |`);
     }
+    lines.push("");
   }
+
   for (const run of result.runs) {
-    lines.push(`## ${run.strategy}`, "");
+    lines.push(`## ${run.variant}, run ${run.run}`, "");
+    lines.push(`- first draft ${seconds(run.firstDraftMs)} s, first verified ${seconds(run.firstVerifiedMs)} s, both sources ${seconds(run.allVerifiedMs)} s; retrieval Gmail ${seconds(run.retrievalMs.gmail)} s, Drive ${seconds(run.retrievalMs.drive)} s; ${run.costCents.toFixed(2)}¢`);
     for (const note of run.notes) lines.push(`- ${note}`);
     if (run.plan) {
       lines.push(`- Gemini's Gmail searches: ${run.plan.gmail.map(s => `\`${s.query}\``).join(", ") || "none"}`);
       lines.push(`- Gemini's Drive searches: ${run.plan.drive.map(s => `\`${s.terms.join(" ")}\``).join(", ") || "none"}`);
     }
-    for (const search of run.mcp ?? []) lines.push(`- search_corpus (${seconds(search.latencyMs)}): ${search.ok ? `${search.hits.length} hits` : `REFUSED ${search.status}: ${search.error}`}`);
-    for (const call of run.calls) lines.push(`- ${call.purpose} · ${call.model}: ${seconds(call.latencyMs)}, ${call.inputTokens} in / ${call.outputTokens} out${call.error ? `, FAILED: ${call.error}` : ""}`);
+    for (const call of run.calls) lines.push(`- ${call.purpose}: ${seconds(call.latencyMs)} s, ${call.inputTokens} in / ${call.outputTokens} out${call.error ? `, FAILED: ${call.error}` : ""}`);
+    if (run.grading) {
+      lines.push(`- grading (after the clock): recall ${percent(run.grading.recall)}, status right ${percent(run.grading.statusRight)}${run.grading.call?.error ? `, FAILED: ${run.grading.call.error}` : ""}`);
+      for (const grade of run.grading.grades) lines.push(`  - ${grade.id}: ${grade.found}${grade.found !== "no" ? `, status ${grade.statusRight}` : ""} — ${grade.note}`);
+      if (run.grading.beyond.length) lines.push(`- stated, but in no Overview (new discoveries, or inventions: check each): ${run.grading.beyond.map(s => `“${s}”`).join("; ")}`);
+    }
     lines.push("");
-    for (const source of ["gmail", "drive"] as const) {
-      const claims = run.claims[source];
-      const evidence = new Map(run.evidence[source].map(item => [item.id, item]));
-      lines.push(`### ${source === "gmail" ? "Sent mail" : "Drive"}: ${run.evidence[source].length} evidence items; ${verdictCounts(claims)}`, "");
-      if (!claims.length) {
-        lines.push("No reading.", "");
-        continue;
-      }
-      for (const verdict of VERDICT_ORDER) {
-        const these = claims.filter(c => c.verdict === verdict);
-        if (!these.length) continue;
-        lines.push(`**${VERDICT_HEADING[verdict]}**`, "");
-        for (const claim of these) {
-          const cites = claim.citations
-            .map(c => {
-              const item = evidence.get(c.id);
-              const mark = !c.valid ? "✗ no such evidence" : !c.quoted ? "✗ quote not found" : "✓";
-              const source = item ? ` [${item.ref}${item.url ? `](${item.url})` : "]"}` : "";
-              return `${c.id} ${item ? stamp(item) : "—"} ${mark} “${clipText(c.quote, 90)}”${source}`;
-            })
-            .join("\n    - ");
-          const kind = claim.kind === "person" ? "person" : claim.kind === "older" ? "older ambition" : `priority, model said ${claim.claimed}`;
-          lines.push(`- **${claim.label}** (${kind}): ${claim.summary}${claim.people.length ? ` People: ${claim.people.join(", ")}.` : ""}`);
-          if (claim.reasons.length) lines.push(`  - why: ${claim.reasons.join("; ")}`);
-          lines.push(`  - evidence:\n    - ${cites}`);
-        }
-        lines.push("");
-      }
+    for (const answer of run.answers) {
+      const stated = answer.claims.filter(c => STATED.includes(c.verdict)).length;
+      lines.push(`### ${answer.question}: ${answer.evidence.length} evidence items, ${answer.claims.length} claims, ${stated} stated; draft ${seconds(answer.draftMs)} s, verified ${seconds(answer.verifiedMs)} s`, "");
+      lines.push(...claimLines(answer.claims, answer.evidence));
     }
   }
   return lines.join("\n");

@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { benchReport, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
-import { applyJudge, checkReading, judgeClaims, JUDGE_SYSTEM, quoteIsIn, READING_SYSTEM, scoreExpectations, type Evidence, type Reading } from "./synthesis";
+import {
+  applyJudge,
+  checkClaims,
+  GRADE_SYSTEM,
+  gradeScore,
+  judgeClaims,
+  judgePrompt,
+  JUDGE_SYSTEM,
+  quoteIsIn,
+  READING_SYSTEM,
+  type Evidence,
+  type Reading,
+} from "./synthesis";
 import { hitsOf, searchCorpus, workspaceSearchFetch, WORKSPACE_MCP_URL } from "./workspaceSearch";
 
 const ok = () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }), { status: 200 });
@@ -19,36 +31,23 @@ describe("workspaceSearchFetch", () => {
     await expect(guarded(WORKSPACE_MCP_URL, { method: "POST", body: "not json" })).rejects.toThrow(/Refused/);
     expect(base).toHaveBeenCalledTimes(3);
   });
-});
 
-describe("search_corpus results", () => {
-  const items = [
-    { gmailResult: { thread: { threadId: "t1", messages: [{ subject: "Proposal", snippet: "Here is the proposal", sender: "me@x.com", recipients: ["dana@y.com"], viewUrl: "https://mail/1" }] } } },
-    { driveResult: { title: "Plan", contentSnippet: "the plan", mimeType: "application/vnd.google-apps.document", viewUrl: "https://drive/1" } },
-    { calendarResult: { title: "Walkthrough", start: { dateTime: "2026-10-01T10:00:00Z" } } },
-  ];
-
-  it("reads structured content and JSON text alike", () => {
-    const fromStructured = hitsOf({ structuredContent: { items } });
-    expect(fromStructured).toEqual(hitsOf({ content: [{ type: "text", text: JSON.stringify({ items }) }] }));
-    expect(fromStructured.map(hit => hit.corpus)).toEqual(["gmail", "drive", "calendar"]);
-  });
-
-  it("reports a refusal as a result, with Google's message", async () => {
+  it("reads structured and text results alike, and reports a refusal as a result", async () => {
+    const items = [{ driveResult: { title: "Plan", contentSnippet: "the plan", viewUrl: "https://drive/1" } }];
+    expect(hitsOf({ structuredContent: { items } })).toEqual(hitsOf({ content: [{ type: "text", text: JSON.stringify({ items }) }] }));
     const refused = vi.fn(async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: "API not enabled" }] } }), { status: 403 }));
-    const search = await searchCorpus({ accessToken: "t", query: "q" }, { fetch: refused as unknown as typeof fetch });
-    expect(search).toMatchObject({ ok: false, status: 403, error: "API not enabled", hits: [] });
+    expect(await searchCorpus({ accessToken: "t", query: "q" }, { fetch: refused as unknown as typeof fetch })).toMatchObject({ ok: false, status: 403, error: "API not enabled" });
   });
 });
 
 // ------------------------------------------------------------------ claims
 
 const today = new Date("2026-10-31T00:00:00Z");
-const item = (id: string, source: Evidence["source"], at: string | null, dated: Evidence["dated"], byOwner: boolean | null, title: string, text: string, people = ""): Evidence => ({
+const item = (id: string, source: Evidence["source"], at: string, byOwner: boolean, title: string, text: string, people = ""): Evidence => ({
   id,
   source,
-  at: at ? new Date(at) : null,
-  dated,
+  at: new Date(at),
+  dated: source === "gmail" ? "activity" : "modified",
   byOwner,
   title,
   people,
@@ -57,108 +56,138 @@ const item = (id: string, source: Evidence["source"], at: string | null, dated: 
   url: `https://example.com/${id}`,
 });
 const evidence: Evidence[] = [
-  item("g1", "gmail", "2026-10-20T00:00:00Z", "activity", true, "Proposal for The Louise", "Attached is our premium residential laundry proposal for your residents.", "dana@y.com"),
-  item("g2", "gmail", "2024-03-01T00:00:00Z", "activity", true, "Website quote", "Here is my quote to redesign your restaurant website."),
-  item("d1", "drive", "2026-10-25T00:00:00Z", "modified", false, "Shared deck", "A deck someone shared about a product launch plan."),
-  item("m1", "gmail", null, null, null, "Undated", "We are expanding the agentic software business this quarter."),
-  item("d2", "drive", "2026-10-29T00:00:00Z", "modified", true, "Old venture plan", "The plan for our mobile car wash business in Pasadena."),
+  item("g1", "gmail", "2026-10-20T00:00:00Z", true, "Proposal for The Louise", "Attached is our premium residential laundry proposal for your residents.", "from Owner <owner@x.com> to Dana Reyes <dana@thelouise.example>"),
+  item("g2", "gmail", "2024-03-01T00:00:00Z", true, "Website quote", "Here is my quote to redesign your restaurant website.", "from Owner <owner@x.com> to Chef <chef@x.com>"),
+  item("g3", "gmail", "2026-09-17T00:00:00Z", true, "Stolen register", "Someone broke into our laundromat last night and stole the register.", "from Owner <owner@x.com> to Cents Support <help@cents.example>"),
+  item("g4", "gmail", "2025-01-10T00:00:00Z", true, "Dryer down", "Dryer number four is broken again and customers are complaining.", "from Owner <owner@x.com> to Russell <russell@x.com>"),
+  item("d1", "drive", "2026-10-29T00:00:00Z", true, "JOYSTICK plan (doc)", "Make real business activity playable: the business is the game.", "owned by owner@x.com; last edited by owner@x.com"),
+  item("d2", "drive", "2023-05-01T00:00:00Z", true, "Car wash plan (doc)", "The plan for our mobile car wash business in Pasadena.", "owned by owner@x.com; last edited by owner@x.com"),
 ];
-const cite = (id: string, quote: string) => ({ id, quote });
+const claim = (kind: Reading["claims"][number]["kind"], statement: string, status: Reading["claims"][number]["status"], ...cites: Array<[string, string]>): Reading["claims"][number] => ({
+  kind,
+  statement,
+  status,
+  people: [],
+  evidence: cites.map(([id, quote]) => ({ id, quote })),
+});
 const reading: Reading = {
-  priorities: [
-    { title: "Premium residential accounts", aim: "build", status: "current", summary: "Selling premium laundry to buildings", people: ["Dana"], evidence: [cite("g1", "premium residential laundry proposal")] },
-    { title: "Web design", aim: "build", status: "current", summary: "Website work", people: [], evidence: [cite("g2", "quote to redesign your restaurant website")] },
-    { title: "Agentic software", aim: "build", status: "current", summary: "Software", people: [], evidence: [cite("m1", "expanding the agentic software business")] },
-    { title: "Shared launch", aim: "change", status: "current", summary: "Launch", people: [], evidence: [cite("d1", "a product launch plan")] },
-    { title: "Paraphrased", aim: "protect", status: "current", summary: "", people: [], evidence: [cite("g1", "the building signed a two year contract")] },
-    { title: "Invented", aim: "protect", status: "current", summary: "", people: [], evidence: [cite("g9", "anything at all here")] },
-    { title: "Car wash", aim: "build", status: "current", summary: "Edited last week", people: [], evidence: [cite("d2", "mobile car wash business in Pasadena")] },
+  claims: [
+    claim("business", "Selling premium residential laundry to The Louise", "active", ["g1", "premium residential laundry proposal"]),
+    claim("business", "Web design for restaurants", "active", ["g2", "quote to redesign your restaurant website"]),
+    claim("project", "Building JOYSTICK, which makes business activity playable", "active", ["d1", "Make real business activity playable"]),
+    claim("project", "Mobile car wash in Pasadena", "ended", ["d2", "mobile car wash business in Pasadena"]),
+    claim("event", "The laundromat was broken into and its register stolen (Sept 2026)", "happened", ["g3", "broke into our laundromat last night"]),
+    claim("problem", "Replacing the stolen register", "unresolved", ["g3", "broke into our laundromat last night"]),
+    claim("problem", "Broken dryer and complaints", "unresolved", ["g4", "Dryer number four is broken again"]),
+    claim("relationship", "Dana Reyes, contact at The Louise", "n/a", ["g1", "to Dana Reyes dana thelouise example"]),
+    claim("project", "JOYSTICK is what the laundry proposal is for", "active", ["d1", "Make real business activity playable"], ["g1", "premium residential laundry proposal"]),
+    claim("business", "Invented", "active", ["g9", "anything at all here"]),
+    claim("business", "Paraphrased", "active", ["g1", "the building signed a two year contract"]),
   ],
-  olderAmbitions: [{ title: "Louise", summary: "old", evidence: [cite("g1", "Proposal for The Louise")] }],
-  people: [{ name: "Dana", role: "The Louise contact", evidence: [cite("g1", "Proposal for The Louise")] }],
-  unsure: [],
 };
 
-describe("checkReading", () => {
-  const claims = checkReading(reading, evidence, today);
-  const verdict = (label: string, kind = "priority") => claims.find(c => c.label === label && c.kind === kind)?.verdict;
+describe("checkClaims", () => {
+  const claims = checkClaims(reading, evidence, today);
+  const verdict = (statement: string) => claims.find(c => c.statement === statement)!.verdict;
+  const reasons = (statement: string) => claims.find(c => c.statement === statement)!.reasons.join("; ");
 
-  it("establishes current only on the owner's own recent act, with a real quote", () => {
-    expect(verdict("Premium residential accounts")).toBe("established_current");
+  it("calls a business active only on the owner's own recent dated act", () => {
+    expect(verdict("Selling premium residential laundry to The Louise")).toBe("active");
   });
 
-  it("never lets a stale, undated, or someone-else's item stand as current", () => {
-    expect(verdict("Web design")).toBe("supported_past");
-    expect(claims.find(c => c.label === "Web design")!.reasons[0]).toMatch(/latest support is 2024-03-01/);
-    expect(verdict("Agentic software")).toBe("uncertain");
-    expect(verdict("Shared launch")).toBe("uncertain");
+  it("keeps an old business's status unknown, with when it was last seen, never 'ended'", () => {
+    expect(verdict("Web design for restaurants")).toBe("status_unknown");
+    expect(reasons("Web design for restaurants")).toMatch(/last seen 2024-03-01/);
   });
 
-  it("never treats a recent edit to a file as proof its work is active", () => {
-    expect(verdict("Car wash")).toBe("uncertain");
-    expect(claims.find(c => c.label === "Car wash")!.reasons[0]).toMatch(/file edits/);
+  it("never treats a recent document edit as proof something is operating", () => {
+    expect(verdict("Building JOYSTICK, which makes business activity playable")).toBe("status_unknown");
+    expect(reasons("Building JOYSTICK, which makes business activity playable")).toMatch(/edit isn't proof/);
   });
 
-  it("keeps the original source of every citation", () => {
-    expect(claims.find(c => c.label === "Premium residential accounts")!.citations[0]).toMatchObject({ ref: "gmail g1-original", url: "https://example.com/g1", activity: true });
+  it("lets mail corroborate files: a project cited with the owner's recent mail can be active", () => {
+    const linked = claims.find(c => c.statement === "JOYSTICK is what the laundry proposal is for")!;
+    expect(linked).toMatchObject({ verdict: "active", crossSource: true });
   });
 
-  it("strikes quotes that aren't in the evidence and ids that don't exist", () => {
-    expect(verdict("Paraphrased")).toBe("unsupported");
+  it("states 'ended' only as claimed, for the judge to confirm", () => {
+    expect(verdict("Mobile car wash in Pasadena")).toBe("ended");
+  });
+
+  it("tells a dated event from a current, unresolved problem", () => {
+    expect(verdict("The laundromat was broken into and its register stolen (Sept 2026)")).toBe("happened");
+    expect(verdict("Replacing the stolen register")).toBe("open_problem");
+    expect(verdict("Broken dryer and complaints")).toBe("happened");
+    expect(reasons("Broken dryer and complaints")).toMatch(/still unresolved isn't shown/);
+  });
+
+  it("accepts a relationship shown by the message headers", () => {
+    expect(verdict("Dana Reyes, contact at The Louise")).toBe("relationship");
+  });
+
+  it("strikes ids that don't exist and quotes that aren't there, and refuses too-short quotes", () => {
     expect(verdict("Invented")).toBe("unsupported");
-  });
-
-  it("doesn't let a recent own act be filed away as past", () => {
-    expect(verdict("Louise", "older")).toBe("uncertain");
-    expect(verdict("Dana", "person")).toBe("supported");
-  });
-
-  it("refuses quotes too short to prove anything", () => {
+    expect(verdict("Paraphrased")).toBe("unsupported");
     expect(quoteIsIn("Louise", evidence[0])).toBe(false);
-    expect(quoteIsIn("PROPOSAL for the   Louise!", evidence[0])).toBe(true);
   });
 
-  it("lets the judge lower a verdict, never raise one", () => {
+  it("keeps each citation's original source", () => {
+    expect(claims[0].citations[0]).toMatchObject({ ref: "gmail g1-original", url: "https://example.com/g1", activity: true });
+  });
+
+  it("shows the judge each cited item's real sender and recipients", () => {
+    expect(judgePrompt([claims[7]], evidence, today)).toMatch(/from Owner <owner@x\.com> to Dana Reyes <dana@thelouise\.example>/);
+  });
+
+  it("lets the judge lower, never raise, and keeps unknown status unknown", () => {
+    const yes = { supports: "yes" as const, statusShown: "yes" as const, contradiction: "" };
     const judged = applyJudge(claims, [
-      { n: 0, supports: "yes", presentActivity: "unknown", contradiction: "" },
-      { n: 1, supports: "yes", presentActivity: "yes", contradiction: "" },
-      { n: 2, supports: "no", presentActivity: "no", contradiction: "" },
-      { n: 3, supports: "yes", presentActivity: "yes", contradiction: "the launch was cancelled" },
+      { n: 0, ...yes, statusShown: "unknown" },
+      { n: 1, ...yes },
+      { n: 3, ...yes, statusShown: "no" },
+      { n: 4, ...yes },
+      { n: 5, ...yes, statusShown: "no" },
+      { n: 7, ...yes },
+      { n: 8, ...yes, supports: "no" },
     ]);
-    expect(judged.slice(0, 4).map(c => c.verdict)).toEqual(["uncertain", "supported_past", "unsupported", "contradicted"]);
-    expect(judged[1].reasons.join(" ")).not.toMatch(/not verified/);
+    expect(judged.map(c => c.verdict).slice(0, 9)).toEqual([
+      "status_unknown", // active, but the items don't show it is operating now
+      "status_unknown", // stays: the judge can't raise it
+      "status_unknown", // project: no verdict, but status_unknown needs none
+      "status_unknown", // ended, but the items don't say so
+      "happened",
+      "happened", // open problem: still unresolved isn't shown
+      "happened", // no verdict: a dated event needs none
+      "relationship",
+      "unsupported",
+    ]);
   });
 
-  it("fails closed: a failed judge, or a claim it skipped, establishes nothing", async () => {
+  it("fails closed: a failed judge states nothing that needs it", async () => {
     const failing = vi.fn(async () => new Response("overloaded", { status: 503 }));
     const failed = await judgeClaims({ apiKey: "k", model: "m", fetch: failing as unknown as typeof fetch }, claims, evidence, today);
     expect(failed.call?.error).toMatch(/503/);
-    expect(failed.claims.some(c => c.verdict === "established_current")).toBe(false);
-    expect(failed.claims.find(c => c.label === "Premium residential accounts")!.reasons.at(-1)).toMatch(/not verified: the judge failed/);
-    // the judge answered, but said nothing about claim 0
-    const skipped = applyJudge(claims, [{ n: 1, supports: "yes", presentActivity: "yes", contradiction: "" }]);
-    expect(skipped[0].verdict).toBe("uncertain");
-    expect(skipped[0].reasons.at(-1)).toMatch(/gave no verdict/);
+    const after = (statement: string) => failed.claims.find(c => c.statement === statement)!;
+    expect(after("Selling premium residential laundry to The Louise").verdict).toBe("uncertain");
+    expect(after("Selling premium residential laundry to The Louise").reasons.at(-1)).toMatch(/not verified: the judge failed/);
+    expect(after("Dana Reyes, contact at The Louise").verdict).toBe("uncertain");
+    expect(after("The laundromat was broken into and its register stolen (Sept 2026)").verdict).toBe("happened");
   });
 
-  it("reports unconfirmed guesses apart, never as ground truth", () => {
-    const score = scoreExpectations(claims, { unconfirmed: [{ name: "Web design", guess: "past" }] });
-    expect(score.unconfirmed).toEqual([{ name: "Web design", guess: "past", found: true, calledCurrent: false }]);
-    expect(score.pastFound).toEqual([]);
-  });
-
-  it("scores the owner's AI Overview results by status", () => {
-    const score = scoreExpectations(claims, { current: ["Premium residential", "Agentic software", "Nothing"], past: ["Web design"], people: ["Dana", "Russell"] });
-    expect(score.currentFound).toEqual(["Premium residential"]);
-    expect(score.currentWrongStatus).toEqual(["Agentic software"]);
-    expect(score.currentMissed).toEqual(["Nothing"]);
-    expect(score.pastFound).toEqual(["Web design"]);
-    expect(score.pastWronglyCurrent).toEqual([]);
-    expect(score.peopleMissed).toEqual(["Russell"]);
+  it("scores only confirmed findings", () => {
+    const score = gradeScore(
+      [
+        { id: "G1", found: "yes", claims: [0], statusRight: "yes", note: "" },
+        { id: "G2", found: "partly", claims: [7], statusRight: "no", note: "" },
+        { id: "U1", found: "yes", claims: [1], statusRight: "yes", note: "" },
+      ],
+      { findings: [{ id: "G1", from: "gmail", statement: "", expected: "active" }, { id: "G2", from: "gmail", statement: "", expected: "relationship" }, { id: "U1", from: "gmail", statement: "", expected: "past", unconfirmed: true }] }
+    );
+    expect(score).toEqual({ recall: 0.75, statusRight: 0.5, confirmed: 2 });
   });
 });
 
-// ------------------------------------------------------------------ the benchmark, against a fake Google
+// ------------------------------------------------------------------ the benchmark, against a fake Google and Gemini
 
 const OWNER = "owner@example.com";
 const DOC = "application/vnd.google-apps.document";
@@ -187,21 +216,25 @@ function fakeWorld(now: Date) {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     if (url.host === "oauth2.googleapis.com") return json({ access_token: "fresh", expires_in: 3600 });
     if (url.host === "generativelanguage.googleapis.com") {
-      const body = JSON.parse(String(init?.body)) as { systemInstruction: { parts: Array<{ text: string }> } };
+      const body = JSON.parse(String(init?.body)) as { systemInstruction: { parts: Array<{ text: string }> }; contents: Array<{ parts: Array<{ text: string }> }> };
       const system = body.systemInstruction.parts[0].text;
+      const prompt = body.contents[0].parts[0].text;
+      const firstId = /\[(g1|d1)\]/.exec(prompt)?.[1] ?? "g1";
       const value =
         system === PLAN_SYSTEM
           ? { gmail: [{ query: "in:sent Louise", why: "the proposal" }], drive: [{ terms: ["Goldline"], why: "the product" }] }
           : system === JUDGE_SYSTEM
-            ? { verdicts: [{ n: 0, supports: "yes", presentActivity: "yes", contradiction: "" }] }
-            : system === READING_SYSTEM
-              ? {
-                  priorities: [{ title: "Premium residential accounts", aim: "build", status: "current", summary: "Selling to The Louise", people: ["Dana"], evidence: [{ id: JSON.stringify(body).includes("[d1]") ? "d1" : "g1", quote: "premium residential laundry proposal" }] }],
-                  olderAmbitions: [],
-                  people: [],
-                  unsure: [],
-                }
-              : {};
+            ? { verdicts: [0, 1].map(n => ({ n, supports: "yes", statusShown: "yes", contradiction: "" })) }
+            : system === GRADE_SYSTEM
+              ? { findings: [{ id: "G2", found: "yes", claims: [0], statusRight: "yes", note: "named" }] }
+              : system === READING_SYSTEM
+                ? {
+                    claims: [
+                      { kind: "business", statement: "Selling premium residential laundry to The Louise", status: "active", people: ["Dana"], evidence: [{ id: firstId, quote: "premium residential laundry proposal" }] },
+                      { kind: "relationship", statement: "Dana, contact at The Louise", status: "n/a", people: ["Dana"], evidence: [{ id: "g1", quote: "to Dana dana thelouise example" }] },
+                    ],
+                  }
+                : {};
       return json({ candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }], usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 200 }, modelVersion: "gemini-fake" });
     }
     if (url.host === "gmail.googleapis.com") {
@@ -221,7 +254,7 @@ function fakeWorld(now: Date) {
 }
 
 describe("runFirstReadBench", () => {
-  it("the fast strategy reads a small sample; the survey reads two years; the agent searches what Gemini chose", async () => {
+  it("times every variant, reads only a small sample, and grades by meaning after the clock", async () => {
     const now = new Date("2026-10-31T12:00:00Z");
     const fake = fakeWorld(now);
     const result = await runFirstReadBench({
@@ -233,40 +266,45 @@ describe("runFirstReadBench", () => {
         ownerEmail: OWNER,
         onRefreshed: async () => undefined,
       },
-      strategies: ["fast", "agent", "survey"],
+      variants: ["fast:separate", "fast:combined", "agent:separate", "agent:combined"],
+      runs: 1,
       geminiKey: "key",
-      model: "gemini-2.5-flash",
-      centsPerMillion: { input: 30, output: 250 },
-      expect: { current: ["Premium residential"] },
+      model: "gemini-3.8-flash",
+      thinking: "low",
+      centsPerMillion: { input: 75, output: 375 },
+      expect: { findings: [{ id: "G2", from: "gmail", statement: "Dana at The Louise", expected: "relationship" }] },
       fetch: fake as unknown as typeof fetch,
       env: { JOYSTICK_GOOGLE_CLIENT_ID: "id", JOYSTICK_GOOGLE_CLIENT_SECRET: "secret" } as NodeJS.ProcessEnv,
       now: () => now,
     });
-    const [fast, agent, survey] = result.runs;
+    const by = (variant: string) => result.runs.find(run => run.variant === variant)!;
 
-    // fast: one recent Sent search and three older samples, never the 24 monthly windows
-    expect(fast.requests.gmail_search).toBe(4);
-    expect(fast.requests.drive_search).toBe(1);
-    // agent: the same four, plus the one Gmail search and one Drive search Gemini chose
-    expect(agent.requests.gmail_search).toBe(5);
-    expect(agent.requests.drive_search).toBe(2);
-    expect(agent.plan?.gmail[0].query).toBe("in:sent Louise");
-    expect(agent.calls.map(call => call.purpose).sort()).toEqual(["judge", "judge", "plan", "reading", "reading"]);
-    // survey: one recent search and 24 monthly windows
-    expect(survey.requests.gmail_search).toBe(25);
-    expect(survey.requests.gmail_search! + (survey.requests.gmail_header ?? 0)).toBeGreaterThan(fast.requests.gmail_search! + (fast.requests.gmail_header ?? 0));
+    // fast: one recent Sent search and three older samples; agent adds the one search Gemini chose
+    expect(by("fast:separate").requests.gmail_search).toBe(4);
+    expect(by("fast:separate").requests.drive_search).toBe(1);
+    expect(by("agent:combined").requests.gmail_search).toBe(5);
+    expect(by("agent:combined").requests.drive_search).toBe(2);
+    // separate answers twice; combined once, over both sources
+    expect(by("fast:separate").answers.map(a => a.question).sort()).toEqual(["drive", "gmail"]);
+    expect(by("fast:combined").answers.map(a => a.question)).toEqual(["combined"]);
+    expect(by("agent:combined").calls.map(c => c.purpose).sort()).toEqual(["judge", "plan", "reading:combined"]);
+    // the thinking level reaches Gemini
+    const geminiBodies = fake.mock.calls.filter(([input]) => String(input).includes("generativelanguage")).map(([, init]) => JSON.parse(String(init?.body)));
+    expect(geminiBodies.some(b => b.generationConfig.thinkingConfig?.thinkingLevel === "low")).toBe(true);
 
     for (const run of result.runs) {
-      expect(run.firstResultMs).toBeGreaterThan(0);
-      expect(run.claims.gmail[0].verdict).toBe("established_current");
-      // Drive dates are edits, not activity: a Drive-only claim can't be established as current
-      expect(run.claims.drive[0].verdict).toBe("uncertain");
-      expect(run.expectations?.currentFound).toEqual(["Premium residential"]);
+      expect(run.firstVerifiedMs).toBeGreaterThan(0);
+      expect(run.allVerifiedMs).toBeGreaterThanOrEqual(run.firstVerifiedMs);
+      expect(run.grading?.recall).toBe(1);
+      expect(run.answers.flatMap(a => a.claims).some(c => c.verdict === "relationship")).toBe(true);
     }
-    // the private report links every citation to its original message or file
+    // Drive alone can't make anything active; mail can
+    const driveOnly = by("fast:separate").answers.find(a => a.question === "drive")!.claims[0];
+    expect(driveOnly.verdict).toBe("status_unknown");
+
     const report = benchReport(result);
     expect(report).toMatch(/\[gmail message m1a, thread t-m1a\]\(https:\/\/mail\.google\.com\/mail\/u\/owner%40example\.com\/#all\/t-m1a\)/);
-    expect(report).toMatch(/\[drive file f1\]\(https:\/\/docs\.example\/f1\)/);
+    expect(report).toMatch(/Your AI Overviews, finding by finding/);
     // nothing but reads and one token refresh went to Google
     for (const [input, init] of fake.mock.calls) {
       const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

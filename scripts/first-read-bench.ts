@@ -5,12 +5,14 @@
  *
  *   scripts/first-read-bench.sh --journey <own journey id> --i-have-authorization [options]
  *
- *   --paths rest|mcp      rest (default): JOYSTICK's own Gmail/Drive readers; mcp: Google's search_corpus (preview only)
- *   --strategies <list>   for rest: fast, agent, survey (default fast,agent,survey; survey is the 24-month comparison)
- *   --model <id>          the Gemini model (default gemini-3.8-flash; needs GEMINI_API_KEY. gemini-2.5-flash is closed to new users)
- *   --no-judge            skip the second model call that checks each claim against its quotes
- *   --expect <file>       your Gmail/Drive AI Overview results as expectations, kept outside the repo:
- *                         {"current": ["Name|Alias"], "past": [...], "people": [...], "mention": [...]}
+ *   --variants <list>     fast:separate, fast:combined, agent:separate, agent:combined (default: all four)
+ *   --runs <n>            how many times to run each variant, interleaved (default 3, at most 5)
+ *   --thinking <level>    low (default), medium, high, or default (the model's own, medium) for the readings
+ *   --model <id>          the Gemini model (default gemini-3.8-flash; needs GEMINI_API_KEY). Google limits the 2.5
+ *                         models to projects that used them before; production's project hasn't.
+ *   --no-judge            skip the judge (then nothing that needs it is stated)
+ *   --expect <file>       your Gmail/Drive AI Overview findings, kept outside the repo, graded by meaning:
+ *                         {"findings": [{"id": "G1", "from": "gmail", "statement": "…", "expected": "active", "unconfirmed": false}]}
  *   --out-dir <dir>       where reports go (default tmp/first-read-bench, readable by you only)
  *   --input-cents-per-million <n> --output-cents-per-million <n>   the model's price (default: Gemini 3.8 Flash, paid tier, through 2026-12-31)
  *
@@ -36,23 +38,28 @@ const refuse = (message: string): never => {
 async function main() {
   const journeyId = value("--journey") ?? refuse("--journey <own journey id> is required");
   if (!args.includes("--i-have-authorization")) refuse("this reads a real person's Gmail and Drive. Pass --i-have-authorization only with the account owner's explicit go-ahead.");
-  const { STRATEGIES, benchReport, runFirstReadBench } = await import("../server/businessKnowledge/firstRead/bench");
-  type Strategy = (typeof STRATEGIES)[number];
-  const path = value("--paths") ?? "rest";
-  if (path !== "rest" && path !== "mcp") refuse("--paths takes rest or mcp");
-  const strategies = (path === "mcp" ? ["mcp"] : (value("--strategies") ?? "fast,agent,survey").split(",").map(s => s.trim())) as Strategy[];
-  if (!strategies.length || strategies.some(s => !STRATEGIES.includes(s) || (path === "rest" && s === "mcp"))) refuse("--strategies takes fast, agent and survey");
+  const { VARIANTS, benchReport, runFirstReadBench } = await import("../server/businessKnowledge/firstRead/bench");
+  type Variant = (typeof VARIANTS)[number];
+  const variants = (value("--variants") ?? VARIANTS.join(",")).split(",").map(v => v.trim()) as Variant[];
+  if (!variants.length || variants.some(v => !VARIANTS.includes(v))) refuse(`--variants takes ${VARIANTS.join(", ")}`);
+  const runs = Number(value("--runs") ?? 3);
+  if (!Number.isInteger(runs) || runs < 1 || runs > 5) refuse("--runs takes 1 to 5");
+  const thinking = value("--thinking") ?? "low";
+  if (!["low", "medium", "high", "default"].includes(thinking)) refuse("--thinking takes low, medium, high or default");
   const geminiKey = process.env.GEMINI_API_KEY?.trim() || refuse("GEMINI_API_KEY isn't set. Nothing was read.");
   const expectFile = value("--expect");
   const expect = expectFile ? JSON.parse(readFileSync(expectFile, "utf8")) : null;
+  if (expect && !Array.isArray(expect.findings)) refuse("--expect needs {\"findings\": [...]}");
 
   const { coldTestSource } = await import("../server/businessKnowledge/coldTest");
   const { google } = await coldTestSource(journeyId);
   const result = await runFirstReadBench({
     google,
-    strategies,
+    variants,
+    runs,
     geminiKey,
     model: value("--model") ?? "gemini-3.8-flash",
+    thinking: thinking === "default" ? undefined : (thinking as "low" | "medium" | "high"),
     judge: !args.includes("--no-judge"),
     expect,
     centsPerMillion: { input: Number(value("--input-cents-per-million") ?? 75), output: Number(value("--output-cents-per-million") ?? 375) },
@@ -65,10 +72,10 @@ async function main() {
     writeFileSync(file, body, { mode: 0o600 });
     chmodSync(file, 0o600);
   }
-  console.log(`auth ${result.authMs} ms`);
+  console.log(`auth ${result.authMs} ms; model ${result.model}, thinking ${result.thinking}`);
   for (const run of result.runs) {
-    const requests = Object.entries(run.requests).map(([kind, n]) => `${kind} ${n}`).join(", ");
-    console.log(`${run.strategy}: first draft ${run.firstResultMs} ms, all verified ${run.totalMs} ms, ${run.costCents.toFixed(2)}¢ — Google requests: ${requests}`);
+    const grade = run.grading ? `, recall ${Math.round(run.grading.recall * 100)}%, status right ${Math.round(run.grading.statusRight * 100)}%` : "";
+    console.log(`${run.variant} #${run.run}: first verified ${run.firstVerifiedMs} ms, both sources ${run.allVerifiedMs} ms, ${run.costCents.toFixed(2)}¢${grade}${run.notes.length ? ` — ${run.notes.join("; ")}` : ""}`);
   }
   console.log(`Report: ${stem}.md`);
   process.exit(0);
