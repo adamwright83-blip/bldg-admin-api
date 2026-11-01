@@ -415,10 +415,13 @@ export function gradePrompt(claims: readonly CheckedClaim[], expect: Expectation
   return `The reading:\n${reading}\n\nExpected findings:\n${expected}`;
 }
 
-/** Grade a reading against the owner's Overviews. Not part of the first-minute path: timed apart. */
+/**
+ * Grade a reading against the owner's Overviews. Not part of the first-minute path: timed apart. High thinking needs
+ * room: at 8k output tokens the thinking used the budget and the JSON came back cut off.
+ */
 export async function gradeReading(config: GeminiConfig, claims: readonly CheckedClaim[], expect: Expectations) {
   const kept = claims.filter(claim => claim.verdict !== "unsupported" && claim.verdict !== "contradicted");
-  const { value, call } = await geminiJson(config, { purpose: "grade", schema: gradeSchema, system: GRADE_SYSTEM, prompt: gradePrompt(kept, expect), thinking: "high", timeoutMs: 120_000 });
+  const { value, call } = await geminiJson(config, { purpose: "grade", schema: gradeSchema, system: GRADE_SYSTEM, prompt: gradePrompt(kept, expect), thinking: "high", timeoutMs: 180_000, maxOutputTokens: 32_000 });
   const grades = value?.findings ?? [];
   const used = new Set(grades.flatMap(g => g.claims));
   return {

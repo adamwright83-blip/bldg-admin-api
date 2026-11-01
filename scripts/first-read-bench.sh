@@ -21,4 +21,7 @@ if [ -z "$public_url" ]; then
   exit 2
 fi
 
-exec railway run --service bldg-admin-api -- env DATABASE_URL="$public_url" npx tsx scripts/first-read-bench.ts "$@"
+# The address travels in the environment, never on a command line, where any process on this machine could read it
+# with ps. Railway injects the service's own (private) DATABASE_URL, so it is set inside, from a name Railway leaves alone.
+export FIRST_READ_DATABASE_URL="$public_url"
+exec railway run --service bldg-admin-api -- sh -c 'DATABASE_URL="$FIRST_READ_DATABASE_URL" exec npx tsx scripts/first-read-bench.ts "$@"' first-read-bench "$@"

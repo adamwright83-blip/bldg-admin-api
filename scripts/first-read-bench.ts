@@ -18,6 +18,9 @@
  *
  * Find the journey id with: scripts/onboarding-cold-test.sh --list
  *
+ *   scripts/first-read-bench.sh --regrade <report.json> --expect <file>
+ *     grades a saved result again: its claims and your expectations go to Gemini; Gmail and Drive are not read.
+ *
  *   npx tsx scripts/first-read-bench.ts --rerender <report.json>
  *     writes the report again from a saved result with this version's reporting; nothing is read or sent.
  */
@@ -44,6 +47,35 @@ function revive(file: string) {
 }
 
 async function main() {
+  const regrade = value("--regrade");
+  if (regrade) {
+    // grade a saved result again (its claims and your expectations go to Gemini; Gmail and Drive are not read)
+    const geminiKey = process.env.GEMINI_API_KEY?.trim() || refuse("GEMINI_API_KEY isn't set.");
+    const expectFile = value("--expect") ?? refuse("--regrade needs --expect <file>");
+    const expect = JSON.parse(readFileSync(expectFile, "utf8"));
+    const { benchReport } = await import("../server/businessKnowledge/firstRead/bench");
+    const { gradeReading, gradeScore } = await import("../server/businessKnowledge/firstRead/synthesis");
+    const result = revive(regrade);
+    const gemini = { apiKey: geminiKey, model: result.model };
+    const price = { input: Number(value("--input-cents-per-million") ?? 75), output: Number(value("--output-cents-per-million") ?? 375) };
+    for (const run of result.runs) {
+      const graded = await gradeReading(gemini, run.answers.flatMap((a: { claims: unknown[] }) => a.claims), expect);
+      const score = gradeScore(graded.grades, expect);
+      const costCents = (graded.call.inputTokens * price.input + graded.call.outputTokens * price.output) / 1_000_000;
+      run.grading = { grades: graded.grades, beyond: graded.beyond, recall: score.recall, statusRight: score.statusRight, call: graded.call, costCents };
+      run.notes = run.notes.filter((note: string) => !note.startsWith("grading failed"));
+      if (graded.call.error) run.notes.push(`grading failed: ${graded.call.error}`);
+      console.log(`${run.variant} #${run.run}: recall ${Math.round(score.recall * 100)}%, status right ${Math.round(score.statusRight * 100)}%${graded.call.error ? ` FAILED ${graded.call.error}` : ""}`);
+    }
+    result.expectations = expect;
+    const out = regrade.replace(/\.json$/, ".regraded");
+    writeFileSync(`${out}.json`, JSON.stringify(result, null, 2), { mode: 0o600 });
+    writeFileSync(`${out}.md`, benchReport(result), { mode: 0o600 });
+    chmodSync(`${out}.json`, 0o600);
+    chmodSync(`${out}.md`, 0o600);
+    console.log(`Report: ${out}.md`);
+    process.exit(0);
+  }
   const saved = value("--rerender");
   if (saved) {
     const { benchReport } = await import("../server/businessKnowledge/firstRead/bench");
