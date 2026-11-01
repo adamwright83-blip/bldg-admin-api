@@ -82,7 +82,9 @@ export const readingSchema = z.object({
         evidence: z.array(z.object({ id: z.string(), quote: z.string() })).min(1).max(3),
       })
     )
-    .max(30),
+    // no maxItems: Gemini 3.8 refuses this schema (400) once the list is bounded above 14. The prompt asks for at most
+    // 30, and geminiReading keeps the first 30.
+    .transform(claims => claims.slice(0, 30)),
   /** what Claire says first: a few sentences, each built only from the claims it names */
   opening: z.array(z.object({ sentence: z.string(), claims: z.array(z.number()).min(1) })).max(4),
 });
@@ -149,7 +151,7 @@ export async function geminiJson<T>(
   const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 60_000);
   const thinking = input.thinking ?? config.thinking;
   try {
-    const schema = z.toJSONSchema(input.schema) as Record<string, unknown>;
+    const schema = z.toJSONSchema(input.schema, { io: "input" }) as Record<string, unknown>;
     delete schema.$schema;
     const response = await (config.fetch ?? fetch)(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`, {
       method: "POST",
@@ -167,7 +169,11 @@ export async function geminiJson<T>(
         },
       }),
     });
-    if (!response.ok) throw new Error(`Gemini answered ${response.status}`);
+    if (!response.ok) {
+      // Google's own reason (e.g. a schema it won't take); it never echoes the prompt
+      const reason = await response.json().then((b: { error?: { message?: string } }) => b.error?.message ?? "", () => "");
+      throw new Error(`Gemini answered ${response.status}${reason ? `: ${reason.slice(0, 160)}` : ""}`);
+    }
     const body = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };

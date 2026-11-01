@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { benchReport, coverageOf, DISCOVER_SYSTEM, outcomeOf, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
 import {
   applyJudge,
@@ -11,6 +12,7 @@ import {
   JUDGE_SYSTEM,
   quoteIsIn,
   READING_SYSTEM,
+  readingSchema,
   type Evidence,
   type Reading,
 } from "./synthesis";
@@ -90,6 +92,15 @@ const reading: Reading = {
   ],
   opening: [],
 };
+
+describe("the reading schema Gemini is sent", () => {
+  it("bounds no list Gemini refuses to bound, and still keeps only 30 claims", () => {
+    const json = z.toJSONSchema(readingSchema, { io: "input" }) as { properties: { claims: { maxItems?: number } } };
+    expect(json.properties.claims.maxItems).toBeUndefined();
+    const many = { claims: Array.from({ length: 40 }, () => ({ kind: "event", statement: "s", status: "happened", partOf: "", people: [], evidence: [{ id: "g1", quote: "q" }] })), opening: [] };
+    expect(readingSchema.parse(many).claims).toHaveLength(30);
+  });
+});
 
 describe("checkClaims", () => {
   const claims = checkClaims(reading, evidence, today);
