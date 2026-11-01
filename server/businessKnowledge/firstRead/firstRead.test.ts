@@ -568,15 +568,58 @@ describe("progressive public research", () => {
     expect(inOwnText("40 Bank St, Ottawa, ON K1P, Canada", own)).toBe(false);
   });
 
-  it("keeps an organization as an identity anchor only if the item it cites names it", async () => {
+  it("anchors only on organizations their own items show they belong to: never a customer, vendor or someone else's", async () => {
     const { identityAnchors } = await import("./publicResearch");
+    const own = (id: string, title: string, text = ""): Evidence => ({ id, source: "drive", at: new Date("2026-10-26"), dated: "modified", byOwner: true, title, people: "owned by Sam", text, ref: id, url: null });
     const items: Evidence[] = [
-      { id: "d1", source: "drive", at: new Date("2026-10-26"), dated: "modified", byOwner: true, title: "Brightline Labs — cap table", people: "owned by Sam", text: "", ref: "d1", url: null },
+      own("d1", "Brightline Labs — cap table"),
+      own("d2", "Supplier invoices", "CleanCloud monthly subscription, Speed Queen parts order"),
+      own("g1", "Re: your order", "Thanks for choosing Harbor Lofts as a customer"),
+      { ...own("g2", "Welcome to Northwind", "Northwind founders update"), byOwner: false },
     ];
-    const reply = { organizations: [{ name: "Brightline Labs", relation: "past", evidence: ["d1"] }, { name: "Invented Corp", relation: "current", evidence: ["d1"] }] };
+    const reply = {
+      organizations: [
+        { name: "Brightline Labs", relation: "founder_or_owner", when: "past", evidence: ["d1"] },
+        { name: "Invented Corp", relation: "founder_or_owner", when: "current", evidence: ["d1"] },
+        { name: "CleanCloud", relation: "vendor_or_tool", when: "current", evidence: ["d2"] },
+        { name: "Harbor Lofts", relation: "customer", when: "current", evidence: ["g1"] },
+        { name: "Speed Queen", relation: "unclear", when: "unclear", evidence: ["d2"] },
+        { name: "Northwind", relation: "employee_or_member", when: "current", evidence: ["g2"] },
+      ],
+    };
     const fetch = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(reply) }] } }] }), { status: 200 }));
     const out = await identityAnchors({ apiKey: "k", model: "m", fetch: fetch as unknown as typeof globalThis.fetch }, items, "Sam Acme");
     expect(out.organizations.map(o => o.name)).toEqual(["Brightline Labs"]);
-    expect(out.dropped[0]).toMatch(/Invented Corp/);
+    expect(out.dropped.join("; ")).toMatch(/Invented Corp \(not in the items it cites\)/);
+    expect(out.dropped.join("; ")).toMatch(/CleanCloud \(vendor_or_tool, not theirs\)/);
+    expect(out.dropped.join("; ")).toMatch(/Harbor Lofts \(customer, not theirs\)/);
+    expect(out.dropped.join("; ")).toMatch(/Speed Queen \(unclear, not theirs\)/);
+    expect(out.dropped.join("; ")).toMatch(/Northwind \(only in items someone else wrote\)/);
   });
+
+  it("keeps a personal web finding only from a profile verified as theirs", async () => {
+    const { PublicResearchRun } = await import("./publicResearch");
+    const create = vi.fn().mockResolvedValueOnce(
+      answer(
+        {
+          findings: [
+            // a gossip page that names him: real result, two claimed anchors, but not his profile
+            { text: "Says he is raising a seed round", signal: "self-description", url: "https://blog.example/sam-acme-raising", date: "", identity: "certain", matchedAnchors: ["name", "Brightline Labs"] },
+            // press about the business is not personal
+            { text: "Brightline Labs featured in a local paper", signal: "press", url: "https://news.example/brightline", date: "", identity: "likely", matchedAnchors: ["Brightline Labs", "Sam Acme"] },
+          ],
+          handles: handles(),
+        },
+        [
+          { url: "https://blog.example/sam-acme-raising", title: "Sam Acme is raising — rumours" },
+          { url: "https://news.example/brightline", title: "Brightline Labs, founded by Sam Acme" },
+        ]
+      )
+    );
+    const run = new PublicResearchRun(anchors, { client: { messages: { create } } as never, fetch: vi.fn() as unknown as typeof fetch, xaiKey: "", placesKey: "" }).start();
+    await run.settled();
+    expect(run.snapshot().map(f => f.signal)).toEqual(["press"]);
+    expect(run.rejected.some(r => /not from a profile or site verified as theirs/.test(r.why))).toBe(true);
+  });
+
 });

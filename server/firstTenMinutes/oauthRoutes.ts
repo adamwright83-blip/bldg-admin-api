@@ -3,6 +3,7 @@ import { parse as parseCookies } from "cookie";
 import type { ConnectErrorCode, ConnectionProvider } from "../../shared/firstTenMinutes";
 import { firstTenOpenFor } from "./flag";
 import { exchangeGoogleCode, googleAccount, googleGrantIsUsable, revokeGoogleToken } from "./google";
+import { beginFirstRead } from "./firstRead/firstRead";
 import { exchangeSlackCode, revokeSlackToken, slackGrantIsUsable } from "./slack";
 import { firstTenCallbackPath, firstTenRedirectUri } from "./origins";
 import { FIRST_TEN_NONCE_COOKIE, verifyConnectState } from "./oauthState";
@@ -19,6 +20,7 @@ import { connectionRows, journeyById, saveConnection } from "./store";
  */
 type Dependencies = {
   exchangeGoogle?: typeof exchangeGoogleCode;
+  beginFirstRead?: typeof beginFirstRead;
   account?: typeof googleAccount;
   revokeGoogle?: typeof revokeGoogleToken;
   exchangeSlack?: typeof exchangeSlackCode;
@@ -41,6 +43,8 @@ export async function handleFirstTenCallback(
   deps: Dependencies = {}
 ): Promise<void> {
   const env = deps.env ?? process.env;
+  // the moment Google sent the person back: the first read's clock starts here
+  const consentedAt = new Date();
   const fail = (code: ConnectErrorCode) => back(res, `connect_error=${code}&provider=${provider}`);
   const clearNonce = () =>
     res.clearCookie(FIRST_TEN_NONCE_COOKIE, { path: "/api/first-ten/oauth", httpOnly: true, sameSite: "lax" });
@@ -95,6 +99,9 @@ export async function handleFirstTenCallback(
       if (checked.state.purpose === "send") {
         return tokens.grantedScopes.includes(GOOGLE_SEND_SCOPE) ? back(res, "connected=google&for=send") : fail("send_permission");
       }
+      // off unless JOYSTICK_FIRST_READ_REVEAL=on. Awaited only for its claim (one row), so the page that loads next
+      // already finds it running; the read itself goes on in the background and never holds the redirect.
+      await (deps.beginFirstRead ?? beginFirstRead)(journey, { startedAt: consentedAt, ownerName: account.name, ownerEmail: account.email }, env).catch(() => false);
     } else {
       const grant = await (deps.exchangeSlack ?? exchangeSlackCode)({ code, redirectUri }, { env });
       if (!slackGrantIsUsable(grant.grantedScopes)) {

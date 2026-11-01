@@ -93,6 +93,8 @@ const FIRST_MEETING_BRIEF = [
   "The magician never reveals the trick: no line mentions email, inbox, messages, documents, files, Drive, searching, the",
   "web, LinkedIn, X, posts, reposts, profiles, followers, screenshots, 'I noticed', 'I saw', 'I read', 'based on'.",
   "Keep separate businesses separate unless an item shows the link. Fictional characters belong to their project.",
+  "Other people's business stays theirs: never another company's or person's deals, terms, investments, legal matters,",
+  "money between parties or what is in documents they sent. Speak only of this person's own work, organizations and team.",
 ].join("\n");
 
 const RECONCILE = [
@@ -165,6 +167,8 @@ export const revealJudgeSchema = z.object({
       undatedFigure: z.enum(["yes", "no"]),
       /** says something about money, debt, legal trouble, health or family stronger than or different from the source */
       escalates: z.enum(["yes", "no"]),
+      /** discloses another company's or person's confidential matters (a deal, terms, an investment, a legal matter) */
+      thirdParty: z.enum(["yes", "no"]),
       why: z.string(),
     })
   ),
@@ -187,6 +191,9 @@ export const REVEAL_JUDGE_SYSTEM = [
   "escalates: yes if the line says anything about money, bills, debt, legal trouble, health or family that is stronger",
   "than or different from the source text (the source: revenue doesn't cover fuel; the line: fuel is unpaid), or",
   "implies a decline, a rescue or a struggle the source doesn't show ('pared down to', 'keep it alive', 'barely').",
+  "thirdParty: yes if the line discloses another company's or person's confidential matters: a deal or its terms, an",
+  "investment, a legal matter, money owed between parties, the contents of a document someone else wrote. Naming the",
+  "person's own team or a business they run is not that.",
   "A supported, carefully worded inference is exactly what's wanted. Do not penalise personality.",
 ].join("\n");
 
@@ -302,6 +309,7 @@ export async function runReveal(gemini: GeminiConfig, input: RevealInput, option
       if (!judged.value) Object.assign(l, { kept: false, why: `not verified: the judge failed (${judged.call.error})` });
       else if (!v) Object.assign(l, { kept: false, why: "not verified: the judge gave no verdict" });
       else if (v.supported === "no") Object.assign(l, { kept: false, why: `invented: ${v.why}` });
+      else if (v.thirdParty === "yes") Object.assign(l, { kept: false, why: `someone else's confidential matter: ${v.why}` });
       else if (v.escalates === "yes") Object.assign(l, { kept: false, why: `goes beyond the source on a sensitive matter: ${v.why}` });
       else if (v.motiveAsFact === "yes") Object.assign(l, { kept: false, why: `motive stated as fact: ${v.why}` });
       else if (v.overstated === "yes") Object.assign(l, { kept: false, why: `inference worded as fact: ${v.why}` });

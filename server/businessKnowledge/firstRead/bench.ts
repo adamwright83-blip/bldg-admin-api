@@ -152,9 +152,15 @@ export async function fastGmail(research: GoogleResearch, now: Date): Promise<Ev
   return readMail(research, [...latest, ...contrast]);
 }
 
-export async function fastDrive(research: GoogleResearch, now: Date, owner: string): Promise<Evidence[]> {
+/**
+ * The person's recent documents. `onlyOwn` (onboarding) keeps only files they own or last edited: a document someone
+ * else sent them (a pitch deck, a contract draft) is that person's business, never something to say back to them.
+ */
+export async function fastDrive(research: GoogleResearch, now: Date, owner: string, options: { onlyOwn?: boolean } = {}): Promise<Evidence[]> {
   const files = (await research.recentFiles({ since: new Date(now.getTime() - 540 * DAY), limit: 25, mimeTypes: DOCS })) ?? [];
-  return readFiles(research, ownFirst(files, owner).slice(0, 20), owner);
+  const ordered = ownFirst(files, owner);
+  const mine = (file: DriveEntry) => file.owners.some(p => sameEmail(p.email, owner)) || sameEmail(file.lastModifiedBy?.email, owner);
+  return readFiles(research, (options.onlyOwn ? ordered.filter(mine) : ordered).slice(0, 20), owner);
 }
 
 export const searchPlanSchema = z.object({

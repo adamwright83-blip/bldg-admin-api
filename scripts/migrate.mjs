@@ -5827,6 +5827,15 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0164: JOYSTICK's first ten minutes, the first read shown before Claire is named. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0164_first_ten_first_reads.sql");
+  for (const statement of statements) await runRequired(statement, "First ten minutes first reads");
+  await assertRequiredColumns("first_ten_first_reads", [
+    "journey_id", "status", "started_at", "reveal_json", "understanding_json", "public_json", "timings_json", "created_at", "updated_at",
+  ]);
+}
+
 // 0156: JOYSTICK's first ten minutes, the real message prepared at the writing table (never sent from here). Additive.
 {
   const statements = await readSqlStatements("../drizzle/0156_first_ten_drafts.sql");
