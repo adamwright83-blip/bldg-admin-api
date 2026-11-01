@@ -8,7 +8,7 @@ const entries = JSON.parse(
 );
 
 test('every matrix entry is complete and scoped', () => {
-  assert.equal(entries.length, 8);
+  assert.equal(entries.length, 7);
   for (const entry of entries) {
     assert.ok(entry.name && entry.command && entry.timeout > 0, entry.name);
     assert.ok(['core', 'world'].includes(entry.scope), entry.name);
@@ -54,5 +54,5 @@ test('anything else, including unknown paths, runs every job', () => {
     assert.equal(smokeScope(['docs/a.md', 'server/mitch/a.ts', file]), 'all', file);
   }
   assert.equal(smokeScope(null), 'all');
-  assert.equal(selectEntries(entries, 'all').length, 8);
+  assert.equal(selectEntries(entries, 'all').length, 7);
 });

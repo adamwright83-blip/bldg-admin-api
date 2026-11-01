@@ -57,13 +57,13 @@ export type ReadingConnections = {
 /**
  * The reading for `journey` over the given connections: what `readingDepsFor` builds from the journey's own. The
  * cold-start test harness (businessKnowledge/coldTest.ts) uses it to read a person's connected accounts into a
- * throwaway test journey, with its read-only `fetch`, the investigator model it was asked for (`env`) and, in its own
- * tests, a fixed clock (`now`).
+ * throwaway test journey, with its read-only `fetch`, the investigator model it was asked for (`env`), where to note
+ * the model that actually answered (`served`) and, in its own tests, a fixed clock (`now`).
  */
 export function readingDepsWith(
   journey: JourneyRow,
   connections: ReadingConnections,
-  options: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv; now?: () => Date } = {}
+  options: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv; now?: () => Date; served?: Set<string> } = {}
 ): ReadingDeps {
   const { google: access, slack } = connections;
   const now = options.now ?? (() => new Date());
@@ -95,7 +95,7 @@ export function readingDepsWith(
     ...(access && intelligenceFor(journey)
       ? {
           investigate: (heartbeat: () => Promise<void>) =>
-            investigateJourney(journey, access, heartbeat, { fetch: options.fetch, env: options.env, now: options.now }),
+            investigateJourney(journey, access, heartbeat, { fetch: options.fetch, env: options.env, now: options.now, served: options.served }),
         }
       : {}),
   };

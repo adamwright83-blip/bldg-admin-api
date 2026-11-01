@@ -61,7 +61,8 @@ export type ColdTestOutcome = {
   /** a run starts only once every table is shown to hold nothing for its id */
   startedFromNothing: true;
   cleanup: { deleted: Record<string, number>; left: 0 } | { kept: true };
-  investigator: { configured: string; model: string; status: string; rounds: number; toolCalls: number; stoppedBecause: string; notes: string[] } | null;
+  /** `model` is what was asked for (with the deterministic floor beside it); `served` is what the provider says answered */
+  investigator: { configured: string; model: string; served: string[]; status: string; rounds: number; toolCalls: number; stoppedBecause: string; notes: string[] } | null;
   usage: {
     investigator: ModelUsage & { costCents: number; priceBasis: string };
     /** Claude calls under the test id, from JOYSTICK's spend ledger (journey runs); null when it couldn't be read */
@@ -225,9 +226,15 @@ function totalCents(stages: StageUsage[] | null, investigatorCents: number): num
 
 export function coldTestOutcome(raw: ColdTestRaw): ColdTestOutcome {
   const u = raw.understanding;
-  const model = raw.investigator?.model ?? "";
+  // priced by the model that actually answered, when the provider said
+  const model = raw.investigator?.served[0] ?? raw.investigator?.model ?? "";
   const investigatorCost = estimateModelCostCents(raw.investigatorUsage.inputTokens, raw.investigatorUsage.outputTokens, model);
   const checks = ruleChecks(u, raw.live, raw.events);
+  if (raw.investigator && raw.investigator.configured !== "heuristic") {
+    // a model whose every call failed leaves the deterministic floor alone: that is a different test
+    const usage = raw.investigatorUsage;
+    checks.push({ name: `the ${raw.investigator.configured} model answered (not the deterministic fallback alone)`, ok: usage.calls > usage.failures });
+  }
   if (raw.journey) {
     const draft = raw.journey.chapter.draft;
     checks.push({ name: "no draft left the table", ok: !draft || !(draft.sentByJoystick || draft.handedOffAt || draft.reportedSentAt || draft.verifiedSentAt) });
@@ -450,9 +457,20 @@ export function renderColdTestReport(outcome: ColdTestOutcome, comparison: Compa
       ? "Kept for inspection: delete it with `--sweep --yes` when done."
       : `Cleaned up: ${Object.values(outcome.cleanup.deleted).reduce((sum, n) => sum + n, 0)} rows deleted (${Object.entries(outcome.cleanup.deleted).filter(([, n]) => n).map(([table, n]) => `${table} ${n}`).join(", ") || "none"}); none left.`,
     "",
+    "## Summary",
+    `- Model that answered: ${inv ? (inv.served.length ? inv.served.join(", ") : inv.configured === "heuristic" ? "none (deterministic investigator, by choice)" : "NONE: no model call succeeded; the deterministic investigator ran alone") : "no investigation"}.`,
+    `- Took ${seconds(outcome.wallMs)}; about ${dollars(usage.totalCostCents)}.`,
+    `- Read: ${outcome.coverage.map(row => `${row.source} ${row.items} items in ${row.operations} operations${row.failed + row.not_granted ? ` (${row.failed} failed, ${row.not_granted} not granted)` : ""}`).join("; ") || "nothing"}.`,
+    `- Couldn't read completely: ${u.gaps.map(gap => `${gap.source} (${gap.state})`).join(", ") || "nothing"}.`,
+    ...(comparison
+      ? [`- Against your expectations: ${comparison.discoveries.length} right, ${comparison.omissions.length} missed, ${comparison.incorrect.length} misunderstood, ${comparison.unexpected.length} for you to judge.`]
+      : ["- No expectations file: judge the conclusions below yourself."]),
+    `- Concluded: ${u.entities.length} businesses, products or projects, ${u.people.length} people, ${u.relationships.length} relationships; ${u.questions.length} questions for you.`,
+    `- Rule checks: ${outcome.checks.every(check => check.ok) ? "all passed" : `FAILED: ${outcome.checks.filter(check => !check.ok).map(check => check.name).join("; ")}`}.`,
+    "",
     "## Model, tokens, time and cost",
     inv
-      ? `- Investigator: asked for ${inv.configured}, ran ${inv.model}; ${inv.status} after ${inv.rounds} rounds and ${inv.toolCalls} tool calls (stopped: ${inv.stoppedBecause || "finished"}).`
+      ? `- Investigator: asked for ${inv.configured} (${inv.model}); the provider served ${inv.served.join(", ") || "nothing"}; ${inv.status} after ${inv.rounds} rounds and ${inv.toolCalls} tool calls (stopped: ${inv.stoppedBecause || "finished"}).`
       : "- Investigator: didn't run.",
     `- Investigator model: ${usage.investigator.calls} calls (${usage.investigator.failures} failed), ${usage.investigator.inputTokens} tokens in / ${usage.investigator.outputTokens} out, ${seconds(usage.investigator.latencyMs)} waiting on the model, about ${dollars(usage.investigator.costCents)} (${usage.investigator.priceBasis}).`,
     ...(outcome.mode === "journey"
@@ -554,7 +572,7 @@ export function renderColdTestReport(outcome: ColdTestOutcome, comparison: Compa
               ? [`- Draft at the table (${journey.chapter.draft.status}; ${journey.chapter.draft.left ? "IT LEFT THE TABLE" : "nothing was sent"}): to ${journey.chapter.draft.to ?? "(no name)"}, "${journey.chapter.draft.subject ?? ""}"`, ...(journey.chapter.draft.body ?? "").split(/(?<=[.!?])\s+/).map(sentence => `  > ${sentence}`)]
               : ["- No draft was prepared."]),
           ]
-        : ["- No chapter: the crew found no conversation to pick up."]),
+        : ["- No chapter: the crew found no conversation worth picking up. That is a valid outcome (a new business may have none); nothing was invented to fill it."]),
       ""
     );
   }

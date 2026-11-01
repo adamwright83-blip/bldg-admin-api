@@ -9,7 +9,6 @@ import { advertisedOfferForPlan } from "../../saas/joystickStripeOffer";
 import { assertNewBusinessIdentity, assertTestModeCheckoutKey } from "../../saas/paidCustomerLifecycle";
 import { createLegacyDayforgeSubscriptionCheckout, legacyDayforgeBillingAppUrl, legacyDayforgeBillingSecretKey } from "../../saas/saasBilling";
 import { listPublicSaasPlans, requireOnboardingSession, saveFirstTenOnboardingIdentity } from "../../saas/saasStore";
-import { chapterView } from "../chapter/chapter";
 import { recordEvent } from "../events";
 import type { DraftCredentials } from "../journeys";
 import { connectionRows, firstTenDb, setJourneyStage, type JourneyRow } from "../store";
@@ -60,6 +59,7 @@ function named<K extends string>(findings: FindingView[], kind: K): string | nul
 
 export async function activationView(journey: JourneyRow, credentials: DraftCredentials): Promise<ActivationView> {
   const session = await requireOnboardingSession(credentials);
+  assertSignupOwnsJourney(journey, session.id);
   const offer = journey.kind === "example" ? null : await currentOffer();
   const google = (await connectionRows(journey.id)).find(row => row.provider === "google" && row.status === "connected");
   const findings = (await understandingView(journey.id)).findings;
@@ -91,6 +91,22 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
   };
 }
 
+/**
+ * A prepared customer message is not required to buy JOYSTICK. An own journey may check out with no opportunity and
+ * no draft, including when the chapter they play is a fictional prospect. Nina's example never may. Correspondence
+ * is not consulted: a simulated prospect cannot become a reason to activate, or a reason to refuse.
+ */
+export function activationRefusedReason(kind: JourneyRow["kind"]): "example" | null {
+  return kind === "example" ? "example" : null;
+}
+
+/** The signup draft these credentials open must be the one this journey was started from. */
+function assertSignupOwnsJourney(journey: JourneyRow, sessionId: string) {
+  if (journey.acquisitionSessionId !== sessionId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "This journey belongs to a different signup." });
+  }
+}
+
 /** "Continue with JOYSTICK": the person's identity on their signup draft, then today's checkout. */
 export async function beginActivation(
   journey: JourneyRow,
@@ -98,14 +114,15 @@ export async function beginActivation(
   identity: { businessName: string; contactName: string; ownerEmail: string; timeZone: string },
   stripe?: Stripe
 ): Promise<{ url: string }> {
-  if (journey.kind === "example") throw new TRPCError({ code: "BAD_REQUEST", message: "Nina's example can't be activated. Bring your own to continue." });
+  if (activationRefusedReason(journey.kind)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Nina's example can't be activated. Bring your own to continue." });
+  }
   const offer = await currentOffer();
   if (!offer) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "JOYSTICK isn't taking payment yet. Everything here is saved." });
-  const chapter = await chapterView(journey);
-  if (!chapter.draft) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "There's nothing at the table yet." });
   const checked = assertNewBusinessIdentity(identity);
   if (!stripe) assertTestModeCheckoutKey(legacyDayforgeBillingSecretKey());
   const session = await requireOnboardingSession(credentials);
+  assertSignupOwnsJourney(journey, session.id);
   if (session.status === "draft") {
     await saveFirstTenOnboardingIdentity({ ...credentials, expectedVersion: session.version, ...checked });
   }

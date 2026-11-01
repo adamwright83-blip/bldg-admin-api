@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import styles from "../portrait/portrait.module.css";
 import type { ChapterGate } from "./chapterGate";
 
@@ -5,6 +6,8 @@ import type { ChapterGate } from "./chapterGate";
  * Under a kept page, whenever the chapter isn't showing: it's on its way, it couldn't be read, or the crew found no
  * conversation to pick up. For users without existing correspondence (User B), Claire introduces an imagined scenario
  * three days forward so every user experiences The Impossible Machine.
+ * Signup, when passed, is the existing JOYSTICK offer: a letter is not required.
+ * "Three Days Later" and signup sit together on this screen.
  */
 export function ChapterThreshold({
   gate,
@@ -13,6 +16,7 @@ export function ChapterThreshold({
   onLookCloser,
   onEnterSimulated,
   simulatedStatus = "not_started",
+  signup,
 }: {
   gate: Extract<ChapterGate, "loading" | "error" | "no_opportunity">;
   retrying: boolean;
@@ -20,6 +24,8 @@ export function ChapterThreshold({
   onLookCloser: () => void;
   onEnterSimulated?: () => void;
   simulatedStatus?: "not_started" | "in_progress" | "completed";
+  /** The existing JOYSTICK offer, once it's known there's no letter to write. */
+  signup?: ReactNode;
 }) {
   if (gate === "loading") {
     return (
@@ -47,6 +53,11 @@ export function ChapterThreshold({
       data-simulated-status={simulatedStatus}
     >
       <p>Your page is kept.</p>
+      <p>
+        The crew read through what you shared and didn't find a conversation still waiting on you, so there's no letter
+        to write today. Claire won't make one up.
+      </p>
+      <p>You can still keep your crew and open JOYSTICK. Nothing has to be sent.</p>
       {simulatedStatus === "completed" ? (
         <>
           <p className={styles.thresholdClaireNote}>
@@ -98,6 +109,7 @@ export function ChapterThreshold({
           Check again
         </button>
       </div>
+      {signup ? <div className={styles.thresholdSignup}>{signup}</div> : null}
     </div>
   );
 }
