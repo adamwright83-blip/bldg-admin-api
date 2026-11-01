@@ -266,3 +266,44 @@ Every run found the same reading:
 - Its first reveal lands inside the `understanding` stage, before `crew`, Claire's questions and the `portrait`.
 - The lines carry no speaker name; Claire is named only after.
 - Nothing in the crew's reading, the crew's interruptions, the portrait or the chapter changes.
+
+## Grounding against the source, and what the timing does not cover (2026-11-01, later)
+
+**The unpaid-bills line, traced.** In the owner's file the line read "covers my payroll but not gas or processing".
+The reading kept that. The significance step's caveat turned it into "leaving gas and processing costs unfunded". The
+reveal said "fuel and processing remain unpaid". The checker passed it, because it compared the line with the
+significance summary and never with the file.
+
+**Fixes:**
+- `groundSignificance` checks every objective, role, relationship, key result and thread against the excerpts it
+  cites. It runs while the opening is written, so it costs no wall-clock time beyond its own ~7 s.
+  - Anything unsupported is unsayable.
+  - A "verified" relationship the text doesn't state outright becomes inferred.
+  - Anything that escalates money, debt, legal, health or family matters is unsayable.
+  - It fails closed.
+- The line judge now reads the source text behind each line, not only the summaries. It has a new `escalates` check.
+- A deterministic guard covers both the reasoning and the lines. It strikes money, debt, legal, health and family words
+  ("unpaid", "owes", "losing money", "lawsuit", "diagnosed with" …) unless the source uses the same word.
+- The significance model now produces a **thread** (`T`): what the day-to-day result would show, and to whom. An
+  audience is named only if an item shows it matters. The reveal prefers it as the spotlight.
+- New traps in the scenarios:
+  - an owner's own note that truck profit "covers my own pay but not the commissary fee and propane … payment sent";
+  - "near break-even until DispatchPilot has paying shops".
+
+**Read cold (`readerTest.ts`).** These are model stand-ins, not the human test:
+- a stranger reading only the kept lines says what the owner does, is after, and what the day-to-day shows;
+- for fictional owners only, a model given the owner's whole situation reacts as them: wrong, generic, "that's my
+  business", or "it sees why".
+
+**Timing is the pipeline, not the experience.** The clock starts with a stored grant being refreshed. A real
+callback (`oauthRoutes.ts`) also:
+- verifies state;
+- loads the journey;
+- exchanges the code (~ the same as a refresh);
+- reads the account;
+- saves the connection;
+- redirects 303 to `/joystick-start`. The browser then loads the page, starts or polls the understanding run, and
+  renders.
+
+None of that is measured. It can only be measured once the fast path runs behind the callback, for example in the
+existing `preview` mode with a preview pass.

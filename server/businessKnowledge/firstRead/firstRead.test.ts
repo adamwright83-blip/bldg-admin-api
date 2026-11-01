@@ -408,3 +408,63 @@ describe("the reveal speaks as the established Claire", () => {
     expect(NOT_CLAIRE.test("I think I found it.")).toBe(false);
   });
 });
+
+describe("money, debt and personal claims never go beyond the source", () => {
+  const gemini = (reply: unknown) => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(reply) }] } }] }), { status: 200 }));
+    return { apiKey: "k", model: "m", fetch: fetch as unknown as typeof globalThis.fetch };
+  };
+  const margin: Evidence = { id: "d7", source: "drive", at: new Date("2026-10-29"), dated: "modified", byOwner: true, title: "Weekly numbers", people: "owned by owner", text: "Fluff and fold brought in $2,000; it covers my payroll but not gas or processing.", ref: "d7", url: null };
+  const significance = {
+    objectives: [{ statement: "Grow Acme Laundry to 50 customers", level: "intermediate" as const, basis: "stated" as const, evidence: ["d7"], confidence: "strong" as const, caveat: "fuel and processing are unpaid" }],
+    activities: [],
+    relationships: [{ from: "Acme Laundry", to: "Moonlight", relation: "test bed", basis: "verified" as const, evidence: ["d7"], caveat: "" }],
+    keyResult: { result: "Customers toward 50", why: "volume", lastKnownValue: "21", asOf: "2026-10-29", basis: "stated" as const, evidence: ["d7"] },
+    thread: { statement: "", provesTo: "", basis: "inferred" as const, evidence: [] },
+    businessIsTheEnd: false,
+    unknowns: [],
+  };
+
+  it("strikes a sensitive word the source never uses, and leaves ordinary words alone", async () => {
+    const { unbackedSensitive } = await import("./reveal");
+    expect(unbackedSensitive("covering wages while fuel and processing remain unpaid", margin.text)).toEqual(["unpaid"]);
+    expect(unbackedSensitive("We should look at what broke the intake rhythm", margin.text)).toEqual([]);
+    expect(unbackedSensitive("Twenty-one customers, as of October", margin.text)).toEqual([]);
+    expect(unbackedSensitive("She owes the commissary", "I owe the commissary for October")).toEqual([]);
+    expect(unbackedSensitive("He's losing money on the shop", "the shop runs near break-even")).toEqual(["losing money"]);
+  });
+
+  it("checks conclusions against the source excerpts and makes an escalation unsayable", async () => {
+    const { groundSignificance, sourceText } = await import("./significance");
+    expect(sourceText(["d7"], { claims: [], publicFindings: [], evidence: [margin] })).toMatch(/covers my payroll but not gas/);
+    const grounded = await groundSignificance(
+      gemini({ items: [
+        { id: "O0", supported: "yes", statedOutright: "yes", escalates: "yes", why: "the source says not covered, not unpaid" },
+        { id: "R0", supported: "partly", statedOutright: "no", escalates: "no", why: "read across items" },
+        { id: "K", supported: "yes", statedOutright: "yes", escalates: "no", why: "" },
+      ] }),
+      significance,
+      { claims: [], publicFindings: [], evidence: [margin] }
+    );
+    expect(grounded.grounding.O0).toMatchObject({ ok: false });
+    expect(grounded.significance.objectives[0].confidence).toBe("weak");
+    expect(grounded.significance.relationships[0].basis).toBe("inferred");
+    expect(grounded.grounding.K.ok).toBe(true);
+  });
+
+  it("fails closed: if the source check fails, nothing from the significance model is sayable", async () => {
+    const { groundSignificance } = await import("./significance");
+    const failing = vi.fn(async () => new Response("overloaded", { status: 503 }));
+    const grounded = await groundSignificance({ apiKey: "k", model: "m", fetch: failing as unknown as typeof fetch }, significance, { claims: [], publicFindings: [], evidence: [margin] });
+    expect(Object.values(grounded.grounding).every(g => !g.ok)).toBe(true);
+    expect(grounded.significance.relationships[0].basis).toBe("none_found");
+  });
+});
+
+describe("the sensitive guard is about people, not business vocabulary", () => {
+  it("lets 'diagnose a bottleneck' through and still stops a medical claim", async () => {
+    const { unbackedSensitive } = await import("./significance");
+    expect(unbackedSensitive("show investors the software can diagnose a real business bottleneck", "Claire investigates concrete problems")).toEqual([]);
+    expect(unbackedSensitive("She was diagnosed with something in March", "March schedule")).toEqual(["diagnosed with"]);
+  });
+});

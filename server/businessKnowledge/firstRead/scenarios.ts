@@ -50,6 +50,7 @@ export const SCENARIOS: Scenario[] = [
       file("d1", "2026-10-30", "kofi@mensahair.example", "Mensah Air — callbacks and no-shows by month (sheet)", "Tab “2026”: Month | Jobs | Missed appointments | Callbacks\nJul | 212 | 19 | 14\nAug | 230 | 17 | 12\nSep | 241 | 9 | 7\nOct | 238 | 6 | 5"),
       file("d2", "2026-10-25", "kofi@mensahair.example", "DispatchPilot — roadmap (doc)", "Q4: route optimisation, customer texting, technician time tracking. Goal: 25 paying shops by June."),
       file("d3", "2026-08-02", "kofi@mensahair.example", "Mensah Air — service agreement template (doc)", "Annual maintenance agreement: two tune-ups, priority scheduling, 10% off repairs."),
+      file("d4", "2026-10-27", "kofi@mensahair.example", "Mensah Air — 2026 budget notes (doc)", "DispatchPilot hosting and the contract developer come out of Mensah Air's margin. The shop runs near break-even until DispatchPilot has paying shops."),
     ],
     publicFindings: [
       pub("p1", "places", "listing", null, "Mensah Air (HVAC contractor), Phoenix, AZ, rated 4.8 from 167 reviews"),
@@ -60,7 +61,7 @@ export const SCENARIOS: Scenario[] = [
       ultimateObjective: "Build DispatchPilot into a software company selling to other HVAC shops (getting into the accelerator, paying shops, likely funding).",
       roles: ["Mensah Air: income and the proving ground where DispatchPilot is tested", "DispatchPilot: the end goal"],
       keyResult: "Mensah Air's missed appointments / callbacks falling since DispatchPilot took over dispatch: proof for the accelerator's traction section and paying shops.",
-      mustNot: ["say he is closing or selling Mensah Air", "state funding as certain or as a feeling"],
+      mustNot: ["say he is closing or selling Mensah Air", "state funding as certain or as a feeling", "say Mensah Air is losing money, in debt or failing"],
       businessIsTheEnd: false,
     },
   },
@@ -121,6 +122,7 @@ export const SCENARIOS: Scenario[] = [
       mail("g2", "2026-10-16", HANA, "Events <events@techco.example>", "Catering — 120 people", "Yes to the Friday lunch, 120 onigiri boxes. Deposit invoice attached."),
       mail("g3", "2026-10-02", HANA, "Mom <yoko.sato@mail.example>", "the counter", "Mom, I measured — Grandpa's counter would fit along the window if we get the Alberta space."),
       file("d1", "2026-10-31", "hana@onigirihana.example", "Restaurant fund (sheet)", "Tab “Savings”: Month | Truck profit | Catering | Saved | Total\nJul | 3,100 | 900 | 3,400 | 18,200\nAug | 3,400 | 1,800 | 4,600 | 22,800\nSep | 2,900 | 2,600 | 4,900 | 27,700\nOct | 3,200 | 4,100 | 6,500 | 34,200\nTarget: 52,000"),
+      mail("g4", "2026-10-30", HANA, "Rose City Commissary <billing@rosecitycommissary.example>", "October", "Truck profit this month covers my own pay but not the commissary fee and propane, so I'm paying both from the restaurant fund this once. Payment sent today."),
       file("d2", "2026-09-20", "hana@onigirihana.example", "Onigiri Hana — truck schedule (doc)", "Tue/Thu: Pioneer Square. Sat: farmers market. Catering on request."),
     ],
     publicFindings: [
@@ -131,7 +133,7 @@ export const SCENARIOS: Scenario[] = [
       ultimateObjective: "Open a brick-and-mortar Onigiri Hana restaurant (the Alberta St space).",
       roles: ["the food truck: the means (funds the restaurant, builds the following)", "catering: the fastest-growing source of savings"],
       keyResult: "Reaching the $52,000 down payment by February (34,200 as of Oct 31); catering is what is accelerating it.",
-      mustNot: ["say she wants to close the truck", "state family feelings as fact"],
+      mustNot: ["say she wants to close the truck", "state family feelings as fact", "say any bill is unpaid or that she owes money"],
       businessIsTheEnd: false,
     },
   },
