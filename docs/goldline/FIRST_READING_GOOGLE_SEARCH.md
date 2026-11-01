@@ -135,3 +135,46 @@ Also Google requests by kind, and model cost. The report gives medians and range
 
 **Safety.** Read-only through `readOnlyFetch`. Nothing is written to the database or sent to analytics. Reports stay
 local, under `tmp/first-read-bench/`, mode 600.
+
+## Baseline before public research (2026-11-01, owner's account, 3 runs each, Gemini 3.8 Flash, low thinking)
+
+| variant | complete | both sources verified | cost / run | Overview findings recalled | status right |
+|---|---|---|---|---|---|
+| discover + combined | 3 / 3 | 30.0 s (26.5–45.9) | 3.5¢ | 42% (33–46%) | 71% (71–88%) |
+| agent + separate | 3 / 3 | 24.6 s (23.6–28.2) | 3.3¢ | 54% (2 of 3 graded) | 83% (67–100%) |
+
+**What it gets right.**
+- The product being built is now stated in every run, as work in progress.
+- Its Season 1 story is filed as fiction inside it.
+- Separate businesses stay separate.
+- The judge struck an opening sentence that tied a collaborator to the wrong business.
+
+**What it misses.**
+- The full understanding stays short: 8–16 claims when 30 are allowed. Undertakings found in discovery are dropped
+  from it.
+- One run filed the AI assistant purely as fiction, though the documents show it is also a product feature.
+- The game's name and two of its characters were never retrieved. A named prospect was retrieved and never stated.
+
+## Public research: what is accessible (checked 2026-11-01)
+
+| source | permitted route | what it gives | limits |
+|---|---|---|---|
+| LinkedIn | none automated: `robots.txt` disallows all agents ("automated means … strictly prohibited"); Googlebot is barred from `/feed/update/` | — | Profiles are reachable only as Google snippets. Posts and reposts can't be reached at all. |
+| LinkedIn data export (the member downloads it) | the member uploads the file | Shares (own posts and reposts, with their own comments), Instant Reposts (date and link only), Reactions, Comments (type, date and link), Positions, Profile | It takes the member minutes to 24 hours. Reposts carry no text: the topic is known only from the link. The programmatic portability API is EU/EEA/CH members only. |
+| X | X API (pay per use: $0.005 per post read), or xAI's `x_search` tool restricted to the person's handle ($5 per 1,000 posts; `XAI_API_KEY` exists) | posts, reposts and replies, with dates | Needs the handle. Under X's developer policy, inferring sensitive characteristics needs legal review. |
+| Web (sites, press, profiles Google indexes) | Claude web search tool ($10 per 1,000 searches) | pages, with citations | Anthropic: cite sources when showing outputs directly. When combining with your own material, "display citations as appropriate" per legal advice. |
+| Web via Gemini grounding | **not usable here** | — | The terms require showing Google's Search Suggestions with grounded results, and forbid storing, analysing or "learning from" them. Maps grounding forbids modifying results. Both rule out hidden research held in Claire's memory. |
+| Google Business Profile | Places API (`GOOGLE_PLACES_API_KEY` exists) | name, address, rating, review count, website, hours, a few reviews | Maps Platform rules on attribution and caching apply before anything is shown or kept. |
+| Company websites | direct fetch, robots honoured (`research/enrichment.ts` already does title and description) | what the business says about itself | none beyond robots |
+| Instagram / Facebook personal profiles | none for a personal account (business accounts only, via Meta's APIs) | — | A user-provided export is the only route. |
+
+**Smallest addition.** A `public` research stream beside Gmail and Drive, started from identity anchors: the owner's
+name and account email, their own sending domains, and the business names the inventory finds. It runs three calls at
+once:
+1. Claude web search, restricted to findings that match the anchors.
+2. xAI `x_search`, limited to the handle web search finds, or found by user search.
+3. Places look-ups for each business discovered.
+
+Its findings join the evidence as their own source, with URLs. A reveal step then reconciles all three streams into
+confirmed facts and inferences. An inference must rest on at least two independent signals. Claire's opening is
+judged, and a line that reveals how something was found is struck.
