@@ -44,6 +44,9 @@ const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
 // /joystick-start: today's funnel, or JOYSTICK's first ten minutes when JOYSTICK_FIRST_TEN_MINUTES opens it.
 const JoystickStartRoute = lazy(() => import("./pages/firstTenMinutes/JoystickStartRoute"));
+const ImpossibleMachinePlayablePreview = lazy(
+  () => import("./pages/firstTenMinutes/impossibleMachine/ImpossibleMachinePlayablePreview")
+);
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -497,6 +500,11 @@ function AdminHostRouter() {
           <JoystickStartRoute />
         </Suspense>
       </Route>
+      <Route path="/impossible-machine">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ImpossibleMachinePlayablePreview />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-onboarding">
         <Suspense fallback={<PublicLandingFallback />}>
           <LegacyDayforgeOnboardingPage />
@@ -839,6 +847,11 @@ function Router() {
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
           <JoystickStartRoute />
+        </Suspense>
+      </Route>
+      <Route path="/impossible-machine">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ImpossibleMachinePlayablePreview />
         </Suspense>
       </Route>
       <Route path="/dayforge-onboarding">
