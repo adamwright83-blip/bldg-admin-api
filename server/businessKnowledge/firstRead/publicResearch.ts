@@ -299,7 +299,7 @@ export async function placesResearch(anchors: Anchors, deps: { apiKey?: string; 
 const toFindings = (found: Found | null, source: PublicFinding["source"]): Omit<PublicFinding, "id">[] =>
   (found?.findings ?? [])
     .filter(f => f.identity !== "different_person" && f.matchedAnchors.length >= 2)
-    .map(f => ({ source, text: f.text, signal: f.signal, url: f.url || null, at: /^\d{4}-\d{2}-\d{2}$/.test(f.date) ? new Date(f.date) : null, identity: f.identity === "certain" ? "certain" : "likely" }));
+    .map(f => ({ source, text: f.text, signal: f.signal, url: f.url || null, at: /^\d{4}-\d{2}-\d{2}$/.test(f.date) && !Number.isNaN(Date.parse(f.date)) ? new Date(f.date) : null, identity: f.identity === "certain" ? "certain" : "likely" }));
 
 /** The public stream in one call (the reveal script): the progressive run, waited out. */
 export async function publicResearch(anchors: Anchors, deps: { client?: Anthropic; fetch?: typeof fetch; xaiKey?: string; placesKey?: string } = {}) {
@@ -381,6 +381,7 @@ export class PublicResearchRun {
   readonly rejected: Array<{ text: string; url: string; why: string }> = [];
   private readonly pending: Promise<unknown>[] = [];
   private xStarted = false;
+  private stopped = false;
   /** when authorization completed: every "landed at" is measured from here */
   private readonly t0: number;
   identity: Promise<void> = Promise.resolve();
@@ -394,7 +395,13 @@ export class PublicResearchRun {
     this.t0 = deps.t0 ?? Date.now();
   }
 
+  /** Nothing more starts, and what lands is dropped: the reading found too little to use it. */
+  stop(): void {
+    this.stopped = true;
+  }
+
   private take(found: Found | null, sources: readonly SearchSource[], source: PublicFinding["source"], label: string) {
+    if (this.stopped) return;
     for (const kind of HANDLE_KINDS) {
       const value = found?.handles[kind];
       if (!value || this.candidates.some(c => c.kind === kind && profileKey(kind, c.value) === profileKey(kind, value) && c.verified)) continue;
@@ -452,12 +459,14 @@ export class PublicResearchRun {
       this.runs.push({ ...r.run, label, at: Date.now() - this.t0 });
       then(r);
     });
+    // nobody may be waiting on it (an early stop): a throw must never become an unhandled rejection
+    done.catch(error => console.warn(`[FirstRead] ${label} failed:`, error instanceof Error ? error.name : "unknown"));
     this.pending.push(done);
     return done;
   }
 
   private maybeStartX() {
-    if (this.xStarted || !this.handles.x) return;
+    if (this.stopped || this.xStarted || !this.handles.x) return;
     this.xStarted = true;
     const handle = this.handles.x;
     this.track("x (verified handle)", xResearch({ ...this.anchors, handles: this.handles }, { apiKey: this.deps.xaiKey, fetch: this.deps.fetch, handle }), r => this.take(r.found, [], "x", "x"));
@@ -477,6 +486,7 @@ export class PublicResearchRun {
    * long search took 30–40 s and missed the first reveal).
    */
   withBusinesses(businesses: string[], city: string | null = this.anchors.city): this {
+    if (this.stopped) return this;
     this.anchors = { ...this.anchors, businesses, city };
     this.track("places", placesResearch(this.anchors, { apiKey: this.deps.placesKey, fetch: this.deps.fetch }), r => this.add(r.findings));
     for (const business of businesses.slice(0, 4)) {

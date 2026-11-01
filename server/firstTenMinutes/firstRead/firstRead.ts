@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { FIRST_READ_DEADLINE_MS, type FirstReadView } from "../../../shared/firstTenMinutes";
 import { fastDrive, fastGmail } from "../../businessKnowledge/firstRead/bench";
 import { identityAnchors, PublicResearchRun } from "../../businessKnowledge/firstRead/publicResearch";
@@ -55,6 +55,14 @@ async function save(journeyId: string, patch: Patch): Promise<void> {
   await db.update(firstTenFirstReads).set(patch).where(eq(firstTenFirstReads.journeyId, journeyId));
 }
 
+/** A failure never overwrites lines already written: only a run still marked running becomes failed. */
+async function markFailed(journeyId: string): Promise<void> {
+  const db = await firstTenDb();
+  await db.update(firstTenFirstReads).set({ status: "failed" }).where(and(eq(firstTenFirstReads.journeyId, journeyId), eq(firstTenFirstReads.status, "running")));
+}
+
+const iso = (date: Date | null | undefined) => (date && !Number.isNaN(date.getTime()) ? date.toISOString() : null);
+
 /** One per journey: a second callback (a reconnect, a refresh) never pays for it again. */
 async function claim(journeyId: string, startedAt: Date): Promise<boolean> {
   const db = await firstTenDb();
@@ -73,7 +81,9 @@ export type FirstReadInput = { startedAt: Date; ownerName: string | null; ownerE
  * Called from the Google OAuth callback once the connection is saved. Returns at once; never throws into the callback.
  */
 export async function beginFirstRead(journey: JourneyRow, input: FirstReadInput, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  if (!firstReadOn(env) || journey.kind !== "own") return false;
+  // only when the person is connecting to begin: a Google connection made later (after Slack, at the portrait) would
+  // pay for lines nobody is there to see
+  if (!firstReadOn(env) || journey.kind !== "own" || !["connect", "understanding"].includes(journey.stage)) return false;
   const apiKey = env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     console.warn("[FirstRead] GEMINI_API_KEY isn't set: no first read");
@@ -93,7 +103,7 @@ export async function beginFirstRead(journey: JourneyRow, input: FirstReadInput,
       await runFirstRead({ ...input, access, gemini, save: patch => save(journey.id, patch) });
     } catch (error) {
       console.warn("[FirstRead] failed:", error instanceof Error ? error.message.slice(0, 120) : "unknown");
-      await save(journey.id, { status: "failed" }).catch(() => undefined);
+      await markFailed(journey.id).catch(() => undefined);
     }
   })();
   return true;
@@ -155,7 +165,10 @@ export async function runFirstRead(args: FirstReadInput & {
   const judged = await judgeClaims(args.gemini, checked, evidence, now, reading.opening);
   mark("judged");
   const stated = judged.claims.filter(c => STATED.includes(c.verdict));
-  if (stated.length < 2) return finish("empty");
+  if (stated.length < 2) {
+    pub.stop();
+    return finish("empty");
+  }
 
   await Promise.race([pub.settled(), sleep(PUBLIC_CUTOFF_MS - at())]);
   // the first lines use public research only where it is a listing tied to them; profiles and posts come later
@@ -168,7 +181,7 @@ export async function runFirstRead(args: FirstReadInput & {
   const grounded = groundedP ? await groundedP : null;
   const lines = reveal.lines.filter(l => l.kept).map(l => l.line);
   const understandingJson = {
-    claims: judged.claims.filter(c => STATED.includes(c.verdict) || c.verdict === "status_unknown").map(c => ({ kind: c.kind, statement: c.statement, verdict: c.verdict, partOf: c.partOf, lastSeen: c.lastSeen?.toISOString() ?? null })),
+    claims: judged.claims.filter(c => STATED.includes(c.verdict) || c.verdict === "status_unknown").map(c => ({ kind: c.kind, statement: c.statement, verdict: c.verdict, partOf: c.partOf, lastSeen: iso(c.lastSeen) })),
     significance: grounded?.significance ?? null,
     organizations: anchors.organizations,
   };
@@ -177,21 +190,24 @@ export async function runFirstRead(args: FirstReadInput & {
     understandingJson,
   });
 
-  // what public research verifies afterwards is kept for the experience that follows; it is never forced into words
-  await Promise.race([pub.settled(), sleep(DEEP_CAP_MS - at())]);
-  mark("public research");
-  await args
-    .save({
+  // what public research verifies afterwards is kept for the experience that follows; it is never forced into words,
+  // and nothing that goes wrong here touches the lines already written
+  try {
+    await Promise.race([pub.settled(), sleep(DEEP_CAP_MS - at())]);
+    mark("public research");
+    await args.save({
       publicJson: {
         profiles: pub.handles,
         candidates: pub.candidates,
-        findings: pub.snapshot().map(f => ({ id: f.id, source: f.source, signal: f.signal, text: f.text, url: f.url, at: f.at?.toISOString() ?? null, identity: f.identity })),
+        findings: pub.snapshot().map(f => ({ id: f.id, source: f.source, signal: f.signal, text: f.text, url: f.url, at: iso(f.at), identity: f.identity })),
         rejected: pub.rejected.length,
       },
       timingsJson: { ...times },
-    })
-    .catch(() => undefined);
-  console.log(`[FirstRead] public research kept at ${(at() / 1000).toFixed(1)}s: ${pub.snapshot().length} findings, profiles ${Object.keys(pub.handles).join(", ") || "none"}`);
+    });
+    console.log(`[FirstRead] public research kept at ${(at() / 1000).toFixed(1)}s: ${pub.snapshot().length} findings, profiles ${Object.keys(pub.handles).join(", ") || "none"}`);
+  } catch (error) {
+    console.warn("[FirstRead] public research couldn't be kept:", error instanceof Error ? error.name : "unknown");
+  }
   return status;
 }
 

@@ -47,10 +47,12 @@ const RULES: Array<{ pattern: RegExp; keep?: (match: string) => boolean }> = [
   { pattern: /\b\d{3}-\d{2}-\d{4}\b/g },
   // IBAN
   { pattern: /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,3})?\b/g },
-  // a number labelled as a bank account, routing / ABA / sort code, or card
+  // a number labelled as a bank account, routing / ABA / sort code, or card. A real one has digits in it: "checking in
+  // on the 3 orders" and "your account for the 2 locations" are sentences, not numbers, and are kept
   {
     pattern:
       /\b(?:account|acct|a\/c|routing|aba|sort code|checking|savings|card|iban|swift|bic)(?:\s*(?:no\.?|number|num|#))?\s*[:#-]?\s*[A-Z0-9][A-Z0-9 -]{3,24}\d\b/gi,
+    keep: match => (match.match(/\d/g) ?? []).length < 4,
   },
   // credentials written out
   { pattern: /\b(?:password|passcode|pin|passwd|secret|api[ _-]?key|token|client[ _-]?secret)\s*[:=]\s*\S+/gi },
@@ -89,7 +91,7 @@ export function sensitiveDocumentReason(name: string, sample = ""): string | nul
   if (/\b(bank statement|personal (?:budget|finances?|banking)|my (?:budget|finances|accounts)|household budget|credit report)\b/.test(title)) {
     return "personal_finance";
   }
-  if (/\b(tax return|w-?2|1040|passport|driver'?s licen[cs]e|medical|prescription|health record|insurance claim)\b/.test(title)) {
+  if (/\b(tax return|w[ -]?2|1040|passport|driver'?s licen[cs]e|medical|prescription|health record|insurance claim)\b/.test(title)) {
     return "personal_records";
   }
   if (/\b(passwords?|logins?|credentials?|api ?keys?|secret keys?|private keys?|(?:access|auth|api|bearer) tokens?|keys? rotation)\b/.test(title)) return "credentials";

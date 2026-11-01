@@ -5,6 +5,17 @@ import { REDACTED, redactSensitive, sensitiveDocumentReason } from "./privacy";
 import { ProviderError } from "../providerFetch";
 
 describe("privacy", () => {
+  it("keeps ordinary sentences that happen to follow a banking word, and still redacts real numbers", () => {
+    expect(redactSensitive("Just checking in on the 3 orders from May 2")).toBe("Just checking in on the 3 orders from May 2");
+    expect(redactSensitive("We set up your account for the 2 locations")).toBe("We set up your account for the 2 locations");
+    expect(redactSensitive("Routing number 021000021, account 4412 0098 7731")).not.toMatch(/021000021|4412/);
+    expect(redactSensitive("acct #88213")).toContain(REDACTED);
+  });
+
+  it("leaves out a W-2 however its file is named", () => {
+    for (const name of ["W-2 2025", "w2 2025", "Adam_W-2_2025", "W 2 copy"]) expect(sensitiveDocumentReason(name)).toBe("personal_records");
+  });
+
   it("redacts cards (Luhn), SSNs, IBANs, labelled account and routing numbers, and written-out passwords", () => {
     const text = [
       "Card 4111 1111 1111 1111 on file.",

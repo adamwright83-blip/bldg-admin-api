@@ -14,6 +14,11 @@ describe("the first read", () => {
     expect(await beginFirstRead(journey, { startedAt: started, ownerName: "Sam", ownerEmail: "sam@x.example" }, {})).toBe(false);
     expect(await beginFirstRead({ id: "j2", kind: "example" } as never, { startedAt: started, ownerName: null, ownerEmail: "" }, { JOYSTICK_FIRST_READ_REVEAL: "on", GEMINI_API_KEY: "k" })).toBe(false);
     expect(await beginFirstRead(journey, { startedAt: started, ownerName: null, ownerEmail: "" }, { JOYSTICK_FIRST_READ_REVEAL: "on" })).toBe(false);
+    // a Google connection made later (after Slack, at the portrait) never pays for lines nobody will see
+    const on = { JOYSTICK_FIRST_READ_REVEAL: "on", GEMINI_API_KEY: "k" };
+    for (const stage of ["crew", "portrait", "chapter", "first_chapter"]) {
+      expect(await beginFirstRead({ id: "j3", kind: "own", stage } as never, { startedAt: started, ownerName: null, ownerEmail: "" }, on)).toBe(false);
+    }
   });
 
   it("shows the browser only the lines, only once revealed; a run whose server went away reads as failed", () => {

@@ -509,7 +509,7 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               view={reading.view}
               onAgain={reading.again}
               onLookCloser={() => setCloser(true)}
-              firstLines={view?.stage === "understanding" && firstRead?.status === "revealed" ? firstRead.lines : null}
+              firstLines={view?.stage === "understanding" && firstRead?.status === "revealed" && !revealRead ? firstRead.lines : null}
               onFirstLinesRead={() => setRevealRead(true)}
             />
           )}
