@@ -392,6 +392,10 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
     await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeInViewport({ timeout: 15_000 });
+    await expect(page.getByTestId("machine-correspondence-panel")).toHaveCount(0);
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-back-to-page")).toBeInViewport({ timeout: 10_000 });
 
     // 5. Exit after finish (back to portrait)
     await page.getByTestId("first-ten-back-to-page").click();
@@ -453,4 +457,86 @@ test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
     const focused = page.locator(":focus");
     await expect(focused).toBeVisible();
   });
+
+  for (const vp of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+  ]) {
+    test(`Regression (${vp.name}): After rescuing Rook, finale auto-scrolls into viewport, drawer closes, and player returns to page`, async ({
+      page,
+    }) => {
+      test.setTimeout(240_000);
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await advanceToMachineWithExample(page);
+
+      const machine = page.getByTestId("first-ten-impossible-machine");
+      await expect(machine).toBeVisible({ timeout: 20_000 });
+
+      // Outbound solve in THEN
+      while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+        await page.getByTestId("machine-west-junction").click();
+        await page.waitForTimeout(150);
+      }
+      if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+        await page.getByTestId("machine-upper-rotor").click();
+        await page.waitForTimeout(150);
+      }
+      while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+        await page.getByTestId("machine-east-junction").click();
+        await page.waitForTimeout(150);
+      }
+
+      // Wind crank to capture key and switch dial to NOW
+      await page.getByTestId("machine-wind-crank").click();
+      await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+      await expect(machine).toHaveAttribute("data-dial", "NOW", { timeout: 15_000 });
+
+      // Open correspondence drawer explicitly (simulating player examining note)
+      await page.getByTestId("machine-center-crossing").click();
+      const drawer = page.getByTestId("machine-correspondence-panel");
+      await expect(drawer).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10_000 });
+
+      // Align alternate lower return route in NOW without closing the drawer
+      while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "lower") {
+        await page.getByTestId("machine-west-junction").click();
+        await page.waitForTimeout(150);
+      }
+      if ((await page.getByTestId("machine-lower-rotor").getAttribute("data-orientation")) !== "aligned") {
+        await page.getByTestId("machine-lower-rotor").click();
+        await page.waitForTimeout(150);
+      }
+      while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "lower") {
+        await page.getByTestId("machine-east-junction").click();
+        await page.waitForTimeout(150);
+      }
+
+      // Wind crank to send carriage along lower route to rescue Rook
+      await page.getByTestId("machine-wind-crank").click();
+
+      // 1. Carriage arrives and dome unlocks
+      await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+      await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+
+      // 2. Correspondence drawer automatically closes / unmounts
+      await expect(page.getByTestId("machine-correspondence-panel")).toHaveCount(0);
+      await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+
+      // 3. Finale card is rendered and automatically brought into the visible viewport
+      const endingBanner = page.getByTestId("machine-ending-banner");
+      await expect(endingBanner).toBeVisible({ timeout: 15_000 });
+      await expect(endingBanner).toBeInViewport({ timeout: 15_000 });
+      await expect(page.getByTestId("machine-rook-stealing")).toBeVisible();
+
+      // 4. "Back to your page" action is visible in the viewport and clickable
+      const backToPageBtn = page.getByTestId("first-ten-back-to-page");
+      await expect(backToPageBtn).toBeVisible({ timeout: 10_000 });
+      await expect(backToPageBtn).toBeInViewport({ timeout: 10_000 });
+
+      // 5. Clicking "Back to your page" cleanly returns player to their portrait page
+      await backToPageBtn.click();
+      await expect(machine).toHaveCount(0);
+      await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 20_000 });
+    });
+  }
 });
