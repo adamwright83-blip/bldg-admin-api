@@ -400,6 +400,9 @@ describe("the reveal speaks as the established Claire", () => {
     expect(TRICK.test("I read your emails last night")).toBe(true);
     expect(TRICK.test("Those reposts about seed rounds say plenty")).toBe(true);
     expect(TRICK.test("You'll drive Bellaire harder than Westheimer")).toBe(false);
+    expect(TRICK.test("Luis takes the foreman post in March")).toBe(false);
+    expect(TRICK.test("I saw your inbox")).toBe(true);
+    expect(TRICK.test("twenty-one, as of October")).toBe(false);
     expect(NOT_CLAIRE.test("I'm Claire, your assistant")).toBe(true);
     expect(NOT_CLAIRE.test("an assistant who already understands the business")).toBe(true);
     expect(NOT_CLAIRE.test("I think I found it.")).toBe(false);

@@ -141,7 +141,7 @@ function ownFirst(files: readonly DriveEntry[], owner: string): DriveEntry[] {
   return [...files.filter(mine), ...files.filter(file => !mine(file))];
 }
 
-async function fastGmail(research: GoogleResearch, now: Date): Promise<Evidence[]> {
+export async function fastGmail(research: GoogleResearch, now: Date): Promise<Evidence[]> {
   const [recent, ...older] = await Promise.all([
     research.searchMail("in:sent", { limit: 25, window: ago(now, 0, RECENT_DAYS) }),
     ...OLDER_WINDOWS.map(([from, to]) => research.searchMail("in:sent", { limit: 6, window: ago(now, from, to) })),
@@ -152,7 +152,7 @@ async function fastGmail(research: GoogleResearch, now: Date): Promise<Evidence[
   return readMail(research, [...latest, ...contrast]);
 }
 
-async function fastDrive(research: GoogleResearch, now: Date, owner: string): Promise<Evidence[]> {
+export async function fastDrive(research: GoogleResearch, now: Date, owner: string): Promise<Evidence[]> {
   const files = (await research.recentFiles({ since: new Date(now.getTime() - 540 * DAY), limit: 25, mimeTypes: DOCS })) ?? [];
   return readFiles(research, ownFirst(files, owner).slice(0, 20), owner);
 }

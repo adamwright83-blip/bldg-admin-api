@@ -204,3 +204,65 @@ returned, so no fundraising inference was made.
 
 **Timing.** Public started at 14.6 s, web done at 51.6 s, X done at about 140 s, reveal done at 173 s. X is too slow
 for the first minute.
+
+## Significance before dialogue, and the fast path (2026-11-01)
+
+**Why version C lost the discovery.** Traced through the saved intermediate artifacts:
+- Ingestion was fine.
+- Reconciliation kept "the unnamed build is JOYSTICK" (strong), now with more support.
+- The spotlight was unchanged.
+- The writer fused it with a new, weaker inference from the screenshots into one unhedged line, and the judge struck
+  that line. Nothing re-checked that the spotlight survived, and no line was required to stand alone.
+
+Fixes:
+- one repair pass when the spotlight is struck;
+- a `standsAlone` check;
+- lines are judged on the items that hold up.
+
+**Significance stage** (`firstRead/significance.ts`). Before Claire speaks it works out:
+- objectives (ultimate and intermediate, stated or inferred);
+- each activity's role: end in itself, income, proving ground, means, side interest, past, or unclear;
+- relationships (verified, inferred, or none found);
+- the key result and why it matters, with its value as a dated snapshot;
+- what the evidence can't tell.
+
+No hidden ambition is assumed; a business can be the whole point. It reads the source excerpts as well as the claims:
+on the owner's account the claims had compressed "Claire, inside JOYSTICK, worked from Laundry Farm's numbers" into
+"Laundry Farm has 21 customers", and the significance stage concluded no connection until it could see the excerpts.
+
+**Reasoning tests** (`firstRead/scenarios.ts`, six fictional owners, graded before any dialogue against a reviewer's
+key the model never sees):
+
+| owner | type | objective | roles | key result | end in itself |
+|---|---|---|---|---|---|
+| HVAC + dispatch software | proving ground | right | right | partly | right |
+| family bakery | the business is the end | right | right | right | right |
+| landscaper + band | unrelated side interest | right | right | right | right |
+| food truck → restaurant | means | right | right | right | wrong (debatable key) |
+| rideshare/handyman → real estate | income during transition | right | right | right | right |
+| cleaner, thin evidence | unknown | right | right | right | right |
+
+**Owner's account, fast path** (`scripts/first-read-significance.sh --fast`, timed from a fresh token):
+
+| stage | ends at |
+|---|---|
+| Gmail and Drive, at once (4 Sent searches, 20 files) | 2–3 s |
+| reading (claims) | 14–20 s |
+| claims judged | 20–27 s |
+| significance (low thinking) | 32–41 s |
+| first reveal (low thinking, judged) | 46.1, 47.2, 51.3, 46.4, 47.3 s (median 47 s) |
+| web research (started when businesses were named, 14–20 s) | 50–58 s |
+| second, deeper reveal with public findings | 74–85 s |
+
+Every run found the same reading:
+- JOYSTICK is the ultimate objective (stated).
+- Laundry Farm is its proving ground (inferred; the data link is verified).
+- The customer count toward 50 is the result that matters, for both.
+- Fundraising stays an open question ("whether JOYSTICK has secured pre-seed/angel capital from the investor research
+  pipeline"), not a claim.
+
+**Fit with the approved sequence** (`JOURNEY_STAGES`):
+- The fast path starts at the Google callback, beside the crew's reading.
+- Its first reveal lands inside the `understanding` stage, before `crew`, Claire's questions and the `portrait`.
+- The lines carry no speaker name; Claire is named only after.
+- Nothing in the crew's reading, the crew's interruptions, the portrait or the chapter changes.
