@@ -391,6 +391,8 @@ export type BenchInput = {
   /** run the judge (a second model call per answer); on by default */
   judge?: boolean;
   expect?: Expectations | null;
+  /** called as soon as the discover strategy has mapped the owner's undertakings (about 15 s in) */
+  onDiscovery?: (discovery: Discovery) => void;
   centsPerMillion: { input: number; output: number };
   fetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
@@ -470,7 +472,12 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
         const found = discoverRetrieval(research, now(), owner, gemini, run.calls);
         gmail = found.gmail;
         drive = found.drive;
-        found.planned.then(({ discovery }) => (run.discovery = discovery)).catch(() => undefined);
+        found.planned
+          .then(({ discovery }) => {
+            run.discovery = discovery;
+            input.onDiscovery?.(discovery);
+          })
+          .catch(() => undefined);
       }
       const timed = (source: "gmail" | "drive", evidence: Promise<Evidence[]>) =>
         evidence

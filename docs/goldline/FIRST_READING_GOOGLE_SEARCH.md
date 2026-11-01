@@ -178,3 +178,29 @@ once:
 Its findings join the evidence as their own source, with URLs. A reveal step then reconciles all three streams into
 confirmed facts and inferences. An inference must rest on at least two independent signals. Claire's opening is
 judged, and a line that reveals how something was found is struck.
+
+## Three-stream reveal prototype (2026-11-01)
+
+`scripts/first-read-reveal.sh` (`firstRead/publicResearch.ts`, `firstRead/reveal.ts`, synthetic owners in
+`firstRead/personas.ts`).
+
+- Public research starts when discovery names the owner's businesses, about 15 s in. On the first real run it started
+  with only name, email and domain, and found no social account at all.
+- X runs only with a handle the web stream confirmed. Without one, the first run spent 167 s and 337k tokens to find
+  nothing.
+- A Places listing counts only when its website is the owner's domain or its address is in their city. The first run
+  accepted a same-named business 40 miles away.
+
+**Owner's account, second run: what the public stream added.**
+- X: posts about eight months building an unnamed AI project, posts about AI coding tools, reposts clustered on AI
+  builder tooling, and a bio calling LeapN past.
+- Web: a LinkedIn snippet, the business's contact page, and the public repo's pull requests.
+
+Combined, the reveal inferred, strongly, that the unnamed project is the one in the owner's private files. That
+connection exists only because the two streams met.
+
+**Not reached.** LinkedIn reposts can't be read by any permitted route. No fundraising signal appeared in what X
+returned, so no fundraising inference was made.
+
+**Timing.** Public started at 14.6 s, web done at 51.6 s, X done at about 140 s, reveal done at 173 s. X is too slow
+for the first minute.
