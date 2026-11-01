@@ -268,6 +268,24 @@ export type BenchInput = {
   now?: () => Date;
 };
 
+/**
+ * Which sources a run actually covered: a verified answer that rests on that source's evidence. A combined answer
+ * built from Gmail alone (Drive failed or found nothing) covers Gmail only. Worked out from the answers, so a saved
+ * result can be re-reported.
+ */
+export function coverageOf(run: Pick<VariantRun, "answers">): { gmail: boolean; drive: boolean } {
+  const verified = run.answers.filter(answer => answer.verifiedMs > 0);
+  const covers = (source: "gmail" | "drive") =>
+    verified.some(answer => (answer.question === source || answer.question === "combined") && answer.evidence.some(item => item.source === source));
+  return { gmail: covers("gmail"), drive: covers("drive") };
+}
+
+/** complete: both sources covered; partial: one; failed: neither. */
+export function outcomeOf(run: Pick<VariantRun, "answers">): "complete" | "partial" | "failed" {
+  const { gmail, drive } = coverageOf(run);
+  return gmail && drive ? "complete" : gmail || drive ? "partial" : "failed";
+}
+
 const centsOf = (calls: readonly ModelCall[], price: BenchInput["centsPerMillion"]) =>
   calls.reduce((sum, call) => sum + (call.inputTokens * price.input + call.outputTokens * price.output) / 1_000_000, 0);
 
@@ -360,9 +378,9 @@ export async function runFirstReadBench(input: BenchInput): Promise<BenchResult>
       const verified = run.answers.map(a => a.verifiedMs);
       run.firstVerifiedMs = verified.length ? Math.min(...verified) : 0;
       run.firstDraftMs = run.answers.length ? Math.min(...run.answers.map(a => a.draftMs)) : 0;
-      const covered = synthesis === "combined" ? run.answers.length === 1 : run.answers.length === 2;
-      run.allVerifiedMs = covered ? Math.max(...verified) : 0;
-      if (!covered) run.notes.push("not every answer completed: no both-source time");
+      const covered = coverageOf(run);
+      run.allVerifiedMs = covered.gmail && covered.drive ? Math.max(...verified) : 0;
+      if (!covered.gmail || !covered.drive) run.notes.push(`PARTIAL: covered ${[covered.gmail && "Gmail", covered.drive && "Drive"].filter(Boolean).join(" and ") || "nothing"}; no both-source time`);
       run.costCents = centsOf(run.calls, input.centsPerMillion);
 
       // after the clock: grade by meaning against the owner's Overviews
@@ -397,9 +415,18 @@ const median = (xs: number[]) => {
   if (!s.length) return 0;
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
+/** median (min–max) of the runs that produced the value, and how many of all runs did: failures are never hidden */
 const range = (xs: number[], show: (x: number) => string) => {
   const s = xs.filter(x => x > 0);
-  return s.length ? `${show(median(s))} (${show(Math.min(...s))}–${show(Math.max(...s))})` : "—";
+  const counted = s.length < xs.length ? ` [${s.length}/${xs.length}]` : "";
+  return s.length ? `${show(median(s))} (${show(Math.min(...s))}–${show(Math.max(...s))})${counted}` : `— [0/${xs.length}]`;
+};
+/** scores keep their zeros (0% recall is a result); only ungraded runs are missing */
+const scoreRange = (xs: Array<number | null>) => {
+  const s = xs.filter((x): x is number => x !== null).sort((a, b) => a - b);
+  if (!s.length) return `— [0/${xs.length}]`;
+  const mid = s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  return `${percent(mid)} (${percent(s[0])}–${percent(s[s.length - 1])})${s.length < xs.length ? ` [${s.length}/${xs.length}]` : ""}`;
 };
 const VERDICT_ORDER = ["active", "open_problem", "happened", "ended", "relationship", "status_unknown", "uncertain", "contradicted", "unsupported"] as const;
 const VERDICT_HEADING: Record<(typeof VERDICT_ORDER)[number], string> = {
@@ -443,15 +470,24 @@ export function benchReport(result: BenchResult): string {
     "",
     `Account: ${result.account}. Model ${result.model}, thinking ${result.thinking}. Auth (token refresh) ${seconds(result.authMs)} s.`,
     "",
-    "Seconds from connect, median (min–max) over runs. First verified = the first judged answer; both sources = every answer judged.",
+    "Seconds from connect, median (min–max) over the runs that produced each value; [k/n] when only k of n runs did.",
+    "First verified = the first judged answer. Both sources = Gmail and Drive both covered by verified answers (a combined",
+    "answer built from one source alone is partial). Complete / partial / failed counts every run.",
     "",
-    "| variant | runs | retrieval done | first draft | first verified | both sources verified | reading call | judge call | cost / run | recall | status right |",
+    "| variant | complete / partial / failed | retrieval done | first draft | first verified | both sources verified | reading call | judge call | cost / run | recall | status right |",
     "|---|---|---|---|---|---|---|---|---|---|---|",
     ...variants.map(variant => {
       const runs = of(variant);
       const calls = (purpose: string) => runs.flatMap(run => run.calls.filter(call => call.purpose.startsWith(purpose)).map(call => call.latencyMs));
-      return `| ${variant} | ${runs.length} | ${range(runs.map(r => Math.max(r.retrievalMs.gmail, r.retrievalMs.drive)), x => seconds(x))} | ${range(runs.map(r => r.firstDraftMs), x => seconds(x))} | ${range(runs.map(r => r.firstVerifiedMs), x => seconds(x))} | ${range(runs.map(r => r.allVerifiedMs), x => seconds(x))} | ${range(calls("reading"), x => seconds(x))} | ${range(calls("judge"), x => seconds(x))} | ${range(runs.map(r => r.costCents), x => `${x.toFixed(1)}¢`)} | ${range(runs.map(r => r.grading?.recall ?? 0), percent)} | ${range(runs.map(r => r.grading?.statusRight ?? 0), percent)} |`;
+      const outcomes = runs.map(outcomeOf);
+      const tally = `${outcomes.filter(o => o === "complete").length} / ${outcomes.filter(o => o === "partial").length} / ${outcomes.filter(o => o === "failed").length}`;
+      const both = runs.map(r => (outcomeOf(r) === "complete" ? Math.max(...r.answers.map(a => a.verifiedMs)) : 0));
+      return `| ${variant} | ${tally} | ${range(runs.map(r => Math.max(r.retrievalMs.gmail, r.retrievalMs.drive)), x => seconds(x))} | ${range(runs.map(r => r.firstDraftMs), x => seconds(x))} | ${range(runs.map(r => r.firstVerifiedMs), x => seconds(x))} | ${range(both, x => seconds(x))} | ${range(calls("reading"), x => seconds(x))} | ${range(calls("judge"), x => seconds(x))} | ${range(runs.map(r => r.costCents), x => `${x.toFixed(1)}¢`)} | ${scoreRange(runs.map(r => (r.grading && !r.grading.call?.error ? r.grading.recall : null)))} | ${scoreRange(runs.map(r => (r.grading && !r.grading.call?.error ? r.grading.statusRight : null)))} |`;
     }),
+    "",
+    "Runs that weren't complete:",
+    "",
+    ...(result.runs.filter(run => outcomeOf(run) !== "complete").map(run => `- ${run.variant} #${run.run}: ${outcomeOf(run)}; ${run.notes.join("; ") || "no answer verified"}`).concat(result.runs.every(run => outcomeOf(run) === "complete") ? ["- none"] : [])),
     "",
     "Google requests (first run of each variant):",
     "",
@@ -476,7 +512,8 @@ export function benchReport(result: BenchResult): string {
 
   for (const run of result.runs) {
     lines.push(`## ${run.variant}, run ${run.run}`, "");
-    lines.push(`- first draft ${seconds(run.firstDraftMs)} s, first verified ${seconds(run.firstVerifiedMs)} s, both sources ${seconds(run.allVerifiedMs)} s; retrieval Gmail ${seconds(run.retrievalMs.gmail)} s, Drive ${seconds(run.retrievalMs.drive)} s; ${run.costCents.toFixed(2)}¢`);
+    const both = outcomeOf(run) === "complete" ? Math.max(...run.answers.map(a => a.verifiedMs)) : 0;
+    lines.push(`- ${outcomeOf(run).toUpperCase()}; first draft ${seconds(run.firstDraftMs)} s, first verified ${seconds(run.firstVerifiedMs)} s, both sources ${seconds(both)} s; retrieval Gmail ${seconds(run.retrievalMs.gmail)} s, Drive ${seconds(run.retrievalMs.drive)} s; ${run.costCents.toFixed(2)}¢`);
     for (const note of run.notes) lines.push(`- ${note}`);
     if (run.plan) {
       lines.push(`- Gemini's Gmail searches: ${run.plan.gmail.map(s => `\`${s.query}\``).join(", ") || "none"}`);

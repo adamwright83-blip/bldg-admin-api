@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { benchReport, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
+import { benchReport, coverageOf, outcomeOf, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
 import {
   applyJudge,
   checkClaims,
@@ -184,6 +184,24 @@ describe("checkClaims", () => {
       { findings: [{ id: "G1", from: "gmail", statement: "", expected: "active" }, { id: "G2", from: "gmail", statement: "", expected: "relationship" }, { id: "U1", from: "gmail", statement: "", expected: "past", unconfirmed: true }] }
     );
     expect(score).toEqual({ recall: 0.75, statusRight: 0.5, confirmed: 2 });
+  });
+});
+
+describe("coverage", () => {
+  const answer = (question: "gmail" | "drive" | "combined", sources: Array<"gmail" | "drive">, verifiedMs = 1000) => ({
+    question,
+    evidence: sources.map((source, i) => ({ ...evidence[0], id: `${source}${i}`, source })),
+    claims: [],
+    draftMs: 900,
+    verifiedMs,
+  });
+
+  it("never counts a combined answer built from one source as covering both", () => {
+    expect(coverageOf({ answers: [answer("combined", ["gmail", "drive"])] })).toEqual({ gmail: true, drive: true });
+    expect(outcomeOf({ answers: [answer("combined", ["gmail"])] })).toBe("partial");
+    expect(outcomeOf({ answers: [answer("gmail", ["gmail"])] })).toBe("partial");
+    expect(outcomeOf({ answers: [answer("gmail", ["gmail"]), answer("drive", ["drive"], 0)] })).toBe("partial");
+    expect(outcomeOf({ answers: [] })).toBe("failed");
   });
 });
 

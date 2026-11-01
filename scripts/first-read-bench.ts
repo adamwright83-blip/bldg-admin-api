@@ -17,6 +17,9 @@
  *   --input-cents-per-million <n> --output-cents-per-million <n>   the model's price (default: Gemini 3.8 Flash, paid tier, through 2026-12-31)
  *
  * Find the journey id with: scripts/onboarding-cold-test.sh --list
+ *
+ *   npx tsx scripts/first-read-bench.ts --rerender <report.json>
+ *     writes the report again from a saved result with this version's reporting; nothing is read or sent.
  */
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -35,7 +38,21 @@ const refuse = (message: string): never => {
   process.exit(2);
 };
 
+/** A saved result, with its dates as Dates again. */
+function revive(file: string) {
+  return JSON.parse(readFileSync(file, "utf8"), (key, value) => ((key === "at" || key === "lastSeen") && typeof value === "string" ? new Date(value) : value));
+}
+
 async function main() {
+  const saved = value("--rerender");
+  if (saved) {
+    const { benchReport } = await import("../server/businessKnowledge/firstRead/bench");
+    const out = saved.replace(/\.json$/, ".rerendered.md");
+    writeFileSync(out, benchReport(revive(saved)), { mode: 0o600 });
+    chmodSync(out, 0o600);
+    console.log(`Report: ${out}`);
+    process.exit(0);
+  }
   const journeyId = value("--journey") ?? refuse("--journey <own journey id> is required");
   if (!args.includes("--i-have-authorization")) refuse("this reads a real person's Gmail and Drive. Pass --i-have-authorization only with the account owner's explicit go-ahead.");
   const { VARIANTS, benchReport, runFirstReadBench } = await import("../server/businessKnowledge/firstRead/bench");
