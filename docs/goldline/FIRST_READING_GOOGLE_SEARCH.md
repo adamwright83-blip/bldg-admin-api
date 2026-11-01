@@ -307,3 +307,36 @@ callback (`oauthRoutes.ts`) also:
 
 None of that is measured. It can only be measured once the fast path runs behind the callback, for example in the
 existing `preview` mode with a preview pass.
+
+## Public research inside the first minute (2026-11-01, evening)
+
+ChatGPT's code review was right. The fast path:
+- called only `webResearch`;
+- started it about 15 s in;
+- discarded the handles it found;
+- never ran X or Places.
+
+It now uses `PublicResearchRun`:
+
+| stream | starts | lands (owner's account, 3 runs) | what it gave |
+|---|---|---|---|
+| their own profiles (name, account email, sending domains) | at authorization | 10–25 s | nothing confirmable: a common name and a personal Gmail address are one anchor; every hit was a namesake and was rejected |
+| Places, per business | when the reading names them | 13–17 s | Lugo's Lavanderia, every run, confirmed because its street address is in the owner's own mail (`inOwnText`) |
+| one short web search per business (Sonnet 5.5, 3 searches each), all at once | when the reading names them | 25–36 s | lugoslavanderia.com, the public GitHub repo; often nothing |
+| X, limited to the confirmed handle | when any search confirms one | never ran: no search confirmed a handle | — |
+
+- **What the first reveal sees.** Whatever has landed by 20 s after authorization (`--public-wait`). Waiting until 30 s
+  added nothing but ~10 s. The rest feeds the second reveal.
+- **First reveals across the final runs:**
+  - timing: 45.8, 49.2 and 52.8 s;
+  - the Places listing reached the first reveal in each;
+  - the investor line was carried in each, after two judge fixes: the closing line no longer counts as carrying the
+    spotlight, and "from twenty-one to fifty" is a starting point, not a current figure.
+
+**A profile found is not a profile read.**
+- X is the only social account read directly (xAI, confirmed handle only).
+- LinkedIn, Instagram and Facebook are known only from what search engines index, and are never opened.
+- Their posts and reposts are never claimed unless the person hands them over.
+- Over the day's runs the search turned up a Facebook page ID and laundry.farm, and never an X handle. An earlier run
+  rejected "Adam Wright, founder and COO of LeapN, Los Angeles (LinkedIn)" as a different person. LeapN appears in the
+  owner's own Drive but wasn't among the businesses passed as anchors.

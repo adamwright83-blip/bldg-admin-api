@@ -178,12 +178,15 @@ export const REVEAL_JUDGE_SYSTEM = [
   "supported: do the cited items support what the line claims? For an inference, the items must make the read",
   "plausible, not prove it. For a flourish, only that it fits the items.",
   "motiveAsFact: yes if the line states a feeling, motive or intention as certain fact ('you're terrified of…').",
-  "overstated: yes if an inference is worded as certain fact.",
+  "overstated: yes if an inference is worded as certain fact, including a purpose stated flatly ('it is the testbed",
+  "built to…', 'exists to…', 'is really about…') with no 'I think', 'unless I'm wrong' or question.",
   "standsAlone: no if the line only makes sense after another line (a missing subject, 'that', 'it' with nothing to point at).",
   "undatedFigure: yes if the line states a count, amount or trend as true right now ('sits at 21', 'has stalled', 'is",
-  "losing money') without saying when (e.g. 'as of October'). Figures in the items are snapshots of their dates.",
+  "losing money') without saying when (e.g. 'as of October'). Figures in the items are snapshots of their dates. A number",
+  "used as a starting point or a goal ('taking it from twenty-one to fifty') is not stated as current: no.",
   "escalates: yes if the line says anything about money, bills, debt, legal trouble, health or family that is stronger",
-  "than or different from the source text (the source: revenue doesn't cover fuel; the line: fuel is unpaid).",
+  "than or different from the source text (the source: revenue doesn't cover fuel; the line: fuel is unpaid), or",
+  "implies a decline, a rescue or a struggle the source doesn't show ('pared down to', 'keep it alive', 'barely').",
   "A supported, carefully worded inference is exactly what's wanted. Do not penalise personality.",
 ].join("\n");
 
@@ -312,9 +315,11 @@ export async function runReveal(gemini: GeminiConfig, input: RevealInput, option
 
   let lines = await check(reveal.opening);
   // The spotlight must survive. If every line carrying it was struck, one repair: rewrite it alone, told why.
-  const carries = (l: RevealLine) => l.kept && l.rests.includes(spotRef);
+  // the closing line ("we start with what's stalling it") points somewhere; it doesn't say the discovery
+  const carries = (l: RevealLine, i: number, all: RevealLine[]) => l.kept && l.rests.includes(spotRef) && all.slice(i + 1).some(next => next.kept);
   let repaired = false;
-  if (spotlight && options.repair !== false && !lines.some(carries)) {
+  // up to two attempts, each told why the last one was struck
+  for (let attempt = 0; attempt < 2 && spotlight && options.repair !== false && !lines.some(carries); attempt += 1) {
     const struck = lines.filter(l => !l.kept && l.rests.includes(spotRef));
     const ask = [
       `The spotlight is ${spotRef}: ${spotlight.text}`,
@@ -327,8 +332,9 @@ export async function runReveal(gemini: GeminiConfig, input: RevealInput, option
     if (fix.value) {
       const [checkedFix] = await check([fix.value]);
       checkedFix.why = `repair: ${checkedFix.why}`;
-      // the repaired line goes where the spotlight line was, or before the closing line
-      const at = struck.length ? lines.indexOf(struck[0]) + 1 : Math.max(0, lines.length - 1);
+      // the repaired line goes just before the closing line
+      const closing = lines.map(l => l.kept).lastIndexOf(true);
+      const at = closing >= 0 ? closing : lines.length;
       lines = [...lines.slice(0, at), checkedFix, ...lines.slice(at)];
       repaired = true;
     }

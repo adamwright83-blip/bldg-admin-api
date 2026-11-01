@@ -468,3 +468,50 @@ describe("the sensitive guard is about people, not business vocabulary", () => {
     expect(unbackedSensitive("She was diagnosed with something in March", "March schedule")).toEqual(["diagnosed with"]);
   });
 });
+
+describe("progressive public research", () => {
+  const answer = (body: unknown) => ({ content: [{ type: "text", text: JSON.stringify(body) }], usage: { input_tokens: 1, output_tokens: 1, server_tool_use: { web_search_requests: 1 } } });
+  const handles = (h: Partial<Record<string, string>> = {}) => ({ x: "", linkedin: "", instagram: "", facebook: "", website: "", ...h });
+
+  it("searches for their own profiles at once, keeps the handles, starts X on a confirmed handle, and never renumbers", async () => {
+    const { PublicResearchRun } = await import("./publicResearch");
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(
+        answer({
+          findings: [
+            { text: "Says on X he is building an unnamed AI product", signal: "post", url: "https://x.com/acme/status/1", date: "2026-10-20", identity: "certain", matchedAnchors: ["name", "acme.example"] },
+            { text: "A namesake dentist in Ohio", signal: "profile", url: "https://example.com/dentist", date: "", identity: "different_person", matchedAnchors: ["name"] },
+          ],
+          handles: handles({ x: "acmesam", linkedin: "https://www.linkedin.com/in/sam-acme" }),
+        })
+      )
+      .mockResolvedValueOnce(answer({ findings: [{ text: "Says on X he is building an unnamed AI product", signal: "post", url: "https://x.com/acme/status/1/", date: "", identity: "certain", matchedAnchors: ["name", "Acme Laundry"] }], handles: handles() }));
+    const xFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ output: [{ type: "message", content: [{ text: JSON.stringify({ findings: [{ text: "Reposts early-stage fundraising threads", signal: "repost", url: "https://x.com/acmesam/status/2", date: "2026-10-25", identity: "certain", matchedAnchors: ["handle", "name"] }], handles: handles() }) }] }] }), { status: 200 })
+    );
+    const run = new PublicResearchRun({ name: "Sam Acme", email: "sam@acme.example", domains: ["acme.example"], businesses: [], city: null }, { client: { messages: { create } } as never, fetch: xFetch as unknown as typeof fetch, xaiKey: "k", placesKey: "" }).start();
+    await run.identity;
+    const early = run.snapshot();
+    expect(early.map(f => f.id)).toEqual(["p1"]);
+    expect(run.handles).toMatchObject({ x: "acmesam", linkedin: "https://www.linkedin.com/in/sam-acme" });
+    expect(run.rejected[0].why).toBe("a different person");
+    run.withBusinesses(["Acme Laundry"]);
+    await run.settled();
+    const all = run.snapshot();
+    // the same post found twice is one finding; the first one keeps its id
+    expect(all[0]).toMatchObject({ id: "p1", source: "web" });
+    expect(all.filter(f => f.source === "x")).toHaveLength(1);
+    expect(all).toHaveLength(2);
+    expect(String((xFetch.mock.calls[0] as unknown[])[1] && JSON.parse(((xFetch.mock.calls[0] as unknown[])[1] as RequestInit).body as string).tools[0].allowed_x_handles)).toBe("acmesam");
+    expect(run.runs.map(r => r.label).sort()).toEqual(["places", "web: Acme Laundry", "web: identity", "x (confirmed handle)"]);
+  });
+
+  it("takes a listing as theirs when its street or city is in their own mail, not a namesake elsewhere", async () => {
+    const { inOwnText } = await import("./publicResearch");
+    const own = "Break-in last night at the laundromat, 2528 Slauson Ave. Police report filed in Huntington Park.";
+    expect(inOwnText("2528 E Slauson Ave, Huntington Park, CA 90255, USA", own)).toBe(true);
+    expect(inOwnText("40 Bank St, Ottawa, ON K1P, Canada", own)).toBe(false);
+    expect(inOwnText("12 Main St, Springfield, IL", undefined)).toBe(false);
+  });
+});

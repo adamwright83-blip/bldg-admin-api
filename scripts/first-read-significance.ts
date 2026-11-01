@@ -9,8 +9,10 @@
  *   scripts/first-read-significance.sh --journey <own journey id> --i-have-authorization --fast [--runs 3]
  *       [--sig-thinking low|medium] [--reveal-thinking low|medium]   (default low: the first-minute budget)
  *     a real account, timed from completed Google authorization: Gmail and Drive at once, the reading, the
- *     significance, the first reveal; public web research starts as soon as the businesses are named and feeds a
- *     second, deeper reveal when it lands
+ *     significance, the first reveal. Public research is progressive (PublicResearchRun): their own profiles are
+ *     searched for from the start; Places and the wider web search start once the businesses are named; X starts
+ *     once a search confirms their handle. Whatever has landed when the significance starts goes into the first
+ *     reveal (it waits for what is running until --public-wait seconds after authorization, default 20); the rest feeds the second
  */
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -131,7 +133,9 @@ async function main() {
     const { googleResearch } = await import("../server/firstTenMinutes/research/googleResearch");
     const { CoverageLedger } = await import("../server/firstTenMinutes/research/coverage");
     const { fastGmail, fastDrive } = await import("../server/businessKnowledge/firstRead/bench");
-    const { webResearch } = await import("../server/businessKnowledge/firstRead/publicResearch");
+    const { PublicResearchRun } = await import("../server/businessKnowledge/firstRead/publicResearch");
+    const publicWaitMs = Number(value("--public-wait") ?? 20) * 1000;
+    const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
     const { google } = await coldTestSource(journeyId);
     const runs = Number(value("--runs") ?? 1);
     for (let n = 1; n <= runs; n += 1) {
@@ -149,6 +153,13 @@ async function main() {
         fastDrive(research, new Date(), google.ownerEmail).then(e => ((times["drive retrieved"] = at()), e)),
       ]);
       const evidence = [...gmailEvidence, ...driveEvidence];
+      // their own profiles and sites, searched for from the moment the account and sending domains are known
+      const account = await accountP;
+      const free = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|aol|proton|protonmail)\./i;
+      const domains = [...new Set(gmailEvidence.map(e => /from [^<]*<[^@]+@([^>]+)>/.exec(e.people)?.[1]?.toLowerCase()).filter((d): d is string => Boolean(d) && !free.test(d!)))];
+      const ownText = evidence.map(e => `${e.title} ${e.text}`).join("\n");
+      const pub = new PublicResearchRun({ name: account.name ?? google.ownerEmail, email: google.ownerEmail, domains, businesses: [], city: null, ownText }, { fastModel: value("--fast-web-model") ?? "claude-sonnet-5-5" }).start();
+      const tWebStart = at();
       const { value: reading, call } = await synth.geminiReading(gemini, { question: "combined", evidence, today: new Date() });
       times["reading"] = at();
       if (!reading) {
@@ -156,31 +167,32 @@ async function main() {
         continue;
       }
       const checked = synth.checkClaims(reading, evidence, new Date());
-      // public research starts the moment the businesses are named; it feeds the second reveal, never holds the first
-      const account = await accountP;
-      const businesses = checked.filter(c => (c.kind === "business" || c.kind === "project") && c.verdict !== "unsupported").map(c => c.statement.split(/[,.;:]/)[0]).slice(0, 6);
-      const free = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|aol|proton|protonmail)\./i;
-      const domains = [...new Set(gmailEvidence.map(e => /from [^<]*<[^@]+@([^>]+)>/.exec(e.people)?.[1]?.toLowerCase()).filter((d): d is string => Boolean(d) && !free.test(d!)))];
-      const tWebStart = at();
-      const webP = webResearch({ name: account.name ?? google.ownerEmail, email: google.ownerEmail, domains, businesses, city: null }).then(r => ((times["web research"] = at()), r));
+      // the businesses are named: Places and the wider footprint search start now
+      // "Adam Wright operates Laundry Farm, a laundry business" → "Laundry Farm"
+      const nameOf = (statement: string) => statement.replace(/^.*?\b(?:operates|runs|owns|manages|is developing|is building|develops|builds|is working on)\s+/i, "").split(/[,.;:(]| - | — | is | was | located /)[0].trim();
+      const businesses = [...new Set(checked.filter(c => (c.kind === "business" || c.kind === "project") && c.verdict !== "unsupported").map(c => nameOf(c.statement)))].slice(0, 6);
+      pub.withBusinesses(businesses);
       const judged = await synth.judgeClaims(gemini, checked, evidence, new Date(), reading.opening);
       times["claims judged"] = at();
       const input = { claims: judged.claims, publicFindings: [], today: new Date(), ownerName: account.name ?? "the owner" };
       const sigThinking = (value("--sig-thinking") ?? "low") as "low" | "medium" | "high";
       const revealThinking = (value("--reveal-thinking") ?? "low") as "low" | "medium" | "high";
-      const significance = await sig.runSignificance(gemini, { ...input, evidence }, { thinking: sigThinking });
+      // whatever public research has landed goes into the first reveal; it waits for what's running only so long
+      await Promise.race([pub.settled(), sleep(publicWaitMs - at())]);
+      times["public cut-off"] = at();
+      const firstPublic = pub.snapshot();
+      const significance = await sig.runSignificance(gemini, { ...input, publicFindings: firstPublic, evidence }, { thinking: sigThinking });
       times["significance"] = at();
       // the grounding check runs while the opening is written; lines are checked once both land
-      const groundedP = significance.significance ? sig.groundSignificance(gemini, significance.significance, { ...input, evidence }).then(g => ((times["grounded"] = at()), g)) : null;
-      const first = await runReveal(gemini, { ...input, evidence, significance: significance.significance, grounded: groundedP }, { thinking: revealThinking });
+      const groundedP = significance.significance ? sig.groundSignificance(gemini, significance.significance, { ...input, publicFindings: firstPublic, evidence }).then(g => ((times["grounded"] = at()), g)) : null;
+      const first = await runReveal(gemini, { ...input, publicFindings: firstPublic, evidence, significance: significance.significance, grounded: groundedP }, { thinking: revealThinking });
       times["FIRST REVEAL"] = at();
       const grounded = groundedP ? await groundedP : null;
 
       // the deeper discovery, when public research lands
-      const web = await webP;
-      const publicFindings = (web.found?.findings ?? [])
-        .filter(f => f.identity !== "different_person" && f.matchedAnchors.length >= 2)
-        .map((f, i) => ({ id: `p${i + 1}`, source: "web" as const, text: f.text, signal: f.signal, url: f.url || null, at: /^\d{4}-\d{2}-\d{2}$/.test(f.date) ? new Date(f.date) : null, identity: f.identity === "certain" ? ("certain" as const) : ("likely" as const) }));
+      await Promise.race([pub.settled(), sleep(110_000 - at())]);
+      times["public research settled"] = at();
+      const publicFindings = pub.snapshot();
       const deeper = await sig.runSignificance(gemini, { ...input, publicFindings, evidence }, { thinking: sigThinking });
       const deeperGroundedP = deeper.significance ? sig.groundSignificance(gemini, deeper.significance, { ...input, publicFindings, evidence }) : null;
       const second = await runReveal(gemini, { ...input, publicFindings, evidence, significance: deeper.significance, grounded: deeperGroundedP }, { thinking: revealThinking });
@@ -190,12 +202,17 @@ async function main() {
       out.push(`# Fast path run ${n}: ${account.name}`, "");
       out.push(`Timings from completed authorization: ${Object.entries(times).map(([k, ms]) => `${k} ${(ms / 1000).toFixed(1)} s`).join(" → ")}. Web research started at ${(tWebStart / 1000).toFixed(1)} s.`, "");
       out.push(`Evidence: ${gmailEvidence.length} sent messages, ${driveEvidence.length} files.`, "");
+      out.push("### Public research, as it landed", "", ...pub.runs.map(r => `- ${r.label}: landed ${(r.at / 1000).toFixed(1)} s after authorization, ${r.findings} findings${r.error ? `, error: ${r.error}` : ""}${r.note ? ` (${r.note})` : ""}`));
+      out.push(`- in the first reveal: ${firstPublic.length} public findings (${firstPublic.map(f => `${f.id} ${f.source}`).join(", ") || "none"})`);
+      out.push("", "Profiles found (a profile found is not a profile read: only X is read, by its confirmed handle):", ...(Object.entries(pub.handles).filter(([, v]) => v).map(([k, v]) => `- ${k}: ${v} — found by ${pub.handleSources[k as keyof typeof pub.handles]}${k === "x" ? "; read through xAI" : k === "website" ? "" : "; known from search results only, never opened"}`)), ...(Object.values(pub.handles).some(Boolean) ? [] : ["- none"]));
+      if (pub.rejected.length) out.push("", "Rejected as someone else or unconfirmed:", ...pub.rejected.map(r => `- ${r.text} (${r.why})`));
+      out.push("");
       const firstRead = await readerSection(reader, gemini, first.lines.filter(l => l.kept).map(l => l.line));
       out.push("## First reveal (Gmail + Drive)", "", ...reasoningSection(judged.claims, grounded?.significance ?? significance.significance, significance.issues, sig.significanceLines, grounded), "", ...revealSection(first), "", ...firstRead.out, "");
-      out.push("## Second, deeper reveal (plus public research)", "", `Public findings: ${publicFindings.length}${web.run.error ? ` (web error: ${web.run.error})` : ""}`, ...publicFindings.map(f => `- ${f.id} [${f.signal}] ${f.text}`), "");
+      out.push("## Second, deeper reveal (all public research)", "", `Public findings: ${publicFindings.length}`, ...publicFindings.map(f => `- ${f.id} [${f.source}; ${f.signal}] ${f.text}`), "");
       const deeperSig = deeperGrounded?.significance ?? deeper.significance;
       out.push("### What the significance became with public evidence", "", ...(deeperSig ? sig.significanceLines(deeperSig).map(l => `- ${l}`) : ["- failed"]), ...(deeperGrounded?.issues ?? []).map(i => `- source check: ${i}`), "", ...revealSection(second), "", "---", "");
-      console.log(`fast run ${n}: first reveal ${(times["FIRST REVEAL"] / 1000).toFixed(1)} s (${first.lines.filter(l => l.kept).length} lines kept, spotlight ${first.spotlight?.carried ? "carried" : "lost"}), second ${(times["second reveal (with public)"] / 1000).toFixed(1)} s`);
+      console.log(`fast run ${n}: first reveal ${(times["FIRST REVEAL"] / 1000).toFixed(1)} s (${first.lines.filter(l => l.kept).length} lines kept, ${firstPublic.length} public findings in it, ${first.lines.filter(l => l.kept && l.combined).length} lines combining private and public, spotlight ${first.spotlight?.carried ? "carried" : "lost"}); profiles ${Object.entries(pub.handles).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}; second ${(times["second reveal (with public)"] / 1000).toFixed(1)} s`);
     }
   }
 
