@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { benchReport, coverageOf, outcomeOf, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
+import { benchReport, coverageOf, DISCOVER_SYSTEM, outcomeOf, PLAN_SYSTEM, requestKind, runFirstReadBench } from "./bench";
 import {
   applyJudge,
   checkClaims,
+  checkOpening,
   GRADE_SYSTEM,
   gradeScore,
   judgeClaims,
@@ -56,10 +57,10 @@ const item = (id: string, source: Evidence["source"], at: string, byOwner: boole
   url: `https://example.com/${id}`,
 });
 const evidence: Evidence[] = [
-  item("g1", "gmail", "2026-10-20T00:00:00Z", true, "Proposal for The Louise", "Attached is our premium residential laundry proposal for your residents.", "from Owner <owner@x.com> to Dana Reyes <dana@thelouise.example>"),
+  item("g1", "gmail", "2026-10-20T00:00:00Z", true, "Proposal for Harbor Lofts", "Attached is our premium residential laundry proposal for your residents.", "from Owner <owner@x.com> to Jordan Reyes <jordan@harborlofts.example>"),
   item("g2", "gmail", "2024-03-01T00:00:00Z", true, "Website quote", "Here is my quote to redesign your restaurant website.", "from Owner <owner@x.com> to Chef <chef@x.com>"),
   item("g3", "gmail", "2026-09-17T00:00:00Z", true, "Stolen register", "Someone broke into our laundromat last night and stole the register.", "from Owner <owner@x.com> to Cents Support <help@cents.example>"),
-  item("g4", "gmail", "2025-01-10T00:00:00Z", true, "Dryer down", "Dryer number four is broken again and customers are complaining.", "from Owner <owner@x.com> to Russell <russell@x.com>"),
+  item("g4", "gmail", "2025-01-10T00:00:00Z", true, "Dryer down", "Dryer number four is broken again and customers are complaining.", "from Owner <owner@x.com> to Sam <sam@x.com>"),
   item("d1", "drive", "2026-10-29T00:00:00Z", true, "JOYSTICK plan (doc)", "Make real business activity playable: the business is the game.", "owned by owner@x.com; last edited by owner@x.com"),
   item("d2", "drive", "2023-05-01T00:00:00Z", true, "Car wash plan (doc)", "The plan for our mobile car wash business in Pasadena.", "owned by owner@x.com; last edited by owner@x.com"),
 ];
@@ -67,23 +68,27 @@ const claim = (kind: Reading["claims"][number]["kind"], statement: string, statu
   kind,
   statement,
   status,
+  partOf: "",
   people: [],
   evidence: cites.map(([id, quote]) => ({ id, quote })),
 });
 const reading: Reading = {
   claims: [
-    claim("business", "Selling premium residential laundry to The Louise", "active", ["g1", "premium residential laundry proposal"]),
+    claim("business", "Selling premium residential laundry to Harbor Lofts", "active", ["g1", "premium residential laundry proposal"]),
     claim("business", "Web design for restaurants", "active", ["g2", "quote to redesign your restaurant website"]),
     claim("project", "Building JOYSTICK, which makes business activity playable", "active", ["d1", "Make real business activity playable"]),
     claim("project", "Mobile car wash in Pasadena", "ended", ["d2", "mobile car wash business in Pasadena"]),
     claim("event", "The laundromat was broken into and its register stolen (Sept 2026)", "happened", ["g3", "broke into our laundromat last night"]),
     claim("problem", "Replacing the stolen register", "unresolved", ["g3", "broke into our laundromat last night"]),
     claim("problem", "Broken dryer and complaints", "unresolved", ["g4", "Dryer number four is broken again"]),
-    claim("relationship", "Dana Reyes, contact at The Louise", "n/a", ["g1", "to Dana Reyes dana thelouise example"]),
+    claim("relationship", "Jordan Reyes, contact at Harbor Lofts", "n/a", ["g1", "to Jordan Reyes jordan harborlofts example"]),
     claim("project", "JOYSTICK is what the laundry proposal is for", "active", ["d1", "Make real business activity playable"], ["g1", "premium residential laundry proposal"]),
     claim("business", "Invented", "active", ["g9", "anything at all here"]),
     claim("business", "Paraphrased", "active", ["g1", "the building signed a two year contract"]),
+    { ...claim("fiction", "A courier character in the game", "n/a", ["d1", "Make real business activity playable"]), partOf: "JOYSTICK" },
+    claim("fiction", "A character with no project", "n/a", ["d1", "Make real business activity playable"]),
   ],
+  opening: [],
 };
 
 describe("checkClaims", () => {
@@ -92,7 +97,7 @@ describe("checkClaims", () => {
   const reasons = (statement: string) => claims.find(c => c.statement === statement)!.reasons.join("; ");
 
   it("calls a business active only on the owner's own recent dated act", () => {
-    expect(verdict("Selling premium residential laundry to The Louise")).toBe("active");
+    expect(verdict("Selling premium residential laundry to Harbor Lofts")).toBe("active");
   });
 
   it("keeps an old business's status unknown, with when it was last seen, never 'ended'", () => {
@@ -100,9 +105,14 @@ describe("checkClaims", () => {
     expect(reasons("Web design for restaurants")).toMatch(/last seen 2024-03-01/);
   });
 
-  it("never treats a recent document edit as proof something is operating", () => {
-    expect(verdict("Building JOYSTICK, which makes business activity playable")).toBe("status_unknown");
-    expect(reasons("Building JOYSTICK, which makes business activity playable")).toMatch(/edit isn't proof/);
+  it("treats the owner's own recent documents as work on a project, never as proof it is operating", () => {
+    expect(verdict("Building JOYSTICK, which makes business activity playable")).toBe("in_progress");
+    expect(reasons("Building JOYSTICK, which makes business activity playable")).toMatch(/recent work on it .* not that it is operating/);
+  });
+
+  it("files fiction under the project it belongs to, and won't state fiction without one", () => {
+    expect(claims.find(c => c.statement === "A courier character in the game")).toMatchObject({ verdict: "fiction", partOf: "JOYSTICK" });
+    expect(verdict("A character with no project")).toBe("uncertain");
   });
 
   it("lets mail corroborate files: a project cited with the owner's recent mail can be active", () => {
@@ -122,13 +132,13 @@ describe("checkClaims", () => {
   });
 
   it("accepts a relationship shown by the message headers", () => {
-    expect(verdict("Dana Reyes, contact at The Louise")).toBe("relationship");
+    expect(verdict("Jordan Reyes, contact at Harbor Lofts")).toBe("relationship");
   });
 
   it("strikes ids that don't exist and quotes that aren't there, and refuses too-short quotes", () => {
     expect(verdict("Invented")).toBe("unsupported");
     expect(verdict("Paraphrased")).toBe("unsupported");
-    expect(quoteIsIn("Louise", evidence[0])).toBe(false);
+    expect(quoteIsIn("Lofts", evidence[0])).toBe(false);
   });
 
   it("keeps each citation's original source", () => {
@@ -136,7 +146,7 @@ describe("checkClaims", () => {
   });
 
   it("shows the judge each cited item's real sender and recipients", () => {
-    expect(judgePrompt([claims[7]], evidence, today)).toMatch(/from Owner <owner@x\.com> to Dana Reyes <dana@thelouise\.example>/);
+    expect(judgePrompt([claims[7]], evidence, today)).toMatch(/from Owner <owner@x\.com> to Jordan Reyes <jordan@harborlofts\.example>/);
   });
 
   it("lets the judge lower, never raise, and keeps unknown status unknown", () => {
@@ -153,7 +163,7 @@ describe("checkClaims", () => {
     expect(judged.map(c => c.verdict).slice(0, 9)).toEqual([
       "status_unknown", // active, but the items don't show it is operating now
       "status_unknown", // stays: the judge can't raise it
-      "status_unknown", // project: no verdict, but status_unknown needs none
+      "uncertain", // in progress: no verdict, so not verified
       "status_unknown", // ended, but the items don't say so
       "happened",
       "happened", // open problem: still unresolved isn't shown
@@ -163,14 +173,33 @@ describe("checkClaims", () => {
     ]);
   });
 
+  it("keeps an opening sentence only on stated claims the judge found it faithful to", () => {
+    const opening = [
+      { sentence: "You're pitching premium laundry to Harbor Lofts.", claims: [0] },
+      { sentence: "And you still do restaurant web design.", claims: [1] },
+      { sentence: "JOYSTICK is the laundry business's app.", claims: [0, 2] },
+      { sentence: "You're building JOYSTICK.", claims: [2] },
+    ];
+    const kept = checkOpening(opening, claims, new Map([
+      [0, { faithful: "yes" as const, why: "" }],
+      [1, { faithful: "yes" as const, why: "" }],
+      [2, { faithful: "no" as const, why: "links two businesses the claims don't link" }],
+    ]));
+    expect(kept.map(s => s.kept)).toEqual([true, false, false, false]);
+    expect(kept[1].why).toMatch(/not stated/);
+    expect(kept[2].why).toMatch(/links two businesses/);
+    expect(kept[3].why).toMatch(/no verdict/);
+    expect(checkOpening(opening, claims, null).some(s => s.kept)).toBe(false);
+  });
+
   it("fails closed: a failed judge states nothing that needs it", async () => {
     const failing = vi.fn(async () => new Response("overloaded", { status: 503 }));
     const failed = await judgeClaims({ apiKey: "k", model: "m", fetch: failing as unknown as typeof fetch }, claims, evidence, today);
     expect(failed.call?.error).toMatch(/503/);
     const after = (statement: string) => failed.claims.find(c => c.statement === statement)!;
-    expect(after("Selling premium residential laundry to The Louise").verdict).toBe("uncertain");
-    expect(after("Selling premium residential laundry to The Louise").reasons.at(-1)).toMatch(/not verified: the judge failed/);
-    expect(after("Dana Reyes, contact at The Louise").verdict).toBe("uncertain");
+    expect(after("Selling premium residential laundry to Harbor Lofts").verdict).toBe("uncertain");
+    expect(after("Selling premium residential laundry to Harbor Lofts").reasons.at(-1)).toMatch(/not verified: the judge failed/);
+    expect(after("Jordan Reyes, contact at Harbor Lofts").verdict).toBe("uncertain");
     expect(after("The laundromat was broken into and its register stolen (Sept 2026)").verdict).toBe("happened");
   });
 
@@ -192,6 +221,7 @@ describe("coverage", () => {
     question,
     evidence: sources.map((source, i) => ({ ...evidence[0], id: `${source}${i}`, source })),
     claims: [],
+    opening: [],
     draftMs: 900,
     verifiedMs,
   });
@@ -223,7 +253,7 @@ function fakeWorld(now: Date) {
       mimeType: format === "full" ? "text/plain" : "multipart/alternative",
       headers: [
         { name: "From", value: `Owner <${OWNER}>` },
-        { name: "To", value: "Dana <dana@thelouise.example>" },
+        { name: "To", value: "Jordan <jordan@harborlofts.example>" },
         { name: "Subject", value: `Proposal ${id}` },
       ],
       ...(format === "full" ? { body: { data: b64("Attached is our premium residential laundry proposal for your residents.") } } : {}),
@@ -239,18 +269,21 @@ function fakeWorld(now: Date) {
       const prompt = body.contents[0].parts[0].text;
       const firstId = /\[(g1|d1)\]/.exec(prompt)?.[1] ?? "g1";
       const value =
-        system === PLAN_SYSTEM
-          ? { gmail: [{ query: "in:sent Louise", why: "the proposal" }], drive: [{ terms: ["Goldline"], why: "the product" }] }
+        system === DISCOVER_SYSTEM
+          ? { undertakings: [{ name: "Acme Laundry", category: "business", partOf: "", clue: "proposal" }], read: ["f1"], gmail: [{ query: "in:sent Harbor Lofts", why: "the pitch" }] }
+          : system === PLAN_SYSTEM
+          ? { gmail: [{ query: "in:sent Harbor Lofts", why: "the proposal" }], drive: [{ terms: ["Moonlight"], why: "the product" }] }
           : system === JUDGE_SYSTEM
-            ? { verdicts: [0, 1].map(n => ({ n, supports: "yes", statusShown: "yes", contradiction: "" })) }
+            ? { verdicts: [0, 1].map(n => ({ n, supports: "yes", statusShown: "yes", contradiction: "" })), sentences: [{ n: 0, faithful: "yes", why: "" }] }
             : system === GRADE_SYSTEM
               ? { findings: [{ id: "G2", found: "yes", claims: [0], statusRight: "yes", note: "named" }] }
               : system === READING_SYSTEM
                 ? {
                     claims: [
-                      { kind: "business", statement: "Selling premium residential laundry to The Louise", status: "active", people: ["Dana"], evidence: [{ id: firstId, quote: "premium residential laundry proposal" }] },
-                      { kind: "relationship", statement: "Dana, contact at The Louise", status: "n/a", people: ["Dana"], evidence: [{ id: "g1", quote: "to Dana dana thelouise example" }] },
+                      { kind: "business", statement: "Selling premium residential laundry to Harbor Lofts", status: "active", partOf: "", people: ["Jordan"], evidence: [{ id: firstId, quote: "premium residential laundry proposal" }] },
+                      { kind: "relationship", statement: "Jordan, contact at Harbor Lofts", status: "n/a", partOf: "", people: ["Jordan"], evidence: [{ id: "g1", quote: "to Jordan jordan harborlofts example" }] },
                     ],
+                    opening: [{ sentence: "You're pitching premium laundry to Harbor Lofts.", claims: [0] }],
                   }
                 : {};
       return json({ candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }], usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 200 }, modelVersion: "gemini-fake" });
@@ -263,9 +296,9 @@ function fakeWorld(now: Date) {
       const id = decodeURIComponent(url.pathname.split("/").pop()!);
       return json(message(id, url.searchParams.get("format") === "metadata" ? "metadata" : "full"));
     }
-    if (url.pathname.endsWith("/export")) return new Response("Goldline: premium residential laundry proposal plan.", { status: 200 });
+    if (url.pathname.endsWith("/export")) return new Response("Moonlight: premium residential laundry proposal plan.", { status: 200 });
     if (url.pathname.endsWith("/drive/v3/files")) {
-      return json({ files: [{ id: "f1", name: "Goldline plan", mimeType: DOC, modifiedTime: now.toISOString(), webViewLink: "https://docs.example/f1", owners: [{ emailAddress: OWNER }], lastModifyingUser: { emailAddress: OWNER } }] });
+      return json({ files: [{ id: "f1", name: "Moonlight plan", mimeType: DOC, modifiedTime: now.toISOString(), webViewLink: "https://docs.example/f1", owners: [{ emailAddress: OWNER }], lastModifyingUser: { emailAddress: OWNER } }] });
     }
     return new Response("not found", { status: 404 });
   });
@@ -284,13 +317,13 @@ describe("runFirstReadBench", () => {
         ownerEmail: OWNER,
         onRefreshed: async () => undefined,
       },
-      variants: ["fast:separate", "fast:combined", "agent:separate", "agent:combined"],
+      variants: ["fast:separate", "fast:combined", "agent:separate", "agent:combined", "discover:combined"],
       runs: 1,
       geminiKey: "key",
       model: "gemini-3.8-flash",
       thinking: "low",
       centsPerMillion: { input: 75, output: 375 },
-      expect: { findings: [{ id: "G2", from: "gmail", statement: "Dana at The Louise", expected: "relationship" }] },
+      expect: { findings: [{ id: "G2", from: "gmail", statement: "Jordan at Harbor Lofts", expected: "relationship" }] },
       fetch: fake as unknown as typeof fetch,
       env: { JOYSTICK_GOOGLE_CLIENT_ID: "id", JOYSTICK_GOOGLE_CLIENT_SECRET: "secret" } as NodeJS.ProcessEnv,
       now: () => now,
@@ -306,6 +339,11 @@ describe("runFirstReadBench", () => {
     expect(by("fast:separate").answers.map(a => a.question).sort()).toEqual(["drive", "gmail"]);
     expect(by("fast:combined").answers.map(a => a.question)).toEqual(["combined"]);
     expect(by("agent:combined").calls.map(c => c.purpose).sort()).toEqual(["judge", "plan", "reading:combined"]);
+    // discover: an inventory (4 Sent searches, 3 Drive listings by type), then the one search it chose
+    expect(by("discover:combined").requests.gmail_search).toBe(5);
+    expect(by("discover:combined").requests.drive_search).toBe(3);
+    expect(by("discover:combined").discovery?.undertakings[0].name).toBe("Acme Laundry");
+    expect(by("discover:combined").calls.map(c => c.purpose).sort()).toEqual(["discover", "judge", "reading:combined"]);
     // the thinking level reaches Gemini
     const geminiBodies = fake.mock.calls.filter(([input]) => String(input).includes("generativelanguage")).map(([, init]) => JSON.parse(String(init?.body)));
     expect(geminiBodies.some(b => b.generationConfig.thinkingConfig?.thinkingLevel === "low")).toBe(true);
@@ -316,9 +354,10 @@ describe("runFirstReadBench", () => {
       expect(run.grading?.recall).toBe(1);
       expect(run.answers.flatMap(a => a.claims).some(c => c.verdict === "relationship")).toBe(true);
     }
-    // Drive alone can't make anything active; mail can
+    // Drive alone shows the owner working on something, never that it is operating; mail can
     const driveOnly = by("fast:separate").answers.find(a => a.question === "drive")!.claims[0];
-    expect(driveOnly.verdict).toBe("status_unknown");
+    expect(driveOnly.verdict).toBe("in_progress");
+    expect(by("fast:combined").answers[0].opening[0]).toMatchObject({ kept: true });
 
     const report = benchReport(result);
     expect(report).toMatch(/\[gmail message m1a, thread t-m1a\]\(https:\/\/mail\.google\.com\/mail\/u\/owner%40example\.com\/#all\/t-m1a\)/);
