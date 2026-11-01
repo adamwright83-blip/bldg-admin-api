@@ -18,6 +18,9 @@
  *
  * Find the journey id with: scripts/onboarding-cold-test.sh --list
  *
+ *   scripts/first-read-bench.sh --trace "Name,Other name" --journey <id> --i-have-authorization [--from <report.json>]
+ *     where each name went missing: in the account at all, fetched by a run, stated by a verified answer. Metadata only.
+ *
  *   scripts/first-read-bench.sh --regrade <report.json> --expect <file>
  *     grades a saved result again: its claims and your expectations go to Gemini; Gmail and Drive are not read.
  *
@@ -25,7 +28,7 @@
  *     writes the report again from a saved result with this version's reporting; nothing is read or sent.
  */
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // Private: nothing from a run reaches analytics.
 process.env.POSTHOG_AI_CAPTURE_CONTENT = "0";
@@ -47,6 +50,24 @@ function revive(file: string) {
 }
 
 async function main() {
+  const trace = value("--trace");
+  if (trace) {
+    // where did each term go missing? metadata only: counts, file names, dates, subjects
+    if (!args.includes("--i-have-authorization")) refuse("--trace reads the account's metadata. Pass --i-have-authorization with the owner's go-ahead.");
+    const journey = value("--journey") ?? refuse("--trace needs --journey");
+    const { coldTestSource } = await import("../server/businessKnowledge/coldTest");
+    const { traceReport, traceTerms } = await import("../server/businessKnowledge/firstRead/trace");
+    const from = value("--from");
+    const { google } = await coldTestSource(journey);
+    const traces = await traceTerms(google, trace.split(",").map(t => t.trim()).filter(Boolean), from ? revive(from) : null);
+    const out = join(value("--out-dir") ?? "tmp/first-read-bench", `trace-${new Date().toISOString().replace(/[:.]/g, "-")}.md`);
+    mkdirSync(dirname(out), { recursive: true, mode: 0o700 });
+    writeFileSync(out, traceReport(traces), { mode: 0o600 });
+    chmodSync(out, 0o600);
+    console.log(traceReport(traces));
+    console.log(`\nReport: ${out}`);
+    process.exit(0);
+  }
   const regrade = value("--regrade");
   if (regrade) {
     // grade a saved result again (its claims and your expectations go to Gemini; Gmail and Drive are not read)
