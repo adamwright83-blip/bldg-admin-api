@@ -48,6 +48,7 @@ import { seedSessionFromAcquisition } from "../goldlineOnboarding/store";
 import { JOYSTICK_PREPAY_QUESTION_KEYS, type GoldlineOnboardingQuestionKey } from "../../shared/goldlineOnboarding";
 import { buildJoystickDraftPreview, type JoystickDraftAnswerMap, type JoystickDraftPreview } from "../../shared/joystickAcquisition";
 import { FIRST_TEN_ONBOARDING_MODE, JOYSTICK_GENERIC_ONBOARDING_MODE } from "../../shared/firstTenMinutes";
+import { isJourneyToken, journeyTokenOpensDraft } from "../joystickAccount/journeyAccess";
 
 export type PublicSaasPlan = {
   planKey: string;
@@ -623,17 +624,22 @@ export async function requireOnboardingSession(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  // A JOYSTICK account's journey token (server/joystickAccount/session.ts) opens the draft its account owns, on any
+  // device the person has signed in on; every other token must be the draft's own resume token.
+  const byAccount = isJourneyToken(input.resumeToken) && (await journeyTokenOpensDraft(input.sessionId, input.resumeToken));
   const [session] = await db
     .select()
     .from(legacyDayforgeSaasOnboardingSessions)
     .where(
-      and(
-        eq(legacyDayforgeSaasOnboardingSessions.id, input.sessionId),
-        eq(
-          legacyDayforgeSaasOnboardingSessions.resumeTokenHash,
-          hashSecret(input.resumeToken)
-        )
-      )
+      byAccount
+        ? eq(legacyDayforgeSaasOnboardingSessions.id, input.sessionId)
+        : and(
+            eq(legacyDayforgeSaasOnboardingSessions.id, input.sessionId),
+            eq(
+              legacyDayforgeSaasOnboardingSessions.resumeTokenHash,
+              hashSecret(input.resumeToken)
+            )
+          )
     )
     .limit(1);
   if (

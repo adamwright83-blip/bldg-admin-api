@@ -559,7 +559,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
         </>
       );
     }
-    if (!opened && !view) return <Invitation onBegin={() => setOpened(true)} />;
+    // a stored journey (someone who just signed up, or came back) goes straight on once it loads, not via the invitation
+    if (!opened && !view) return credentials && journey.isLoading ? null : <Invitation onBegin={() => setOpened(true)} />;
     return (
       <BringYourWorld
         busy={busy}

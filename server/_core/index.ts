@@ -373,6 +373,8 @@ async function startServer() {
   // JOYSTICK's first ten minutes: Google and Slack send a connecting visitor back here (read-only access).
   const { registerFirstTenOAuthRoutes } = await import("../firstTenMinutes/oauthRoutes");
   registerFirstTenOAuthRoutes(app);
+  const { registerGoogleSignInRoutes } = await import("../joystickAccount/googleSignIn");
+  registerGoogleSignInRoutes(app);
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
   // Gmail reply detection: Google Cloud Pub/Sub pushes mailbox-change notices here (authenticated; off unless enabled)

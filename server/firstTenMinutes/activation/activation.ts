@@ -20,6 +20,7 @@ import { refreshGoogleAccess } from "../google";
 import { providerUrl } from "../providerFetch";
 import { approvalDigest, checkSend, SendRefused, sendApprovedEmail, type GmailSendAccess, type SendOutcome } from "../../integrations/gmail/gmailSend";
 import { gmailSendLedger } from "../../integrations/gmail/gmailSendLedger";
+import { markFunnelStep } from "../../joystickAccount/store";
 
 /**
  * Activation at the moment of value, and the message leaving the table. Checkout is today's (server/saas), on the
@@ -73,6 +74,7 @@ export async function activationView(journey: JourneyRow, credentials: DraftCred
     await db.update(firstTenJourneys).set({ tenantId: session.tenantId }).where(eq(firstTenJourneys.id, journey.id));
     // and so does what JOYSTICK understood of the person's business: stamped with the tenant, readable only by it
     await bindKnowledgeTenant(journey.id, session.tenantId).catch(() => undefined);
+    void markFunnelStep(journey.id, "activatedAt");
   }
   return {
     example: journey.kind === "example",

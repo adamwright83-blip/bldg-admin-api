@@ -2,6 +2,7 @@
 import { goldlineCargoRouter } from "../goldlineCargo/cargoRouter";
 import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
 import { firstTenMinutesRouter } from "../firstTenMinutes/router";
+import { joystickAccountRouter } from "../joystickAccount/router";
 import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { legacyAdminRoleProcedure, publicProcedure, router } from "./trpc";
@@ -81,6 +82,7 @@ export const systemRouter = router({
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
   firstTenMinutes: firstTenMinutesRouter,
+  account: joystickAccountRouter,
   gumball: cleancloudBrowserSyncRouter,
   commercialMission: commercialMissionRouter,
   voiceWalkIn: voiceWalkInRouter,

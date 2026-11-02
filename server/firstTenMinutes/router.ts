@@ -14,6 +14,7 @@ import { beginReading } from "./understanding/run";
 import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
 import { firstReadView } from "./firstRead/firstRead";
+import { accountForJourney, markFunnelStep } from "../joystickAccount/store";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
@@ -153,7 +154,7 @@ export const firstTenMinutesRouter = router({
       return {
         url:
           input.provider === "google"
-            ? googleAuthorizationUrl({ state, redirectUri, send: input.purpose === "send" })
+            ? googleAuthorizationUrl({ state, redirectUri, send: input.purpose === "send", loginHint: (await accountForJourney(journey.id).catch(() => null))?.email })
             : slackAuthorizationUrl({ state, redirectUri }),
       };
     }),
@@ -249,7 +250,10 @@ export const firstTenMinutesRouter = router({
     .mutation(async ({ ctx, input }) => {
       assertFirstTenOpen(ctx.req);
       const { journey } = await requireJourney(input);
-      if (input.answer === "keep") return keepPortraitFor(journey);
+      if (input.answer === "keep") {
+        void markFunnelStep(journey.id, "portraitKeptAt");
+        return keepPortraitFor(journey);
+      }
       if (input.answer === "restore") return restorePortraitLine(journey, input.key);
       return changePortraitLine(journey, input.key, input.to);
     }),
