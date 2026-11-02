@@ -39,14 +39,15 @@ describe("first-ten-minutes entry wiring", () => {
     expect(vercel.rewrites).toContainEqual({ source: "/joystick-start", destination: "/index.html" });
   });
 
-  it("sends the static homepage into the funnel on the origin Stripe returns to", () => {
+  it("sends the static homepage to sign-up on gojoystick.com; activation carries the journey to the Stripe origin", () => {
     const app = source("client/public/joystick-home/app.js");
-    const billing = source("server/saas/saasBilling.ts");
-    // The funnel's resume token lives in the starting origin's storage, so the
-    // homepage must enter the funnel on the same origin as the Stripe return.
-    expect(billing).toContain('"https://admin.bldg.chat"');
-    expect(app).toContain("const FUNNEL_ORIGIN = 'https://admin.bldg.chat';");
-    expect(app).toContain("'/joystick-start?world='");
-    expect(source("client/public/joystick-home/index.html")).toContain("data-bring");
+    const home = source("client/public/joystick-home/index.html");
+    // Sign-up (server/joystickAccount) starts here; before checkout the first ten minutes hand the journey to the
+    // origin Stripe returns to (ActivationCard), so the homepage no longer has to enter on that origin.
+    expect(app).toContain("window.location.href = '/signup'");
+    expect(source("client/src/pages/firstTenMinutes/chapter/ActivationCard.tsx")).toContain("firstTenHandoffUrl(activation.returnOrigin");
+    expect(home).toContain("data-bring");
+    expect(home).toContain('href="/signup"');
+    expect(home).toContain('href="/login"');
   });
 });

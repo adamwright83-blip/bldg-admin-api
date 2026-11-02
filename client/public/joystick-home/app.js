@@ -144,13 +144,10 @@
     });
   });
 
-  // "Bring your own business" enters the signup funnel carrying the world just played.
-  // The funnel keeps its resume token in this browser's storage for its own origin, and
-  // Stripe returns buyers to the billing return URL (server/saas/saasBilling.ts, today
-  // admin.bldg.chat). Entry must be on that same origin or the paid draft is lost. When
-  // the billing return URL moves to gojoystick.com, set this to '' so the funnel stays here.
-  const FUNNEL_ORIGIN = 'https://admin.bldg.chat';
-  function bringBusiness(mode) { window.location.href = FUNNEL_ORIGIN + '/joystick-start?world=' + encodeURIComponent(mode === 'road' ? 'road' : 'cozy'); }
+  // "Bring your own business" is sign-up, here on gojoystick.com: a JOYSTICK account with Google, then the first ten
+  // minutes. Checkout still returns to the billing origin; the first ten minutes hand the journey there themselves
+  // before checkout (ActivationCard), so starting here loses nothing.
+  function bringBusiness() { window.location.href = '/signup'; }
 
   // Illustrative browser-local sample. No messaging, CRM, or calendar APIs.
   const sample = $('sample-dialog'), about = $('about-dialog');
