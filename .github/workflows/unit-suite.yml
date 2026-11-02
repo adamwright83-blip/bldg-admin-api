@@ -1,30 +1,60 @@
 name: Full unit suite
 
 on:
-  pull_request:
-    # Docs and captured artifacts never reach this gate; any code change still runs it.
-    paths-ignore:
-      - "docs/**"
-      - "artifacts/**"
-      - "**/*.md"
+  # Run by ci.yml: the unit tests that import a changed file (or all of them), and the intake HTTP
+  # contract when a change reaches it. Nightly and by hand: everything.
+  workflow_call:
+    inputs:
+      unit:
+        type: boolean
+        default: true
+      tests:
+        description: Space-separated unit test files; empty runs the whole suite
+        type: string
+        default: ""
+      shards:
+        description: JSON array of shard numbers
+        type: string
+        default: "[1, 2, 3, 4]"
+      shard_total:
+        type: string
+        default: "4"
+      intake_http:
+        type: boolean
+        default: true
   workflow_dispatch:
+    inputs:
+      unit:
+        type: boolean
+        default: true
+      tests:
+        description: Space-separated unit test files; empty runs the whole suite
+        type: string
+        default: ""
+      shards:
+        description: JSON array of shard numbers
+        type: string
+        default: "[1, 2, 3, 4]"
+      shard_total:
+        type: string
+        default: "4"
+      intake_http:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
-concurrency:
-  group: unit-suite-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   unit:
-    name: unit ${{ matrix.shard }}/4
+    name: unit ${{ matrix.shard }}/${{ inputs.shard_total }}
+    if: inputs.unit
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(inputs.shards) }}
     services:
       # sourceBackedAction.test.ts opens a disposable schema on 127.0.0.1:3399.
       # Vitest assigns files to shards by name, so every shard can reach that port.
@@ -76,10 +106,17 @@ jobs:
         # live HTTP contract. It runs in the required intake-http job, where a
         # server is actually listening. CLI --exclude is additive, so the
         # config's integration-test exclude remains in force on these shards.
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4 --exclude "**/intake-stripe.test.ts"
+        # UNIT_TESTS (from ci.yml's scope job) names only tracked test files; empty runs them all.
+        env:
+          UNIT_TESTS: ${{ inputs.tests }}
+          SHARD: ${{ matrix.shard }}/${{ inputs.shard_total }}
+        run: |
+          read -ra tests <<< "$UNIT_TESTS"
+          pnpm exec vitest run --shard="$SHARD" --exclude "**/intake-stripe.test.ts" "${tests[@]}"
 
   intake-http:
     name: intake HTTP
+    if: inputs.intake_http
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:

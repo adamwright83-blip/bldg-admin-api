@@ -5,20 +5,12 @@ name: Procurement durable worker characterization
 # Growth Slice B) can prove procurement keeps working unchanged.
 
 on:
-  pull_request:
-    # Docs and captured artifacts never reach this gate; any code change still runs it.
-    paths-ignore:
-      - "docs/**"
-      - "artifacts/**"
-      - "**/*.md"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: procurement-durable-worker-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   durable-worker:

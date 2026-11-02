@@ -1,38 +1,12 @@
 name: Beverly Hills 2D adventure
 
 on:
-  pull_request:
-    # A client-only game served by Vite: its own code, what it imports, and the build toolchain.
-    paths:
-      - "client/src/pages/goldline/beverlyHills2d/**"
-      - "e2e/beverly-hills-2d/**"
-      - "playwright.beverly-hills.config.ts"
-      - "shared/beverlyHills*"
-      - "server/experience/lanternCity/beverlyHills*"
-      # It mounts inside the admin shell at /growth/lantern-city?level=beverly-hills.
-      - "client/src/pages/AdminHostApp.tsx"
-      - "client/src/components/admin/**"
-      - "client/src/lib/**"
-      - "client/src/_core/**"
-      - "client/src/hooks/**"
-      - "client/src/contexts/**"
-      - "client/src/App.tsx"
-      - "client/src/main.tsx"
-      - "client/src/index.css"
-      - "client/index.html"
-      - "vite.config.ts"
-      - "tsconfig*.json"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/beverly-hills-2d.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: beverly-hills-2d-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   adventure:
@@ -52,9 +26,20 @@ jobs:
         run: pnpm exec vitest run client/src/pages/goldline/beverlyHills2d shared/beverlyHillsOutreach.test.ts server/experience/lanternCity/beverlyHillsOutreach.test.ts shared/beverlyHillsProspects.test.ts
       - run: pnpm exec playwright install --with-deps chromium
       - name: Desktop and mobile adventure, resume and pending journal
-        run: pnpm exec playwright test --config playwright.beverly-hills.config.ts
+        run: pnpm exec playwright test --config playwright.beverly-hills.config.ts --grep-invert "round-up plays with real controls"
+      # QUARANTINED on pull requests (docs/ci/CI_SCOPES.md#quarantine): the boxer charge at
+      # round-up.spec.ts:39 misses its 4 s window in about one run in seven, on unrelated changes.
+      # It still runs and reports on every pull request that reaches Beverly Hills, and it blocks the
+      # nightly run. Fold it back into the step above when the Round-Up de-flake lands.
+      - name: Round-Up (quarantined on pull requests)
+        id: round-up
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+        run: pnpm exec playwright test --config playwright.beverly-hills.config.ts round-up.spec.ts
+      - name: Report a quarantined failure
+        if: steps.round-up.outcome == 'failure'
+        run: echo "::warning title=Quarantined test failed::e2e/beverly-hills-2d/round-up.spec.ts failed. It does not block this pull request; see docs/ci/CI_SCOPES.md#quarantine."
       - uses: actions/upload-artifact@v6
-        if: failure()
+        if: failure() || steps.round-up.outcome == 'failure'
         with:
           name: beverly-hills-2d-failures
           path: test-results/

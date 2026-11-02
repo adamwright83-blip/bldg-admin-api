@@ -1,19 +1,34 @@
 name: Fast Goldline smoke
 
 on:
-  pull_request:
+  # Run by ci.yml when a change reaches the core contracts or a proof world (scripts/ci/ciAreas.mjs),
+  # nightly with everything, and by hand.
+  workflow_call:
+    inputs:
+      contracts:
+        type: boolean
+        default: true
+      browser:
+        description: JSON array of matrix entry names, or "auto" to pick from the pull request's files
+        type: string
+        default: auto
   workflow_dispatch:
+    inputs:
+      contracts:
+        type: boolean
+        default: true
+      browser:
+        description: JSON array of matrix entry names, or "auto" to pick from the pull request's files
+        type: string
+        default: auto
 
 permissions:
   contents: read
 
-concurrency:
-  group: goldline-fast-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   fast-contracts:
     name: fast-contracts
+    if: inputs.contracts
     runs-on: ubuntu-latest
     # Includes clean MySQL migrations and integration suites after unit contracts.
     timeout-minutes: 20
@@ -52,10 +67,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Type-check
-        env:
-          NODE_OPTIONS: --max-old-space-size=6144
-        run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Enforce Phase 0 architecture guards
         run: |
           pnpm check:nomenclature
@@ -388,6 +400,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BROWSER_ENTRIES: ${{ inputs.browser }}
         run: |
           node --test scripts/ci/goldlineSmokeScope.test.mjs
           node scripts/ci/goldlineSmokeScope.mjs >> "$GITHUB_OUTPUT"

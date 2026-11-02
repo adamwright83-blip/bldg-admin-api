@@ -1,26 +1,12 @@
 name: Mitch event-driven producer
 
 on:
-  pull_request:
-    paths:
-      - "server/mitch/**"
-      - "shared/mitch*.ts"
-      - "drizzle/0111_mitch_producer_events.sql"
-      - "e2e/boreslay/**"
-      - "scripts/migrate.mjs"
-      - "scripts/mitch-github-agent.ts"
-      - "tsconfig.mitch-agent.json"
-      - ".github/workflows/mitch-event-driven.yml"
-      - ".github/workflows/mitch-claude-executor.yml"
-      - ".github/workflows/mitch-independent-reviewer.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: mitch-event-driven-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   producer-contracts:
@@ -52,8 +38,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Mitch unit and HTTP contracts
         run: pnpm vitest run server/mitch
-      - name: Mitch typecheck
-        run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Mitch autonomous agent typecheck
         run: pnpm exec tsc --project tsconfig.mitch-agent.json --noEmit
       - name: Durable inbox against disposable MySQL

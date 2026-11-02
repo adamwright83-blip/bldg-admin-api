@@ -1,14 +1,17 @@
 name: Story infrastructure
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Run by ci.yml on every run: the spoiler guard always, the MySQL job when the change reaches story code.
+  workflow_call:
+    inputs:
+      mysql:
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      mysql:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -29,6 +32,7 @@ jobs:
 
   story-mysql:
     name: story tables on real MySQL
+    if: inputs.mysql
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:

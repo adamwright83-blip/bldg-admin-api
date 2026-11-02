@@ -4,20 +4,13 @@ name: Mission Director cost regression
 # explanation calls, changed plans still get one, and stale or concurrent reads
 # never reuse the wrong stored plan (PR #606).
 on:
-  pull_request:
-    paths:
-      - "server/planning/missionDirector/**"
-      - ".github/workflows/mission-director-cost.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
+  workflow_dispatch:
   push:
     branches: [claude/mission-director-explain-cost]
-  workflow_dispatch:
 permissions:
   contents: read
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   disposable-mysql:
     runs-on: ubuntu-latest

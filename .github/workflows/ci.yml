@@ -1,0 +1,259 @@
+name: CI
+
+# One workflow for every pull request. The scope job reads the change and picks the suites it needs
+# (scripts/ci/ciAreas.mjs); each suite is a reusable workflow called below; merge-gate passes only when
+# every picked suite passed. merge-gate is the one check to require on main (docs/ci/CI_SCOPES.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 10:00 UTC, 02:00 or 03:00 in Los Angeles: the full regression, every browser suite included.
+    - cron: "0 10 * * *"
+  # On demand, e.g. before a release: the same full regression.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# A newer push to the same pull request supersedes its run. Main, nightly and manual runs never cancel.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.scope.outputs.jobs }}
+      unit_tests: ${{ steps.scope.outputs.unit_tests }}
+      unit_shards: ${{ steps.scope.outputs.unit_shards }}
+      unit_shard_total: ${{ steps.scope.outputs.unit_shard_total }}
+      story_mysql: ${{ steps.scope.outputs.story_mysql }}
+      smoke_contracts: ${{ steps.scope.outputs.smoke_contracts }}
+      smoke_entries: ${{ steps.scope.outputs.smoke_entries }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The pull_request merge commit and its base, HEAD^1.
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Selection rules and merge-gate hold for representative changes
+        run: node --test scripts/ci/*.test.mjs
+      - id: scope
+        name: Pick the suites this change needs
+        run: node scripts/ci/ciScopes.mjs
+
+  # ── Every run ───────────────────────────────────────────────────────────────────────────────
+  # Independent of scope, so the guards report even if the scope job breaks.
+  guards:
+    uses: ./.github/workflows/nomenclature-hygiene.yml
+
+  story:
+    needs: scope
+    uses: ./.github/workflows/story-infrastructure.yml
+    with:
+      mysql: ${{ needs.scope.outputs.story_mysql == 'true' }}
+
+  typecheck:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'typecheck')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm check
+
+  unit:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'unit')
+    uses: ./.github/workflows/unit-suite.yml
+    with:
+      tests: ${{ needs.scope.outputs.unit_tests }}
+      shards: ${{ needs.scope.outputs.unit_shards }}
+      shard_total: ${{ needs.scope.outputs.unit_shard_total }}
+      intake_http: false
+
+  # ── Accounts, payments, tenants, migrations ─────────────────────────────────────────────────
+  launch-exam:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'launch-exam')
+    uses: ./.github/workflows/saas-launch-exam.yml
+
+  billing:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'billing')
+    uses: ./.github/workflows/saas-billing-lifecycle.yml
+
+  intake-http:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'intake-http')
+    uses: ./.github/workflows/unit-suite.yml
+    with:
+      unit: false
+      intake_http: true
+
+  tenant-boundary:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'tenant-boundary')
+    uses: ./.github/workflows/saas-tenant-boundary.yml
+
+  tenant-lifecycle:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'tenant-lifecycle')
+    uses: ./.github/workflows/saas-tenant-lifecycle.yml
+
+  plan-cogs:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'plan-cogs')
+    uses: ./.github/workflows/saas-plan-cogs.yml
+
+  schema-release:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'schema-release')
+    uses: ./.github/workflows/saas-schema-release.yml
+
+  procurement:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'procurement')
+    uses: ./.github/workflows/procurement-durable-worker.yml
+
+  # ── Core contracts, release journey, gameplay ───────────────────────────────────────────────
+  goldline-smoke:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'goldline-smoke')
+    uses: ./.github/workflows/goldline-fast-smoke.yml
+    with:
+      contracts: ${{ needs.scope.outputs.smoke_contracts == 'true' }}
+      browser: ${{ needs.scope.outputs.smoke_entries }}
+
+  legacy-release:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'legacy-release')
+    uses: ./.github/workflows/legacy-dayforge-compatibility-release.yml
+
+  goldline-mobile:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'goldline-mobile')
+    uses: ./.github/workflows/goldline-mobile-regression.yml
+
+  beverly-hills-2d:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'beverly-hills-2d')
+    uses: ./.github/workflows/beverly-hills-2d.yml
+
+  # ── Claire, Daphne, Mitch, President, integrations ──────────────────────────────────────────
+  claire-analysis:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'claire-analysis')
+    uses: ./.github/workflows/claire-analysis.yml
+
+  claire-sales-truth:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'claire-sales-truth')
+    uses: ./.github/workflows/claire-sales-truth.yml
+
+  claire-strategic-preparation:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'claire-strategic-preparation')
+    uses: ./.github/workflows/claire-strategic-preparation.yml
+
+  daphne-v2-acceptance:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'daphne-v2-acceptance')
+    uses: ./.github/workflows/daphne-v2-acceptance.yml
+
+  mission-director-cost:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'mission-director-cost')
+    uses: ./.github/workflows/mission-director-cost.yml
+
+  cleancloud-intake-pilot:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'cleancloud-intake-pilot')
+    uses: ./.github/workflows/cleancloud-intake-pilot.yml
+
+  cleancloud-late-sales:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'cleancloud-late-sales')
+    uses: ./.github/workflows/cleancloud-late-sales.yml
+
+  google-integrations:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'google-integrations')
+    uses: ./.github/workflows/google-integrations.yml
+
+  mitch-event-driven:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'mitch-event-driven')
+    uses: ./.github/workflows/mitch-event-driven.yml
+
+  president-stage1:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'president-stage1')
+    uses: ./.github/workflows/president-stage1.yml
+
+  sales-intel-teaching-review:
+    needs: scope
+    if: contains(fromJSON(needs.scope.outputs.jobs || '[]'), 'sales-intel-teaching-review')
+    uses: ./.github/workflows/sales-intel-teaching-review.yml
+
+  # ── The one required check ──────────────────────────────────────────────────────────────────
+  merge-gate:
+    name: merge-gate
+    if: always()
+    needs:
+      - scope
+      - guards
+      - story
+      - typecheck
+      - unit
+      - launch-exam
+      - billing
+      - intake-http
+      - tenant-boundary
+      - tenant-lifecycle
+      - plan-cogs
+      - schema-release
+      - procurement
+      - goldline-smoke
+      - legacy-release
+      - goldline-mobile
+      - beverly-hills-2d
+      - claire-analysis
+      - claire-sales-truth
+      - claire-strategic-preparation
+      - daphne-v2-acceptance
+      - mission-director-cost
+      - cleancloud-intake-pilot
+      - cleancloud-late-sales
+      - google-integrations
+      - mitch-event-driven
+      - president-stage1
+      - sales-intel-teaching-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Every suite this change needs passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/mergeGate.mjs

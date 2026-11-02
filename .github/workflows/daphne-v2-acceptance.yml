@@ -1,20 +1,12 @@
 # LEGACY DAYFORGE COMPATIBILITY: CI migration runner uses retained historical bootstrap keys.
 name: Daphne V2 durable preference acceptance
 on:
-  pull_request:
-    paths:
-      - 'server/agents/daphne/**'
-      - 'server/claire/**'
-      - '.github/workflows/daphne-v2-acceptance.yml'
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   daphne-durable-two-call:
@@ -55,8 +47,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Verify TypeScript compile
-        run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Verify Daphne receipts, style rendering and Stage 3B branch
         run: >-
           pnpm vitest run

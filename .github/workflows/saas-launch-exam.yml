@@ -2,21 +2,12 @@
 name: JOYSTICK SaaS launch exam
 
 on:
-  pull_request:
-    # Docs and captured artifacts never reach this gate; any code change still runs it.
-    paths-ignore:
-      - "docs/**"
-      - "artifacts/**"
-      - "**/*.md"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fresh-customer-exam:
@@ -53,8 +44,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Type-check launch candidate
-        run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Stripe acceptance guard and signed-event contract (offline, NOT provider acceptance)
         run: pnpm vitest run server/saas/stripeProviderAcceptance.test.ts
       - name: Product and SaaS contract

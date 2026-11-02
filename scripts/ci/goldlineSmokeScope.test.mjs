@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { selectEntries, smokeScope } from './goldlineSmokeScope.mjs';
+import { namedEntries, selectEntries, smokeScope } from './goldlineSmokeScope.mjs';
 
 const entries = JSON.parse(
   readFileSync(new URL('../../.github/goldline-fast-smoke-matrix.json', import.meta.url), 'utf8')
@@ -56,4 +56,15 @@ test('anything else, including unknown paths, runs every job', () => {
   }
   assert.equal(smokeScope(null), 'all');
   assert.equal(selectEntries(entries, 'all').length, 6);
+});
+
+test('ci.yml can name the entries, and an unknown name fails loudly', () => {
+  assert.equal(namedEntries(entries, 'auto'), null);
+  assert.equal(namedEntries(entries, ''), null);
+  assert.deepEqual(namedEntries(entries, '[]'), []);
+  assert.deepEqual(
+    namedEntries(entries, '["fast-smoke-channel-382","fast-smoke-world"]').map(entry => entry.name),
+    ['fast-smoke-world', 'fast-smoke-channel-382']
+  );
+  assert.throws(() => namedEntries(entries, '["fast-smoke-silver-lake-desktop"]'), /no matrix entry/);
 });
