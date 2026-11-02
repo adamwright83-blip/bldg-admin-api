@@ -57,6 +57,13 @@ const GARMENT_COLOR = /* glsl */ `
     if (p.y < 1.165 || (tx > 0.145 && p.y > 1.33) || (p.z > 0.03 && p.y > 1.30 && tx < (p.y - 1.30) * 0.55)
         || (p.y > 1.435 && (tx < 0.055 || tx > 0.125))) discard;
   }
+  if (sid == 2) {
+    // the frayed hem: an uneven fringe cut per pixel, loose threads hanging a little below it
+    float hem = 0.80 + 0.028 * tbNoise(vec3(p.x * 70.0, 0.0, p.z * 70.0)) + 0.012 * tbNoise(vec3(p.x * 260.0, 3.0, p.z * 260.0));
+    float thread = step(0.8, tbNoise(vec3(p.x * 900.0, 7.0, p.z * 900.0))) * step(hem - 0.018, p.y);
+    if ((p.y < hem && thread < 0.5) || p.y > 1.035) discard;
+    c = mix(c, vec3(0.34, 0.33, 0.2), (1.0 - smoothstep(hem, hem + 0.02, p.y)) * 0.55);
+  }
   if (sid == 11) {
     float sd = dot(p - vec3(-0.095, 1.47, 0.0), normalize(vec3(0.505, 0.27, 0.0)));
     if (abs(sd) > 0.0232) discard;
@@ -217,7 +224,7 @@ const SKIN = /* glsl */ `
     warm += 1.0 - smoothstep(0.0, 0.06, abs(p.y - 0.5));                      // knees
     warm += (1.0 - smoothstep(0.0, 0.05, abs(p.y - 1.08))) * step(0.22, ax);   // elbows
     warm += (1.0 - smoothstep(0.86, 0.96, p.y)) * step(0.28, ax);              // hands
-    warm += (1.0 - smoothstep(0.0, 0.03, abs(p.y - 1.62))) * step(0.035, ax) * step(ax, 0.07) * step(0.04, p.z); // cheeks
+    warm += (1.0 - smoothstep(0.0, 0.03, abs(p.y - 1.575))) * step(0.035, ax) * step(ax, 0.07) * step(0.04, p.z); // cheeks
     diffuseColor.rgb *= 0.95 + 0.1 * mottle;
     // under the top's outline the skin wears the linen, so a gap in the cut reads as cloth, not a hole
     float under = step(1.17, p.y) * step(p.y, 1.43) * step(ax, 0.135)
