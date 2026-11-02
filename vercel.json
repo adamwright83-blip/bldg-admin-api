@@ -59,6 +59,22 @@
       "destination": "/index.html"
     },
     {
+      "source": "/signup",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/joystick-home/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/joystick-home/terms.html"
+    },
+    {
       "source": "/onboarding",
       "destination": "/index.html"
     },

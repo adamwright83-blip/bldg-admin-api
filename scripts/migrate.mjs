@@ -5827,6 +5827,17 @@ await ensureRequiredColumn(
   ]);
 }
 
+// 0165: JOYSTICK accounts (Google sign-up before any workspace) and the journeys they own. Additive.
+{
+  const statements = await readSqlStatements("../drizzle/0165_joystick_accounts.sql");
+  for (const statement of statements) await runRequired(statement, "JOYSTICK accounts");
+  await assertRequiredColumns("joystick_accounts", [
+    "id", "google_sub", "email", "name", "given_name", "session_version", "preview_version", "signed_up_at", "last_signed_in_at",
+    "google_connected_at", "first_lines_at", "portrait_kept_at", "activated_at", "created_at", "updated_at",
+  ]);
+  await assertRequiredColumns("joystick_account_journeys", ["journey_id", "account_id", "acquisition_session_id", "created_at"]);
+}
+
 // 0164: JOYSTICK's first ten minutes, the first read shown before Claire is named. Additive.
 {
   const statements = await readSqlStatements("../drizzle/0164_first_ten_first_reads.sql");

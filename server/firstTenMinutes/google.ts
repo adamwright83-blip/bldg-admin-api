@@ -26,7 +26,10 @@ export function isGoogleConnectConfigured(env: NodeJS.ProcessEnv = process.env):
   return Boolean(c.id && c.secret);
 }
 
-export function googleAuthorizationUrl(input: { state: string; redirectUri: string; send?: boolean }, env: NodeJS.ProcessEnv = process.env): string {
+export function googleAuthorizationUrl(
+  input: { state: string; redirectUri: string; send?: boolean; loginHint?: string | null },
+  env: NodeJS.ProcessEnv = process.env
+): string {
   const c = client(env);
   if (!c.id) throw new Error("Google connection is not configured");
   const params = new URLSearchParams({
@@ -37,6 +40,28 @@ export function googleAuthorizationUrl(input: { state: string; redirectUri: stri
     // a refresh token, so the crew can keep reading while the visitor plays, and after activation
     access_type: "offline",
     prompt: "consent",
+    include_granted_scopes: "true",
+    state: input.state,
+    // the account they signed up with, picked for them (they can still choose another)
+    ...(input.loginHint ? { login_hint: input.loginHint } : {}),
+  });
+  return providerUrl(`${AUTH_URL}?${params.toString()}`, env);
+}
+
+/**
+ * Sign up / log in with Google: who the person is, and nothing else (openid, email, profile). Google lets anyone
+ * grant these with no warning, even while the app's restricted scopes await verification; reading Gmail, Calendar and
+ * Drive is asked for on the next screen (googleAuthorizationUrl).
+ */
+export function googleSignInUrl(input: { state: string; redirectUri: string }, env: NodeJS.ProcessEnv = process.env): string {
+  const c = client(env);
+  if (!c.id) throw new Error("Google sign-in is not configured");
+  const params = new URLSearchParams({
+    client_id: c.id,
+    redirect_uri: input.redirectUri,
+    response_type: "code",
+    scope: "openid email profile",
+    prompt: "select_account",
     include_granted_scopes: "true",
     state: input.state,
   });

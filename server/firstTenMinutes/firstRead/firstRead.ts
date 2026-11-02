@@ -12,6 +12,7 @@ import { googleResearch } from "../research/googleResearch";
 import { firstTenFirstReads } from "../schema";
 import { firstTenDb, type JourneyRow } from "../store";
 import { googleAccessFor } from "../understanding/deps";
+import { markFunnelStep } from "../../joystickAccount/store";
 import type { GoogleAccess } from "../understanding/googleReaders";
 
 /**
@@ -100,7 +101,15 @@ export async function beginFirstRead(journey: JourneyRow, input: FirstReadInput,
       const access = await googleAccessFor(journey);
       if (!access) throw new Error("no Google connection");
       const gemini: GeminiConfig = { apiKey, model: env.JOYSTICK_FIRST_READ_MODEL?.trim() || "gemini-3.8-flash", thinking: "low" };
-      await runFirstRead({ ...input, access, gemini, save: patch => save(journey.id, patch) });
+      await runFirstRead({
+        ...input,
+        access,
+        gemini,
+        save: async patch => {
+          await save(journey.id, patch);
+          if (patch.status === "revealed") void markFunnelStep(journey.id, "firstLinesAt");
+        },
+      });
     } catch (error) {
       console.warn("[FirstRead] failed:", error instanceof Error ? error.message.slice(0, 120) : "unknown");
       await markFailed(journey.id).catch(() => undefined);

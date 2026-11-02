@@ -116,7 +116,8 @@ function hasAuthenticatedCookie(req: Pick<Request, "headers">): boolean {
     .split(";")
     .some(part => {
       const name = part.trim().split("=", 1)[0];
-      return name === COOKIE_NAME || name === VENDOR_COOKIE_NAME;
+      // a JOYSTICK account cookie (server/joystickAccount/session.ts) authenticates too
+      return name === COOKIE_NAME || name === VENDOR_COOKIE_NAME || name === "joystick_account";
     });
 }
 

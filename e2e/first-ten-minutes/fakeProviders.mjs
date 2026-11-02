@@ -156,6 +156,8 @@ const grantedScopes = () => [...control.googleScopes, ...(sendGranted ? [SEND_SC
 const defaults = () => ({
   googleScopes: ALL_GOOGLE_SCOPES,
   googleEmail: "owner@first-ten.example",
+  // Google's account id: JOYSTICK accounts are keyed by it, so a sign-up test that needs a new person sets its own
+  googleSub: "fake-sub-1",
   deny: false,
   slackTeam: "First Ten Workspace",
   modelFails: false,
@@ -278,7 +280,7 @@ const server = http.createServer(async (req, res) => {
     });
   }
   if (path === "/openidconnect.googleapis.com/v1/userinfo") {
-    return send(res, 200, { sub: "fake-sub-1", email: control.googleEmail, email_verified: true, name: "First Ten Owner", given_name: "Owner" });
+    return send(res, 200, { sub: control.googleSub, email: control.googleEmail, email_verified: true, name: "First Ten Owner", given_name: "Owner" });
   }
   if (path === "/oauth2.googleapis.com/revoke" && req.method === "POST") {
     revoked.push({ provider: "google", token: new URLSearchParams(body).get("token") });

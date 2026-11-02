@@ -9,6 +9,7 @@ import { firstTenCallbackPath, firstTenRedirectUri } from "./origins";
 import { FIRST_TEN_NONCE_COOKIE, verifyConnectState } from "./oauthState";
 import { GOOGLE_SEND_SCOPE } from "../../shared/firstTenMinutes";
 import { connectionRows, journeyById, saveConnection } from "./store";
+import { markFunnelStep } from "../joystickAccount/store";
 
 /**
  * Google and Slack send the visitor back here. The callback is a top-level GET from the provider, so it is an
@@ -99,6 +100,7 @@ export async function handleFirstTenCallback(
       if (checked.state.purpose === "send") {
         return tokens.grantedScopes.includes(GOOGLE_SEND_SCOPE) ? back(res, "connected=google&for=send") : fail("send_permission");
       }
+      void markFunnelStep(journey.id, "googleConnectedAt");
       // off unless JOYSTICK_FIRST_READ_REVEAL=on. Awaited only for its claim (one row), so the page that loads next
       // already finds it running; the read itself goes on in the background and never holds the redirect.
       await (deps.beginFirstRead ?? beginFirstRead)(journey, { startedAt: consentedAt, ownerName: account.name, ownerEmail: account.email }, env).catch(() => false);

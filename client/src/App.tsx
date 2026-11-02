@@ -44,6 +44,8 @@ const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const JoystickLanding = lazy(() => import("./pages/JoystickLanding"));
 // /joystick-start: today's funnel, or JOYSTICK's first ten minutes when JOYSTICK_FIRST_TEN_MINUTES opens it.
 const JoystickStartRoute = lazy(() => import("./pages/firstTenMinutes/JoystickStartRoute"));
+// /signup and /login: a JOYSTICK account with Google, before any workspace exists (server/joystickAccount).
+const SignInPage = lazy(() => import("./pages/account/SignInPage"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
@@ -337,6 +339,8 @@ const SAAS_CUSTOMER_SAFE_PATHS = [
   "/dayforge-login",
   "/dayforge-onboarding",
   "/joystick-start",
+  "/signup",
+  "/login",
   "/onboarding",
   "/goldline/start",
   "/receipt/",
@@ -495,6 +499,16 @@ function AdminHostRouter() {
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
           <JoystickStartRoute />
+        </Suspense>
+      </Route>
+      <Route path="/signup">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <SignInPage intent="signup" />
+        </Suspense>
+      </Route>
+      <Route path="/login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <SignInPage intent="login" />
         </Suspense>
       </Route>
       <Route path="/dayforge-onboarding">
@@ -839,6 +853,16 @@ function Router() {
       <Route path="/joystick-start">
         <Suspense fallback={<PublicLandingFallback />}>
           <JoystickStartRoute />
+        </Suspense>
+      </Route>
+      <Route path="/signup">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <SignInPage intent="signup" />
+        </Suspense>
+      </Route>
+      <Route path="/login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <SignInPage intent="login" />
         </Suspense>
       </Route>
       <Route path="/dayforge-onboarding">
