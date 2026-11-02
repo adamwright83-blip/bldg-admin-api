@@ -8,7 +8,9 @@ const entries = JSON.parse(
 );
 
 test('every matrix entry is complete and scoped', () => {
-  assert.equal(entries.length, 7);
+  // Counted from the matrix itself: removing a world (Silver Lake, #813) must not fail every PR's scope job.
+  assert.ok(entries.length >= 3);
+  assert.equal(new Set(entries.map(entry => entry.name)).size, entries.length);
   for (const entry of entries) {
     assert.ok(entry.name && entry.command && entry.timeout > 0, entry.name);
     assert.ok(['core', 'world'].includes(entry.scope), entry.name);
@@ -54,5 +56,5 @@ test('anything else, including unknown paths, runs every job', () => {
     assert.equal(smokeScope(['docs/a.md', 'server/mitch/a.ts', file]), 'all', file);
   }
   assert.equal(smokeScope(null), 'all');
-  assert.equal(selectEntries(entries, 'all').length, 7);
+  assert.equal(selectEntries(entries, 'all').length, entries.length);
 });
