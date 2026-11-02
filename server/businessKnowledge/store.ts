@@ -511,7 +511,10 @@ export async function finishRun(
     research: ResearchRecord[];
     notes: string[];
     watermarkAt: Date | null;
-  }
+  },
+  // the run's own clock, as startRun takes it: a run started on one clock and finished on another can look as if it
+  // finished in the future, and every later "checked recently" comparison is then wrong
+  now = new Date()
 ): Promise<void> {
   const db = await knowledgeDb();
   await db
@@ -519,7 +522,7 @@ export async function finishRun(
     .set({
       status: result.status,
       runningKey: null,
-      finishedAt: new Date(),
+      finishedAt: now,
       leaseUntil: null,
       usedJson: result.used,
       coverageJson: [...result.coverage].slice(-600),

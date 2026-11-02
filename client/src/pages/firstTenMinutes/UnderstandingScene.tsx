@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   objectNames,
   UNDERSTANDING_COPY,
@@ -69,14 +69,57 @@ function DeskObject({
   );
 }
 
+/** One line at a time, unhurried; how long the last one stays before the crew may step in. */
+const FIRST_LINE_GAP_MS = 2600;
+const FIRST_LINES_HOLD_MS = 6000;
+
+/**
+ * The first read in the lamplight: the lines arrive one at a time, unsigned (Claire hasn't been named yet). After the
+ * last, the person can go on at once, or the crew steps in after a few seconds.
+ */
+function FirstLines({ lines, onRead }: { lines: string[]; onRead: () => void }) {
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(reduce ? lines.length : 1);
+  // the page re-renders while the reading is polled; the timers mustn't restart with it
+  const read = useRef(onRead);
+  read.current = onRead;
+  useEffect(() => {
+    if (shown < lines.length) {
+      const timer = setTimeout(() => setShown(n => n + 1), FIRST_LINE_GAP_MS);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => read.current(), FIRST_LINES_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [shown, lines.length]);
+  return (
+    <motion.div key="first-lines" className={styles.firstLines} data-testid="first-ten-first-lines" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
+      {lines.slice(0, shown).map(line => (
+        <motion.p key={line} className={styles.firstLine} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+          {line}
+        </motion.p>
+      ))}
+      {shown >= lines.length ? (
+        <button type="button" className={styles.deskLink} onClick={onRead} data-testid="first-ten-first-lines-go-on">
+          Go on
+        </button>
+      ) : null}
+    </motion.div>
+  );
+}
+
 export function UnderstandingScene({
   view,
   onAgain,
   onLookCloser,
+  firstLines = null,
+  onFirstLinesRead,
 }: {
   view: UnderstandingView | null;
   onAgain: () => void;
   onLookCloser: () => void;
+  /** the first read's lines, when they are ready (FirstLines) */
+  firstLines?: string[] | null;
+  onFirstLinesRead?: () => void;
 }) {
   const [open, setOpen] = useState<ObjectKey | null>(null);
   const findings = view?.findings ?? [];
@@ -106,7 +149,9 @@ export function UnderstandingScene({
 
       <div className={styles.lampLine} aria-live="polite">
         <AnimatePresence mode="wait">
-          {view?.status === "running" && stage ? (
+          {firstLines?.length ? (
+            <FirstLines lines={firstLines} onRead={() => onFirstLinesRead?.()} />
+          ) : view?.status === "running" && stage ? (
             <motion.p key={stage} className={styles.workLine} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
               {UNDERSTANDING_COPY[stage]}
             </motion.p>

@@ -214,12 +214,12 @@ export async function investigate(scope: KnowledgeScope, deps: InvestigationDeps
     }));
     const watermark = latestMaterialTime(book.all(), now) ?? now;
     if (deps.usage) Object.assign(used, Object.fromEntries(Object.entries(deps.usage).map(([key, value]) => [`model_${key}`, value])));
-    await finishRun(scope, runId, { status, used, coverage: deps.ledger.all(), research, notes: [...notes, `stopped: ${stoppedBecause}`], watermarkAt: watermark });
+    await finishRun(scope, runId, { status, used, coverage: deps.ledger.all(), research, notes: [...notes, `stopped: ${stoppedBecause}`], watermarkAt: watermark }, deps.now());
     return { runId, status, rounds: used.rounds, used, research, stoppedBecause, questionIds };
   } catch (error) {
     const reason = error instanceof Error ? error.message.slice(0, 120) : "unknown";
     console.warn("[BusinessKnowledge] the investigation failed:", error instanceof Error ? error.name : "unknown");
-    await finishRun(scope, runId, { status: "failed", used, coverage: deps.ledger.all(), research: [], notes: [...notes, `failed: ${reason}`], watermarkAt: null }).catch(() => undefined);
+    await finishRun(scope, runId, { status: "failed", used, coverage: deps.ledger.all(), research: [], notes: [...notes, `failed: ${reason}`], watermarkAt: null }, deps.now()).catch(() => undefined);
     return { runId, status: "failed", rounds: used.rounds, used, research: [], stoppedBecause: reason, questionIds: [] };
   }
 

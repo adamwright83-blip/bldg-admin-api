@@ -272,6 +272,47 @@ describe("the callback", () => {
     expect(res.cleared).toContain(FIRST_TEN_NONCE_COOKIE);
   });
 
+  it("starts the first read once the Google connection is saved, timed from Google's redirect, and never for send", async () => {
+    const { req } = await signedRequest("google");
+    const res = fakeRes();
+    const order: string[] = [];
+    const save = vi.fn(async () => void order.push("save"));
+    const beginFirstRead = vi.fn(async () => (order.push("first read"), true));
+    const before = Date.now();
+    await handleFirstTenCallback("google", req, res as unknown as Response, {
+      env, loadJourney: ownJourney, save, beginFirstRead,
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL] }),
+      account: async () => ({ subject: "sub-1", email: "nina@wildrootflowers.example", name: "Nina", givenName: "Nina" }),
+    });
+    expect(order).toEqual(["save", "first read"]);
+    const [journey, input] = beginFirstRead.mock.calls[0] as unknown as [{ id: string }, { startedAt: Date; ownerName: string; ownerEmail: string }];
+    expect(journey.id).toBe("journey-1");
+    expect(input).toMatchObject({ ownerName: "Nina", ownerEmail: "nina@wildrootflowers.example" });
+    expect(input.startedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(res.location).toBe("/joystick-start?connected=google");
+
+    // a failure starting it never breaks the connect
+    const again = await signedRequest("google");
+    const res2 = fakeRes();
+    await handleFirstTenCallback("google", again.req, res2 as unknown as Response, {
+      env, loadJourney: ownJourney, save: vi.fn(async () => undefined), beginFirstRead: vi.fn(async () => { throw new Error("db down"); }),
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL] }),
+      account: async () => ({ subject: "sub-1", email: "nina@wildrootflowers.example", name: "Nina", givenName: "Nina" }),
+    });
+    expect(res2.location).toBe("/joystick-start?connected=google");
+
+    // asking for send permission later is not a new first read
+    const send = await signedRequest("google", {}, "send");
+    const beginForSend = vi.fn(async () => true);
+    await handleFirstTenCallback("google", send.req, fakeRes() as unknown as Response, {
+      env, loadJourney: ownJourney, save: vi.fn(async () => undefined), beginFirstRead: beginForSend,
+      loadConnections: async () => [{ provider: "google", status: "connected", accountSubject: "sub-1" }] as never,
+      exchangeGoogle: async () => ({ accessToken: "a", refreshToken: "r", expiresAt: new Date(), grantedScopes: ["openid", GMAIL, "https://www.googleapis.com/auth/gmail.send"] }),
+      account: async () => ({ subject: "sub-1", email: "nina@wildrootflowers.example", name: "Nina", givenName: "Nina" }),
+    });
+    expect(beginForSend).not.toHaveBeenCalled();
+  });
+
   it("revokes and says so when Gmail was unticked", async () => {
     const { req } = await signedRequest("google");
     const res = fakeRes();

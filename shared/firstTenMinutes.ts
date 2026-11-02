@@ -214,3 +214,22 @@ export type ConnectErrorCode = keyof typeof CONNECT_ERRORS;
 export function connectErrorCode(value: string | null | undefined): ConnectErrorCode | null {
   return value && Object.prototype.hasOwnProperty.call(CONNECT_ERRORS, value) ? (value as ConnectErrorCode) : null;
 }
+
+/**
+ * The first read: a few lines about the person, written from their own mail and files (and any public listing tied to
+ * them) within about a minute of connecting Google, shown before Claire is named. Behind JOYSTICK_FIRST_READ_REVEAL.
+ *   off       not running for this journey (the flag is off, or Google isn't connected)
+ *   running   still reading
+ *   revealed  `lines` are ready
+ *   empty     too little to say anything true: nothing is shown
+ *   failed    nothing is shown; the experience goes on as it would have
+ */
+export type FirstReadView = {
+  status: "off" | "running" | "revealed" | "empty" | "failed";
+  lines: string[];
+  /** since the person finished connecting Google */
+  elapsedMs: number;
+  /** after this the experience moves on without the lines */
+  deadlineMs: number;
+};
+export const FIRST_READ_DEADLINE_MS = 75_000;

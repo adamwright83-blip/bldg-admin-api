@@ -136,6 +136,23 @@ export const firstTenPortraits = mysqlTable("first_ten_portraits", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+/**
+ * drizzle/0164_first_ten_first_reads.sql: the first read of one journey (firstRead/firstRead.ts). One per journey, so
+ * repeat visits never pay for it twice. `reveal_json` is only the lines that passed every check; `understanding_json`
+ * and `public_json` keep what the reading concluded and what public research verified, with their sources, for later.
+ */
+export const firstTenFirstReads = mysqlTable("first_ten_first_reads", {
+  journeyId: varchar("journey_id", { length: 36 }).primaryKey(),
+  status: varchar("status", { length: 16 }).$type<"running" | "revealed" | "empty" | "failed">().notNull(),
+  startedAt: timestamp("started_at", { fsp: 3 }).notNull(),
+  revealJson: json("reveal_json").$type<{ lines: string[]; readyMs: number } | null>(),
+  understandingJson: json("understanding_json").$type<Record<string, unknown> | null>(),
+  publicJson: json("public_json").$type<Record<string, unknown> | null>(),
+  timingsJson: json("timings_json").$type<Record<string, number> | null>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 /** drizzle/0156_first_ten_drafts.sql: the real message prepared at the writing table (one per journey). */
 export const firstTenDrafts = mysqlTable("first_ten_drafts", {
   journeyId: varchar("journey_id", { length: 36 }).primaryKey(),

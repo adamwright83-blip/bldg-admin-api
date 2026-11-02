@@ -18,6 +18,7 @@ import { BringYourWorld, ConnectionIncludesSheet, ConnectionsStrip, Invitation }
 import { UnderstandingScene } from "./UnderstandingScene";
 import { FindingsSheet } from "./FindingsSheet";
 import { useReading } from "./useReading";
+import { firstReadHolds, useFirstRead } from "./useFirstRead";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
 import { ClaireQuestion } from "./knowledge/ClaireQuestion";
@@ -153,6 +154,9 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const example = view?.kind === "example";
   const hasConnection = Boolean(view?.connections.length);
   const reading = useReading(credentials, hasConnection);
+  // the first read (off unless JOYSTICK_FIRST_READ_REVEAL is on): a few lines about the person before Claire is named
+  const firstRead = useFirstRead(credentials, hasConnection && !example && view?.stage === "understanding");
+  const [revealRead, setRevealRead] = useState(false);
   const [closer, setCloser] = useState(false);
   const [crewDone, setCrewDone] = useState(false);
   const utils = trpc.useUtils();
@@ -160,10 +164,12 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
   const move = trpc.system.firstTenMinutes.move.useMutation();
 
   // The crew steps in as soon as something worthwhile is ready: once the email reading is done, or the whole reading.
+  // While the person is still on the reading, the crew waits for the first read: its lines, or its deadline.
   const crewReady = Boolean(
     reading.view &&
       (reading.view.status === "complete" || reading.view.finished.includes("conversations")) &&
-      (reading.view.status === "complete" || buildReveals(reading.view.findings, { final: false }).length > 0)
+      (reading.view.status === "complete" || buildReveals(reading.view.findings, { final: false }).length > 0) &&
+      !(view?.stage === "understanding" && firstReadHolds(firstRead, revealRead))
   );
   useEffect(() => {
     if (!crewReady || !credentials || !view || view.stage !== "understanding") return;
@@ -499,7 +505,13 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
               />
             </div>
           ) : (
-            <UnderstandingScene view={reading.view} onAgain={reading.again} onLookCloser={() => setCloser(true)} />
+            <UnderstandingScene
+              view={reading.view}
+              onAgain={reading.again}
+              onLookCloser={() => setCloser(true)}
+              firstLines={view?.stage === "understanding" && firstRead?.status === "revealed" && !revealRead ? firstRead.lines : null}
+              onFirstLinesRead={() => setRevealRead(true)}
+            />
           )}
           {!page && !inChapter && crewFinished && readingComplete && !questionsSettled && knowledgeQuestion.data?.question ? (
             <ClaireQuestion question={knowledgeQuestion.data.question} understood={understood} onAnswer={onKnowledgeAnswer} />

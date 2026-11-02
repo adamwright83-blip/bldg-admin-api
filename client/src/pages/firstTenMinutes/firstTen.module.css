@@ -543,6 +543,21 @@
   color: rgba(251, 245, 232, 0.86);
 }
 
+/* the first read: a few unsigned lines in the lamplight, one at a time */
+.firstLines {
+  display: grid;
+  gap: 14px;
+}
+
+.firstLine {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(18px, 2.2vw, 24px);
+  line-height: 1.38;
+  color: rgba(251, 245, 232, 0.92);
+}
+
 .deskLink {
   margin-top: 14px;
   border: 0;

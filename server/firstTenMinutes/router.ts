@@ -13,6 +13,7 @@ import { disconnectProvider, journeyView, moveJourney, requireJourney, startJour
 import { beginReading } from "./understanding/run";
 import { readingDepsFor } from "./understanding/deps";
 import { understandingView } from "./understanding/view";
+import { firstReadView } from "./firstRead/firstRead";
 import { answerFinding, findingPicture } from "./crew";
 import { changePortraitLine, keepPortraitFor, portraitView, preparePortrait, restorePortraitLine } from "./portrait/portrait";
 import { changeDraft, chapterView, declineDraft, prepareDraft, recordChapterStep } from "./chapter/chapter";
@@ -188,6 +189,13 @@ export const firstTenMinutesRouter = router({
     assertFirstTenOpen(ctx.req);
     const { journey } = await requireJourney(input);
     return understandingView(journey.id);
+  }),
+
+  /** The first read's lines for this journey, once they are ready (status `off` when it isn't running here). */
+  firstRead: publicProcedure.input(credentials).query(async ({ ctx, input }) => {
+    assertFirstTenOpen(ctx.req);
+    const { journey } = await requireJourney(input);
+    return firstReadView(journey.id);
   }),
 
   /**
