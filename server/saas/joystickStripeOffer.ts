@@ -37,7 +37,7 @@ export type StripePriceFacts = {
   active?: boolean | null;
   unit_amount?: number | null;
   currency?: string | null;
-  recurring?: { interval?: string | null } | null;
+  recurring?: { interval?: string | null; interval_count?: number | null } | null;
 };
 
 export type PriceCheck =
@@ -132,11 +132,11 @@ export function checkAdvertisedStripePrice(input: {
         "JOYSTICK checkout is closed until the configured Stripe price can be verified",
     };
   }
-  if (input.price.active === false) {
+  if (input.price.active !== true) {
     return {
       ok: false,
       code: "stale_price",
-      reason: `Stripe price ${input.configuredPriceId} is inactive`,
+      reason: `Stripe price ${input.configuredPriceId} is not an active price`,
     };
   }
   if (input.price.id && input.price.id !== input.configuredPriceId) {
@@ -147,15 +147,17 @@ export function checkAdvertisedStripePrice(input: {
     };
   }
   const interval = input.price.recurring?.interval ?? null;
+  const intervalCount = input.price.recurring?.interval_count;
   if (
     input.price.unit_amount !== offer.unitAmountCents ||
     input.price.currency !== offer.currency ||
-    interval !== offer.interval
+    interval !== offer.interval ||
+    intervalCount !== 1
   ) {
     return {
       ok: false,
       code: "price_mismatch",
-      reason: `Stripe price ${input.configuredPriceId} mismatch: amount=${input.price.unit_amount} (expected ${offer.unitAmountCents}), currency=${input.price.currency} (expected ${offer.currency}), interval=${interval} (expected ${offer.interval})`,
+      reason: `Stripe price ${input.configuredPriceId} mismatch: amount=${input.price.unit_amount} (expected ${offer.unitAmountCents}), currency=${input.price.currency} (expected ${offer.currency}), interval=${interval} (expected ${offer.interval}), interval_count=${intervalCount ?? "missing"} (expected 1)`,
     };
   }
   return { ok: true };
