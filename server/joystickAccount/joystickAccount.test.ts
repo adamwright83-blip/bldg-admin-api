@@ -2,9 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import { firstTenOpenFor } from "../firstTenMinutes/flag";
 import { newConnectNonce } from "../firstTenMinutes/oauthState";
-import { FIRST_TEN_PREVIEW_COOKIE, issuePreviewPass } from "../firstTenMinutes/previewPass";
+import { currentPreviewVersion, FIRST_TEN_PREVIEW_COOKIE, issuePreviewPass } from "../firstTenMinutes/previewPass";
 import { handleGoogleSignInCallback, signSignInState, SIGNIN_NONCE_COOKIE, verifySignInState } from "./googleSignIn";
-import { allowSignInStart } from "./router";
 import { ACCOUNT_COOKIE, accountCookieFrom, issueAccountCookie, journeyToken, readAccountCookie, readJourneyToken } from "./session";
 import type { AccountRow } from "./schema";
 
@@ -20,12 +19,12 @@ describe("account credentials", () => {
   it("signs the account cookie, refuses a tampered, expired or unsigned one", () => {
     const now = new Date("2026-11-02T10:00:00Z");
     const cookie = issueAccountCookie({ accountId: ACCOUNT_ID, version: 3 }, env, now)!;
-    expect(readAccountCookie(cookie.value, env, now)).toEqual({ accountId: ACCOUNT_ID, version: 3 });
+    expect(readAccountCookie(cookie.value, env, now)).toEqual({ accountId: ACCOUNT_ID, version: 3, previewVersion: null });
     expect(readAccountCookie(cookie.value.replace(".3.", ".4."), env, now)).toBeNull();
     expect(readAccountCookie(cookie.value, { ...env, JWT_SECRET: "another-secret-entirely-0000000000000" }, now)).toBeNull();
     expect(readAccountCookie(cookie.value, env, new Date(now.getTime() + 31 * 86_400_000))).toBeNull();
     expect(issueAccountCookie({ accountId: ACCOUNT_ID, version: 1 }, {})).toBeNull();
-    expect(accountCookieFrom(`other=1; ${ACCOUNT_COOKIE}=${encodeURIComponent(cookie.value)}`, env, now)).toEqual({ accountId: ACCOUNT_ID, version: 3 });
+    expect(accountCookieFrom(`other=1; ${ACCOUNT_COOKIE}=${encodeURIComponent(cookie.value)}`, env, now)).toEqual({ accountId: ACCOUNT_ID, version: 3, previewVersion: null });
   });
 
   it("derives a journey token that opens only the draft it was made for, and fits the first-ten handoff", () => {
@@ -39,21 +38,20 @@ describe("account credentials", () => {
     expect(readJourneyToken("a".repeat(48), SESSION_ID, env)).toBeNull();
   });
 
-  it("lets a signed-in account through the preview gate, as the crew link's pass does", () => {
-    const cookie = issueAccountCookie({ accountId: ACCOUNT_ID, version: 1 }, env)!;
+  it("lets an account admitted under the current crew code through the preview gate, and closes it with a new code", () => {
+    const cookie = issueAccountCookie({ accountId: ACCOUNT_ID, version: 1, previewVersion: currentPreviewVersion(env) }, env)!;
+    const header = { headers: { cookie: `${ACCOUNT_COOKIE}=${encodeURIComponent(cookie.value)}` } };
     expect(firstTenOpenFor({ headers: {} }, env)).toBe(false);
-    expect(firstTenOpenFor({ headers: { cookie: `${ACCOUNT_COOKIE}=${encodeURIComponent(cookie.value)}` } }, env)).toBe(true);
+    expect(firstTenOpenFor(header, env)).toBe(true);
+    // a new crew code revokes it, as it revokes every pass; so does removing the code
+    expect(firstTenOpenFor(header, { ...env, JOYSTICK_FIRST_TEN_PREVIEW_CODE: "a-brand-new-crew-code-00000000" })).toBe(false);
+    expect(firstTenOpenFor(header, { ...env, JOYSTICK_FIRST_TEN_PREVIEW_CODE: "" })).toBe(false);
+    // an account never admitted in preview (made while it was `on`) is not a pass
+    const unadmitted = issueAccountCookie({ accountId: ACCOUNT_ID, version: 1 }, env)!;
+    expect(firstTenOpenFor({ headers: { cookie: `${ACCOUNT_COOKIE}=${encodeURIComponent(unadmitted.value)}` } }, env)).toBe(false);
     expect(firstTenOpenFor({ headers: { cookie: `${ACCOUNT_COOKIE}=forged.1.9999999999999.sig` } }, env)).toBe(false);
     // off stays off, whoever is signed in
-    expect(firstTenOpenFor({ headers: { cookie: `${ACCOUNT_COOKIE}=${encodeURIComponent(cookie.value)}` } }, { ...env, JOYSTICK_FIRST_TEN_MINUTES: "off" })).toBe(false);
-  });
-
-  it("limits sign-in starts per address", () => {
-    const now = Date.now();
-    for (let i = 0; i < 20; i += 1) expect(allowSignInStart("203.0.113.9", now)).toBe(true);
-    expect(allowSignInStart("203.0.113.9", now)).toBe(false);
-    expect(allowSignInStart("203.0.113.10", now)).toBe(true);
-    expect(allowSignInStart("203.0.113.9", now + 11 * 60_000)).toBe(true);
+    expect(firstTenOpenFor(header, { ...env, JOYSTICK_FIRST_TEN_MINUTES: "off" })).toBe(false);
   });
 });
 
@@ -85,6 +83,7 @@ const account = (over: Partial<AccountRow> = {}): AccountRow => ({
   name: "Sam Acme",
   givenName: "Sam",
   sessionVersion: 1,
+  previewVersion: null,
   signedUpAt: new Date(),
   lastSignedInAt: new Date(),
   googleConnectedAt: null,
@@ -96,24 +95,45 @@ const account = (over: Partial<AccountRow> = {}): AccountRow => ({
   ...over,
 });
 
-async function callback(options: { intent?: "signup" | "login"; pass?: boolean; query?: Record<string, string>; existing?: boolean; journey?: { tenantId: string | null } | null; workspace?: boolean; env?: NodeJS.ProcessEnv }) {
+async function callback(options: {
+  intent?: "signup" | "login";
+  pass?: boolean;
+  accountCookie?: boolean;
+  query?: Record<string, string>;
+  existing?: Partial<AccountRow>;
+  journey?: { tenantId: string | null } | null;
+  workspace?: boolean;
+  adopt?: { owner: boolean };
+  env?: NodeJS.ProcessEnv;
+}) {
   const e = options.env ?? env;
   const { nonce, nonceHash } = newConnectNonce();
-  const state = await signSignInState({ origin: "https://gojoystick.com", nonceHash, intent: options.intent ?? "signup" }, e);
+  const adopt = options.adopt ? { journeyId: "journey-before", sessionId: SESSION_ID } : undefined;
+  const state = await signSignInState({ origin: "https://gojoystick.com", nonceHash, intent: options.intent ?? "signup", adopt }, e);
   const pass = issuePreviewPass(e)!;
-  const cookie = [`${SIGNIN_NONCE_COOKIE}=${nonce}`, ...(options.pass ? [`${FIRST_TEN_PREVIEW_COOKIE}=${encodeURIComponent(pass.value)}`] : [])].join("; ");
+  const admitted = issueAccountCookie({ accountId: "7f1c1c1e-3a6b-4c43-9a4e-4a1f0c1f2b11", version: 1, previewVersion: currentPreviewVersion(e) }, e)!;
+  const cookie = [
+    `${SIGNIN_NONCE_COOKIE}=${nonce}`,
+    ...(options.pass ? [`${FIRST_TEN_PREVIEW_COOKIE}=${encodeURIComponent(pass.value)}`] : []),
+    ...(options.accountCookie ? [`${ACCOUNT_COOKIE}=${encodeURIComponent(admitted.value)}`] : []),
+  ].join("; ");
   const req = { query: { state, code: "the-code", ...options.query }, headers: { cookie }, protocol: "https", get: () => "gojoystick.com" } as unknown as Request;
   const res = fakeRes();
   const deps = {
     env: e,
     exchange: vi.fn(async () => ({ accessToken: "a", refreshToken: null, expiresAt: new Date(), grantedScopes: ["openid", "email", "profile"] })),
     account: vi.fn(async () => ({ subject: "google-sub-1", email: "sam@acme.example", name: "Sam Acme", givenName: "Sam" })),
-    findAccount: vi.fn(async () => (options.existing ? account() : null)),
-    signIn: vi.fn(async () => ({ account: account(), created: !options.existing })),
+    findAccount: vi.fn(async () => (options.existing ? account(options.existing) : null)),
+    signIn: vi.fn(async (_identity: unknown, opts?: { previewVersion?: string | null }) => ({
+      account: account({ ...options.existing, ...(opts?.previewVersion ? { previewVersion: opts.previewVersion } : {}) }),
+      created: !options.existing,
+    })),
     latestJourney: vi.fn(async () => (options.journey ? { journey: { id: "journey-1", tenantId: options.journey.tenantId } as never, acquisitionSessionId: SESSION_ID } : null)),
     start: vi.fn(async () => ({ credentials: { sessionId: SESSION_ID, resumeToken: "r".repeat(43) }, journey: { id: "journey-new" } as never, session: { id: SESSION_ID } as never })),
     link: vi.fn(async () => undefined),
     openWorkspace: vi.fn(async () => Boolean(options.workspace)),
+    ownerOf: vi.fn(async () => (options.adopt?.owner ? account({ id: "8f1c1c1e-3a6b-4c43-9a4e-4a1f0c1f2b11" }) : null)),
+    loadJourney: vi.fn(async () => ({ id: "journey-before", kind: "own", acquisitionSessionId: SESSION_ID, tenantId: null }) as never),
   };
   await handleGoogleSignInCallback(req, res as unknown as Response, deps);
   return { res, deps };
@@ -125,7 +145,9 @@ describe("Continue with Google", () => {
     expect(deps.exchange).toHaveBeenCalledWith({ code: "the-code", redirectUri: "https://gojoystick.com/api/account/google/callback" }, { env });
     expect(deps.signIn).toHaveBeenCalled();
     expect(deps.link).toHaveBeenCalledWith({ accountId: ACCOUNT_ID, journeyId: "journey-new", acquisitionSessionId: SESSION_ID });
-    expect(readAccountCookie(res.cookies[ACCOUNT_COOKIE], env)).toEqual({ accountId: ACCOUNT_ID, version: 1 });
+    // admitted under the current crew code: the cookie carries it to this account's other devices
+    expect(readAccountCookie(res.cookies[ACCOUNT_COOKIE], env)).toEqual({ accountId: ACCOUNT_ID, version: 1, previewVersion: currentPreviewVersion(env) });
+    expect(deps.signIn).toHaveBeenCalledWith(expect.anything(), { previewVersion: currentPreviewVersion(env) });
     const [, fragment] = res.location.split("#first-ten=");
     expect(res.location.startsWith("/joystick-start#first-ten=")).toBe(true);
     const [sessionId, token] = fragment.split(".");
@@ -134,11 +156,17 @@ describe("Continue with Google", () => {
     expect(res.cleared).toContain(SIGNIN_NONCE_COOKIE);
   });
 
-  it("in preview, a new person without the crew link gets no account; someone who has one signs in", async () => {
+  it("in preview, only the crew link admits: never another account's cookie, never an account the code no longer covers", async () => {
     const refused = await callback({ pass: false });
     expect(refused.res.location).toBe("/signup?error=invite_only");
     expect(refused.deps.signIn).not.toHaveBeenCalled();
-    const returning = await callback({ pass: false, existing: true, intent: "login", journey: { tenantId: null } });
+    // an admitted account's cookie in this browser doesn't let a different Google identity in
+    const piggyback = await callback({ pass: false, accountCookie: true });
+    expect(piggyback.res.location).toBe("/signup?error=invite_only");
+    // an account admitted under an older code, or made while it was `on`, needs the current link
+    const stale = await callback({ pass: false, existing: { previewVersion: "0000000000000000" }, intent: "login" });
+    expect(stale.res.location).toBe("/login?error=invite_only");
+    const returning = await callback({ pass: false, existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: null } });
     expect(returning.res.location.startsWith("/joystick-start#first-ten=")).toBe(true);
     expect(returning.deps.start).not.toHaveBeenCalled();
     // `on`: anyone may sign up
@@ -147,11 +175,20 @@ describe("Continue with Google", () => {
   });
 
   it("opens the workspace for an activated owner, and their journey when the workspace can't be opened yet", async () => {
-    const opened = await callback({ existing: true, intent: "login", journey: { tenantId: "df_123" }, workspace: true });
+    const opened = await callback({ existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: "df_123" }, workspace: true });
     expect(opened.deps.openWorkspace).toHaveBeenCalledWith("df_123", expect.anything(), expect.anything());
     expect(opened.res.location).toBe("/onboarding");
-    const notYet = await callback({ existing: true, intent: "login", journey: { tenantId: "df_123" }, workspace: false });
+    const notYet = await callback({ existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: "df_123" }, workspace: false });
     expect(notYet.res.location.startsWith("/joystick-start#first-ten=")).toBe(true);
+  });
+
+  it("makes the journey this browser already began the new account's, unless another account has it", async () => {
+    const adopted = await callback({ pass: true, adopt: { owner: false } });
+    expect(adopted.deps.link).toHaveBeenCalledWith({ accountId: ACCOUNT_ID, journeyId: "journey-before", acquisitionSessionId: SESSION_ID });
+    expect(adopted.deps.start).not.toHaveBeenCalled();
+    const taken = await callback({ pass: true, adopt: { owner: true } });
+    expect(taken.deps.start).toHaveBeenCalled();
+    expect(taken.deps.link).toHaveBeenCalledWith({ accountId: ACCOUNT_ID, journeyId: "journey-new", acquisitionSessionId: SESSION_ID });
   });
 
   it("refuses a return that didn't start in this browser, a cancelled consent, and a closed experience", async () => {

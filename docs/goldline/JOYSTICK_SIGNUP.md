@@ -16,8 +16,9 @@
   - It is handed to `/joystick-start` in the existing `#first-ten=` fragment. `requireOnboardingSession`
     (`server/saas/saasStore.ts`) accepts it for drafts the account owns.
   - The same journey therefore opens on every device the person signs in on.
-- **Sign-out** (`system.account.signOut`) raises `session_version`. Every cookie and journey token issued before it
-  stops working, on every device.
+- **Sign-out** (`system.account.signOut`) raises `session_version`. Every account cookie and journey token issued
+  before it stops working, on every device, and this browser's workspace session is cleared too. A workspace session
+  (`app_session_id`) open on another device ends only there, because it isn't stored server-side.
 - **After activation**, "Continue with Google" opens the workspace. It issues the owner's workspace session with the
   same checks as the password sign-in: an active owner membership, workspace status and paid entitlement
   (`workspace.ts`). The password stays as a second way in.
@@ -34,8 +35,12 @@ Sign-up follows `JOYSTICK_FIRST_TEN_MINUTES`:
 | `preview` | a browser holding the crew link's preview pass (`/signup?crew=<code>` works too) |
 | `off` | nobody |
 
-- An existing account can always log in.
-- A signed-in account counts as a preview pass, so the person's journey opens on any device.
+- In `preview`, only the crew link admits. A new account needs the pass.
+- An account admitted under the current crew code records it (`preview_version`), and its cookie then counts as a pass
+  on any device. A new crew code, or none, closes those accounts too, just as it revokes every pass.
+- An account cookie never admits a different Google identity.
+- A first sign-up adopts the journey this browser already began through the crew link (and its Google connection),
+  instead of orphaning it.
 
 ## Pages
 - `client/src/pages/account/SignInPage.tsx`: the split layout, three true trust tiles, and "JOYSTICK and your data".

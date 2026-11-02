@@ -26,7 +26,8 @@ export async function openWorkspaceForOwner(tenantId: string, req: Request, res:
     })
     .from(legacyDayforgeSaasMemberships)
     .innerJoin(legacyDayforgeSaasTenants, eq(legacyDayforgeSaasTenants.id, legacyDayforgeSaasMemberships.tenantId))
-    .leftJoin(users, eq(users.openId, legacyDayforgeSaasMemberships.userOpenId))
+    // like the password sign-in: an owner with no users row opens nothing
+    .innerJoin(users, eq(users.openId, legacyDayforgeSaasMemberships.userOpenId))
     .where(and(eq(legacyDayforgeSaasMemberships.tenantId, tenantId), eq(legacyDayforgeSaasMemberships.role, "owner")))
     .orderBy(asc(legacyDayforgeSaasMemberships.createdAt))
     .limit(1);

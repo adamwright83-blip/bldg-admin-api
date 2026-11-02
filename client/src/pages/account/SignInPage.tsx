@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { takePreviewCodeFromUrl } from "@/lib/previewCode";
 import { SIGN_IN_ERRORS, type AccountIntent, type SignInErrorCode } from "@shared/joystickAccount";
-import { saveFirstTenCredentials } from "../firstTenMinutes/draftStorage";
+import { readFirstTenCredentials, saveFirstTenCredentials } from "../firstTenMinutes/draftStorage";
 import styles from "./signIn.module.css";
 
 /**
@@ -86,7 +86,9 @@ export default function SignInPage({ intent }: { intent: AccountIntent }) {
   async function continueWithGoogle() {
     setError(null);
     try {
-      const { url } = await begin.mutateAsync({ intent });
+      // a journey this browser already began through the crew link becomes the new account's, not a stray
+      const stored = readFirstTenCredentials();
+      const { url } = await begin.mutateAsync({ intent, ...(stored ? { journey: stored } : {}) });
       window.location.assign(url);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : SIGN_IN_ERRORS.failed);

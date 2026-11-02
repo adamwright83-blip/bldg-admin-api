@@ -14,6 +14,11 @@ export const joystickAccounts = mysqlTable(
     givenName: varchar("given_name", { length: 255 }),
     /** raised on sign-out: every cookie and journey token issued under an older version stops working */
     sessionVersion: int("session_version").notNull().default(1),
+    /**
+     * Which crew code admitted the account while JOYSTICK_FIRST_TEN_MINUTES is `preview` (previewPass.ts's code
+     * version); its cookie then opens the preview on any device. A new code (or none) closes it, as it does every pass.
+     */
+    previewVersion: varchar("preview_version", { length: 32 }),
     signedUpAt: timestamp("signed_up_at", { fsp: 3 }).notNull(),
     lastSignedInAt: timestamp("last_signed_in_at", { fsp: 3 }),
     // the sign-up funnel, first time each happened: counts, never content

@@ -5,7 +5,8 @@ import crypto from "node:crypto";
  * `session_version` (sign-out):
  *
  *   the account cookie   `joystick_account`, httpOnly, host-only, 30 days: who is signed in on this browser. It reaches
- *                        nothing but the person's own first-ten journeys; it is never a workspace session.
+ *                        nothing but the person's own first-ten journeys; it is never a workspace session. It also
+ *                        carries the crew code version that admitted the account in `preview` (flag.ts).
  *   a journey token      what the first-ten pages hold as a journey's resume token on this browser:
  *                        acct_<account id>_<version>_<hex mac over the journey's draft id>. Derived, so the same
  *                        journey opens on every device the person signs in on, and no device's token replaces another's.
@@ -24,27 +25,27 @@ const equal = (a: string, b: string) => {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
 
-export type AccountCookie = { accountId: string; version: number };
+export type AccountCookie = { accountId: string; version: number; previewVersion?: string | null };
 
 export function issueAccountCookie(account: AccountCookie, env: NodeJS.ProcessEnv = process.env, now = new Date()): { value: string; maxAgeMs: number } | null {
   const secret = key(env);
   if (!secret) return null;
   const maxAgeMs = ACCOUNT_COOKIE_DAYS * 86_400_000;
-  const payload = `${account.accountId}.${account.version}.${now.getTime() + maxAgeMs}`;
+  const payload = `${account.accountId}.${account.version}.${account.previewVersion || "-"}.${now.getTime() + maxAgeMs}`;
   return { value: `${payload}.${hmac(secret, `joystick-account:${payload}`).digest("base64url")}`, maxAgeMs };
 }
 
 /** The signed cookie's claims, if its signature and expiry hold. Whether the version is still current needs the row. */
-export function readAccountCookie(value: string | undefined, env: NodeJS.ProcessEnv = process.env, now = new Date()): AccountCookie | null {
+export function readAccountCookie(value: string | undefined, env: NodeJS.ProcessEnv = process.env, now = new Date()): Required<AccountCookie> | null {
   const secret = key(env);
   if (!secret || !value) return null;
   const parts = value.split(".");
-  if (parts.length !== 4) return null;
-  const [accountId, version, expires, signature] = parts;
-  if (!/^[0-9a-f-]{36}$/.test(accountId) || !/^\d{1,9}$/.test(version) || !/^\d{1,15}$/.test(expires)) return null;
-  if (!equal(signature, hmac(secret, `joystick-account:${accountId}.${version}.${expires}`).digest("base64url"))) return null;
+  if (parts.length !== 5) return null;
+  const [accountId, version, preview, expires, signature] = parts;
+  if (!/^[0-9a-f-]{36}$/.test(accountId) || !/^\d{1,9}$/.test(version) || !/^([0-9a-f]{16}|-)$/.test(preview) || !/^\d{1,15}$/.test(expires)) return null;
+  if (!equal(signature, hmac(secret, `joystick-account:${accountId}.${version}.${preview}.${expires}`).digest("base64url"))) return null;
   if (Number(expires) <= now.getTime()) return null;
-  return { accountId, version: Number(version) };
+  return { accountId, version: Number(version), previewVersion: preview === "-" ? null : preview };
 }
 
 /** The account cookie in a request's Cookie header, if signed and unexpired. */

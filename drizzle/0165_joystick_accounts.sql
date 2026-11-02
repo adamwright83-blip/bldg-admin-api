@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `joystick_accounts` (
   `name` varchar(255) NULL,
   `given_name` varchar(255) NULL,
   `session_version` int NOT NULL DEFAULT 1,
+  `preview_version` varchar(32) NULL,
   `signed_up_at` timestamp(3) NOT NULL,
   `last_signed_in_at` timestamp(3) NULL,
   `google_connected_at` timestamp(3) NULL,

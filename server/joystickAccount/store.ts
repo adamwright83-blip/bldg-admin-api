@@ -29,15 +29,19 @@ export async function accountByGoogleSub(sub: string): Promise<AccountRow | null
  * The account for this Google identity: created on first sign-in, otherwise refreshed (Google's email and name win, as
  * they're what the person sees at Google). `created` says which.
  */
-export async function signInAccount(identity: GoogleIdentity, now = new Date()): Promise<{ account: AccountRow; created: boolean }> {
+export async function signInAccount(
+  identity: GoogleIdentity,
+  options: { previewVersion?: string | null; now?: Date } = {}
+): Promise<{ account: AccountRow; created: boolean }> {
   const db = await accountDb();
+  const now = options.now ?? new Date();
+  // the crew code this sign-in was admitted under, when it was (a sign-in without the link keeps the old one)
+  const admitted = options.previewVersion ? { previewVersion: options.previewVersion } : {};
   const existing = await accountByGoogleSub(identity.subject);
   if (existing) {
-    await db
-      .update(joystickAccounts)
-      .set({ email: identity.email, name: identity.name, givenName: identity.givenName, lastSignedInAt: now })
-      .where(eq(joystickAccounts.id, existing.id));
-    return { account: { ...existing, email: identity.email, name: identity.name, givenName: identity.givenName, lastSignedInAt: now }, created: false };
+    const changes = { email: identity.email, name: identity.name, givenName: identity.givenName, lastSignedInAt: now, ...admitted };
+    await db.update(joystickAccounts).set(changes).where(eq(joystickAccounts.id, existing.id));
+    return { account: { ...existing, ...changes }, created: false };
   }
   const id = randomUUID();
   try {
@@ -49,6 +53,7 @@ export async function signInAccount(identity: GoogleIdentity, now = new Date()):
       givenName: identity.givenName,
       signedUpAt: now,
       lastSignedInAt: now,
+      ...admitted,
     });
   } catch (error) {
     // the same Google account signing up twice at once: the first insert wins, the second signs in to it

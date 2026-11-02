@@ -25,6 +25,12 @@ const digest = (value: string) => crypto.createHash("sha256").update(value).dige
 const codeVersion = (code: string) => digest(`first-ten-preview-code:${code}`).toString("hex").slice(0, 16);
 const mac = (key: string, payload: string) => crypto.createHmac("sha256", key).update(`first-ten-preview:${payload}`).digest("base64url");
 
+/** The current crew code's version, or null when preview has no code: what an account admitted under it records. */
+export function currentPreviewVersion(env: NodeJS.ProcessEnv = process.env): string | null {
+  const code = previewCode(env);
+  return code ? codeVersion(code) : null;
+}
+
 /** Whether `given` is the configured code (constant-time). */
 export function previewCodeMatches(given: string, env: NodeJS.ProcessEnv = process.env): boolean {
   const code = previewCode(env);

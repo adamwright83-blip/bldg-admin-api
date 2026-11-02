@@ -4,12 +4,14 @@ import { parse as parseCookies } from "cookie";
 import { SignJWT, jwtVerify, errors as joseErrors } from "jose";
 import type { AccountIntent, SignInErrorCode } from "../../shared/joystickAccount";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { firstTenMode, firstTenOpenFor } from "../firstTenMinutes/flag";
+import { firstTenMode } from "../firstTenMinutes/flag";
+import { currentPreviewVersion, requestHasPreviewPass } from "../firstTenMinutes/previewPass";
 import { exchangeGoogleCode, googleAccount, googleSignInUrl } from "../firstTenMinutes/google";
 import { startJourney } from "../firstTenMinutes/journeys";
 import { hashNonce, newConnectNonce } from "../firstTenMinutes/oauthState";
 import { ACCOUNT_COOKIE, issueAccountCookie, journeyToken } from "./session";
-import { accountByGoogleSub, latestJourneyFor, linkJourney, signInAccount } from "./store";
+import { journeyById } from "../firstTenMinutes/store";
+import { accountByGoogleSub, accountForJourney, latestJourneyFor, linkJourney, signInAccount } from "./store";
 import { openWorkspaceForOwner } from "./workspace";
 
 /**
@@ -20,8 +22,8 @@ import { openWorkspaceForOwner } from "./workspace";
  * The journey is handed over in the URL fragment the first-ten page already adopts (#first-ten=<draft>.<token>), with an
  * account journey token (session.ts) in place of the draft's own resume token.
  *
- * Who may create an account follows JOYSTICK_FIRST_TEN_MINUTES: `on`, anyone; `preview`, a browser holding the crew
- * link's preview pass. Someone who already has an account may always sign in.
+ * Who may sign in follows JOYSTICK_FIRST_TEN_MINUTES: `on`, anyone; `preview`, a browser holding the crew link's
+ * preview pass, or an account admitted under the current crew code; `off`, no one.
  */
 export const SIGNIN_CALLBACK_PATH = "/api/account/google/callback";
 export const SIGNIN_NONCE_COOKIE = "joystick_signin";
@@ -34,10 +36,14 @@ function stateKey(env: NodeJS.ProcessEnv): Uint8Array {
   return new TextEncoder().encode(`joystick-signin-state:${secret}`);
 }
 
-export type SignInState = { origin: string; nonceHash: string; intent: AccountIntent };
+/**
+ * `adopt`: a journey this browser began before signing up (through the crew link), checked against its own
+ * credentials when sign-in began. A first sign-in makes it the account's journey instead of starting another.
+ */
+export type SignInState = { origin: string; nonceHash: string; intent: AccountIntent; adopt?: { journeyId: string; sessionId: string } };
 
 export async function signSignInState(state: SignInState, env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  return new SignJWT({ purpose: STATE_PURPOSE, org: state.origin, nh: state.nonceHash, int: state.intent })
+  return new SignJWT({ purpose: STATE_PURPOSE, org: state.origin, nh: state.nonceHash, int: state.intent, ...(state.adopt ? { aj: state.adopt.journeyId, as: state.adopt.sessionId } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${STATE_TTL_SECONDS}s`)
@@ -50,16 +56,20 @@ export async function verifySignInState(token: string, nonce: string | undefined
     if (payload.purpose !== STATE_PURPOSE || typeof payload.org !== "string" || typeof payload.nh !== "string") return { ok: false, reason: "invalid" };
     // the browser that returns must be the browser that left
     if (!nonce || !crypto.timingSafeEqual(Buffer.from(hashNonce(nonce)), Buffer.from(payload.nh))) return { ok: false, reason: "invalid" };
-    return { ok: true, state: { origin: payload.org, nonceHash: payload.nh, intent: payload.int === "login" ? "login" : "signup" } };
+    const adopt = typeof payload.aj === "string" && typeof payload.as === "string" ? { journeyId: payload.aj, sessionId: payload.as } : undefined;
+    return { ok: true, state: { origin: payload.org, nonceHash: payload.nh, intent: payload.int === "login" ? "login" : "signup", ...(adopt ? { adopt } : {}) } };
   } catch (error) {
     return { ok: false, reason: error instanceof joseErrors.JWTExpired ? "expired" : "invalid" };
   }
 }
 
 /** Google's consent URL, and the nonce cookie that ties the return to this browser. */
-export async function beginGoogleSignIn(input: { origin: string; intent: AccountIntent; req: Request | undefined; res: Response | undefined }, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+export async function beginGoogleSignIn(
+  input: { origin: string; intent: AccountIntent; adopt?: SignInState["adopt"]; req: Request | undefined; res: Response | undefined },
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string> {
   const { nonce, nonceHash } = newConnectNonce();
-  const state = await signSignInState({ origin: input.origin, nonceHash, intent: input.intent }, env);
+  const state = await signSignInState({ origin: input.origin, nonceHash, intent: input.intent, adopt: input.adopt }, env);
   input.res?.cookie(SIGNIN_NONCE_COOKIE, nonce, {
     httpOnly: true,
     sameSite: "lax",
@@ -79,6 +89,8 @@ type Dependencies = {
   start?: typeof startJourney;
   link?: typeof linkJourney;
   openWorkspace?: typeof openWorkspaceForOwner;
+  ownerOf?: typeof accountForJourney;
+  loadJourney?: typeof journeyById;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -103,18 +115,31 @@ export async function handleGoogleSignInCallback(req: Request, res: Response, de
   const redirectUri = `${verdict.state.origin}${SIGNIN_CALLBACK_PATH}`;
   const tokens = await (deps.exchange ?? exchangeGoogleCode)({ code: query.code, redirectUri }, { env });
   const identity = await (deps.account ?? googleAccount)(tokens.accessToken, { env });
-  // A new account needs the experience to be open to this browser (in `preview`, the crew link's pass); an existing
-  // account may always sign in.
-  if (!(await (deps.findAccount ?? accountByGoogleSub)(identity.subject)) && !firstTenOpenFor(req, env)) return fail("invite_only");
-  const { account } = await (deps.signIn ?? signInAccount)(identity);
+  // In `preview`, only the crew link's pass admits: a new account needs it, and an existing one needs it or to have
+  // been admitted under the current crew code. An account cookie never admits a new account.
+  const preview = firstTenMode(env) === "preview";
+  const passHeld = preview && requestHasPreviewPass(req.headers.cookie, env);
+  const existing = await (deps.findAccount ?? accountByGoogleSub)(identity.subject);
+  const current = currentPreviewVersion(env);
+  if (preview && !passHeld && !(existing?.previewVersion && existing.previewVersion === current)) return fail("invite_only");
+  const { account } = await (deps.signIn ?? signInAccount)(identity, { previewVersion: passHeld ? current : null });
 
-  const cookie = issueAccountCookie({ accountId: account.id, version: account.sessionVersion }, env);
+  const cookie = issueAccountCookie({ accountId: account.id, version: account.sessionVersion, previewVersion: account.previewVersion }, env);
   if (!cookie) return fail("failed");
   res.cookie(ACCOUNT_COOKIE, cookie.value, { ...getSessionCookieOptions(req), sameSite: "lax", maxAge: cookie.maxAgeMs });
 
   let latest = await (deps.latestJourney ?? latestJourneyFor)(account.id);
   if (latest?.journey.tenantId && (await (deps.openWorkspace ?? openWorkspaceForOwner)(latest.journey.tenantId, req, res))) {
     return to(res, "/onboarding");
+  }
+  // the journey this browser already began (and may have connected Google in), if no account has it yet
+  const adopt = verdict.state.adopt;
+  if (!latest && adopt && !(await (deps.ownerOf ?? accountForJourney)(adopt.journeyId))) {
+    const journey = await (deps.loadJourney ?? journeyById)(adopt.journeyId);
+    if (journey && journey.kind === "own" && journey.acquisitionSessionId === adopt.sessionId) {
+      await (deps.link ?? linkJourney)({ accountId: account.id, journeyId: journey.id, acquisitionSessionId: adopt.sessionId });
+      latest = { journey, acquisitionSessionId: adopt.sessionId };
+    }
   }
   if (!latest) {
     const started = await (deps.start ?? startJourney)({ requestId: randomUUID(), kind: "own" });
