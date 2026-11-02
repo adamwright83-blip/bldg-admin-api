@@ -104,6 +104,7 @@ async function callback(options: {
   journey?: { tenantId: string | null } | null;
   workspace?: boolean;
   adopt?: { owner: boolean };
+  draftLive?: boolean;
   env?: NodeJS.ProcessEnv;
 }) {
   const e = options.env ?? env;
@@ -134,6 +135,7 @@ async function callback(options: {
     openWorkspace: vi.fn(async () => Boolean(options.workspace)),
     ownerOf: vi.fn(async () => (options.adopt?.owner ? account({ id: "8f1c1c1e-3a6b-4c43-9a4e-4a1f0c1f2b11" }) : null)),
     loadJourney: vi.fn(async () => ({ id: "journey-before", kind: "own", acquisitionSessionId: SESSION_ID, tenantId: null }) as never),
+    draftLive: vi.fn(async () => options.draftLive ?? true),
   };
   await handleGoogleSignInCallback(req, res as unknown as Response, deps);
   return { res, deps };
@@ -180,6 +182,16 @@ describe("Continue with Google", () => {
     expect(opened.res.location).toBe("/onboarding");
     const notYet = await callback({ existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: "df_123" }, workspace: false });
     expect(notYet.res.location.startsWith("/joystick-start#first-ten=")).toBe(true);
+  });
+
+  it("replaces a journey whose draft has expired instead of handing it back dead, and keeps it the account's", async () => {
+    const returning = await callback({ existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: null }, draftLive: false });
+    expect(returning.deps.start).toHaveBeenCalled();
+    expect(returning.deps.link).toHaveBeenCalledWith({ accountId: ACCOUNT_ID, journeyId: "journey-new", acquisitionSessionId: SESSION_ID });
+    expect(returning.res.location.startsWith("/joystick-start#first-ten=")).toBe(true);
+    // a live one is handed back as it is
+    const live = await callback({ existing: { previewVersion: currentPreviewVersion(env) }, intent: "login", journey: { tenantId: null } });
+    expect(live.deps.start).not.toHaveBeenCalled();
   });
 
   it("makes the journey this browser already began the new account's, unless another account has it", async () => {

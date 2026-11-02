@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { legacyDayforgeSaasOnboardingSessions } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { firstTenJourneys } from "../firstTenMinutes/schema";
@@ -81,7 +82,9 @@ export async function linkJourney(input: { accountId: string; journeyId: string;
 }
 
 /** The account's latest own journey and its draft, if it has one. */
-export async function latestJourneyFor(accountId: string) {
+export type AccountJourney = { journey: typeof firstTenJourneys.$inferSelect; acquisitionSessionId: string };
+
+export async function latestJourneyFor(accountId: string): Promise<AccountJourney | null> {
   const db = await accountDb();
   const [row] = await db
     .select({ journey: firstTenJourneys, acquisitionSessionId: joystickAccountJourneys.acquisitionSessionId })
@@ -103,6 +106,20 @@ export async function accountForJourney(journeyId: string): Promise<AccountRow |
     .where(eq(joystickAccountJourneys.journeyId, journeyId))
     .limit(1);
   return row?.account ?? null;
+}
+
+/**
+ * Whether a journey's draft can still be opened (requireOnboardingSession refuses an expired one): an account's
+ * journey whose draft has lapsed is replaced at sign-in rather than handed back dead.
+ */
+export async function draftIsLive(acquisitionSessionId: string, now = new Date()): Promise<boolean> {
+  const db = await accountDb();
+  const [draft] = await db
+    .select({ expiresAt: legacyDayforgeSaasOnboardingSessions.expiresAt, status: legacyDayforgeSaasOnboardingSessions.status })
+    .from(legacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyDayforgeSaasOnboardingSessions.id, acquisitionSessionId))
+    .limit(1);
+  return Boolean(draft && draft.expiresAt > now && draft.status !== "expired");
 }
 
 /** Whether this draft's journey belongs to this account. */

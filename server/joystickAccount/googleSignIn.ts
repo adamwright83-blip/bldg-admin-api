@@ -11,7 +11,7 @@ import { startJourney } from "../firstTenMinutes/journeys";
 import { hashNonce, newConnectNonce } from "../firstTenMinutes/oauthState";
 import { ACCOUNT_COOKIE, issueAccountCookie, journeyToken } from "./session";
 import { journeyById } from "../firstTenMinutes/store";
-import { accountByGoogleSub, accountForJourney, latestJourneyFor, linkJourney, signInAccount } from "./store";
+import { accountByGoogleSub, accountForJourney, draftIsLive, latestJourneyFor, linkJourney, signInAccount, type AccountJourney } from "./store";
 import { openWorkspaceForOwner } from "./workspace";
 
 /**
@@ -90,6 +90,7 @@ type Dependencies = {
   link?: typeof linkJourney;
   openWorkspace?: typeof openWorkspaceForOwner;
   ownerOf?: typeof accountForJourney;
+  draftLive?: typeof draftIsLive;
   loadJourney?: typeof journeyById;
   env?: NodeJS.ProcessEnv;
 };
@@ -128,15 +129,35 @@ export async function handleGoogleSignInCallback(req: Request, res: Response, de
   if (!cookie) return fail("failed");
   res.cookie(ACCOUNT_COOKIE, cookie.value, { ...getSessionCookieOptions(req), sameSite: "lax", maxAge: cookie.maxAgeMs });
 
-  let latest = await (deps.latestJourney ?? latestJourneyFor)(account.id);
-  if (latest?.journey.tenantId && (await (deps.openWorkspace ?? openWorkspaceForOwner)(latest.journey.tenantId, req, res))) {
-    return to(res, "/onboarding");
+  const destination = await accountDestination(account, { req, res, adopt: verdict.state.adopt, env }, deps);
+  if (destination.workspace) return to(res, "/onboarding");
+  if (!destination.credentials) return fail("failed");
+  return to(res, `/joystick-start#first-ten=${destination.credentials.sessionId}.${destination.credentials.resumeToken}`);
+}
+
+/**
+ * Where a signed-in account goes, for the Google callback and for the signed-in "Continue" alike:
+ *   an activated workspace it may open   → the owner's workspace session is set (workspace.ts)
+ *   otherwise                            → its journey, opened on this browser: its latest one while that draft is
+ *                                          live; an expired draft (drafts last 14 days) is replaced, not handed back
+ *                                          dead; a first sign-in adopts the journey this browser already began
+ */
+export async function accountDestination(
+  account: { id: string; sessionVersion: number },
+  context: { req: Request; res: Response; adopt?: SignInState["adopt"]; env?: NodeJS.ProcessEnv },
+  deps: Dependencies = {}
+): Promise<{ workspace: true; credentials?: undefined } | { workspace?: false; credentials: { sessionId: string; resumeToken: string } | null }> {
+  const env = context.env ?? deps.env ?? process.env;
+  let latest: AccountJourney | null = await (deps.latestJourney ?? latestJourneyFor)(account.id);
+  if (latest?.journey.tenantId && (await (deps.openWorkspace ?? openWorkspaceForOwner)(latest.journey.tenantId, context.req, context.res))) {
+    return { workspace: true };
   }
+  if (latest && !(await (deps.draftLive ?? draftIsLive)(latest.acquisitionSessionId))) latest = null;
   // the journey this browser already began (and may have connected Google in), if no account has it yet
-  const adopt = verdict.state.adopt;
+  const adopt = context.adopt;
   if (!latest && adopt && !(await (deps.ownerOf ?? accountForJourney)(adopt.journeyId))) {
     const journey = await (deps.loadJourney ?? journeyById)(adopt.journeyId);
-    if (journey && journey.kind === "own" && journey.acquisitionSessionId === adopt.sessionId) {
+    if (journey && journey.kind === "own" && journey.acquisitionSessionId === adopt.sessionId && (await (deps.draftLive ?? draftIsLive)(adopt.sessionId))) {
       await (deps.link ?? linkJourney)({ accountId: account.id, journeyId: journey.id, acquisitionSessionId: adopt.sessionId });
       latest = { journey, acquisitionSessionId: adopt.sessionId };
     }
@@ -147,8 +168,7 @@ export async function handleGoogleSignInCallback(req: Request, res: Response, de
     latest = { journey: started.journey, acquisitionSessionId: started.session.id };
   }
   const token = journeyToken({ accountId: account.id, version: account.sessionVersion, sessionId: latest.acquisitionSessionId }, env);
-  if (!token) return fail("failed");
-  return to(res, `/joystick-start#first-ten=${latest.acquisitionSessionId}.${token}`);
+  return { credentials: token ? { sessionId: latest.acquisitionSessionId, resumeToken: token } : null };
 }
 
 export function registerGoogleSignInRoutes(app: Express): void {

@@ -98,8 +98,10 @@ export default function SignInPage({ intent }: { intent: AccountIntent }) {
   async function continueSignedIn() {
     setError(null);
     try {
-      const { credentials } = await resume.mutateAsync();
-      if (credentials) saveFirstTenCredentials(credentials);
+      // the same destination as signing in with Google: the workspace, when they have one, or their journey
+      const destination = await resume.mutateAsync();
+      if (destination.workspace) return window.location.assign("/onboarding");
+      if (destination.credentials) saveFirstTenCredentials(destination.credentials);
       window.location.assign("/joystick-start");
     } catch {
       setError(SIGN_IN_ERRORS.failed);

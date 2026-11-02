@@ -7,10 +7,10 @@ import { publicProcedure, router } from "../_core/trpc";
 import { firstTenMode, firstTenOpenFor } from "../firstTenMinutes/flag";
 import { isGoogleConnectConfigured } from "../firstTenMinutes/google";
 import { firstTenConnectOrigin } from "../firstTenMinutes/origins";
-import { beginGoogleSignIn } from "./googleSignIn";
+import { accountDestination, beginGoogleSignIn } from "./googleSignIn";
 import { requireJourney } from "../firstTenMinutes/journeys";
-import { ACCOUNT_COOKIE, accountCookieFrom, isJourneyToken, journeyToken } from "./session";
-import { accountById, latestJourneyFor, revokeAccountSessions } from "./store";
+import { ACCOUNT_COOKIE, accountCookieFrom, isJourneyToken } from "./session";
+import { accountById, revokeAccountSessions } from "./store";
 
 type Req = { headers: { cookie?: string; origin?: string }; ip?: string } | undefined;
 
@@ -55,14 +55,15 @@ export const joystickAccountRouter = router({
     return { url: await beginGoogleSignIn({ origin, intent: input.intent, adopt, req: ctx.req, res: ctx.res }) };
   }),
 
-  /** For a signed-in browser: its journey, opened here (the same journey on every device). */
+  /**
+   * For a signed-in browser, the same destination as signing in with Google (googleSignIn.ts accountDestination): its
+   * workspace when it has one it may open, otherwise its journey opened here.
+   */
   resume: publicProcedure.mutation(async ({ ctx }) => {
     const account = await currentAccount(ctx.req as Req);
-    if (!account) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in first." });
-    const latest = await latestJourneyFor(account.id);
-    if (!latest) return { credentials: null };
-    const token = journeyToken({ accountId: account.id, version: account.sessionVersion, sessionId: latest.acquisitionSessionId });
-    return { credentials: token ? { sessionId: latest.acquisitionSessionId, resumeToken: token } : null };
+    if (!account || !ctx.req || !ctx.res) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in first." });
+    const destination = await accountDestination(account, { req: ctx.req, res: ctx.res });
+    return destination.workspace ? { workspace: true as const, credentials: null } : { workspace: false as const, credentials: destination.credentials };
   }),
 
   /**

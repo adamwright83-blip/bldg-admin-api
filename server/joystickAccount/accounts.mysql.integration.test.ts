@@ -69,6 +69,18 @@ describe.skipIf(!allowed)("JOYSTICK accounts on MySQL", () => {
     await expect(requireJourney({ sessionId: mine.session.id, resumeToken: token })).rejects.toThrow();
   });
 
+  it("knows when a journey's draft has lapsed, so sign-in replaces it instead of handing it back", async () => {
+    const { draftIsLive } = await import("./store");
+    const { startJourney } = await import("../firstTenMinutes/journeys");
+    const started = await startJourney({ requestId: randomUUID(), kind: "own" });
+    expect(await draftIsLive(started.session.id)).toBe(true);
+    const { getTableName } = await import("drizzle-orm");
+    const { legacyDayforgeSaasOnboardingSessions } = await import("../../drizzle/schema");
+    await db.query(`UPDATE \`${getTableName(legacyDayforgeSaasOnboardingSessions)}\` SET expiresAt = DATE_SUB(NOW(), INTERVAL 1 DAY) WHERE id = ?`, [started.session.id]);
+    expect(await draftIsLive(started.session.id)).toBe(false);
+    expect(await draftIsLive(randomUUID())).toBe(false);
+  });
+
   it("records each funnel step once, for journeys that belong to an account", async () => {
     const { signInAccount, linkJourney, markFunnelStep, accountById } = await import("./store");
     const { startJourney } = await import("../firstTenMinutes/journeys");
