@@ -2,77 +2,12 @@
 name: Goldline mobile regression
 
 on:
-  pull_request:
-    paths:
-      - "client/src/game/**"
-      - "client/src/pages/driver/GoldlineDriverController.tsx"
-      - "client/src/pages/Driver.tsx"
-      - "client/src/pages/goldline/**"
-      - "public/goldline/dayline-v2/**"
-      - "client/public/goldline/dayline-v2"
-      - "playwright.dayline-art.config.ts"
-      - "client/src/components/driver/**"
-      - "client/src/components/admin/control-room/**"
-      - "server/commercialMissions/driverSalesMotivationService.ts"
-      - "server/commercialMissions/driverSalesJournalResilience.test.ts"
-      - "server/experience/goldline/driver/**"
-      - "server/experience/lanternCity/businessOverview/**"
-      - "server/composition/driverGameWorldRouter.ts"
-      - "server/capabilities/expansionScoutCapability.ts"
-      - "server/armory/armoryWeaponService.ts"
-      - "server/armory/armoryRouter.ts"
-      - "server/armory/armoryEvolution.integration.test.ts"
-      - "server/salesIntel/driverSafeSalesIntel*"
-      - "server/field/**"
-      - "server/experience/**"
-      - "server/composition/goldlineWorldRouter.ts"
-      - "server/platform/persistence/**"
-      - "server/integrations/googleMaps/**"
-      - "server/legacy/dayforge/release/legacyDayforgeReleaseJourney.integration.test.ts"
-      - "server/openChannel/**"
-      - "server/impactSignals/**"
-      - "shared/localTargetRun.ts"
-      - "shared/localTargetRun.test.ts"
-      - "shared/impactSignal.ts"
-      - "shared/impactSignal.test.ts"
-      - "shared/goldlineProgression.ts"
-      - "shared/goldlineProgression.test.ts"
-      - "shared/goldlineArcade*"
-      - "shared/goldlineCamera*"
-      - "shared/goldlineCustomerWindows*"
-      - "shared/goldlineFuturePressure*"
-      - "shared/goldlineObligations*"
-      - "shared/goldlineTemporal*"
-      - "shared/driverSafeSalesIntel.ts"
-      - "client/public/goldline.webmanifest"
-      - "client/public/goldline-sw.js"
-      - "client/public/assets/goldline/**"
-      - "e2e/goldline/**"
-      - "e2e/goldline-smoke/**"
-      - "playwright.goldline.config.ts"
-      - "playwright.goldline-smoke.config.ts"
-      - "scripts/checkGoldlineBundleBudget.mjs"
-      - "scripts/verifyPlayableGoldline.mjs"
-      - "scripts/verifyGoldlineFirstPlayGate.mjs"
-      - "scripts/verifyGoldlineObjectiveHierarchyGate.mjs"
-      - "scripts/verifyGoldlineTrueTouch.mjs"
-      - "scripts/verifyGoldlineLocalTargetRunGate.mjs"
-      - "scripts/verifyGoldlineOpenChannelExpedition.mjs"
-      - "scripts/verifyGoldlineFieldIntel.mjs"
-      - "scripts/verifyGoldlineExternalOrder.mjs"
-      - "scripts/capture-goldline-closure.mjs"
-      - "scripts/measure-goldline-performance.mjs"
-      - "scripts/goldlineLocalProofTarget.mjs"
-      - ".github/workflows/goldline-mobile-regression.yml"
-      - ".github/workflows/goldline-fast-smoke.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: goldline-mobile-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   CI: "true"

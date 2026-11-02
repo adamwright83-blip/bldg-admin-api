@@ -1,38 +1,10 @@
 name: Claire strategic preparation
 on:
-  pull_request:
-    paths:
-      - "server/strategy/**"
-      - "server/agents/persistentOperator/**"
-      - "server/claire/**"
-      - "server/planning/**"
-      - "shared/strategic*"
-      - "shared/operatingMandate*"
-      - "shared/claireRoleFeedback.ts"
-      - "client/src/App.tsx"
-      - "e2e/claire-acceptance/**"
-      - "shared/daphneMissionPresentation*"
-      - "shared/dayDirector.ts"
-      - "shared/goldlineDayLine.ts"
-      - "shared/missionDirector.ts"
-      - "server/agents/daphne/missionFollowUp.ts"
-      - "server/planning/dayDirector/**"
-      - "client/src/pages/driver/GoldlineDriverController.tsx"
-      - "client/src/pages/driver/goldlineDayPlanModel.ts"
-      - "client/src/pages/goldline/GoldlineDayPlan.tsx"
-      - "playwright.claire-acceptance.config.ts"
-      - "client/src/pages/goldline/Claire*"
-      - "drizzle/0128_claire_strategic_preparation.sql"
-      - "scripts/migrate.mjs"
-      - ".github/workflows/claire-strategic-preparation.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   connected-journey:
     runs-on: ubuntu-latest
@@ -71,7 +43,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Strategy, authority, Mission Director and live routing regressions
         run: >-
           pnpm vitest run server/strategy server/planning/missionDirector

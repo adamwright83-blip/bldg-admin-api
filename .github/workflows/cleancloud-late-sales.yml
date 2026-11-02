@@ -1,21 +1,10 @@
 name: CleanCloud late sales recovery
 on:
-  pull_request:
-    paths:
-      - "server/integrations/cleancloud/browserSync/cleancloudDirectSync.ts"
-      - "server/integrations/cleancloud/browserSync/lateSalesRecovery.mysql.integration.test.ts"
-      - "server/integrations/cleancloud/cleancloudPaidEvidence.ts"
-      - "server/analytics/paidOrderLedger.ts"
-      - "docs/verification/CLEANCLOUD_LATE_SALES.md"
-      - ".github/workflows/cleancloud-late-sales.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   late-sales:
     runs-on: ubuntu-latest
@@ -41,7 +30,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - run: pnpm exec vitest run server/integrations/cleancloud/browserSync/cleancloudDirectSync.test.ts server/integrations/cleancloud/browserSync/validation.test.ts
       - run: node --test extensions/gumballpals/core.test.mjs extensions/gumballpals/schedule.test.mjs
       - run: node scripts/migrate.mjs

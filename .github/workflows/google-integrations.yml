@@ -2,28 +2,12 @@ name: Google integrations
 
 # Google capability evidence (migration 0158) and Gmail reply detection (0159) on real MySQL, plus their contracts.
 on:
-  pull_request:
-    paths:
-      - "server/google/**"
-      - "server/geography/googleGeocoder*"
-      - "server/integrations/gmail/**"
-      - "server/integrations/googleMaps/**"
-      - "server/integrations/cleancloud/browserSync/gmailVerification.ts"
-      - "server/claire/prototype/tools.ts"
-      - "shared/googleCapabilities.ts"
-      - "shared/opportunityPressure*"
-      - "drizzle/0158_*"
-      - "drizzle/0159_*"
-      - "scripts/migrate.mjs"
-      - ".github/workflows/google-integrations.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: google-integrations-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   google:

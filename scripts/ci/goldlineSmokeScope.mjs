@@ -11,6 +11,10 @@
  * An unrecognised path counts as "might matter", so new code runs every job.
  * workflow_dispatch and any API failure also run every job.
  *
+ * When ci.yml calls this workflow it has already chosen the entries (scripts/ci/ciAreas.mjs) and passes
+ * their names as BROWSER_ENTRIES, a JSON array; this script then runs exactly those. "auto" or unset keeps
+ * the choice above.
+ *
  * Writes `matrix=<json>` for $GITHUB_OUTPUT.
  */
 import { readFileSync } from "node:fs";
@@ -45,6 +49,15 @@ export function smokeScope(files) {
   return scope;
 }
 
+/** Entries named in BROWSER_ENTRIES, or null when the choice is left to smokeScope. */
+export function namedEntries(entries, browserEntries) {
+  if (!browserEntries || browserEntries === "auto") return null;
+  const names = JSON.parse(browserEntries);
+  const unknown = names.filter(name => !entries.some(entry => entry.name === name));
+  if (unknown.length) throw new Error(`browser-scope: no matrix entry named ${unknown.join(", ")}`);
+  return entries.filter(entry => names.includes(entry.name));
+}
+
 export function selectEntries(entries, scope) {
   if (scope === "none") return [];
   if (scope === "core") return entries.filter(entry => entry.scope === "core");
@@ -76,6 +89,12 @@ async function changedFiles() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const entries = JSON.parse(readFileSync(MATRIX, "utf8"));
+  const named = namedEntries(entries, process.env.BROWSER_ENTRIES);
+  if (named) {
+    console.error(`browser-scope: ci.yml chose ${named.map(entry => entry.name).join(", ") || "no browser jobs"}`);
+    console.log(`matrix=${JSON.stringify(named)}`);
+    process.exit(0);
+  }
   const files = await changedFiles();
   const scope = smokeScope(files);
   const selected = selectEntries(entries, scope);

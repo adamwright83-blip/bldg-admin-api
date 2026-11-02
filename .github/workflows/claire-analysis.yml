@@ -1,24 +1,10 @@
 name: Claire approved-view analysis
 on:
-  pull_request:
-    paths:
-      - 'server/analytics/**'
-      - 'server/claire/**'
-      - 'server/strategy/**'
-      - 'server/_core/llm*'
-      - 'server/domains/orders/orderHistoryReadService.ts'
-      - 'scripts/claire-analysis-*'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/claire-analysis.yml'
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   bounded-evidence:
     runs-on: ubuntu-latest
@@ -52,7 +38,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # ci.yml type-checks every code change once, in its typecheck job.
       - name: Canonical money, hostile SQL, resource limits, conversation, Showrunner and authority regressions
         run: pnpm vitest run server/analytics server/claire server/strategy server/_core/llm.test.ts
       - name: Verify production packaging and the trusted worker entrypoint

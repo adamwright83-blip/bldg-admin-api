@@ -2,20 +2,12 @@
 name: Legacy compatibility release gates
 
 on:
-  pull_request:
-    # Docs and captured artifacts never reach this gate; any code change still runs it.
-    paths-ignore:
-      - "docs/**"
-      - "artifacts/**"
-      - "**/*.md"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: legacy-dayforge-compatibility-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   release-journey:

@@ -1,15 +1,9 @@
 name: Nomenclature semantic hygiene
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-
-# A newer push to the same pull request supersedes this run. Pushes to main are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Run by ci.yml on every pull request, push to main and nightly run; also by hand.
+  workflow_call:
+  workflow_dispatch:
 
 jobs:
   nomenclature:

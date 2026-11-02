@@ -1,22 +1,12 @@
 name: Sales Intel teaching review gate
 
 on:
-  pull_request:
-    paths:
-      - "server/salesIntel/salesIntelTeachingReExtraction.ts"
-      - "server/salesIntel/salesIntelTeachingReExtraction.integration.test.ts"
-      - "server/salesIntel/salesIntelTeachingStore.ts"
-      - "shared/salesIntelTeaching.ts"
-      - "drizzle/**"
-      - ".github/workflows/sales-intel-teaching-review.yml"
+  # Run by ci.yml when a change needs it (scripts/ci/ciAreas.mjs), nightly, and by hand.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: sales-intel-teaching-review-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   human-review-contract:
