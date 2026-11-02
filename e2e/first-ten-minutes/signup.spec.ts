@@ -10,8 +10,11 @@ async function shots(name: string, page: Page, testInfo: { project: { name: stri
   await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-${name}.png`, fullPage: true });
 }
 
-test.beforeEach(async ({ page, request }) => {
+test.beforeEach(async ({ page, request }, testInfo) => {
   await request.post(`${FAKE}/__reset`);
+  // a new person each test: accounts are keyed by Google's account id, and the database outlives a test (and the
+  // desktop and mobile runs share it), so the stand-in Google is a different account every time
+  await request.post(`${FAKE}/__control`, { data: { googleSub: `signup-${testInfo.project.name}-${testInfo.title.length}-${Date.now()}` } });
   await page.goto("/signup");
   await page.evaluate(() => {
     localStorage.clear();
