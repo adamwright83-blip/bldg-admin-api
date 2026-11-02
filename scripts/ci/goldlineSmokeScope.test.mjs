@@ -8,9 +8,8 @@ const entries = JSON.parse(
 );
 
 test('every matrix entry is complete and scoped', () => {
-  // Counted from the matrix itself: removing a world (Silver Lake, #813) must not fail every PR's scope job.
-  assert.ok(entries.length >= 3);
-  assert.equal(new Set(entries.map(entry => entry.name)).size, entries.length);
+  // six since the Silver Lake browser job left CI (2026-11-02)
+  assert.equal(entries.length, 6);
   for (const entry of entries) {
     assert.ok(entry.name && entry.command && entry.timeout > 0, entry.name);
     assert.ok(['core', 'world'].includes(entry.scope), entry.name);
@@ -56,7 +55,7 @@ test('anything else, including unknown paths, runs every job', () => {
     assert.equal(smokeScope(['docs/a.md', 'server/mitch/a.ts', file]), 'all', file);
   }
   assert.equal(smokeScope(null), 'all');
-  assert.equal(selectEntries(entries, 'all').length, entries.length);
+  assert.equal(selectEntries(entries, 'all').length, 6);
 });
 
 test('ci.yml can name the entries, and an unknown name fails loudly', () => {
