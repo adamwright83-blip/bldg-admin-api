@@ -128,7 +128,8 @@ describe("connection state", () => {
 describe("where a connection may start", () => {
   it("accepts JOYSTICK's front doors, configured https origins, and local hosts outside production", () => {
     expect(firstTenConnectOrigin("https://gojoystick.com", env)).toBe("https://gojoystick.com");
-    expect(firstTenConnectOrigin("https://admin.bldg.chat/", env)).toBe("https://admin.bldg.chat");
+    // JOYSTICK left bldg.chat: Google no longer has a callback there
+    expect(firstTenConnectOrigin("https://admin.bldg.chat/", env)).toBeNull();
     expect(firstTenConnectOrigin("https://evil.example", env)).toBeNull();
     expect(firstTenConnectOrigin("https://driver.gojoystick.com", env)).toBeNull();
     expect(firstTenConnectOrigin(undefined, env)).toBeNull();
