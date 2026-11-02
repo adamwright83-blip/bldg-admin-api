@@ -412,6 +412,44 @@
   margin: 0;
 }
 
+.thresholdClaireNote {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 17px;
+  font-style: italic;
+  color: #ffd97d;
+  line-height: 1.5;
+  max-width: 480px;
+}
+
+.thresholdSubtitle {
+  font-size: 13.5px;
+  color: rgba(251, 245, 232, 0.65);
+}
+
+.thresholdPrimaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #d59b3f 0%, #a86f21 100%) !important;
+  color: #1a120b !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  text-decoration: none !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.thresholdPrimaryBtn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.thresholdPrimaryBtn:active {
+  transform: translateY(0);
+}
+
 .thresholdActions {
   display: flex;
   flex-wrap: wrap;

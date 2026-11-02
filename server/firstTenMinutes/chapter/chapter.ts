@@ -4,6 +4,7 @@ import { chapterFindings } from "../../businessKnowledge/onboarding";
 import type { FindingPayload, FindingView } from "../../../shared/firstTenMinutesFindings";
 import {
   LETTER_STEPS,
+  MACHINE_MILESTONES,
   approachesFor,
   composeDraft,
   type ChapterCard,
@@ -12,6 +13,9 @@ import {
   type DraftApproach,
   type DraftView,
   type LetterStep,
+  type MachineCorrespondenceChoice,
+  type MachineMilestone,
+  type MachineProgressView,
 } from "../../../shared/firstTenMinutesChapter";
 import { journeyEvents, recordEvent } from "../events";
 import { firstTenDb, setJourneyStage, type JourneyRow } from "../store";
@@ -118,6 +122,15 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
   let letterWritten = false;
   let handedOffVia: DraftView["handedOffVia"] = null;
   let sentByJoystick = false;
+  const machine: MachineProgressView = {
+    keyRetrieved: false,
+    centerExamined: false,
+    correspondenceChoice: null,
+    returnCompleted: false,
+    returnRouteUsed: null,
+    rookRescued: false,
+    adventureCompleted: false,
+  };
   for (const event of events) {
     if (event.kind === "draft_sent") sentByJoystick = true;
     if (event.kind === "chapter_revealed") revealed = true;
@@ -128,17 +141,52 @@ export async function chapterView(journey: JourneyRow, now = new Date()): Promis
     if (event.kind === "letter_written") letterWritten = true;
     const step = (event.payloadJson as { step?: string } | null)?.step;
     if (event.kind === "letter_step" && LETTER_STEPS.includes(step as LetterStep)) steps.add(step as LetterStep);
+    if (event.kind === "machine_milestone") {
+      const payload = event.payloadJson as { milestone?: string; route?: string } | null;
+      const milestone = payload?.milestone;
+      if (milestone === "key_retrieved") machine.keyRetrieved = true;
+      if (milestone === "center_examined") machine.centerExamined = true;
+      if (milestone === "choice_prepare_reply") machine.correspondenceChoice = "prepare_reply";
+      if (milestone === "choice_keep_for_later") machine.correspondenceChoice = "keep_for_later";
+      if (milestone === "choice_not_for_me") machine.correspondenceChoice = "not_for_me";
+      if (milestone === "return_completed") {
+        machine.returnCompleted = true;
+        if (payload?.route === "center" || payload?.route === "lower") {
+          machine.returnRouteUsed = payload.route;
+        }
+      }
+      if (milestone === "rook_rescued") machine.rookRescued = true;
+      if (milestone === "adventure_completed") machine.adventureCompleted = true;
+    }
   }
+  const hasMachineEvents =
+    machine.keyRetrieved ||
+    machine.centerExamined ||
+    machine.correspondenceChoice !== null ||
+    machine.returnCompleted ||
+    machine.rookRescued ||
+    machine.adventureCompleted;
   return {
     opportunity,
     progress: { revealed, steps: LETTER_STEPS.filter(step => steps.has(step)), letterWritten },
+    ...(hasMachineEvents ? { machine } : {}),
     draft: row ? draftView(row, opportunity, now, handedOffVia, sentByJoystick) : null,
   };
 }
 
 /** How far the person has played: each beat is recorded once, in the order played. */
-export async function recordChapterStep(journey: JourneyRow, step: "revealed" | LetterStep | "letter_written"): Promise<ChapterView> {
+export async function recordChapterStep(
+  journey: JourneyRow,
+  step: "revealed" | LetterStep | "letter_written" | MachineMilestone,
+  route?: "center" | "lower"
+): Promise<ChapterView> {
   const view = await chapterView(journey);
+  if (MACHINE_MILESTONES.includes(step as MachineMilestone)) {
+    const milestone = step as MachineMilestone;
+    await recordEvent(journey.id, "machine_milestone", route ? { milestone, route } : { milestone });
+    if (journey.stage === "portrait") await setJourneyStage(journey.id, "chapter");
+    return chapterView(journey);
+  }
   if (!view.opportunity) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "There's no conversation to pick up yet." });
   if (step === "revealed") {
     if (!view.progress.revealed) await recordEvent(journey.id, "chapter_revealed", { opportunityId: view.opportunity.id });
@@ -150,9 +198,10 @@ export async function recordChapterStep(journey: JourneyRow, step: "revealed" | 
   } else {
     // a step counts only in its turn, as in the courtyard (reunionQuests.applyStepItem)
     const expected = LETTER_STEPS[view.progress.steps.length];
-    if (!view.progress.steps.includes(step)) {
-      if (step !== expected) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Not yet." });
-      await recordEvent(journey.id, "letter_step", { step });
+    const letterStep = step as LetterStep;
+    if (!view.progress.steps.includes(letterStep)) {
+      if (letterStep !== expected) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Not yet." });
+      await recordEvent(journey.id, "letter_step", { step: letterStep });
     }
   }
   if (journey.stage === "portrait") await setJourneyStage(journey.id, "chapter");

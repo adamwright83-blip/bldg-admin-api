@@ -16,6 +16,7 @@ export type JourneyEventKind =
   | "chapter_revealed"
   | "letter_step"
   | "letter_written"
+  | "machine_milestone"
   | "draft_prepared"
   | "draft_changed"
   | "draft_declined"

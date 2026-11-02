@@ -22,19 +22,20 @@ import { firstReadHolds, useFirstRead } from "./useFirstRead";
 import { CrewScene } from "./crew/CrewScene";
 import { PortraitPage } from "./portrait/PortraitPage";
 import { ClaireQuestion } from "./knowledge/ClaireQuestion";
-import { RevelationScene } from "./chapter/RevelationScene";
-import { LetterScene } from "./chapter/LetterScene";
-import { DraftTable } from "./chapter/DraftTable";
 import { ActivationOffer } from "./chapter/ActivationOffer";
 import { activationQueryEnabled } from "./chapter/activationEligibility";
-import { SendDesk } from "./chapter/SendDesk";
 import { WorkspaceKey } from "./chapter/WorkspaceKey";
-import { ClosingBeat, type ClosingOutcome } from "./chapter/ClosingBeat";
 import { AskClaire, FirstChapterEntry } from "./chapter/FirstChapterEntry";
 import { ChapterThreshold } from "./chapter/ChapterThreshold";
 import { chapterGate } from "./chapter/chapterGate";
+import { ImpossibleMachine } from "./impossibleMachine/ImpossibleMachine";
+import {
+  generateSimulatedOpportunity,
+  createSimulatedDraft,
+} from "./impossibleMachine/simulatedOpportunity";
 import { draftStatusLine } from "@shared/firstTenMinutesActivation";
-import type { ChapterView, DraftApproach, LetterStep } from "@shared/firstTenMinutesChapter";
+import type { ChapterView, DraftApproach, DraftView } from "@shared/firstTenMinutesChapter";
+import type { StoredMachineProgress } from "./impossibleMachine/machinePersistence";
 import { buildReveals } from "@shared/firstTenMinutesCrew";
 import type { JourneyStage } from "@shared/firstTenMinutes";
 import styles from "./firstTen.module.css";
@@ -112,54 +113,49 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     const result = await start.mutateAsync({ requestId: newRequestId(), kind });
     saveFirstTenCredentials(result.credentials);
     setCredentials(result.credentials);
-    captureProductEvent("onboarding_draft_started", { source: "first_ten", kind });
     return result.credentials;
   }
 
   async function connect(provider: ConnectionProvider) {
     setNotice(null);
-    try {
-      const own = credentials && journey.data?.kind === "own" ? credentials : await startJourney("own");
-      captureProductEvent("onboarding_connect_started", { provider, funnel_step: "first_ten" });
-      const { url } = await beginConnect.mutateAsync({ ...own, provider });
-      window.location.assign(url);
-    } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : CONNECT_ERRORS.failed);
-    }
-  }
-
-  async function exploreExample() {
-    setNotice(null);
-    try {
-      await startJourney("example");
-      captureProductEvent("onboarding_source_connected", { kind: "example", funnel_step: "first_ten" });
-    } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "The example didn't open. Please try again.");
-    }
-  }
-
-  function bringYourOwn() {
-    clearFirstTenCredentials();
-    setCredentials(null);
-    setOpened(true);
+    const creds = credentials ?? (await startJourney("own"));
+    const { url } = await beginConnect.mutateAsync({ ...creds, provider });
+    window.location.assign(url);
   }
 
   async function removeConnection(provider: ConnectionProvider) {
     if (!credentials) return;
+    setNotice(null);
     await disconnect.mutateAsync({ ...credentials, provider });
     await journey.refetch();
   }
 
-  const view = journey.data ?? null;
+  async function exploreExample() {
+    setNotice(null);
+    await startJourney("example");
+  }
+
+  const view = journey.data;
   const example = view?.kind === "example";
-  const hasConnection = Boolean(view?.connections.length);
+  const hasConnection = Boolean(view && (view.kind === "example" || view.connections.length > 0));
+  const utils = trpc.useUtils();
+
+  async function bringYourOwn() {
+    clearFirstTenCredentials();
+    setCredentials(null);
+    utils.system.firstTenMinutes.journey.setData(credentials!, null as unknown as typeof view);
+    await exploreExample();
+  }
+
+  // reading what the visitor shared (or our own example)
   const reading = useReading(credentials, hasConnection);
   // the first read (off unless JOYSTICK_FIRST_READ_REVEAL is on): a few lines about the person before Claire is named
   const firstRead = useFirstRead(credentials, hasConnection && !example && view?.stage === "understanding");
   const [revealRead, setRevealRead] = useState(false);
   const [closer, setCloser] = useState(false);
+
+  // the crew's introductions (Astra's script)
   const [crewDone, setCrewDone] = useState(false);
-  const utils = trpc.useUtils();
   const answerFinding = trpc.system.firstTenMinutes.answerFinding.useMutation();
   const move = trpc.system.firstTenMinutes.move.useMutation();
 
@@ -273,13 +269,71 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     reading.view?.findings.find(finding => finding.payload.kind === "business" && finding.status !== "dismissed")?.payload.kind === "business"
       ? (reading.view.findings.find(finding => finding.payload.kind === "business")!.payload as { name: string }).name
       : null;
-  const opportunity = chapter.data?.opportunity ?? null;
   // "Your first chapter": back on their portrait, unless they went out to the courtyard again
   const [atCourtyard, setAtCourtyard] = useState(false);
   const onFirstChapter = view?.stage === "first_chapter" && !atCourtyard;
+
+  // Simulated machine state for User B (No qualified opportunity in inbox)
+  const [simulatedActive, setSimulatedActive] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return false;
+    try {
+      return window.localStorage.getItem(`joystick_simulated_machine_${credentials.sessionId}`) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const enterSimulated = useCallback(() => {
+    setSimulatedActive(true);
+    if (credentials?.sessionId) {
+      try {
+        window.localStorage.setItem(`joystick_simulated_machine_${credentials.sessionId}`, "true");
+      } catch {}
+    }
+  }, [credentials?.sessionId]);
+
+  const exitSimulated = useCallback(() => {
+    setSimulatedActive(false);
+    if (credentials?.sessionId) {
+      try {
+        window.localStorage.setItem(`joystick_simulated_machine_${credentials.sessionId}`, "false");
+      } catch {}
+    }
+    setAtCourtyard(false);
+    window.scrollTo({ top: 0 });
+  }, [credentials?.sessionId]);
+
   // a kept page always leads somewhere visible: the chapter, or a plain word on why not yet (chapter/chapterGate.ts)
   const gate = chapterGate({ portraitKept, chapterOpen, onFirstChapter, data: chapter.data, isError: chapter.isError });
-  const inChapter = gate === "open";
+  const isSimulatedChapter = gate === "no_opportunity" && simulatedActive;
+  const inChapter = gate === "open" || isSimulatedChapter;
+
+  const [simulatedDraft, setSimulatedDraft] = useState<DraftView | null>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return null;
+    try {
+      const raw = window.localStorage.getItem(`joystick_simulated_draft_${credentials.sessionId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [simulatedProgress, setSimulatedProgress] = useState<Partial<StoredMachineProgress> | null>(() => {
+    if (typeof window === "undefined" || !credentials?.sessionId) return null;
+    try {
+      const raw = window.localStorage.getItem(`joystick_simulated_progress_${credentials.sessionId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const simulatedStatus =
+    simulatedProgress?.adventureCompleted || simulatedProgress?.rookRescued
+      ? ("completed" as const)
+      : simulatedProgress?.keyRetrieved || simulatedDraft !== null
+        ? ("in_progress" as const)
+        : ("not_started" as const);
 
   // keeping the crew, and the message leaving the table
   const hasDraft = Boolean(chapter.data?.draft);
@@ -301,13 +355,6 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     setChapter(await verifyDraft.mutateAsync(credentials));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credentials]);
-
-  function closingOutcome(): ClosingOutcome | null {
-    const status = chapter.data?.draft?.status;
-    if (status === "reported_sent" || status === "verified_sent") return "sent";
-    if (status === "declined") return "not_now";
-    return null;
-  }
 
   async function continueActivation(identity: { businessName: string; contactName: string; ownerEmail: string; timeZone: string }) {
     if (!credentials) return;
@@ -347,45 +394,6 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     return renderSignupWithoutDraft();
   }
 
-  function renderTableFoot() {
-    const draft = chapter.data?.draft;
-    const offer = activation.data;
-    if (!draft || !offer || !credentials) return null;
-    const mustActivate = offer.required && offer.status !== "active";
-    const showCard = offer.example || mustActivate || (!offer.required && draft.status === "prepared");
-    return (
-      <>
-        <ActivationOffer
-          activation={offer}
-          credentials={credentials}
-          checkout={returned.checkout}
-          showCard={showCard}
-          onBringYourOwn={bringYourOwn}
-          onContinue={continueActivation}
-        />
-        {!offer.example && !mustActivate ? (
-          <SendDesk
-            draft={draft}
-            activation={offer}
-            onSend={async (approved, options) => {
-              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
-              setChapter(sent.chapter);
-              if (sent.outcome === "needs_permission") void activation.refetch();
-              return sent.outcome;
-            }}
-            onAllow={async () => {
-              // Google's own permission screen, once; it comes back to this table
-              const { url } = await beginConnect.mutateAsync({ ...credentials, provider: "google", purpose: "send" });
-              window.location.assign(url);
-            }}
-            onVerify={verify}
-            notice={notice}
-          />
-        ) : null}
-      </>
-    );
-  }
-
   // the person returns to their portrait, where a new entry has appeared, and Claire is there to ask
   const firstChapter = trpc.system.firstTenMinutes.firstChapter.useQuery(credentials!, {
     enabled: Boolean(credentials) && hasDraft && view?.stage === "first_chapter",
@@ -416,52 +424,163 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
     await chapter.refetch();
   }
 
-  async function step(which: "revealed" | LetterStep | "letter_written") {
-    if (!credentials) return;
-    setChapter(await chapterStep.mutateAsync({ ...credentials, step: which }));
-  }
-
   function renderChapter() {
+    if (!credentials) return null;
     const data = chapter.data;
-    if (!data || !opportunity || !credentials) return null;
-    if (!data.progress.revealed) {
+    if (!data && !isSimulatedChapter) return null;
+
+    if (isSimulatedChapter) {
+      const simulatedOpp = generateSimulatedOpportunity(businessName ?? "", reading.view?.findings);
       return (
         <>
-          <RevelationScene opportunity={opportunity} businessName={businessName} now={new Date()} onPickUp={() => void step("revealed")} />
-          {renderSignupBypass()}
-        </>
-      );
-    }
-    if (!data.draft) {
-      return (
-        <>
-          <LetterScene
-            steps={data.progress.steps}
-            letterWritten={data.progress.letterWritten}
-            carrying={opportunity.firstName ?? opportunity.person.name ?? "Them"}
-            onStep={which => step(which)}
-            onWritten={() => step("letter_written")}
-            onYours={() => prepareDraft.mutateAsync(credentials).then(setChapter)}
+          <ImpossibleMachine
+            initialProgress={simulatedProgress}
+            adapter={{
+              isSimulated: true,
+              example,
+              businessName: businessName ?? "",
+              opportunity: simulatedOpp,
+              draft: simulatedDraft,
+              activation: null,
+              checkoutNotice: null,
+              connectNotice: null,
+              onPrepareDraft: async () => {
+                const draft = createSimulatedDraft(simulatedOpp, "still_wanted");
+                setSimulatedDraft(draft);
+                try {
+                  window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(draft));
+                } catch {}
+              },
+              onChangeDraft: async change => {
+                setSimulatedDraft(prev => {
+                  if (!prev) return prev;
+                  const updated = change.approach
+                    ? createSimulatedDraft(simulatedOpp, change.approach)
+                    : { ...prev, body: change.body ?? prev.body, edited: true };
+                  try {
+                    window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(updated));
+                  } catch {}
+                  return updated;
+                });
+              },
+              onDeclineDraft: async () => {
+                setSimulatedDraft(prev => {
+                  if (!prev) return null;
+                  const declined: DraftView = { ...prev, status: "declined" };
+                  try {
+                    window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(declined));
+                  } catch {}
+                  return declined;
+                });
+              },
+              onRecordChoice: async () => {},
+              onRecordMilestone: async payload => {
+                setSimulatedProgress(prev => {
+                  const next: Partial<StoredMachineProgress> = {
+                    ...prev,
+                    keyRetrieved: payload.milestone === "key_retrieved" ? true : prev?.keyRetrieved,
+                    centerExamined: payload.milestone === "center_examined" ? true : prev?.centerExamined,
+                    returnCompleted: payload.milestone === "return_completed" ? true : prev?.returnCompleted,
+                    returnRouteUsed: payload.route ?? prev?.returnRouteUsed,
+                    rookRescued: payload.milestone === "rook_rescued" ? true : prev?.rookRescued,
+                    adventureCompleted: payload.milestone === "adventure_completed" ? true : prev?.adventureCompleted,
+                  };
+                  try {
+                    window.localStorage.setItem(`joystick_simulated_progress_${credentials.sessionId}`, JSON.stringify(next));
+                  } catch {}
+                  return next;
+                });
+              },
+              onSendDraft: async () => {
+                setSimulatedDraft(prev => {
+                  if (!prev) return prev;
+                  const sent: DraftView = {
+                    ...prev,
+                    status: "verified_sent",
+                    verifiedSentAt: new Date().toISOString(),
+                    sentByJoystick: true,
+                  };
+                  try {
+                    window.localStorage.setItem(`joystick_simulated_draft_${credentials.sessionId}`, JSON.stringify(sent));
+                  } catch {}
+                  return sent;
+                });
+                return "sent";
+              },
+              onFinishAdventure: async () => {
+                exitSimulated();
+              },
+            }}
           />
           {renderSignupBypass()}
         </>
       );
     }
-    const outcome = closingOutcome();
+
+    if (!data) return null;
+    const actView = activation.data ?? null;
+    const opportunity = data.opportunity;
     return (
       <>
-        <DraftTable
-          opportunity={opportunity}
-          draft={data.draft}
-          onChange={async (change: { approach?: DraftApproach; body?: string }) => setChapter(await changeDraft.mutateAsync({ ...credentials, ...change }))}
-          onDecline={async () => setChapter(await declineDraft.mutateAsync(credentials))}
+        <ImpossibleMachine
+          initialProgress={data.machine ?? null}
+          adapter={{
+            isSimulated: false,
+            example,
+            businessName: businessName ?? "",
+            opportunity,
+            draft: data.draft,
+            activation: actView,
+            checkoutNotice: returned.checkout,
+            connectNotice: notice,
+            onPrepareDraft: async () => setChapter(await prepareDraft.mutateAsync(credentials)),
+            onChangeDraft: async (change: { approach?: DraftApproach; body?: string }) =>
+              setChapter(await changeDraft.mutateAsync({ ...credentials, ...change })),
+            onDeclineDraft: async () => setChapter(await declineDraft.mutateAsync(credentials)),
+            onRecordChoice: async choice => {
+              const stepName =
+                choice === "prepare_reply"
+                  ? "choice_prepare_reply"
+                  : choice === "keep_for_later"
+                    ? "choice_keep_for_later"
+                    : "choice_not_for_me";
+              setChapter(await chapterStep.mutateAsync({ ...credentials, step: stepName }));
+            },
+            onRecordMilestone: async payload => {
+              setChapter(
+                await chapterStep.mutateAsync({
+                  ...credentials,
+                  step: payload.milestone,
+                  route: payload.route,
+                })
+              );
+            },
+            onBeginActivation: async identity => {
+              const { url } = await beginActivation.mutateAsync({ ...credentials, ...identity });
+              window.location.assign(url);
+            },
+            onBringYourOwn: bringYourOwn,
+            onSendDraft: async (approved, options) => {
+              const sent = await sendDraft.mutateAsync({ ...credentials, ...approved, ...options });
+              setChapter(sent.chapter);
+              if (sent.outcome === "needs_permission") void activation.refetch();
+              return sent.outcome;
+            },
+            onAllowSend: async () => {
+              const { url } = await beginConnect.mutateAsync({
+                ...credentials,
+                provider: "google",
+                purpose: "send",
+              });
+              window.location.assign(url);
+            },
+            onVerifyDraft: verify,
+            onFinishAdventure: backToPage,
+          }}
         >
-          {renderTableFoot()}
-        </DraftTable>
-        {outcome ? <ClosingBeat outcome={outcome} /> : null}
-        <button type="button" className={sendStyles.backToPage} disabled={openFirstChapter.isPending} onClick={() => void backToPage()} data-testid="first-ten-back-to-page">
-          Back to your page
-        </button>
+          {actView?.owner ? <WorkspaceKey activation={actView} credentials={credentials} /> : null}
+        </ImpossibleMachine>
+        {renderSignupBypass()}
       </>
     );
   }
@@ -537,6 +656,8 @@ export default function FirstTenMinutes({ availability }: { availability: FirstT
                   retrying={chapter.isFetching}
                   onRetry={() => void chapter.refetch()}
                   onLookCloser={() => setCloser(true)}
+                  onEnterSimulated={enterSimulated}
+                  simulatedStatus={simulatedStatus}
                   signup={gate === "no_opportunity" ? renderSignupWithoutDraft() : null}
                 />
               ) : null}

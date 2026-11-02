@@ -1,15 +1,19 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
- * Slice 5: the revelation and "A Proper Letter". The calendar turns back to Elena's April request, the Friday
- * crossing is folded shut, Rook tries it; Nina turns the calendar to today and brings the invitation onto today's map.
- * Then Hazel's errand in the courtyard, and the real draft at the same writing table, to the real recipient.
+ * THE IMPOSSIBLE MACHINE — Full Production E2E Suite
+ * Tests physical railway puzzle mechanics, deterministic graph state transitions,
+ * business correspondence integration, both winning paths (Route A & Route B),
+ * mobile responsive layouts, reduced motion, keyboard interaction, and captures all 10 required screenshots.
  */
 const FAKE = "http://127.0.0.1:4999";
 
-async function shots(name: string, page: Page, testInfo: { project: { name: string } }) {
-  await page.waitForTimeout(700);
-  await page.screenshot({ path: `tmp/first-ten-e2e-shots/${testInfo.project.name}-${name}.png`, fullPage: true });
+async function takeScreenshot(name: string, page: Page) {
+  await page.waitForTimeout(600);
+  await page.screenshot({
+    path: `tmp/first-ten-e2e-shots/${name}.png`,
+    fullPage: true,
+  });
 }
 
 test.beforeEach(async ({ page, request }) => {
@@ -24,120 +28,515 @@ test.beforeEach(async ({ page, request }) => {
   await page.getByRole("button", { name: "Let's find out" }).click();
 });
 
-const ASTRA = "Hi Elena — you asked earlier this year about Friday flowers. We now have a weekly Friday delivery. Is that still something you're looking for at the hotel?";
+async function advanceToMachineWithAccount(page: Page, request: APIRequestContext) {
+  await request.post(`${FAKE}/__control`, { data: { googleEmail: "nina@wildrootflowers.example" } });
+  await page.getByTestId("first-ten-connect-google").click();
+  await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+  await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+  await page.getByRole("button", { name: "That sounds like me" }).click();
+  await expect(page.getByTestId("first-ten-impossible-machine")).toBeVisible({ timeout: 30_000 });
+}
 
-async function toTheChapter(page: Page) {
+async function advanceToMachineWithExample(page: Page) {
   await page.getByTestId("first-ten-example").click();
   await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
   await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
   await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
   await page.getByRole("button", { name: "That sounds like me" }).click();
-  await expect(page.getByTestId("first-ten-revelation")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("first-ten-impossible-machine")).toBeVisible({ timeout: 30_000 });
 }
 
-test("the Friday that didn't exist, Hazel's proper letter, and the real draft at the same table", async ({ page }, testInfo) => {
-  test.setTimeout(240_000);
-  await toTheChapter(page);
-  const revelation = page.getByTestId("first-ten-revelation");
-  const line = page.getByTestId("first-ten-chapter-line");
+test.describe("THE IMPOSSIBLE MACHINE — Production Tests", () => {
+  test("Route A: Outbound upper -> Key capture -> Sourced correspondence -> Verified Send -> Central bridge restored -> Dome unlock & Theft", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    await advanceToMachineWithAccount(page, request);
 
-  // then: April, Elena's request, Nina's reply, the crossing folded shut
-  await expect(revelation).toHaveAttribute("data-phase", "then", { timeout: 20_000 });
-  await expect(page.getByTestId("first-ten-calendar")).toHaveAttribute("data-month", "April");
-  await expect(page.getByTestId("first-ten-invitation")).toContainText("Could you do fresh arrangements every Friday?");
-  await expect(page.getByTestId("first-ten-invitation")).toContainText("Elena Ruiz · Apr 18");
-  await expect(page.getByTestId("first-ten-old-reply")).toContainText("Ask me again once we have a Friday delivery.");
-  await expect(page.getByTestId("first-ten-crossing")).toHaveAttribute("data-crossing", "closed");
-  await expect(page.getByTestId("first-ten-crossing")).toContainText("FRIDAY — UNAVAILABLE");
-  await expect(line).toContainText("Well, that's inconvenient.");
-  // nothing announces it
-  await expect(revelation).not.toContainText("Someone already asked");
-  await shots("40-then", page, testInfo);
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible();
 
-  // now: today, the Friday delivery, the route; the invitation brought onto today's map.
-  // "Today" is the clock's UTC month (RevelationScene), not a month frozen when this was written.
-  const todayMonth = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(new Date());
-  await page.getByTestId("first-ten-turn-to-today").click();
-  await expect(revelation).toHaveAttribute("data-phase", "now", { timeout: 20_000 });
-  await expect(page.getByTestId("first-ten-calendar")).toHaveAttribute("data-month", todayMonth);
-  await expect(page.getByTestId("first-ten-service-now")).toContainText("Wildroot has a weekly Friday delivery");
-  await page.getByRole("button", { name: "Bring Elena Ruiz's request onto today's map" }).click();
-  await expect(page.getByTestId("first-ten-crossing")).toHaveAttribute("data-crossing", "open");
-  await expect(line).toContainText("Oh. Well, look at that.");
-  await shots("41-now", page, testInfo);
+    // 1. Screenshot 01: Rook under dome, key across railway, dial in THEN
+    await expect(page.getByTestId("machine-glass-dome")).toBeVisible();
+    await expect(page.getByTestId("machine-rook")).toBeVisible();
+    await expect(page.getByTestId("machine-station-key")).toBeVisible();
+    await expect(machine).toHaveAttribute("data-dial", "THEN");
+    await takeScreenshot("01-rook-under-dome", page);
 
-  // the full explanation, for whoever wants it
-  await page.getByTestId("first-ten-why").click();
-  await expect(page.getByTestId("first-ten-why-sheet")).toContainText("Someone already asked for what you now offer.");
-  await expect(page.getByTestId("first-ten-why-sheet")).toContainText("Elena asked before Friday delivery existed. It exists now, and your route passes the hotel.");
-  await page.getByTestId("first-ten-why-sheet").getByRole("button", { name: "Close" }).click();
+    // 2. State B & Screenshot 02: Disconnected railway & failed experiment
+    // Wind crank while route is incomplete
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(page.getByTestId("machine-halt-feedback")).toBeVisible({ timeout: 10_000 });
+    await takeScreenshot("02-disconnected-railway", page);
 
-  await page.getByTestId("first-ten-pick-up").click();
-  const courtyard = page.getByTestId("first-ten-letter");
-  await expect(courtyard).toBeVisible();
-  const say = page.getByTestId("first-ten-letter-line");
-  await expect(say).toContainText("A letter? Excellent. I have several opinions about letters.");
-  await expect(say).toContainText("I said proper.", { timeout: 10_000 });
-  await expect(courtyard).toHaveAttribute("data-phase", "explore", { timeout: 10_000 });
-  await shots("42-courtyard", page, testInfo);
+    // 3. State C & Screenshot 03: Upper route aligned in THEN
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+    await takeScreenshot("03-upper-route-aligned", page);
 
-  // Pip, without protection: ow, and Sable's hint
-  await page.getByRole("button", { name: "Shake the porcupine" }).click();
-  await expect(say).toContainText("OW. Pip is mostly quills.");
-  await expect(say).toContainText("Thick. Knitted. Currently protecting a teapot.", { timeout: 10_000 });
+    // Wind crank to send carriage outbound
+    await page.getByTestId("machine-wind-crank").click();
 
-  await page.getByRole("button", { name: "Put on the tea cosy" }).click();
-  await expect(say).toContainText("an excellent oven glove");
-  await page.getByRole("button", { name: "Shake the porcupine" }).click();
-  await expect(say).toContainText("one shed quill floats down");
-  await page.getByRole("button", { name: "Pick up the quill" }).click();
-  await expect(say).toContainText("Very pointy at one end, very fancy at the other.");
-  await page.getByRole("button", { name: "Dip the quill in the ink well" }).click();
-  await expect(say).toContainText("Dip, dab, drip.");
-  await expect(courtyard).toHaveAttribute("data-step", "4");
-  await shots("43-inked", page, testInfo);
+    // 4. State D & Screenshot 04: Key capture & machine shifts into NOW
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-dial", "NOW", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-carriage-key")).toBeVisible();
+    await takeScreenshot("04-key-capture", page);
 
-  // the table opens only once the draft is prepared: when that fails, it can be tried again without a reload
-  await page.route(/system\.firstTenMinutes\.prepareDraft/, route => route.abort(), { times: 1 });
-  await page.getByRole("button", { name: "Give Hazel the quill" }).click();
-  await expect(say).toContainText("Is that a quill? Inked? Then sit. Write. I'm listening.");
-  await expect(page.getByTestId("first-ten-hazel-reply")).toContainText("Dear Hazel");
-  await expect(say).toContainText("Complaint withdrawn.", { timeout: 15_000 });
-  await expect(say).toContainText("I'm keeping the stamp.", { timeout: 10_000 });
-  await expect(say).toContainText("Now. Yours.", { timeout: 10_000 });
-  await page.getByTestId("first-ten-table-retry").click({ timeout: 15_000 });
+    // 5. State E & Screenshot 05: Examine center correspondence note
+    await page.getByTestId("machine-center-crossing").click();
+    await expect(page.getByTestId("machine-correspondence-panel")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("first-ten-then")).toContainText("Could you do fresh arrangements every Friday?");
+    await expect(page.getByTestId("first-ten-now")).toContainText("Wildroot has a weekly Friday delivery");
+    await takeScreenshot("05-then-now-correspondence", page);
 
-  // the same table, now for Nina's business: the real recipient and the exact message
-  const draft = page.getByTestId("first-ten-draft");
-  await expect(draft).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("first-ten-draft-boundary")).toHaveText("Your business · Elena at the hotel");
-  await expect(page.getByTestId("first-ten-then")).toContainText("Could you do fresh arrangements every Friday?");
-  await expect(page.getByTestId("first-ten-now")).toContainText("Wildroot has a weekly Friday delivery");
-  await expect(page.getByTestId("first-ten-message")).toContainText("Elena Ruiz <elena@larkspurhotel.example>");
-  await expect(page.getByTestId("first-ten-message")).toContainText("Re: Friday flowers?");
-  await expect(page.getByTestId("first-ten-message-body")).toHaveText(ASTRA);
-  await expect(page.getByTestId("first-ten-table-line")).toContainText("Short enough to answer.");
-  await expect(draft).toHaveAttribute("data-status", "prepared");
-  // nothing claims it was sent
-  await expect(page.getByTestId("first-ten-send-status")).toHaveCount(0);
-  await expect(page.getByText(/In your Sent folder|You said you sent it/)).toHaveCount(0);
-  await shots("44-draft", page, testInfo);
+    // 6. State F: Prepare reply, edit message, and send through Gmail stand-in
+    await page.getByTestId("machine-choice-prepare").click();
+    const draft = page.getByTestId("first-ten-draft");
+    await expect(draft).toBeVisible({ timeout: 10_000 });
 
-  // another way, then Nina's own words, then not now, then back
-  await draft.getByRole("button", { name: "Try another way" }).click();
-  await expect(page.getByTestId("first-ten-message-body")).toContainText("the Friday route already goes past the Larkspur Hotel");
-  await draft.getByRole("button", { name: "Edit" }).click();
-  await draft.getByLabel("Your message").fill("Hi Elena — Friday delivery exists now. Shall I bring a sample this Friday?");
-  await draft.getByRole("button", { name: "Keep these words" }).click();
-  await expect(page.getByTestId("first-ten-message-body")).toHaveText("Hi Elena — Friday delivery exists now. Shall I bring a sample this Friday?");
-  await draft.getByRole("button", { name: "Not now" }).click();
-  await expect(draft).toHaveAttribute("data-status", "declined");
-  await expect(draft).toContainText("Not now. It stays here, unsent.");
-  await draft.getByRole("button", { name: "Bring it back" }).click();
-  await expect(draft).toHaveAttribute("data-status", "prepared");
+    // Draft editing test: "Try another way", custom edit, "Keep these words"
+    await draft.getByRole("button", { name: "Try another way" }).click();
+    await expect(page.getByTestId("first-ten-message-body")).toContainText("the Friday route already goes past");
 
-  // a reload lands back at the table with Nina's words
-  await page.reload();
-  await expect(page.getByTestId("first-ten-draft")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("first-ten-message-body")).toContainText("Shall I bring a sample this Friday?");
+    await draft.getByRole("button", { name: "Edit" }).click();
+    await draft.getByLabel("Your message").fill("Hi Elena — Friday delivery exists now. Shall I bring a sample this Friday?");
+    await draft.getByRole("button", { name: "Keep these words" }).click();
+    await expect(page.getByTestId("first-ten-message-body")).toHaveText("Hi Elena — Friday delivery exists now. Shall I bring a sample this Friday?");
+
+    // Allow sending through stand-in
+    await page.getByTestId("first-ten-allow-send").click();
+    await expect(page.getByTestId("first-ten-send-start")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("first-ten-send-start").click();
+    await page.getByTestId("first-ten-send-now").click();
+    await expect(page.getByTestId("first-ten-send-status")).toContainText("Sent from your Gmail", { timeout: 20_000 });
+
+    // 7. State G & Screenshot 06: Verified send restores central bridge
+    // Close correspondence drawer to return to board
+    await page.getByTestId("machine-correspondence-close").click();
+    await expect(page.getByTestId("center-crossing-restored-rails")).toBeVisible({ timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-center-restored", "yes");
+    await takeScreenshot("06-central-track-restored", page);
+
+    // Rotate west and east junctions to center to cross restored bridge
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank for center return
+    await page.getByTestId("machine-wind-crank").click();
+
+    // 8. State I & Screenshot 08: Dome unlocks in layers, Rook escapes
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await takeScreenshot("08-rook-escape", page);
+
+    // 9. Comedic ending & Screenshot 09: Rook tries to steal machine
+    await expect(machine).toHaveAttribute("data-rook-stealing", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+    await takeScreenshot("09-rook-theft-attempt", page);
+  });
+
+  test("Route B: Outbound upper -> Key capture -> Alternate lower return in NOW (No email send)", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    await advanceToMachineWithExample(page);
+
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible();
+
+    // Outbound solve
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+
+    // Inspect note and choose "Keep for later" (NO send)
+    await page.getByTestId("machine-center-crossing").click();
+    await expect(page.getByTestId("machine-choice-later")).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("machine-choice-later").click();
+
+    // Close note drawer to see board
+    await page.getByTestId("machine-correspondence-close").click();
+
+    // Screenshot 07: Alternate lower return route aligned in NOW
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-lower-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-lower-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+    await takeScreenshot("07-alternate-lower-route", page);
+
+    // Wind crank for lower return trip
+    await page.getByTestId("machine-wind-crank").click();
+
+    // Dome unlocks and Rook escapes without sending any email!
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("Route C: No eligible business opportunity (opportunity = null) -> Outbound upper -> Key capture -> Alternate lower return in NOW (Zero email send)", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    // Intercept chapter query to simulate an operator with NO eligible business opportunity
+    await page.route("**/api/trpc/*", async route => {
+      const decoded = decodeURIComponent(route.request().url());
+      if (!decoded.includes("firstTenMinutes.chapter")) {
+        return route.continue();
+      }
+      try {
+        const response = await route.fetch();
+        const json = await response.json();
+        const stripOpp = (target: any) => {
+          if (!target) return;
+          if (target.json && typeof target.json === "object") {
+            target.json.opportunity = null;
+            target.json.draft = null;
+          }
+          if ("opportunity" in target) {
+            target.opportunity = null;
+            target.draft = null;
+          }
+        };
+        if (Array.isArray(json)) {
+          for (const item of json) {
+            if (item?.result?.data) stripOpp(item.result.data);
+          }
+        } else if (json?.result?.data) {
+          stripOpp(json.result.data);
+        }
+        await route.fulfill({ json });
+      } catch {
+        return route.continue().catch(() => undefined);
+      }
+    });
+
+    await page.getByTestId("first-ten-example").click();
+    await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+    await page.getByRole("button", { name: "That sounds like me" }).click();
+
+    // User B threshold
+    const threshold = page.getByTestId("first-ten-chapter-threshold");
+    await expect(threshold).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+
+    // Outbound solve in THEN
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-dial", "NOW", { timeout: 15_000 });
+
+    // Solve lower route in NOW
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-lower-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-lower-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "lower") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank for lower return trip
+    await page.getByTestId("machine-wind-crank").click();
+
+    // Dome unlocks, Rook escapes, ending appears — 100% complete without business opportunity or email send!
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("User B (No real opportunity exists): Claire threshold -> Enter simulated machine -> Three Days Later -> Simulated Reply & Coupling -> Rescue & Ending", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    await request.post(`${FAKE}/__control`, { data: { noOpportunities: true, googleEmail: "nina@wildrootflowers.example" } });
+    await page.getByTestId("first-ten-connect-google").click();
+    await expect(page.getByTestId("first-ten-crew-scene")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("first-ten-sable-answers").getByRole("button", { name: "Still the rule" }).click();
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 90_000 });
+    await page.getByRole("button", { name: "That sounds like me" }).click();
+
+    // Verify Claire's threshold appears
+    const threshold = page.getByTestId("first-ten-chapter-threshold");
+    await expect(threshold).toBeVisible({ timeout: 20_000 });
+    await expect(threshold).toHaveAttribute("data-simulated-status", "not_started");
+    await expect(threshold).toContainText("I haven’t found a customer conversation waiting for you yet. But let me show you what happens when one arrives.");
+
+    // 1. Enter simulated machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+
+    // 2. Leave before finishing (escape hatch)
+    await expect(page.getByTestId("first-ten-back-to-page")).toBeVisible();
+    await page.getByTestId("first-ten-back-to-page").click();
+    await expect(machine).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible();
+    await expect(threshold).toBeVisible();
+
+    // 3. Resume the machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+
+    // Solve outbound route (West=upper, East=upper, Upper Rotor=aligned)
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+      await page.getByTestId("machine-upper-rotor").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank to fetch key
+    await page.getByTestId("machine-wind-crank").click();
+    await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+    await expect(machine).toHaveAttribute("data-dial", "NOW");
+
+    // Open correspondence drawer & inspect simulated inquiry
+    await page.getByTestId("machine-center-crossing").click();
+    const drawer = page.getByTestId("machine-correspondence-panel");
+    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId("machine-simulated-banner")).toBeVisible();
+    await expect(page.getByTestId("machine-simulated-banner")).toContainText("THREE DAYS LATER — AN IMAGINED SCENARIO");
+    await takeScreenshot("user-b-01-simulated-scenario", page);
+
+    // Prepare simulated reply
+    await page.getByTestId("machine-choice-prepare").click();
+    await expect(page.getByTestId("first-ten-send-desk")).toBeVisible();
+
+    // Simulate reply and couple central bridge
+    await page.getByTestId("first-ten-send-now").click();
+    await expect(page.getByTestId("machine-bridge-restored-banner")).toBeVisible({ timeout: 10_000 });
+    await takeScreenshot("user-b-02-bridge-restored", page);
+
+    // Close correspondence drawer
+    await page.getByTestId("machine-correspondence-close").click();
+
+    // Align central bridge (West=center, East=center)
+    while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-west-junction").click();
+      await page.waitForTimeout(150);
+    }
+    while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "center") {
+      await page.getByTestId("machine-east-junction").click();
+      await page.waitForTimeout(150);
+    }
+
+    // Wind crank to return across central bridge
+    await page.getByTestId("machine-wind-crank").click();
+
+    // 4. Dome unlocks and Rook escape sequence plays
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+    await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("machine-ending-banner")).toBeInViewport({ timeout: 15_000 });
+    await expect(page.getByTestId("machine-correspondence-panel")).toHaveCount(0);
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-back-to-page")).toBeInViewport({ timeout: 10_000 });
+
+    // 5. Exit after finish (back to portrait)
+    await page.getByTestId("first-ten-back-to-page").click();
+    await expect(machine).toHaveCount(0);
+    await expect(page.getByTestId("first-ten-portrait")).toBeVisible();
+    await expect(threshold).toBeVisible();
+    await expect(threshold).toHaveAttribute("data-simulated-status", "completed");
+
+    // 6. Reload preserves completed progression
+    await page.reload();
+    await expect(page.getByTestId("first-ten-portrait-kept")).toBeVisible({ timeout: 60_000 });
+    await expect(threshold).toHaveAttribute("data-simulated-status", "completed");
+    await expect(page.getByTestId("first-ten-enter-simulated-machine")).toHaveText("Three Days Later · Revisit the Machine");
+
+    // 7. Revisit the completed machine
+    await page.getByTestId("first-ten-enter-simulated-machine").click();
+    await expect(machine).toBeVisible({ timeout: 20_000 });
+    await expect(machine).toHaveAttribute("data-dome-unlocked", "yes");
+  });
+
+  test("Mobile responsive layout, camera panning, and Screenshot 10", async ({ page }) => {
+    test.setTimeout(180_000);
+    // Set viewport to mobile portrait
+    await page.setViewportSize({ width: 390, height: 844 });
+    await advanceToMachineWithExample(page);
+
+    const machine = page.getByTestId("first-ten-impossible-machine");
+    await expect(machine).toBeVisible();
+
+    // Camera panning controls should be visible on mobile
+    await expect(page.getByTestId("machine-camera-west")).toBeVisible();
+    await expect(page.getByTestId("machine-camera-center")).toBeVisible();
+    await expect(page.getByTestId("machine-camera-east")).toBeVisible();
+
+    // Switch camera to center
+    await page.getByTestId("machine-camera-center").click();
+    await page.waitForTimeout(300);
+
+    // Switch camera to east
+    await page.getByTestId("machine-camera-east").click();
+    await page.waitForTimeout(300);
+
+    // Screenshot 10: Mobile viewport
+    await takeScreenshot("10-mobile-viewport", page);
+
+    // Test mobile landscape
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(300);
+    await expect(machine).toBeVisible();
+  });
+
+  test("Keyboard interaction and accessibility navigation", async ({ page }) => {
+    test.setTimeout(120_000);
+    await advanceToMachineWithExample(page);
+
+    // Navigate with Tab key and activate with Space / Enter
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    const focused = page.locator(":focus");
+    await expect(focused).toBeVisible();
+  });
+
+  for (const vp of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+  ]) {
+    test(`Regression (${vp.name}): After rescuing Rook, finale auto-scrolls into viewport, drawer closes, and player returns to page`, async ({
+      page,
+    }) => {
+      test.setTimeout(240_000);
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await advanceToMachineWithExample(page);
+
+      const machine = page.getByTestId("first-ten-impossible-machine");
+      await expect(machine).toBeVisible({ timeout: 20_000 });
+
+      // Outbound solve in THEN
+      while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "upper") {
+        await page.getByTestId("machine-west-junction").click();
+        await page.waitForTimeout(150);
+      }
+      if ((await page.getByTestId("machine-upper-rotor").getAttribute("data-orientation")) !== "aligned") {
+        await page.getByTestId("machine-upper-rotor").click();
+        await page.waitForTimeout(150);
+      }
+      while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "upper") {
+        await page.getByTestId("machine-east-junction").click();
+        await page.waitForTimeout(150);
+      }
+
+      // Wind crank to capture key and switch dial to NOW
+      await page.getByTestId("machine-wind-crank").click();
+      await expect(machine).toHaveAttribute("data-key-retrieved", "yes", { timeout: 15_000 });
+      await expect(machine).toHaveAttribute("data-dial", "NOW", { timeout: 15_000 });
+
+      // Open correspondence drawer explicitly (simulating player examining note)
+      await page.getByTestId("machine-center-crossing").click();
+      const drawer = page.getByTestId("machine-correspondence-panel");
+      await expect(drawer).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 10_000 });
+
+      // Align alternate lower return route in NOW without closing the drawer
+      while ((await page.getByTestId("machine-west-junction").getAttribute("data-position")) !== "lower") {
+        await page.getByTestId("machine-west-junction").click();
+        await page.waitForTimeout(150);
+      }
+      if ((await page.getByTestId("machine-lower-rotor").getAttribute("data-orientation")) !== "aligned") {
+        await page.getByTestId("machine-lower-rotor").click();
+        await page.waitForTimeout(150);
+      }
+      while ((await page.getByTestId("machine-east-junction").getAttribute("data-position")) !== "lower") {
+        await page.getByTestId("machine-east-junction").click();
+        await page.waitForTimeout(150);
+      }
+
+      // Wind crank to send carriage along lower route to rescue Rook
+      await page.getByTestId("machine-wind-crank").click();
+
+      // 1. Carriage arrives and dome unlocks
+      await expect(machine).toHaveAttribute("data-dome-unlocked", "yes", { timeout: 15_000 });
+      await expect(page.getByTestId("machine-rook")).toBeVisible({ timeout: 10_000 });
+
+      // 2. Correspondence drawer automatically closes / unmounts
+      await expect(page.getByTestId("machine-correspondence-panel")).toHaveCount(0);
+      await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+
+      // 3. Finale card is rendered and automatically brought into the visible viewport
+      const endingBanner = page.getByTestId("machine-ending-banner");
+      await expect(endingBanner).toBeVisible({ timeout: 15_000 });
+      await expect(endingBanner).toBeInViewport({ timeout: 15_000 });
+      await expect(page.getByTestId("machine-rook-stealing")).toBeVisible();
+
+      // 4. "Back to your page" action is visible in the viewport and clickable
+      const backToPageBtn = page.getByTestId("first-ten-back-to-page");
+      await expect(backToPageBtn).toBeVisible({ timeout: 10_000 });
+      await expect(backToPageBtn).toBeInViewport({ timeout: 10_000 });
+
+      // 5. Clicking "Back to your page" cleanly returns player to their portrait page
+      await backToPageBtn.click();
+      await expect(machine).toHaveCount(0);
+      await expect(page.getByTestId("first-ten-portrait")).toBeVisible({ timeout: 20_000 });
+    });
+  }
 });

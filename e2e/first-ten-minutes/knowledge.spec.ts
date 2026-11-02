@@ -54,7 +54,7 @@ test("Claire asks before the page, keeps the person's words, and the page and ga
 
   // the approved game is untouched: keeping the page leads into the chapter as before
   await page.getByRole("button", { name: "That sounds like me" }).click();
-  await expect(page.getByTestId("first-ten-revelation").or(page.getByTestId("first-ten-chapter-threshold"))).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("first-ten-impossible-machine").or(page.getByTestId("first-ten-chapter-threshold"))).toBeVisible({ timeout: 30_000 });
 
   const calls = (await (await request.get(`${FAKE}/__model-calls`)).json()).calls as string[];
   expect(calls.indexOf("investigator")).toBeGreaterThan(-1);

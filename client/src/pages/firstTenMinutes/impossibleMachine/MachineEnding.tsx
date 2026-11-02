@@ -1,0 +1,84 @@
+import { forwardRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import type { DraftStatus } from "@shared/firstTenMinutesChapter";
+import type { MachineEngineState } from "./machineTypes";
+import styles from "./impossibleMachine.module.css";
+
+interface MachineEndingProps {
+  state: MachineEngineState;
+  draftStatus?: DraftStatus | null;
+  onContinueToPage?: () => void;
+  children?: React.ReactNode;
+}
+
+/**
+ * State I — Completed adventure banner & comedic ending beat.
+ * Once Rook steps out of the dome, he notices the machine is unattended and attempts to maneuver it into his satchel.
+ * Invites the player onward into JOYSTICK without requiring a real business action as a prerequisite.
+ */
+export const MachineEnding = forwardRef<HTMLElement, MachineEndingProps>(function MachineEnding(
+  { state, draftStatus = null, onContinueToPage, children },
+  ref
+) {
+  const reduce = useReducedMotion();
+
+  // The ending banner and comedic theft art ONLY render after the actual rescue of Rook from the dome
+  if (!state.domeUnlocked) return null;
+
+  // Only verified provider evidence licenses the claim that an email was sent from Gmail.
+  // Reported sent, unverified sending, or handed off do not license this claim.
+  const outcomeKind =
+    draftStatus === "verified_sent" || state.centerBridgeRestored
+      ? "sent"
+      : draftStatus === "declined"
+        ? "not_now"
+        : null;
+
+  return (
+    <motion.section
+      ref={ref}
+      className={styles.endingBanner}
+      data-testid="machine-ending-banner"
+      data-outcome={outcomeKind ?? "rescued"}
+      initial={reduce ? false : { opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <div className={styles.endingCard} data-testid="first-ten-closing" data-outcome={outcomeKind ?? "not_now"}>
+        <div className={styles.endingVisualCol}>
+          <img
+            src="/assets/first-ten/impossible-machine/rook-stealing.png"
+            alt="Rook trying to stuff the machine into his satchel"
+            className={styles.endingStealArt}
+            data-testid="machine-rook-stealing"
+            draggable={false}
+          />
+        </div>
+        <div className={styles.endingTextCol}>
+          <span className={styles.endingTag}>DOME UNLOCKED · ROOK IS FREE</span>
+          <h2 className={styles.endingTitle}>
+            Rook checks that no one is looking, then tries to slide the entire railway into his satchel.
+          </h2>
+          <p className={styles.endingSub}>
+            {outcomeKind === "sent"
+              ? "Your message went out from your Gmail. Hazel notices the ink on your hand. Rook has already claimed the central turntable as salvage."
+              : "The lower NOW turntable carries the key home. Rook is already trying to fold the brass chimney so the machine fits in his bag."}
+          </p>
+          {onContinueToPage ? (
+            <div className={styles.endingActions}>
+              <button
+                type="button"
+                className={styles.continueJoystickBtn}
+                onClick={onContinueToPage}
+                data-testid="first-ten-back-to-page"
+              >
+                Back to your page →
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {children}
+    </motion.section>
+  );
+});

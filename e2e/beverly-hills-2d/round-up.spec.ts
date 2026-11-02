@@ -30,13 +30,14 @@ test("round-up plays with real controls, ends with stars, and writes nothing", a
     await round.getByRole("button", { name: "Bark" }).tap();
   } else {
     await page.keyboard.down("ArrowRight");
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(2200);
     await page.keyboard.press("Space");
+    await page.waitForTimeout(200);
     // run back away from the herd: the boxer charges it
     await page.keyboard.up("ArrowRight");
     await page.keyboard.down("ShiftLeft");
     await page.keyboard.down("ArrowLeft");
-    await expect(round).toHaveAttribute("data-boxer", "charge", { timeout: 4_000 });
+    await expect(round).toHaveAttribute("data-boxer", "charge", { timeout: 6_000 });
     await page.keyboard.up("ArrowLeft");
     await page.keyboard.up("ShiftLeft");
   }

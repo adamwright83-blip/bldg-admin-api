@@ -59,6 +59,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/impossible-machine",
+      "destination": "/index.html"
+    },
+    {
       "source": "/onboarding",
       "destination": "/index.html"
     },
