@@ -8,7 +8,7 @@ export const FIRST_TEN_CONNECT_ORIGINS = [
   "https://gojoystick.com",
   "https://app.gojoystick.com",
   "https://admin.gojoystick.com",
-  "https://admin.bldg.chat",
+  // admin.bldg.chat left on 2026-11-02: JOYSTICK lives on gojoystick.com, and Google's app no longer lists bldg.chat
 ] as const;
 
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
