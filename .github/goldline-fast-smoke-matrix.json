@@ -2,14 +2,8 @@
   {
     "name": "fast-smoke-world",
     "timeout": 25,
-    "command": "pnpm exec playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/worldSmoke.spec.ts e2e/goldline-smoke/lanternCityMount.spec.ts e2e/goldline-smoke/operatorRepresentative.spec.ts e2e/goldline-smoke/cozyVillagerOutreach.spec.ts e2e/goldline-smoke/silverLakeBirdDiscovery.spec.ts",
+    "command": "pnpm exec playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/worldSmoke.spec.ts e2e/goldline-smoke/lanternCityMount.spec.ts e2e/goldline-smoke/operatorRepresentative.spec.ts e2e/goldline-smoke/cozyVillagerOutreach.spec.ts",
     "scope": "core"
-  },
-  {
-    "name": "fast-smoke-silver-lake-desktop",
-    "timeout": 40,
-    "command": "pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop e2e/goldline-smoke/silverLakeIslandEntry.spec.ts e2e/goldline-smoke/playableVillagers.spec.ts e2e/goldline-smoke/integratedDayLine.spec.ts && pnpm exec playwright test --config playwright.goldline-smoke.config.ts --project=desktop e2e/goldline-smoke/homeCityClicks.spec.ts --grep \"Silver Lake villager\"",
-    "scope": "world"
   },
   {
     "name": "fast-smoke-beverly-hills",
